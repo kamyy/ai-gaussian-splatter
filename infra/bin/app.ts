@@ -9,7 +9,14 @@ import { BudgetsStack } from "../lib/budgets-stack";
 
 const app = new cdk.App();
 
-const env = { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION ?? "us-east-1" };
+// Region is hardcoded, not read from CDK_DEFAULT_REGION: the CDK CLI
+// unconditionally overwrites that env var right before spawning this app,
+// using the SDK's own default-region resolution (which falls back to
+// us-east-1 with no credentials configured) — any value we export for it
+// gets silently clobbered. CDK_DEFAULT_ACCOUNT isn't touched the same way
+// (the CLI only sets it when a real account lookup succeeds), so it's still
+// safe to drive from the env for CI/local fake-account synths.
+const env = { account: process.env.CDK_DEFAULT_ACCOUNT, region: "us-west-2" };
 
 // Worker AMI/subnet are filled in once M5 (EC2 spot launch, per plan §7)
 // actually builds the worker image and picks a subnet — placeholders here

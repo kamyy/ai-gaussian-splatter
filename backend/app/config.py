@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     uploads_bucket: str
     splats_bucket: str
-    aws_region: str = "us-east-1"
+    aws_region: str = "us-west-2"
 
     worker_ami_id: str
     worker_instance_type: str = "g5.xlarge"

@@ -42,7 +42,7 @@ pnpm dev
 (cd backend && uv run pytest -v)          # 5 rate-limit tests skip without TEST_DATABASE_URL
 (cd worker && uv run pytest -v)
 (cd frontend && npx tsc --noEmit && npx eslint . && npx vitest run && npx playwright test)
-(cd infra && npx tsc --noEmit && CDK_DEFAULT_ACCOUNT=123456789012 CDK_DEFAULT_REGION=us-east-1 npx cdk synth)
+(cd infra && npx tsc --noEmit && CDK_DEFAULT_ACCOUNT=123456789012 npx cdk synth)
 ```
 
 ## Debugging a failed job

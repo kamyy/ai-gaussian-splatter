@@ -95,8 +95,7 @@ jobs:
           cache-dependency-path: infra/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: npx tsc --noEmit
-      - name: cdk synth (fake account/region — validates templates, not a real deploy)
+      - name: cdk synth (fake account, region hardcoded in bin/app.ts — validates templates, not a real deploy)
         env:
           CDK_DEFAULT_ACCOUNT: "123456789012"
-          CDK_DEFAULT_REGION: us-east-1
         run: npx cdk synth

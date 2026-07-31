@@ -23,7 +23,7 @@ def aws_test_credentials(monkeypatch):
         "AWS_SECRET_ACCESS_KEY": "testing",
         "AWS_SECURITY_TOKEN": "testing",
         "AWS_SESSION_TOKEN": "testing",
-        "AWS_DEFAULT_REGION": "us-east-1",
+        "AWS_DEFAULT_REGION": "us-west-2",
     }.items():
         monkeypatch.setenv(var, value)
 

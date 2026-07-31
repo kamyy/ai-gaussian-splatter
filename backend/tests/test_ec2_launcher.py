@@ -12,12 +12,12 @@ def test_generate_callback_token_is_unique_and_nontrivial():
 
 @mock_aws
 def test_launch_job_starts_a_spot_instance_with_expected_tags():
-    ec2 = boto3.client("ec2", region_name="us-east-1")
+    ec2 = boto3.client("ec2", region_name="us-west-2")
     vpc = ec2.create_vpc(CidrBlock="10.0.0.0/16")["Vpc"]
     subnet = ec2.create_subnet(VpcId=vpc["VpcId"], CidrBlock="10.0.0.0/24")["Subnet"]
     sg = ec2.create_security_group(GroupName="worker-sg", Description="worker", VpcId=vpc["VpcId"])
 
-    iam = boto3.client("iam", region_name="us-east-1")
+    iam = boto3.client("iam", region_name="us-west-2")
     iam.create_role(
         RoleName="worker",
         AssumeRolePolicyDocument='{"Version": "2012-10-17", "Statement": []}',
