@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+.turbo/
+
+# CDK
+infra/cdk.out/
+infra/*.d.ts
+infra/*.js
+!infra/jest.config.js
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+*.swp
+
+# Local data (photos, pipeline outputs)
+worker/local_data/
+worker/*.ply
+worker/*.splat
+
+# Logs
+*.log

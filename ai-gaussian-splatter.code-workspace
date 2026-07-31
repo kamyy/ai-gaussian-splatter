@@ -1,0 +1,39 @@
+{
+  "folders": [
+    { "name": "frontend", "path": "frontend" },
+    { "name": "backend", "path": "backend" },
+    { "name": "worker", "path": "worker" },
+    { "name": "infra", "path": "infra" },
+    { "name": "docs", "path": "docs" },
+    { "name": "root", "path": "." }
+  ],
+  "settings": {
+    // window-scoped — the TS server is one-per-window, not one-per-folder,
+    // so this can only live here (or in User settings), never in an
+    // individual folder's .vscode/settings.json within a multi-root
+    // workspace. `js/ts.tsdk.promptToUseWorkspaceVersion` is the current
+    // setting ID; it replaced `typescript.enablePromptUseWorkspaceTsdk`
+    // (VS Code consolidated the JS/TS settings namespace).
+    "js/ts.tsdk.promptToUseWorkspaceVersion": true,
+    "search.exclude": {
+      "**/node_modules": true,
+      "**/.venv": true,
+      "**/.next": true,
+      "**/cdk.out": true,
+      "**/dist": true
+    },
+    "files.exclude": {
+      // Exclude patterns are matched relative to each workspace root
+      // independently. This hides the redundant nested frontend/backend/
+      // worker/infra/docs copies inside the "root" entry (path ".")
+      // without affecting their own dedicated top-level entries, since
+      // none of those folders contain a subfolder literally named after
+      // one of the others.
+      "frontend": true,
+      "backend": true,
+      "worker": true,
+      "infra": true,
+      "docs": true
+    }
+  }
+}
