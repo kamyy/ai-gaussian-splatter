@@ -100,9 +100,21 @@ export class BackendStack extends cdk.Stack {
       cpu: "256", // 0.25 vCPU, matching the App Runner sizing this replaces
       memory: "512", // 0.5 GB
       healthCheckPath: "/api/v1/healthz",
+      // Express Mode requires subnets with an Internet Gateway route to
+      // provision an internet-facing ALB — giving it public subnets also
+      // auto-enables assignPublicIp on the Fargate tasks themselves, which
+      // is what lets them reach AWS APIs (S3, EC2 RunInstances) without a
+      // NAT gateway. Private subnets would leave both the ALB and the
+      // tasks' own outbound calls broken.
       networkConfiguration: {
-        subnets: props.vpc.privateSubnets.map(subnet => subnet.subnetId),
+        subnets: props.vpc.publicSubnets.map(subnet => subnet.subnetId),
         securityGroups: [props.backendSecurityGroup.securityGroupId],
+      },
+      // Bounded auto-scaling — matches the "auto-scaling like App Runner
+      // had" intent; without this it defaults to a fixed single task.
+      scalingTarget: {
+        minTaskCount: 1,
+        maxTaskCount: 3,
       },
       primaryContainer: {
         image: `${this.repository.repositoryUri}:latest`,

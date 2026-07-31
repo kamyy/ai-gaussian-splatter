@@ -38,6 +38,17 @@ export class NetworkStack extends cdk.Stack {
       description: "ECS Express Mode backend service to RDS",
       allowAllOutbound: true,
     });
+    // Express Mode's auto-provisioned ALB reaches the Fargate tasks on the
+    // container port. The ALB gets its own AWS-managed security group we
+    // can't reference at synth time (created dynamically by the ECS control
+    // plane), so this is scoped to the VPC's CIDR rather than the internet —
+    // the ALB's traffic to the tasks originates from within the VPC either
+    // way, even though the ALB itself is internet-facing.
+    this.backendSecurityGroup.addIngressRule(
+      ec2.Peer.ipv4(this.vpc.vpcCidrBlock),
+      ec2.Port.tcp(8000),
+      "Express Mode ALB to backend tasks (container port)",
+    );
 
     this.workerSecurityGroup = new ec2.SecurityGroup(this, "WorkerSecurityGroup", {
       vpc: this.vpc,
