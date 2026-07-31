@@ -31,7 +31,7 @@ export default function DashboardPage() {
 
       {objects && objects.length > 0 && (
         <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }}>
-          {objects.map((obj) => (
+          {objects.map(obj => (
             <Card key={obj.id} component={Link} href={`/objects/${obj.id}`} withBorder padding="lg">
               <Group justify="space-between">
                 <Text fw={500}>{obj.name}</Text>

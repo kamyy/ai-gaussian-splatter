@@ -12,14 +12,14 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 export function UploadProgress() {
-  const uploads = useAppStore((state) => state.uploads);
+  const uploads = useAppStore(state => state.uploads);
   const items = Object.values(uploads);
 
   if (items.length === 0) return null;
 
   return (
     <Stack gap="xs">
-      {items.map((item) => (
+      {items.map(item => (
         <Group key={item.filename} justify="space-between" wrap="nowrap">
           <Text size="sm" truncate style={{ flex: 1 }}>
             {item.filename}

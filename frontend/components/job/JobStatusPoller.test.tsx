@@ -2,8 +2,8 @@ import { MantineProvider } from "@mantine/core";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { JobStatusPoller } from "./JobStatusPoller";
 import type { JobRead } from "@/lib/types";
+import { JobStatusPoller } from "./JobStatusPoller";
 
 const { useJobStatusMock } = vi.hoisted(() => ({ useJobStatusMock: vi.fn() }));
 vi.mock("@/lib/hooks", () => ({ useJobStatus: useJobStatusMock }));
@@ -12,7 +12,7 @@ function renderPoller() {
   return render(
     <MantineProvider>
       <JobStatusPoller objectId="obj-1" />
-    </MantineProvider>
+    </MantineProvider>,
   );
 }
 
@@ -35,7 +35,11 @@ describe("JobStatusPoller", () => {
   });
 
   it("shows a fallback when there is no job yet", () => {
-    useJobStatusMock.mockReturnValue({ data: undefined, error: new Error("404"), isLoading: false });
+    useJobStatusMock.mockReturnValue({
+      data: undefined,
+      error: new Error("404"),
+      isLoading: false,
+    });
     renderPoller();
     expect(screen.getByText(/No processing job yet/i)).toBeInTheDocument();
   });

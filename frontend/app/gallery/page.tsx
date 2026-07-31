@@ -24,7 +24,7 @@ export default async function GalleryPage() {
     <Stack p="md">
       <Title order={2}>Gallery</Title>
       <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }}>
-        {items.map((item) => (
+        {items.map(item => (
           // Nesting <Link> around <Card> rather than Card's polymorphic
           // `component={Link}` prop — the latter passes a raw function
           // reference across the Server->Client Component boundary (this

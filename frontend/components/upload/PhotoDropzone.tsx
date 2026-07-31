@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { Button, FileInput, Stack, Text } from "@mantine/core";
+import { useState } from "react";
 
 import { completePhoto, presignPhotos, uploadToS3 } from "@/lib/api";
 import { useAppStore } from "@/lib/store";
@@ -16,9 +16,9 @@ export function PhotoDropzone({ objectId, onAllUploaded }: PhotoDropzoneProps) {
   const { getToken } = useAuth();
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const setUploadStatus = useAppStore((state) => state.setUploadStatus);
-  const setUploadProgress = useAppStore((state) => state.setUploadProgress);
-  const showBanner = useAppStore((state) => state.showBanner);
+  const setUploadStatus = useAppStore(state => state.setUploadStatus);
+  const setUploadProgress = useAppStore(state => state.setUploadProgress);
+  const showBanner = useAppStore(state => state.showBanner);
 
   const handleUpload = async () => {
     if (files.length === 0) return;
@@ -35,7 +35,7 @@ export function PhotoDropzone({ objectId, onAllUploaded }: PhotoDropzoneProps) {
       const { photos } = await presignPhotos(
         token,
         objectId,
-        files.map((f) => ({ filename: f.name, content_type: f.type || "image/jpeg" }))
+        files.map(f => ({ filename: f.name, content_type: f.type || "image/jpeg" })),
       );
 
       await Promise.all(
@@ -50,7 +50,7 @@ export function PhotoDropzone({ objectId, onAllUploaded }: PhotoDropzoneProps) {
           } catch (err) {
             setUploadStatus(file.name, "failed", err instanceof Error ? err.message : "Upload failed");
           }
-        })
+        }),
       );
 
       onAllUploaded?.();

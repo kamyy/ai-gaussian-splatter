@@ -40,7 +40,7 @@ export class WorkerIamStack extends cdk.Stack {
         actions: ["ec2:TerminateInstances"],
         resources: ["*"],
         conditions: { StringEquals: { "ec2:ResourceTag/Role": "worker" } },
-      })
+      }),
     );
 
     this.instanceProfile = new iam.CfnInstanceProfile(this, "WorkerInstanceProfile", {

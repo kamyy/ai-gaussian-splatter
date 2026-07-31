@@ -42,13 +42,13 @@ export function useJobStatus(objectId: string | undefined) {
       return getLatestJob(token, objectId as string);
     },
     {
-      refreshInterval: (latestData) => {
+      refreshInterval: latestData => {
         if (latestData && TERMINAL_JOB_STATUSES.includes(latestData.status)) {
           return 0; // stop polling once terminal — plan §4
         }
         return JOB_POLL_INTERVAL_MS;
       },
-    }
+    },
   );
 }
 

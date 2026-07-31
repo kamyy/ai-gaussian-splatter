@@ -40,7 +40,7 @@ export class BackendStack extends cdk.Stack {
     });
 
     const vpcConnector = new apprunner.CfnVpcConnector(this, "VpcConnector", {
-      subnets: props.vpc.privateSubnets.map((subnet) => subnet.subnetId),
+      subnets: props.vpc.privateSubnets.map(subnet => subnet.subnetId),
       securityGroups: [props.backendSecurityGroup.securityGroupId],
     });
 
@@ -64,20 +64,20 @@ export class BackendStack extends cdk.Stack {
         actions: ["ec2:RunInstances"],
         resources: ["*"], // RunInstances requires resource-level perms on multiple ARN types; tightened via conditions below
         conditions: { StringEquals: { "aws:RequestTag/Role": "worker" } },
-      })
+      }),
     );
     instanceRole.addToPolicy(
       new iam.PolicyStatement({
         actions: ["ec2:TerminateInstances"],
         resources: ["*"],
         conditions: { StringEquals: { "ec2:ResourceTag/Role": "worker" } },
-      })
+      }),
     );
     instanceRole.addToPolicy(
       new iam.PolicyStatement({
         actions: ["iam:PassRole"],
         resources: [props.workerInstanceProfileArn],
-      })
+      }),
     );
 
     new apprunner.CfnService(this, "Service", {
@@ -97,9 +97,7 @@ export class BackendStack extends cdk.Stack {
               { name: "WORKER_SECURITY_GROUP_ID", value: props.workerSecurityGroupId },
               { name: "WORKER_INSTANCE_PROFILE_ARN", value: props.workerInstanceProfileArn },
             ],
-            runtimeEnvironmentSecrets: [
-              { name: "DATABASE_URL", value: props.database.secret?.secretArn ?? "" },
-            ],
+            runtimeEnvironmentSecrets: [{ name: "DATABASE_URL", value: props.database.secret?.secretArn ?? "" }],
           },
         },
       },
@@ -109,7 +107,10 @@ export class BackendStack extends cdk.Stack {
         instanceRoleArn: instanceRole.roleArn,
       },
       networkConfiguration: {
-        egressConfiguration: { egressType: "VPC", vpcConnectorArn: vpcConnector.attrVpcConnectorArn },
+        egressConfiguration: {
+          egressType: "VPC",
+          vpcConnectorArn: vpcConnector.attrVpcConnectorArn,
+        },
       },
       healthCheckConfiguration: { protocol: "HTTP", path: "/api/v1/healthz" },
     });

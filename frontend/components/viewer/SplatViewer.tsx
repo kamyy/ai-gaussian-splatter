@@ -1,10 +1,10 @@
 "use client";
 
-import { Canvas } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
-import { DropInViewer } from "@mkkellogg/gaussian-splats-3d";
-import { useEffect, useState } from "react";
 import { Center, Loader, Text } from "@mantine/core";
+import { DropInViewer } from "@mkkellogg/gaussian-splats-3d";
+import { OrbitControls } from "@react-three/drei";
+import { Canvas } from "@react-three/fiber";
+import { useEffect, useState } from "react";
 
 interface SplatViewerProps {
   splatUrl: string;
@@ -18,13 +18,7 @@ interface SplatViewerProps {
  * scene via <primitive> is enough; R3F's own render loop drives it with no
  * manual useFrame ticking needed.
  */
-function SplatScene({
-  splatUrl,
-  onError,
-}: {
-  splatUrl: string;
-  onError: (message: string) => void;
-}) {
+function SplatScene({ splatUrl, onError }: { splatUrl: string; onError: (message: string) => void }) {
   const [viewer, setViewer] = useState<DropInViewer | null>(null);
 
   useEffect(() => {

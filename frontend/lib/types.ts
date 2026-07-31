@@ -1,13 +1,7 @@
 // Mirrors backend/app/schemas.py — kept in sync by hand for now; a generated
 // OpenAPI client is a reasonable future upgrade once the API stabilizes.
 
-export type ObjectStatus =
-  | "draft"
-  | "uploading"
-  | "ready_to_process"
-  | "processing"
-  | "complete"
-  | "failed";
+export type ObjectStatus = "draft" | "uploading" | "ready_to_process" | "processing" | "complete" | "failed";
 
 export type JobStatus =
   | "queued"

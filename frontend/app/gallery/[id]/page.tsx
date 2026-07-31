@@ -1,9 +1,9 @@
+import { Stack, Text, Title } from "@mantine/core";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Stack, Text, Title } from "@mantine/core";
 
-import { getGalleryItem } from "@/lib/api";
 import { SplatViewer } from "@/components/viewer/SplatViewer";
+import { getGalleryItem } from "@/lib/api";
 
 // See app/gallery/page.tsx — same reasoning, fetches the backend at request
 // time, not buildable statically without it running.

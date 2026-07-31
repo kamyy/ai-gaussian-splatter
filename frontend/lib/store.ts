@@ -30,25 +30,34 @@ interface AppState {
   dismissBanner: () => void;
 }
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>(set => ({
   uploads: {},
   setUploadStatus: (filename, status, error) =>
-    set((state) => ({
+    set(state => ({
       uploads: {
         ...state.uploads,
-        [filename]: { ...(state.uploads[filename] ?? { filename, progress: 0 }), filename, status, error },
+        [filename]: {
+          ...(state.uploads[filename] ?? { filename, progress: 0 }),
+          filename,
+          status,
+          error,
+        },
       },
     })),
   setUploadProgress: (filename, progress) =>
-    set((state) => ({
+    set(state => ({
       uploads: {
         ...state.uploads,
-        [filename]: { ...(state.uploads[filename] ?? { filename, status: "pending" }), filename, progress },
+        [filename]: {
+          ...(state.uploads[filename] ?? { filename, status: "pending" }),
+          filename,
+          progress,
+        },
       },
     })),
   resetUploads: () => set({ uploads: {} }),
 
   banner: null,
-  showBanner: (banner) => set({ banner }),
+  showBanner: banner => set({ banner }),
   dismissBanner: () => set({ banner: null }),
 }));
