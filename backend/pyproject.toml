@@ -1,0 +1,37 @@
+[project]
+name = "ai-gaussian-splatter-backend"
+version = "0.1.0"
+description = "FastAPI REST API: auth, rate limiting, job orchestration (plan §3-6)"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "psycopg[binary]>=3.2",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.4",
+    "boto3>=1.34",
+    "pyjwt[crypto]>=2.9",
+    "httpx>=0.27",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "moto[s3,ec2]>=5.0",
+    "respx>=0.21",
+    "cryptography>=49.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
