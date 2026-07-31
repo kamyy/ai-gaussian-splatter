@@ -35,6 +35,9 @@ export class DataStack extends cdk.Stack {
       databaseName: "ai_gaussian_splatter",
       removalPolicy: cdk.RemovalPolicy.SNAPSHOT,
       deletionProtection: false,
+      // RDS windows are fixed UTC and don't shift for DST — 10:00 UTC is
+      // 3am Pacific during PDT, drifting to 4am Pacific during PST.
+      preferredMaintenanceWindow: "sun:10:00-sun:10:30",
     });
 
     // Uploads are ephemeral (source photos, not the deliverable) — expire
