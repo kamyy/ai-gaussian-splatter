@@ -8,13 +8,6 @@
     { "name": "root", "path": "." }
   ],
   "settings": {
-    // window-scoped — the TS server is one-per-window, not one-per-folder,
-    // so this can only live here (or in User settings), never in an
-    // individual folder's .vscode/settings.json within a multi-root
-    // workspace. `js/ts.tsdk.promptToUseWorkspaceVersion` is the current
-    // setting ID; it replaced `typescript.enablePromptUseWorkspaceTsdk`
-    // (VS Code consolidated the JS/TS settings namespace).
-    "js/ts.tsdk.promptToUseWorkspaceVersion": true,
     "search.exclude": {
       "**/node_modules": true,
       "**/.venv": true,
@@ -34,6 +27,26 @@
       "worker": true,
       "infra": true,
       "docs": true
+    },
+    "js/ts.tsdk.path": "frontend/node_modules/typescript/lib",
+    // Scoped to TS/JS/JSON so this doesn't touch backend/worker's Python
+    // formatting. eslint-config-prettier (frontend/eslint.config.mjs)
+    // disables ESLint's conflicting stylistic rules so the two don't fight.
+    "[typescript]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode",
+      "editor.formatOnSave": true
+    },
+    "[typescriptreact]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode",
+      "editor.formatOnSave": true
+    },
+    "[javascript]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode",
+      "editor.formatOnSave": true
+    },
+    "[json]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode",
+      "editor.formatOnSave": true
     }
   }
 }

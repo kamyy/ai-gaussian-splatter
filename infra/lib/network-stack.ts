@@ -53,7 +53,7 @@ export class NetworkStack extends cdk.Stack {
     this.dbSecurityGroup.addIngressRule(
       this.backendSecurityGroup,
       ec2.Port.tcp(5432),
-      "Backend (via App Runner VPC Connector) to Postgres"
+      "Backend (via App Runner VPC Connector) to Postgres",
     );
   }
 }

@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { Button, Stack, Text, TextInput, Title } from "@mantine/core";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
-import { createObject, triggerProcess } from "@/lib/api";
 import { PhotoDropzone } from "@/components/upload/PhotoDropzone";
 import { UploadProgress } from "@/components/upload/UploadProgress";
+import { createObject, triggerProcess } from "@/lib/api";
 
 export default function NewObjectPage() {
   const { getToken } = useAuth();
@@ -46,7 +46,7 @@ export default function NewObjectPage() {
             label="Name"
             placeholder="e.g. Ceramic mug"
             value={name}
-            onChange={(e) => setName(e.currentTarget.value)}
+            onChange={e => setName(e.currentTarget.value)}
           />
           <Button onClick={handleCreate} loading={creating} disabled={!name.trim()}>
             Continue

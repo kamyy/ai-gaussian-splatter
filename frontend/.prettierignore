@@ -1,0 +1,9 @@
+node_modules/
+.next/
+out/
+build/
+*.tsbuildinfo
+pnpm-lock.yaml
+test-results/
+coverage/
+next-env.d.ts

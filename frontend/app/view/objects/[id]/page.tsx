@@ -1,9 +1,9 @@
+import { Stack, Title } from "@mantine/core";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Stack, Title } from "@mantine/core";
 
-import { getPublicObject } from "@/lib/api";
 import { SplatViewer } from "@/components/viewer/SplatViewer";
+import { getPublicObject } from "@/lib/api";
 
 // See app/gallery/page.tsx — same reasoning, fetches the backend at request
 // time, not buildable statically without it running.

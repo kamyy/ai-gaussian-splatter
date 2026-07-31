@@ -1,14 +1,14 @@
 "use client";
 
-import { use } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { Alert, Skeleton, Stack, Text, Title } from "@mantine/core";
+import { use } from "react";
 import useSWR from "swr";
 
-import { useObject } from "@/lib/hooks";
-import { getSplatUrl } from "@/lib/api";
 import { JobStatusPoller } from "@/components/job/JobStatusPoller";
 import { SplatViewer, SplatViewerLoading } from "@/components/viewer/SplatViewer";
+import { getSplatUrl } from "@/lib/api";
+import { useObject } from "@/lib/hooks";
 
 export default function ObjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
