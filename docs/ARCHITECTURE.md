@@ -23,6 +23,8 @@ FastAPI REST (`backend/`), not GraphQL — the API is ~9 flat endpoints, REST's 
 
 Auth: Clerk (`@clerk/nextjs`), not Cognito (clunkier setup) or Auth0.
 
+**2026-07-31 update**: the backend originally ran on App Runner, but App Runner stopped accepting new customers 2026-04-30 (existing services keep running, no new features). Since this project hadn't deployed yet, it moved to **ECS Express Mode** (`AWS::ECS::ExpressGatewayService`) instead — AWS's official replacement, launched Nov 2025. It auto-provisions the ECS cluster/service, ALB, security groups, and auto-scaling from one resource, same "no hand-wired orchestration" intent App Runner had. Only an L1 CDK construct exists so far (no L2 yet), so `backend-stack.ts` configures it explicitly, same as it did for App Runner's L1 constructs.
+
 ## Abuse protection
 
 Three independent layers (`backend/app/services/rate_limit.py`), since a per-user quota alone doesn't stop multi-accounting:
@@ -37,7 +39,7 @@ Next.js (App Router), not a Vite SPA — Open Graph previews for shared objects 
 
 ## Infra
 
-AWS CDK (TypeScript), not Terraform — 100% AWS with no multi-cloud plans, so Terraform's core value proposition isn't exercised here, and CDK plays to existing TypeScript fluency. Five stacks (`infra/lib/`): network (VPC/security groups), data (RDS/S3), worker-iam (the spot instance's scoped role), backend (App Runner + VPC Connector), budgets (independent of the others, deployed to us-east-1 regardless of the app's region since billing metrics only exist there).
+AWS CDK (TypeScript), not Terraform — 100% AWS with no multi-cloud plans, so Terraform's core value proposition isn't exercised here, and CDK plays to existing TypeScript fluency. Five stacks (`infra/lib/`): network (VPC/security groups), data (RDS/S3), worker-iam (the spot instance's scoped role), backend (ECS Express Mode), budgets (independent of the others, deployed to us-east-1 regardless of the app's region since billing metrics only exist there).
 
 ## Testing
 

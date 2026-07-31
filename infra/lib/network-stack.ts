@@ -35,7 +35,7 @@ export class NetworkStack extends cdk.Stack {
     // are easy to reach for by habit — plain ASCII only below.
     this.backendSecurityGroup = new ec2.SecurityGroup(this, "BackendSecurityGroup", {
       vpc: this.vpc,
-      description: "App Runner VPC Connector to RDS",
+      description: "ECS Express Mode backend service to RDS",
       allowAllOutbound: true,
     });
 
@@ -53,7 +53,7 @@ export class NetworkStack extends cdk.Stack {
     this.dbSecurityGroup.addIngressRule(
       this.backendSecurityGroup,
       ec2.Port.tcp(5432),
-      "Backend (via App Runner VPC Connector) to Postgres",
+      "Backend (ECS Express Mode service) to Postgres",
     );
   }
 }

@@ -1,7 +1,7 @@
 import * as cdk from "aws-cdk-lib";
-import * as apprunner from "aws-cdk-lib/aws-apprunner";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecr from "aws-cdk-lib/aws-ecr";
+import * as ecs from "aws-cdk-lib/aws-ecs";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as rds from "aws-cdk-lib/aws-rds";
 import * as s3 from "aws-cdk-lib/aws-s3";
@@ -20,13 +20,16 @@ interface BackendStackProps extends cdk.StackProps {
 }
 
 /**
- * FastAPI backend on App Runner (plan §6: "simplest managed option — no
- * hand-wired ALB/VPC"), reachable from RDS via a VPC Connector — the one
- * piece of extra networking App Runner needs here.
+ * FastAPI backend on ECS Express Mode (`AWS::ECS::ExpressGatewayService`) —
+ * App Runner's replacement, since App Runner stopped accepting new customers
+ * 2026-04-30. Express Mode auto-provisions the ECS cluster/service, ALB,
+ * security groups, and auto-scaling from a single resource, aiming at the
+ * same "no hand-wired orchestration" DX App Runner had.
  *
- * Uses the L1 CfnService/CfnVpcConnector constructs directly rather than the
- * `@aws-cdk/aws-apprunner-alpha` L2 package, to avoid depending on a
- * separately-versioned alpha module for a stack this size.
+ * Only an L1 construct (`CfnExpressGatewayService`) exists as of
+ * aws-cdk-lib 2.262 — no L2 yet (tracked in aws/aws-cdk#36234) — so, same as
+ * the App Runner resources this replaces, config is explicit with no L2
+ * conveniences.
  */
 export class BackendStack extends cdk.Stack {
   public readonly repository: ecr.Repository;
@@ -39,80 +42,83 @@ export class BackendStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
-    const vpcConnector = new apprunner.CfnVpcConnector(this, "VpcConnector", {
-      subnets: props.vpc.privateSubnets.map(subnet => subnet.subnetId),
-      securityGroups: [props.backendSecurityGroup.securityGroupId],
+    // Lets ECS provision the ALB/security groups/auto-scaling on this
+    // service's behalf. Trust + managed policy per AWS's Express Mode setup
+    // docs — this role is assumed by the ECS control plane, not the running
+    // container.
+    const infrastructureRole = new iam.Role(this, "ExpressInfrastructureRole", {
+      assumedBy: new iam.ServicePrincipal("ecs.amazonaws.com"),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName("service-role/AmazonECSInfrastructureRoleforExpressGatewayServices"),
+      ],
     });
 
-    // Lets App Runner itself pull the image from ECR.
-    const accessRole = new iam.Role(this, "AppRunnerEcrAccessRole", {
-      assumedBy: new iam.ServicePrincipal("build.apprunner.amazonaws.com"),
+    // Pulls the container image and writes logs — also the role ECS uses to
+    // fetch the DATABASE_URL secret's value before handing it to the
+    // container as an env var, so the DB secret grant belongs here, not on
+    // the task role.
+    const executionRole = new iam.Role(this, "ExecutionRole", {
+      assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
+      managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName("service-role/AmazonECSTaskExecutionRolePolicy")],
     });
-    this.repository.grantPull(accessRole);
+    props.database.secret?.grantRead(executionRole);
 
-    // The running service's own permissions — S3 rw on both buckets,
-    // ec2:RunInstances/TerminateInstances scoped by tag (plan §6's IAM
-    // section), read its own DB credentials secret.
-    const instanceRole = new iam.Role(this, "AppRunnerInstanceRole", {
-      assumedBy: new iam.ServicePrincipal("tasks.apprunner.amazonaws.com"),
+    // The running application code's own permissions — S3 rw on both
+    // buckets, ec2:RunInstances/TerminateInstances scoped by tag (plan §6's
+    // IAM section).
+    const taskRole = new iam.Role(this, "TaskRole", {
+      assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
     });
-    props.uploadsBucket.grantReadWrite(instanceRole);
-    props.splatsBucket.grantReadWrite(instanceRole);
-    props.database.secret?.grantRead(instanceRole);
-    instanceRole.addToPolicy(
+    props.uploadsBucket.grantReadWrite(taskRole);
+    props.splatsBucket.grantReadWrite(taskRole);
+    taskRole.addToPolicy(
       new iam.PolicyStatement({
         actions: ["ec2:RunInstances"],
         resources: ["*"], // RunInstances requires resource-level perms on multiple ARN types; tightened via conditions below
         conditions: { StringEquals: { "aws:RequestTag/Role": "worker" } },
       }),
     );
-    instanceRole.addToPolicy(
+    taskRole.addToPolicy(
       new iam.PolicyStatement({
         actions: ["ec2:TerminateInstances"],
         resources: ["*"],
         conditions: { StringEquals: { "ec2:ResourceTag/Role": "worker" } },
       }),
     );
-    instanceRole.addToPolicy(
+    taskRole.addToPolicy(
       new iam.PolicyStatement({
         actions: ["iam:PassRole"],
         resources: [props.workerInstanceProfileArn],
       }),
     );
 
-    new apprunner.CfnService(this, "Service", {
-      sourceConfiguration: {
-        authenticationConfiguration: { accessRoleArn: accessRole.roleArn },
-        autoDeploymentsEnabled: true,
-        imageRepository: {
-          imageIdentifier: `${this.repository.repositoryUri}:latest`,
-          imageRepositoryType: "ECR",
-          imageConfiguration: {
-            port: "8000",
-            runtimeEnvironmentVariables: [
-              { name: "UPLOADS_BUCKET", value: props.uploadsBucket.bucketName },
-              { name: "SPLATS_BUCKET", value: props.splatsBucket.bucketName },
-              { name: "WORKER_AMI_ID", value: props.workerAmiId },
-              { name: "WORKER_SUBNET_ID", value: props.workerSubnetId },
-              { name: "WORKER_SECURITY_GROUP_ID", value: props.workerSecurityGroupId },
-              { name: "WORKER_INSTANCE_PROFILE_ARN", value: props.workerInstanceProfileArn },
-            ],
-            runtimeEnvironmentSecrets: [{ name: "DATABASE_URL", value: props.database.secret?.secretArn ?? "" }],
-          },
-        },
-      },
-      instanceConfiguration: {
-        cpu: "0.25 vCPU",
-        memory: "0.5 GB",
-        instanceRoleArn: instanceRole.roleArn,
-      },
+    new ecs.CfnExpressGatewayService(this, "Service", {
+      serviceName: "ai-gaussian-splatter-backend",
+      infrastructureRoleArn: infrastructureRole.roleArn,
+      executionRoleArn: executionRole.roleArn,
+      taskRoleArn: taskRole.roleArn,
+      cpu: "256", // 0.25 vCPU, matching the App Runner sizing this replaces
+      memory: "512", // 0.5 GB
+      healthCheckPath: "/api/v1/healthz",
       networkConfiguration: {
-        egressConfiguration: {
-          egressType: "VPC",
-          vpcConnectorArn: vpcConnector.attrVpcConnectorArn,
-        },
+        subnets: props.vpc.privateSubnets.map(subnet => subnet.subnetId),
+        securityGroups: [props.backendSecurityGroup.securityGroupId],
       },
-      healthCheckConfiguration: { protocol: "HTTP", path: "/api/v1/healthz" },
+      primaryContainer: {
+        image: `${this.repository.repositoryUri}:latest`,
+        containerPort: 8000,
+        environment: [
+          { name: "UPLOADS_BUCKET", value: props.uploadsBucket.bucketName },
+          { name: "SPLATS_BUCKET", value: props.splatsBucket.bucketName },
+          { name: "WORKER_AMI_ID", value: props.workerAmiId },
+          { name: "WORKER_SUBNET_ID", value: props.workerSubnetId },
+          { name: "WORKER_SECURITY_GROUP_ID", value: props.workerSecurityGroupId },
+          { name: "WORKER_INSTANCE_PROFILE_ARN", value: props.workerInstanceProfileArn },
+        ],
+        // database.secret is always populated — credentials come from
+        // fromGeneratedSecret in data-stack.ts — so this is safe to assert.
+        secrets: [{ name: "DATABASE_URL", valueFrom: props.database.secret!.secretArn }],
+      },
     });
   }
 }
