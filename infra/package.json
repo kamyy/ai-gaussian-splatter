@@ -2,26 +2,14 @@
   "name": "infra",
   "version": "1.0.0",
   "private": true,
-  "description": "AWS CDK app for AI Gaussian Splatter (plan §6, §9)",
+  "description": "CDK CLI pin for the Python CDK app in this directory (plan §6, §9)",
   "scripts": {
-    "build": "tsc",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
     "synth": "cdk synth",
     "diff": "cdk diff",
     "deploy": "cdk deploy --all"
   },
   "packageManager": "pnpm@10.33.0",
-  "dependencies": {
-    "aws-cdk-lib": "^2.262.2",
-    "constructs": "^10.8.0"
-  },
   "devDependencies": {
-    "@types/node": "^26.1.2",
-    "aws-cdk": "^2.1134.0",
-    "prettier": "^3.9.6",
-    "prettier-plugin-organize-imports": "^4.3.0",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "aws-cdk": "^2.1134.0"
   }
 }
