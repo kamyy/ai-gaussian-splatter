@@ -11,8 +11,9 @@ sandbox this was written in to autogenerate against. Verify with
 """
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "727fb3e65bf5"
 down_revision = None

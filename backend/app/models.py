@@ -97,7 +97,9 @@ class Job(Base):
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     object_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("objects.id"), nullable=False, index=True)
-    status: Mapped[JobStatus] = mapped_column(Enum(JobStatus, name="job_status"), default=JobStatus.queued, nullable=False)
+    status: Mapped[JobStatus] = mapped_column(
+        Enum(JobStatus, name="job_status"), default=JobStatus.queued, nullable=False
+    )
     callback_token: Mapped[str] = mapped_column(String, nullable=False)
     ec2_instance_id: Mapped[str | None] = mapped_column(String, nullable=True)
     error_message: Mapped[str | None] = mapped_column(String, nullable=True)

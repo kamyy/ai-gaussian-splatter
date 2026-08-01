@@ -24,7 +24,9 @@ def test_report_status_includes_optional_fields_when_provided(settings):
         f"{settings.backend_url}/api/v1/internal/jobs/{settings.job_id}/status"
     ).mock(return_value=httpx.Response(200))
 
-    report_status(settings, "complete", result_s3_key="objects/x/result.ply", thumbnail_s3_key="objects/x/thumbnail.png")
+    report_status(
+        settings, "complete", result_s3_key="objects/x/result.ply", thumbnail_s3_key="objects/x/thumbnail.png"
+    )
 
     import json
 
