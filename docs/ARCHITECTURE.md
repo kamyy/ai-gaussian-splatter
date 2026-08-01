@@ -23,15 +23,16 @@ FastAPI REST (`backend/`), not GraphQL — the API is ~9 flat endpoints, REST's 
 
 Auth: Clerk (`@clerk/nextjs`), not Cognito (clunkier setup) or Auth0.
 
-**2026-07-31 update**: the backend originally ran on App Runner, but App Runner stopped accepting new customers 2026-04-30 (existing services keep running, no new features). Since this project hadn't deployed yet, it moved to **ECS Express Mode** (`AWS::ECS::ExpressGatewayService`) instead — AWS's official replacement, launched Nov 2025. It auto-provisions the ECS cluster/service, ALB, security groups, and auto-scaling from one resource, same "no hand-wired orchestration" intent App Runner had. Only an L1 CDK construct exists so far (no L2 yet), so `backend-stack.ts` configures it explicitly, same as it did for App Runner's L1 constructs.
+**2026-07-31 update**: the backend originally ran on App Runner, but App Runner stopped accepting new customers 2026-04-30 (existing services keep running, no new features). Since this project hadn't deployed yet, it moved to **ECS Express Mode** (`AWS::ECS::ExpressGatewayService`) instead — AWS's official replacement, launched Nov 2025. It auto-provisions the ECS cluster/service, ALB, security groups, and auto-scaling from one resource, same "no hand-wired orchestration" intent App Runner had. Only an L1 CDK construct exists so far (no L2 yet), so `backend_stack.py` configures it explicitly, same as it did for App Runner's L1 constructs.
 
 ## Abuse protection
 
 Three independent layers (`backend/app/services/rate_limit.py`), since a per-user quota alone doesn't stop multi-accounting:
+
 1. Per-IP rate limit (the actual multi-account defense), checked in `presign`.
 2. Per-user rate limit, alongside it.
 3. Global daily job cap, checked only in `process` — independent of who's calling, the backstop that bounds worst-case GPU spend.
-4. AWS Budget + CloudWatch billing alarm (`infra/lib/budgets-stack.ts`), an independent ops-level safety net.
+4. AWS Budget + CloudWatch billing alarm (`infra/stacks/budgets_stack.py`), an independent ops-level safety net.
 
 ## Frontend
 
@@ -39,11 +40,12 @@ Next.js (App Router), not a Vite SPA — Open Graph previews for shared objects 
 
 ## Infra
 
-AWS CDK (TypeScript), not Terraform — 100% AWS with no multi-cloud plans, so Terraform's core value proposition isn't exercised here, and CDK plays to existing TypeScript fluency. Five stacks (`infra/lib/`): network (VPC/security groups), data (RDS/S3), worker-iam (the spot instance's scoped role), backend (ECS Express Mode), budgets (independent of the others, deployed to us-east-1 regardless of the app's region since billing metrics only exist there).
+AWS CDK (Python), not Terraform — 100% AWS with no multi-cloud plans, so Terraform's core value proposition isn't exercised here. Originally TypeScript CDK (matching `frontend/`'s language), ported to Python on 2026-07-31 to match `backend/`'s and `worker/`'s tooling instead: all three non-frontend packages now share `uv` for dependency management and the same `ruff`+`mypy` lint/type story, so infra code reviews the same way backend/worker code does. The CDK CLI itself remains npm-distributed regardless of app language (there's no pip-installable `cdk` binary), so `infra/` still keeps a minimal `package.json` pinning just that CLI — Node stays a build-time dependency there, just not a source-code language. Five stacks (`infra/stacks/`): network (VPC/security groups), data (RDS/S3), worker-iam (the spot instance's scoped role), backend (ECS Express Mode), budgets (independent of the others, deployed to us-east-1 regardless of the app's region since billing metrics only exist there).
 
 ## Testing
 
 Three tiers, split by CI-cheap vs. GPU-costly (`.github/workflows/ci.yml`):
+
 - **Unit/component** (every PR): `pytest` + `moto` (mocked AWS) for backend/worker; Vitest + React Testing Library for frontend.
 - **E2E against a mocked backend** (every PR): Playwright, covering what's reachable without live Clerk credentials (currently the public gallery path) against a real tiny mock HTTP server (`frontend/e2e/mock-backend.mjs`) — not browser-level route mocking, since the gallery/view pages fetch server-side during Next's SSR, which is invisible to `page.route()`.
 - **Real-pipeline integration** (manual/milestone-gated, not CI): actual COLMAP + gsplat runs cost real GPU time/money. A "fast test mode" (tiny photo set, ~50 iterations) gives a cheap on-demand smoke test of the plumbing when needed.
