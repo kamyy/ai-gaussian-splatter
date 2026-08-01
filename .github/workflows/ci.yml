@@ -95,7 +95,9 @@ jobs:
           cache-dependency-path: infra/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: npx tsc --noEmit
-      - name: cdk synth (fake account, region hardcoded in bin/app.ts — validates templates, not a real deploy)
-        env:
-          CDK_DEFAULT_ACCOUNT: "123456789012"
+      # AWS_ACCOUNT_ID is deliberately left unset here: bin/app.ts falls
+      # back to the placeholder account, and this job has no AWS
+      # credentials configured (it runs on every pull_request, including
+      # forks) — validates templates only, never a real deploy.
+      - name: cdk synth
         run: npx cdk synth

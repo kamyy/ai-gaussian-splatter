@@ -15,6 +15,7 @@ interface BackendStackProps extends cdk.StackProps {
   splatsBucket: s3.Bucket;
   workerAmiId: string;
   workerInstanceProfileArn: string;
+  workerRoleArn: string;
   workerSecurityGroupId: string;
   workerSubnetId: string;
 }
@@ -85,10 +86,14 @@ export class BackendStack extends cdk.Stack {
         conditions: { StringEquals: { "ec2:ResourceTag/Role": "worker" } },
       }),
     );
+    // PassRole is authorized against the role being passed, not the
+    // instance profile ARN that wraps it — RunInstances with
+    // IamInstanceProfile evaluates iam:PassRole against the underlying
+    // role's ARN.
     taskRole.addToPolicy(
       new iam.PolicyStatement({
         actions: ["iam:PassRole"],
-        resources: [props.workerInstanceProfileArn],
+        resources: [props.workerRoleArn],
       }),
     );
 
@@ -99,7 +104,9 @@ export class BackendStack extends cdk.Stack {
       taskRoleArn: taskRole.roleArn,
       cpu: "256", // 0.25 vCPU, matching the App Runner sizing this replaces
       memory: "512", // 0.5 GB
-      healthCheckPath: "/api/v1/healthz",
+      // Express Mode's healthCheckPath is PROTOCOL:PORT/PATH (CDK's own
+      // default is "HTTP:80/ping"), not a bare path.
+      healthCheckPath: "HTTP:8000/api/v1/healthz",
       // Express Mode requires subnets with an Internet Gateway route to
       // provision an internet-facing ALB — giving it public subnets also
       // auto-enables assignPublicIp on the Fargate tasks themselves, which
