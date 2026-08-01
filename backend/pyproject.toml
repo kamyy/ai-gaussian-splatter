@@ -2,7 +2,7 @@
 name = "ai-gaussian-splatter-backend"
 version = "0.1.0"
 description = "FastAPI REST API: auth, rate limiting, job orchestration (plan §3-6)"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
@@ -53,7 +53,7 @@ known-first-party = ["app"]
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body", "fastapi.Header", "fastapi.Cookie"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.14"
 warn_unused_ignores = true
 warn_redundant_casts = true
 warn_unused_configs = true
