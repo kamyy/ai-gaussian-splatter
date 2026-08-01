@@ -89,9 +89,16 @@ jobs:
         working-directory: infra
     steps:
       - uses: actions/checkout@v4
-      # Two toolchains needed here: Node for the `cdk` CLI (npm-distributed
-      # regardless of app language — there's no pip-installable substitute)
-      # and uv for the Python app itself.
+      # Python checks run first and need only uv — no Node/pnpm setup cost
+      # if one of them fails. Node's only needed for the `cdk` CLI
+      # (npm-distributed regardless of app language — there's no
+      # pip-installable substitute), so it's set up last, right before the
+      # one step that actually needs it.
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync --group dev
+      - run: uv run ruff check .
+      - run: uv run mypy app.py stacks
+      - run: uv run pytest -v
       - uses: pnpm/action-setup@v4
         with:
           package_json_file: infra/package.json
@@ -101,11 +108,6 @@ jobs:
           cache: pnpm
           cache-dependency-path: infra/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - uses: astral-sh/setup-uv@v3
-      - run: uv sync --group dev
-      - run: uv run ruff check .
-      - run: uv run mypy app.py stacks
-      - run: uv run pytest -v
       # AWS_ACCOUNT_ID is deliberately left unset here: app.py falls
       # back to the placeholder account, and this job has no AWS
       # credentials configured (it runs on every pull_request, including
