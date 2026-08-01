@@ -39,21 +39,21 @@ const env = { account: process.env.AWS_ACCOUNT_ID ?? "123456789012", region: "us
 // are what let `cdk synth` succeed before those exist.
 const workerAmiId = app.node.tryGetContext("workerAmiId") ?? "ami-000000000000";
 
-const network = new NetworkStack(app, "SplatterNetworkStack", { env });
+const network = new NetworkStack(app, "NetworkStack", { env });
 
-const data = new DataStack(app, "SplatterDataStack", {
+const data = new DataStack(app, "DataStack", {
   env,
   vpc: network.vpc,
   dbSecurityGroup: network.dbSecurityGroup,
 });
 
-const workerIam = new WorkerIamStack(app, "SplatterWorkerIamStack", {
+const workerIam = new WorkerIamStack(app, "WorkerIamStack", {
   env,
   uploadsBucket: data.uploadsBucket,
   splatsBucket: data.splatsBucket,
 });
 
-new BackendStack(app, "SplatterBackendStack", {
+new BackendStack(app, "BackendStack", {
   env,
   vpc: network.vpc,
   backendSecurityGroup: network.backendSecurityGroup,
@@ -69,7 +69,7 @@ new BackendStack(app, "SplatterBackendStack", {
 
 // Billing metrics only exist in us-east-1 regardless of where the rest of
 // the app is deployed — see budgets-stack.ts.
-new BudgetsStack(app, "SplatterBudgetsStack", {
+new BudgetsStack(app, "BudgetsStack", {
   env: { account: env.account, region: "us-east-1" },
   alertEmail: app.node.tryGetContext("alertEmail") ?? "kam.yin.yip@gmail.com",
 });
