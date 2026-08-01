@@ -104,8 +104,8 @@ def _read_images(path: Path) -> dict[int, Image]:
 
 
 def _read_points3d(path: Path) -> tuple[np.ndarray, np.ndarray]:
-    xyz_list: list[np.ndarray] = []
-    rgb_list: list[np.ndarray] = []
+    xyz_list: list[tuple[float, float, float]] = []
+    rgb_list: list[tuple[int, int, int]] = []
     with open(path, "rb") as f:
         (num_points,) = struct.unpack("<Q", f.read(8))
         for _ in range(num_points):

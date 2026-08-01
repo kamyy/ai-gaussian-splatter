@@ -40,9 +40,7 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
     sparse_dir = workdir / "sparse"
     sparse_dir.mkdir(parents=True, exist_ok=True)
 
-    num_images_input = sum(
-        1 for p in photos_dir.iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png"}
-    )
+    num_images_input = sum(1 for p in photos_dir.iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png"})
     if num_images_input == 0:
         raise RuntimeError(f"No photos found in {photos_dir}")
 

@@ -4,12 +4,7 @@ from pipeline.sfm import SfmResult, _count_registered_images
 
 
 def test_count_registered_images_parses_model_analyzer_output(monkeypatch, tmp_path):
-    fake_output = (
-        "Cameras: 1\n"
-        "Images: 50\n"
-        "Registered images: 47\n"
-        "Points: 12345\n"
-    )
+    fake_output = "Cameras: 1\nImages: 50\nRegistered images: 47\nPoints: 12345\n"
 
     def fake_run(cmd, check, capture_output, text):
         return subprocess.CompletedProcess(cmd, 0, stdout=fake_output, stderr="")

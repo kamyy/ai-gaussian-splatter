@@ -9,7 +9,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for how it's built and why, a
 - `frontend/` — Next.js (App Router) + Mantine + SWR + Zustand + react-three-fiber
 - `backend/` — FastAPI REST API (auth, rate limiting, job orchestration)
 - `worker/` — COLMAP + gsplat reconstruction pipeline, run on a GPU spot instance per job
-- `infra/` — AWS CDK (TypeScript)
+- `infra/` — AWS CDK (Python)
 
 ## Quick start
 
@@ -24,7 +24,7 @@ cd worker && uv sync --group dev && uv run pytest
 cd frontend && pnpm install && pnpm test && pnpm dev
 
 # Infra
-cd infra && pnpm install && npx cdk synth
+cd infra && pnpm install && uv sync --group dev && uv run pytest && npx cdk synth
 ```
 
 ## License

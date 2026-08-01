@@ -6,9 +6,9 @@ from pipeline.status import report_status
 
 @respx.mock
 def test_report_status_sends_expected_payload_and_auth(settings):
-    route = respx.patch(
-        f"{settings.backend_url}/api/v1/internal/jobs/{settings.job_id}/status"
-    ).mock(return_value=httpx.Response(200))
+    route = respx.patch(f"{settings.backend_url}/api/v1/internal/jobs/{settings.job_id}/status").mock(
+        return_value=httpx.Response(200)
+    )
 
     report_status(settings, "training_running")
 
@@ -20,11 +20,13 @@ def test_report_status_sends_expected_payload_and_auth(settings):
 
 @respx.mock
 def test_report_status_includes_optional_fields_when_provided(settings):
-    route = respx.patch(
-        f"{settings.backend_url}/api/v1/internal/jobs/{settings.job_id}/status"
-    ).mock(return_value=httpx.Response(200))
+    route = respx.patch(f"{settings.backend_url}/api/v1/internal/jobs/{settings.job_id}/status").mock(
+        return_value=httpx.Response(200)
+    )
 
-    report_status(settings, "complete", result_s3_key="objects/x/result.ply", thumbnail_s3_key="objects/x/thumbnail.png")
+    report_status(
+        settings, "complete", result_s3_key="objects/x/result.ply", thumbnail_s3_key="objects/x/thumbnail.png"
+    )
 
     import json
 

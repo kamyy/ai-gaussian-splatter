@@ -5,9 +5,9 @@
   "scripts": {
     "prepare": "husky",
     "guard:cdk-context": "node scripts/check-cdk-context-account.mjs",
-    "format-staged": "pretty-quick --staged",
-    "lint": "pnpm --dir frontend lint",
-    "typecheck": "pnpm --dir frontend exec tsc --noEmit && pnpm --dir infra exec tsc --noEmit"
+    "format-staged": "pretty-quick --staged && node scripts/format-python-staged.mjs",
+    "lint": "pnpm --dir frontend lint && node scripts/lint-python.mjs",
+    "typecheck": "pnpm --dir frontend exec tsc --noEmit && node scripts/typecheck-python.mjs"
   },
   "devDependencies": {
     "husky": "^9.1.7",

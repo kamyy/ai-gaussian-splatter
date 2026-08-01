@@ -16,9 +16,6 @@ dist/
 
 # CDK
 infra/cdk.out/
-infra/*.d.ts
-infra/*.js
-!infra/jest.config.js
 
 # Env / secrets
 .env

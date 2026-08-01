@@ -47,9 +47,7 @@ def main() -> int:
         ply_path, thumbnail_path = export.export_scene(scene, settings)
         result_key, thumbnail_key = export.upload_result(ply_path, thumbnail_path, settings)
 
-        status.report_status(
-            settings, "complete", result_s3_key=result_key, thumbnail_s3_key=thumbnail_key
-        )
+        status.report_status(settings, "complete", result_s3_key=result_key, thumbnail_s3_key=thumbnail_key)
         return 0
 
     except Exception as exc:  # noqa: BLE001 — a job failure must always be reported, not just logged

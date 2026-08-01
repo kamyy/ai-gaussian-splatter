@@ -3,6 +3,7 @@
 ## Local development
 
 ### Backend
+
 ```bash
 cd backend
 uv sync --group dev
@@ -16,10 +17,13 @@ WORKER_AMI_ID=... WORKER_SUBNET_ID=... WORKER_SECURITY_GROUP_ID=... WORKER_INSTA
 BACKEND_PUBLIC_URL=http://localhost:8000 \
   uv run uvicorn app.main:app --reload
 ```
+
 Interactive API docs at `http://localhost:8000/docs` once running.
 
 ### Worker (local pipeline run, per plan M0/M1)
+
 Requires a real GPU with the CUDA toolkit and `colmap` on PATH — not available in every dev environment (this repo was scaffolded in a sandbox with a GPU driver but no CUDA toolkit, so the training path was smoke-tested but never run end-to-end; verify on real hardware before trusting it).
+
 ```bash
 cd worker
 uv sync --group dev
@@ -30,6 +34,7 @@ FAST_TEST_MODE=true \
 ```
 
 ### Frontend
+
 ```bash
 cd frontend
 pnpm install
@@ -38,27 +43,30 @@ pnpm dev
 ```
 
 ### Full test suite
+
 ```bash
-(cd backend && uv run pytest -v)          # 5 rate-limit tests skip without TEST_DATABASE_URL
-(cd worker && uv run pytest -v)
+(cd backend && uv run ruff check . && uv run mypy app && uv run pytest -v)          # 5 rate-limit tests skip without TEST_DATABASE_URL
+(cd worker && uv run ruff check . && uv run mypy pipeline && uv run pytest -v)
 (cd frontend && npx tsc --noEmit && npx eslint . && npx vitest run && npx playwright test)
-(cd infra && npx tsc --noEmit && CDK_DEFAULT_ACCOUNT=123456789012 npx cdk synth)
+(cd infra && uv run ruff check . && uv run mypy app.py stacks && uv run pytest -v && npx cdk synth)
 ```
 
 ## Debugging a failed job
 
 1. Check `jobs.status` and `jobs.error_message` for the object (`GET /api/v1/objects/{id}/jobs/latest`).
 2. If `status` is stuck (no update in ~20 min) rather than `failed`: the instance likely died without reporting — check the EC2 console for the tagged instance (`Role=worker`, `JobId=<job_id>`) and its system log.
-3. Confirm self-termination actually fired: the instance should not still be running after the job reaches a terminal state. If it is, the CloudWatch alarm backstop (kills anything worker-tagged running >90 min) is the safety net — verify it's configured (`infra/lib/budgets-stack.ts` handles cost alarms; the instance-runtime alarm is a documented addition, not yet in this stack).
+3. Confirm self-termination actually fired: the instance should not still be running after the job reaches a terminal state. If it is, the CloudWatch alarm backstop (kills anything worker-tagged running >90 min) is the safety net — verify it's configured (`infra/stacks/budgets_stack.py` handles cost alarms; the instance-runtime alarm is a documented addition, not yet in this stack).
 4. `docker logs` on the instance (if still running) or CloudWatch Logs (once wired up) for the actual COLMAP/gsplat stack trace.
 
 ## Deploying infra
 
 ```bash
 cd infra
+export AWS_ACCOUNT_ID=<your real account id>   # otherwise this targets the placeholder account and fails
 npx cdk diff    # review changes
 npx cdk deploy --all
 ```
-The `WorkerIamStack` and `DataStack` must exist before `BackendStack` (CDK resolves this automatically via cross-stack references in `bin/app.ts`). `BudgetsStack` deploys to `us-east-1` regardless of the app's primary region — billing metrics only exist there.
 
-`bin/app.ts`'s `workerAmiId` context value is a placeholder (`ami-000000000000`) until the worker image is actually built and pushed (plan M5/M10) — `cdk synth`/`diff` work fine with the placeholder, but don't `deploy` the `BackendStack` with it still set, since job launches would fail.
+The `WorkerIamStack` and `DataStack` must exist before `BackendStack` (CDK resolves this automatically via cross-stack references in `app.py`). `BudgetsStack` deploys to `us-east-1` regardless of the app's primary region — billing metrics only exist there.
+
+`app.py`'s `workerAmiId` context value is a placeholder (`ami-000000000000`) until the worker image is actually built and pushed (plan M5/M10) — `cdk synth`/`diff` work fine with the placeholder, but don't `deploy` the `BackendStack` with it still set, since job launches would fail.

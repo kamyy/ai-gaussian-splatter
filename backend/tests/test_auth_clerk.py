@@ -6,6 +6,7 @@ from fastapi import HTTPException
 
 from app.auth.clerk import ClerkUser, verify_clerk_token
 
+
 def _make_token(claims: dict, key, kid: str = "test-kid") -> str:
     return jwt.encode(claims, key, algorithm="RS256", headers={"kid": kid})
 

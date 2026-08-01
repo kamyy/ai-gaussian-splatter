@@ -2,7 +2,7 @@
 name = "ai-gaussian-splatter-backend"
 version = "0.1.0"
 description = "FastAPI REST API: auth, rate limiting, job orchestration (plan §3-6)"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
@@ -23,11 +23,43 @@ dev = [
     "moto[s3,ec2]>=5.0",
     "respx>=0.21",
     "cryptography>=49.0.0",
+    "ruff>=0.8",
+    "mypy>=1.13",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM"]
+# UP042: models.py's `class X(str, enum.Enum)` pattern predates this ruleset
+# and interacts with SQLAlchemy's Enum column type — not rewriting to
+# enum.StrEnum as a drive-by lint fix without dedicated test coverage for
+# any serialization/migration differences.
+ignore = ["UP042"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection pattern requires Depends()/Query()/etc. as
+# argument defaults — that's how FastAPI resolves them, not a mutable-default
+# bug B008 is meant to catch.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body", "fastapi.Header", "fastapi.Cookie"]
+
+[tool.mypy]
+python_version = "3.14"
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unused_configs = true
+check_untyped_defs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
 
 [build-system]
 requires = ["hatchling"]

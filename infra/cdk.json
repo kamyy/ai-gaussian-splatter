@@ -1,8 +1,8 @@
 {
-  "app": "npx ts-node --prefer-ts-exts bin/app.ts",
+  "app": "uv run python app.py",
   "watch": {
     "include": ["**"],
-    "exclude": ["README.md", "cdk*.json", "**/*.d.ts", "**/*.js", "tsconfig.json", "package*.json", "node_modules"]
+    "exclude": ["README.md", "cdk*.json", "**/__pycache__", "**/*.pyc", "package*.json", "node_modules", ".venv"]
   },
   "context": {
     "@aws-cdk/aws-lambda:recognizeLayerVersion": true,

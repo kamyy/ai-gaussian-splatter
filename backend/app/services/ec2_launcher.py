@@ -1,5 +1,5 @@
 """Direct boto3 spot-instance-per-job launch (plan §4) — no SQS/Batch/Step
-Functions. IAM instance profile is scoped externally (infra/lib/worker-iam-stack.ts)
+Functions. IAM instance profile is scoped externally (infra/stacks/worker_iam_stack.py)
 to exactly: S3 read (uploads bucket), S3 write (splats bucket),
 ec2:TerminateInstances on itself.
 """
@@ -87,6 +87,10 @@ def launch_job(
                 "ResourceType": "instance",
                 "Tags": [
                     {"Key": "Name", "Value": f"ai-gaussian-splatter-worker-{job_id}"},
+                    # Must match infra/stacks/tags.py's WORKER_TAG_KEY/VALUE and
+                    # worker_iam_stack.py's self-termination grant — this is a
+                    # separate uv package/venv so it can't import that constant
+                    # directly, but the two must stay in sync by hand.
                     {"Key": "Role", "Value": "worker"},
                     {"Key": "JobId", "Value": job_id},
                 ],
