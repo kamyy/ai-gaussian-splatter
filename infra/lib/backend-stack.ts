@@ -7,6 +7,11 @@ import * as rds from "aws-cdk-lib/aws-rds";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 
+// Single source of truth for the FastAPI container's listen port — used by
+// both the task definition and the health check path below, so they can't
+// drift out of sync with each other.
+const CONTAINER_PORT = 8000;
+
 interface BackendStackProps extends cdk.StackProps {
   vpc: ec2.Vpc;
   backendSecurityGroup: ec2.SecurityGroup;
@@ -58,11 +63,35 @@ export class BackendStack extends cdk.Stack {
     // fetch the DATABASE_URL secret's value before handing it to the
     // container as an env var, so the DB secret grant belongs here, not on
     // the task role.
+    //
+    // Deliberately not using the AmazonECSTaskExecutionRolePolicy managed
+    // policy: its JSON (verified against AWS's managed policy reference)
+    // grants ecr:GetAuthorizationToken, logs:CreateLogStream, and
+    // logs:PutLogEvents at Resource: "*" — all three are unavoidably
+    // account-wide (GetAuthorizationToken isn't resource-scopable; ECS
+    // doesn't know the log group ahead of time) — but it also grants the
+    // actual image-pull actions (BatchCheckLayerAvailability,
+    // GetDownloadUrlForLayer, BatchGetImage) at Resource: "*", i.e. read
+    // access to every ECR repo in the account. Reconstructed below: the two
+    // unavoidably-broad logs actions explicitly, and GetAuthorizationToken
+    // comes along for free from grantPull, which scopes the real pull
+    // actions to this one repository instead of every repo in the account.
     const executionRole = new iam.Role(this, "ExecutionRole", {
       assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
-      managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName("service-role/AmazonECSTaskExecutionRolePolicy")],
     });
-    props.database.secret?.grantRead(executionRole);
+    executionRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["logs:CreateLogStream", "logs:PutLogEvents"],
+        resources: ["*"],
+      }),
+    );
+    this.repository.grantPull(executionRole); // also grants ecr:GetAuthorizationToken (Resource: "*", unavoidably)
+    // database.secret is always populated — credentials come from
+    // fromGeneratedSecret in data-stack.ts — so this is safe to assert
+    // once and reuse, rather than encoding the same invariant two
+    // different ways (optional-chaining here, non-null assertion below).
+    const dbSecret = props.database.secret!;
+    dbSecret.grantRead(executionRole);
 
     // The running application code's own permissions — S3 rw on both
     // buckets, ec2:RunInstances/TerminateInstances scoped by tag (plan §6's
@@ -106,13 +135,19 @@ export class BackendStack extends cdk.Stack {
       memory: "512", // 0.5 GB
       // Express Mode's healthCheckPath is PROTOCOL:PORT/PATH (CDK's own
       // default is "HTTP:80/ping"), not a bare path.
-      healthCheckPath: "HTTP:8000/api/v1/healthz",
+      healthCheckPath: `HTTP:${CONTAINER_PORT}/api/v1/healthz`,
       // Express Mode requires subnets with an Internet Gateway route to
-      // provision an internet-facing ALB — giving it public subnets also
+      // provision an internet-facing ALB. Providing public subnets also
       // auto-enables assignPublicIp on the Fargate tasks themselves, which
       // is what lets them reach AWS APIs (S3, EC2 RunInstances) without a
-      // NAT gateway. Private subnets would leave both the ALB and the
-      // tasks' own outbound calls broken.
+      // NAT gateway — verified against AWS's docs ("Resources created by
+      // Amazon ECS Express Mode services" > Network configuration
+      // defaults): "If you provide custom public subnets, Express Mode
+      // will provision an internet-facing ALB and turn on assignPublicIP
+      // for your tasks." Private subnets would leave both the ALB internal
+      // and the tasks' own outbound calls broken (assignPublicIp is
+      // disabled for private subnets per the same doc, making you
+      // responsible for a NAT gateway yourself).
       networkConfiguration: {
         subnets: props.vpc.publicSubnets.map(subnet => subnet.subnetId),
         securityGroups: [props.backendSecurityGroup.securityGroupId],
@@ -125,7 +160,7 @@ export class BackendStack extends cdk.Stack {
       },
       primaryContainer: {
         image: `${this.repository.repositoryUri}:latest`,
-        containerPort: 8000,
+        containerPort: CONTAINER_PORT,
         environment: [
           { name: "UPLOADS_BUCKET", value: props.uploadsBucket.bucketName },
           { name: "SPLATS_BUCKET", value: props.splatsBucket.bucketName },
@@ -134,9 +169,7 @@ export class BackendStack extends cdk.Stack {
           { name: "WORKER_SECURITY_GROUP_ID", value: props.workerSecurityGroupId },
           { name: "WORKER_INSTANCE_PROFILE_ARN", value: props.workerInstanceProfileArn },
         ],
-        // database.secret is always populated — credentials come from
-        // fromGeneratedSecret in data-stack.ts — so this is safe to assert.
-        secrets: [{ name: "DATABASE_URL", valueFrom: props.database.secret!.secretArn }],
+        secrets: [{ name: "DATABASE_URL", valueFrom: dbSecret.secretArn }],
       },
     });
   }

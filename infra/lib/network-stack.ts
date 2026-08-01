@@ -33,22 +33,23 @@ export class NetworkStack extends cdk.Stack {
     // CloudFormation's GroupDescription pattern disallows several common
     // punctuation characters (e.g. ">", the unicode em dash "—") that
     // are easy to reach for by habit — plain ASCII only below.
+    //
+    // Deliberately has no ingress rule of its own. Per AWS's Express Mode
+    // docs (Resources created by Amazon ECS Express Mode services —
+    // "networkConfiguration.SecurityGroups"), Express Mode always creates
+    // its own Load Balancer + Service security group pair with minimal
+    // required ingress, regardless of what's passed in; a security group
+    // you provide is only an *additional* ingress path, not a replacement.
+    // So this group needs no ingress rule of its own — its only job is to
+    // give the backend tasks a stable identity that dbSecurityGroup's own
+    // ingress rule below can reference as a source, since security-group
+    // references check ENI membership, not the referenced group's own
+    // rules.
     this.backendSecurityGroup = new ec2.SecurityGroup(this, "BackendSecurityGroup", {
       vpc: this.vpc,
       description: "ECS Express Mode backend service to RDS",
       allowAllOutbound: true,
     });
-    // Express Mode's auto-provisioned ALB reaches the Fargate tasks on the
-    // container port. The ALB gets its own AWS-managed security group we
-    // can't reference at synth time (created dynamically by the ECS control
-    // plane), so this is scoped to the VPC's CIDR rather than the internet —
-    // the ALB's traffic to the tasks originates from within the VPC either
-    // way, even though the ALB itself is internet-facing.
-    this.backendSecurityGroup.addIngressRule(
-      ec2.Peer.ipv4(this.vpc.vpcCidrBlock),
-      ec2.Port.tcp(8000),
-      "Express Mode ALB to backend tasks (container port)",
-    );
 
     this.workerSecurityGroup = new ec2.SecurityGroup(this, "WorkerSecurityGroup", {
       vpc: this.vpc,
@@ -58,7 +59,7 @@ export class NetworkStack extends cdk.Stack {
 
     this.dbSecurityGroup = new ec2.SecurityGroup(this, "DbSecurityGroup", {
       vpc: this.vpc,
-      description: "RDS Postgres, inbound only from the backend VPC Connector",
+      description: "RDS Postgres, inbound only from the backend ECS Express Mode service",
       allowAllOutbound: false,
     });
     this.dbSecurityGroup.addIngressRule(
