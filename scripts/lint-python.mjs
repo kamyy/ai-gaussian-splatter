@@ -9,4 +9,6 @@ const PACKAGES = ["backend", "worker", "infra"];
 for (const pkg of PACKAGES) {
   console.log(`\n> ${pkg}: uv run ruff check .`);
   execFileSync("uv", ["run", "ruff", "check", "."], { cwd: pkg, stdio: "inherit" });
+  console.log(`\n> ${pkg}: uv run ruff format --check .`);
+  execFileSync("uv", ["run", "ruff", "format", "--check", "."], { cwd: pkg, stdio: "inherit" });
 }

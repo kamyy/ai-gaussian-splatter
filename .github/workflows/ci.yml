@@ -33,6 +33,7 @@ jobs:
       - uses: astral-sh/setup-uv@v3
       - run: uv sync --group dev
       - run: uv run ruff check .
+      - run: uv run ruff format --check .
       - run: uv run mypy app
       - name: Run tests (unit tier always; Postgres-dependent tier via TEST_DATABASE_URL)
         env:
@@ -49,6 +50,7 @@ jobs:
       - uses: astral-sh/setup-uv@v3
       - run: uv sync --group dev
       - run: uv run ruff check .
+      - run: uv run ruff format --check .
       - run: uv run mypy pipeline
       # No GPU/CUDA toolkit in CI runners — this is exactly the CI-cheap
       # tier (fetch/export/status callbacks, mocked S3/HTTP), not the real
@@ -97,6 +99,7 @@ jobs:
       - uses: astral-sh/setup-uv@v3
       - run: uv sync --group dev
       - run: uv run ruff check .
+      - run: uv run ruff format --check .
       - run: uv run mypy app.py stacks
       - run: uv run pytest -v
       - uses: pnpm/action-setup@v4
