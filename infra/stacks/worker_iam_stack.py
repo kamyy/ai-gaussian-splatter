@@ -3,6 +3,8 @@ from aws_cdk import aws_iam as iam
 from aws_cdk import aws_s3 as s3
 from constructs import Construct
 
+from stacks.tags import WORKER_TAG_KEY, WORKER_TAG_VALUE
+
 
 class WorkerIamStack(cdk.Stack):
     """The GPU spot worker's IAM role/instance profile (plan §4, §6) — scoped to
@@ -35,12 +37,13 @@ class WorkerIamStack(cdk.Stack):
         # "instance self-terminates in all cases") but nothing else running in
         # the account. EC2 doesn't support resource-level restriction to
         # "the calling instance" directly, so this is scoped by the same
-        # Role=worker tag convention used in backend_stack.py's RunInstances grant.
+        # worker-tag convention used in backend_stack.py's RunInstances grant
+        # (see stacks/tags.py — the shared source of truth for that tag).
         self.role.add_to_policy(
             iam.PolicyStatement(
                 actions=["ec2:TerminateInstances"],
                 resources=["*"],
-                conditions={"StringEquals": {"ec2:ResourceTag/Role": "worker"}},
+                conditions={"StringEquals": {f"ec2:ResourceTag/{WORKER_TAG_KEY}": WORKER_TAG_VALUE}},
             )
         )
 

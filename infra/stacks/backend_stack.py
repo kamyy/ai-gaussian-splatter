@@ -7,6 +7,8 @@ from aws_cdk import aws_rds as rds
 from aws_cdk import aws_s3 as s3
 from constructs import Construct
 
+from stacks.tags import WORKER_TAG_KEY, WORKER_TAG_VALUE
+
 # Single source of truth for the FastAPI container's listen port — used by
 # both the task definition and the health check path below, so they can't
 # drift out of sync with each other.
@@ -120,14 +122,14 @@ class BackendStack(cdk.Stack):
                 actions=["ec2:RunInstances"],
                 # RunInstances requires resource-level perms on multiple ARN types; tightened via conditions below
                 resources=["*"],
-                conditions={"StringEquals": {"aws:RequestTag/Role": "worker"}},
+                conditions={"StringEquals": {f"aws:RequestTag/{WORKER_TAG_KEY}": WORKER_TAG_VALUE}},
             )
         )
         task_role.add_to_policy(
             iam.PolicyStatement(
                 actions=["ec2:TerminateInstances"],
                 resources=["*"],
-                conditions={"StringEquals": {"ec2:ResourceTag/Role": "worker"}},
+                conditions={"StringEquals": {f"ec2:ResourceTag/{WORKER_TAG_KEY}": WORKER_TAG_VALUE}},
             )
         )
         # PassRole is authorized against the role being passed, not the
