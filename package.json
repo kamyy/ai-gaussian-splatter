@@ -1,0 +1,18 @@
+{
+  "name": "ai-gaussian-splatter",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "prepare": "husky",
+    "guard:cdk-context": "node scripts/check-cdk-context-account.mjs",
+    "format-staged": "pretty-quick --staged",
+    "lint": "pnpm --dir frontend lint",
+    "typecheck": "pnpm --dir frontend exec tsc --noEmit && pnpm --dir infra exec tsc --noEmit"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "prettier": "^3.9.6",
+    "prettier-plugin-organize-imports": "^4.3.0",
+    "pretty-quick": "^4.2.2"
+  }
+}

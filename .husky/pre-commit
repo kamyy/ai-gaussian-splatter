@@ -1,0 +1,4 @@
+pnpm run guard:cdk-context
+pnpm run format-staged
+pnpm run lint
+pnpm run typecheck
