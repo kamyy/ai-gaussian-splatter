@@ -29,12 +29,7 @@ def list_objects(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[Object]:
-    return (
-        db.query(Object)
-        .filter(Object.user_id == user.id)
-        .order_by(Object.created_at.desc())
-        .all()
-    )
+    return db.query(Object).filter(Object.user_id == user.id).order_by(Object.created_at.desc()).all()
 
 
 @router.get("/{object_id}", response_model=ObjectRead)

@@ -35,7 +35,5 @@ def test_splats_bucket_has_no_lifecycle_rule(wired_stacks):
     template = Template.from_stack(wired_stacks["data"])
 
     buckets = template.find_resources("AWS::S3::Bucket")
-    without_lifecycle = [
-        props for props in buckets.values() if "LifecycleConfiguration" not in props["Properties"]
-    ]
+    without_lifecycle = [props for props in buckets.values() if "LifecycleConfiguration" not in props["Properties"]]
     assert len(without_lifecycle) == 1

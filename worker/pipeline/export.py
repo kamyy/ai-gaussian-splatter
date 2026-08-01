@@ -63,12 +63,23 @@ def _write_ply(scene: TrainedScene, path: Path) -> None:
     opacities = model.opacities.detach().cpu().numpy()  # already logit-space
 
     dtype = [
-        ("x", "f4"), ("y", "f4"), ("z", "f4"),
-        ("nx", "f4"), ("ny", "f4"), ("nz", "f4"),
-        ("f_dc_0", "f4"), ("f_dc_1", "f4"), ("f_dc_2", "f4"),
+        ("x", "f4"),
+        ("y", "f4"),
+        ("z", "f4"),
+        ("nx", "f4"),
+        ("ny", "f4"),
+        ("nz", "f4"),
+        ("f_dc_0", "f4"),
+        ("f_dc_1", "f4"),
+        ("f_dc_2", "f4"),
         ("opacity", "f4"),
-        ("scale_0", "f4"), ("scale_1", "f4"), ("scale_2", "f4"),
-        ("rot_0", "f4"), ("rot_1", "f4"), ("rot_2", "f4"), ("rot_3", "f4"),
+        ("scale_0", "f4"),
+        ("scale_1", "f4"),
+        ("scale_2", "f4"),
+        ("rot_0", "f4"),
+        ("rot_1", "f4"),
+        ("rot_2", "f4"),
+        ("rot_3", "f4"),
     ]
     vertex = np.zeros(n, dtype=dtype)
     vertex["x"], vertex["y"], vertex["z"] = means[:, 0], means[:, 1], means[:, 2]
@@ -77,7 +88,10 @@ def _write_ply(scene: TrainedScene, path: Path) -> None:
     vertex["opacity"] = opacities
     vertex["scale_0"], vertex["scale_1"], vertex["scale_2"] = scales[:, 0], scales[:, 1], scales[:, 2]
     vertex["rot_0"], vertex["rot_1"], vertex["rot_2"], vertex["rot_3"] = (
-        quats[:, 0], quats[:, 1], quats[:, 2], quats[:, 3]
+        quats[:, 0],
+        quats[:, 1],
+        quats[:, 2],
+        quats[:, 3],
     )
 
     PlyData([PlyElement.describe(vertex, "vertex")], text=False).write(str(path))

@@ -45,9 +45,7 @@ class BudgetsStack(cdk.Stack):
                         threshold=80,  # 80% of budget
                         threshold_type="PERCENTAGE",
                     ),
-                    subscribers=[
-                        budgets.CfnBudget.SubscriberProperty(subscription_type="EMAIL", address=alert_email)
-                    ],
+                    subscribers=[budgets.CfnBudget.SubscriberProperty(subscription_type="EMAIL", address=alert_email)],
                 ),
                 budgets.CfnBudget.NotificationWithSubscribersProperty(
                     notification=budgets.CfnBudget.NotificationProperty(
@@ -56,9 +54,7 @@ class BudgetsStack(cdk.Stack):
                         threshold=100,
                         threshold_type="PERCENTAGE",
                     ),
-                    subscribers=[
-                        budgets.CfnBudget.SubscriberProperty(subscription_type="EMAIL", address=alert_email)
-                    ],
+                    subscribers=[budgets.CfnBudget.SubscriberProperty(subscription_type="EMAIL", address=alert_email)],
                 ),
             ],
         )

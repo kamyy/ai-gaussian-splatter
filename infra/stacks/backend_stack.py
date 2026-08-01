@@ -189,9 +189,7 @@ class BackendStack(cdk.Stack):
                     key_value_pair(name="WORKER_INSTANCE_PROFILE_ARN", value=worker_instance_profile_arn),
                 ],
                 secrets=[
-                    ecs.CfnExpressGatewayService.SecretProperty(
-                        name="DATABASE_URL", value_from=db_secret.secret_arn
-                    )
+                    ecs.CfnExpressGatewayService.SecretProperty(name="DATABASE_URL", value_from=db_secret.secret_arn)
                 ],
             ),
         )

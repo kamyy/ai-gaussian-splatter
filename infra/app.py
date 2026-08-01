@@ -18,9 +18,7 @@ def context_or(app: cdk.App, key: str, default: str) -> str:
     return value if value is not None else default
 
 
-def build_stacks(
-    app: cdk.App, env: cdk.Environment, *, worker_ami_id: str, alert_email: str
-) -> dict[str, cdk.Stack]:
+def build_stacks(app: cdk.App, env: cdk.Environment, *, worker_ami_id: str, alert_email: str) -> dict[str, cdk.Stack]:
     """Wires all 5 stacks together. Pulled out of module scope so
     infra/tests/conftest.py can import and reuse this exact wiring instead
     of hand-duplicating it — keeps the test suite's stack graph from

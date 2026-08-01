@@ -12,9 +12,7 @@ def test_execution_role_ecr_pull_scoped_to_repo_not_account_wide(wired_stacks):
     template = Template.from_stack(wired_stacks["backend"])
 
     policies = template.find_resources("AWS::IAM::Policy")
-    execution_role_policies = [
-        props for name, props in policies.items() if "ExecutionRole" in name
-    ]
+    execution_role_policies = [props for name, props in policies.items() if "ExecutionRole" in name]
     assert len(execution_role_policies) == 1
 
     statements = execution_role_policies[0]["Properties"]["PolicyDocument"]["Statement"]

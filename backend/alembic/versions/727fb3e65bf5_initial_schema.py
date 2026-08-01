@@ -31,7 +31,12 @@ def upgrade() -> None:
     op.create_index("ix_users_clerk_user_id", "users", ["clerk_user_id"])
 
     object_status = postgresql.ENUM(
-        "draft", "uploading", "ready_to_process", "processing", "complete", "failed",
+        "draft",
+        "uploading",
+        "ready_to_process",
+        "processing",
+        "complete",
+        "failed",
         name="object_status",
     )
     object_status.create(op.get_bind())
@@ -66,8 +71,14 @@ def upgrade() -> None:
     op.create_index("ix_photos_object_id", "photos", ["object_id"])
 
     job_status = postgresql.ENUM(
-        "queued", "launching", "colmap_running", "training_running",
-        "uploading_result", "complete", "failed", "cancelled",
+        "queued",
+        "launching",
+        "colmap_running",
+        "training_running",
+        "uploading_result",
+        "complete",
+        "failed",
+        "cancelled",
         name="job_status",
     )
     job_status.create(op.get_bind())
