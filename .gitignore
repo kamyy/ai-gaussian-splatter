@@ -24,6 +24,14 @@ infra/*.js
 .env
 .env.*
 !.env.example
+*.pem
+
+# Frontend (Vitest/Playwright output, Vercel CLI, TS incremental builds)
+coverage/
+test-results/
+.vercel/
+*.tsbuildinfo
+next-env.d.ts
 
 # OS / editor
 .DS_Store

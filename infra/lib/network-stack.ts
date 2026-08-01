@@ -33,9 +33,21 @@ export class NetworkStack extends cdk.Stack {
     // CloudFormation's GroupDescription pattern disallows several common
     // punctuation characters (e.g. ">", the unicode em dash "—") that
     // are easy to reach for by habit — plain ASCII only below.
+    //
+    // Deliberately has no ingress rule of its own. Per AWS's Express Mode
+    // docs (Resources created by Amazon ECS Express Mode services —
+    // "networkConfiguration.SecurityGroups"), Express Mode always creates
+    // its own Load Balancer + Service security group pair with minimal
+    // required ingress, regardless of what's passed in; a security group
+    // you provide is only an *additional* ingress path, not a replacement.
+    // So this group needs no ingress rule of its own — its only job is to
+    // give the backend tasks a stable identity that dbSecurityGroup's own
+    // ingress rule below can reference as a source, since security-group
+    // references check ENI membership, not the referenced group's own
+    // rules.
     this.backendSecurityGroup = new ec2.SecurityGroup(this, "BackendSecurityGroup", {
       vpc: this.vpc,
-      description: "App Runner VPC Connector to RDS",
+      description: "ECS Express Mode backend service to RDS",
       allowAllOutbound: true,
     });
 
@@ -47,13 +59,13 @@ export class NetworkStack extends cdk.Stack {
 
     this.dbSecurityGroup = new ec2.SecurityGroup(this, "DbSecurityGroup", {
       vpc: this.vpc,
-      description: "RDS Postgres, inbound only from the backend VPC Connector",
+      description: "RDS Postgres, inbound only from the backend ECS Express Mode service",
       allowAllOutbound: false,
     });
     this.dbSecurityGroup.addIngressRule(
       this.backendSecurityGroup,
       ec2.Port.tcp(5432),
-      "Backend (via App Runner VPC Connector) to Postgres",
+      "Backend (ECS Express Mode service) to Postgres",
     );
   }
 }
