@@ -51,7 +51,7 @@ class User(Base):
     clerk_user_id: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    objects: Mapped[list["Object"]] = relationship(back_populates="user")
+    objects: Mapped[list[Object]] = relationship(back_populates="user")
 
 
 class Object(Base):
@@ -70,9 +70,9 @@ class Object(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    user: Mapped["User"] = relationship(back_populates="objects")
-    photos: Mapped[list["Photo"]] = relationship(back_populates="object", cascade="all, delete-orphan")
-    jobs: Mapped[list["Job"]] = relationship(back_populates="object", cascade="all, delete-orphan")
+    user: Mapped[User] = relationship(back_populates="objects")
+    photos: Mapped[list[Photo]] = relationship(back_populates="object", cascade="all, delete-orphan")
+    jobs: Mapped[list[Job]] = relationship(back_populates="object", cascade="all, delete-orphan")
 
 
 class Photo(Base):
@@ -89,7 +89,7 @@ class Photo(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    object: Mapped["Object"] = relationship(back_populates="photos")
+    object: Mapped[Object] = relationship(back_populates="photos")
 
 
 class Job(Base):
@@ -116,7 +116,7 @@ class Job(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    object: Mapped["Object"] = relationship(back_populates="jobs")
+    object: Mapped[Object] = relationship(back_populates="jobs")
 
 
 class RateLimitCounter(Base):

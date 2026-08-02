@@ -2,7 +2,7 @@
 name = "ai-gaussian-splatter-backend"
 version = "0.1.0"
 description = "FastAPI REST API: auth, rate limiting, job orchestration (plan §3-6)"
-requires-python = ">=3.14"
+requires-python = ">=3.14,<3.15"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
@@ -33,7 +33,6 @@ asyncio_mode = "auto"
 
 [tool.ruff]
 line-length = 120
-target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "UP", "B", "SIM"]
