@@ -3,7 +3,7 @@
 // the Python equivalent of pretty-quick's staged-file auto-fix, so a
 // developer doesn't have to remember to run `ruff format` by hand before
 // committing. CI enforces the same thing as a hard check (see
-// scripts/lint-python.mjs's `ruff format --check`), since there's no
+// scripts/lint-python.ts's `ruff format --check`), since there's no
 // "re-stage and continue" concept there.
 import { execFileSync } from "node:child_process";
 

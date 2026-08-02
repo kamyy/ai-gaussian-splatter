@@ -5,7 +5,7 @@
 // letting subsequent `cd`s mask it.
 import { execFileSync } from "node:child_process";
 
-const PACKAGES = [
+const PACKAGES: { dir: string; targets: string[] }[] = [
   { dir: "backend", targets: ["app"] },
   { dir: "worker", targets: ["pipeline"] },
   { dir: "infra", targets: ["app.py", "stacks"] },
