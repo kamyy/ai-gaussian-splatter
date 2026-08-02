@@ -1,18 +1,21 @@
 {
   "name": "ai-gaussian-splatter",
   "private": true,
+  "type": "module",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "prepare": "husky",
-    "guard:cdk-context": "node scripts/check-cdk-context-account.mjs",
-    "format-staged": "pretty-quick --staged && node scripts/format-python-staged.mjs",
-    "lint": "pnpm --dir frontend lint && node scripts/lint-python.mjs",
-    "typecheck": "pnpm --dir frontend exec tsc --noEmit && node scripts/typecheck-python.mjs"
+    "guard:cdk-context": "node scripts/check-cdk-context-account.ts",
+    "format-staged": "pretty-quick --staged && node scripts/format-python-staged.ts",
+    "lint": "pnpm --dir frontend lint && node scripts/lint-python.ts",
+    "typecheck": "tsc --noEmit && pnpm --dir frontend exec tsc --noEmit && node scripts/typecheck-python.ts"
   },
   "devDependencies": {
+    "@types/node": "^22",
     "husky": "^9.1.7",
     "prettier": "^3.9.6",
     "prettier-plugin-organize-imports": "^4.3.0",
-    "pretty-quick": "^4.2.2"
+    "pretty-quick": "^4.2.2",
+    "typescript": "^6.0.3"
   }
 }
