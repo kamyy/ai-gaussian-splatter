@@ -2,7 +2,7 @@
 name = "ai-gaussian-splatter-infra"
 version = "1.0.0"
 description = "AWS CDK app for AI Gaussian Splatter (plan §6, §9)"
-requires-python = ">=3.14"
+requires-python = ">=3.14,<3.15"
 dependencies = [
     "aws-cdk-lib==2.262.2", # exact-pinned (not a caret range) for deterministic synth output
     "constructs>=10.8,<11",
