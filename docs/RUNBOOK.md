@@ -2,24 +2,6 @@
 
 ## Local development
 
-### Backend
-
-```bash
-cd backend
-uv sync --group dev
-# Needs a real Postgres for anything beyond the auth/S3/EC2-mocked tests —
-# e.g. `docker run -p 5432:5432 -e POSTGRES_PASSWORD=test postgres:18`
-DATABASE_URL=postgresql+psycopg://postgres:test@localhost/postgres \
-CLERK_JWKS_URL=https://<your-clerk-domain>/.well-known/jwks.json \
-CLERK_ISSUER=https://<your-clerk-domain> \
-UPLOADS_BUCKET=... SPLATS_BUCKET=... \
-WORKER_AMI_ID=... WORKER_SUBNET_ID=... WORKER_SECURITY_GROUP_ID=... WORKER_INSTANCE_PROFILE_ARN=... \
-BACKEND_PUBLIC_URL=http://localhost:8000 \
-  uv run uvicorn app.main:app --reload
-```
-
-Interactive API docs at `http://localhost:8000/docs` once running.
-
 ### Worker (local pipeline run, per plan M0/M1)
 
 Requires a real GPU with the CUDA toolkit and `colmap` on PATH — not available in every dev environment (this repo was scaffolded in a sandbox with a GPU driver but no CUDA toolkit, so the training path was smoke-tested but never run end-to-end; verify on real hardware before trusting it).
@@ -33,22 +15,49 @@ FAST_TEST_MODE=true \
   uv run python run_job.py
 ```
 
-### Frontend
+### Web (frontend + REST API)
+
+Needs a real Postgres — the API layer lives here now:
 
 ```bash
-cd frontend
-pnpm install
-cp .env.example .env.local  # fill in Clerk keys + NEXT_PUBLIC_API_BASE_URL
+podman run -d --rm --name splatter-pg -p 5432:5432 \
+  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=test postgres:18
+```
+
+```bash
+cd web
+pnpm install                # postinstall runs `prisma generate`
+cp .env.example .env.local  # fill in Clerk keys, DATABASE_URL, buckets, worker IDs
+pnpm db:migrate             # apply migrations (prisma migrate dev)
 pnpm dev
 ```
+
+`pnpm db:studio` opens Prisma Studio to browse/edit rows.
 
 ### Full test suite
 
 ```bash
-(cd backend && uv run ruff check . && uv run mypy app && uv run pytest -v)          # 5 rate-limit tests skip without TEST_DATABASE_URL
+(cd web && npx tsc --noEmit && npx biome ci . && npx vitest run && npx playwright test)
 (cd worker && uv run ruff check . && uv run mypy pipeline && uv run pytest -v)
-(cd frontend && npx tsc --noEmit && npx biome ci . && npx vitest run && npx playwright test)
 (cd infra && uv run ruff check . && uv run mypy app.py stacks && uv run pytest -v && npx cdk synth)
+```
+
+The `lib/server/**` Vitest project's Postgres-dependent tests (rate limiting,
+`getOrCreateUser`, the worker callback token) skip unless `TEST_DATABASE_URL`
+is set — CI wires it to a service container:
+
+```bash
+(cd web && TEST_DATABASE_URL=postgresql://postgres:test@localhost:5432/postgres npx vitest run)
+```
+
+### Applying migrations to a deployed environment
+
+The container image deliberately does not run migrations on boot (Express Mode
+runs up to 3 tasks, which would race, and the running app would need DDL
+rights it otherwise doesn't). Run it as a deploy step instead:
+
+```bash
+(cd web && DATABASE_URL=<production-url> npx prisma migrate deploy)
 ```
 
 ## Debugging a failed job
