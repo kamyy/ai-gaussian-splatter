@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { SplatViewer } from "@/components/viewer/SplatViewer";
 import { getGalleryItem } from "@/lib/api";
+import type { GalleryItemRead } from "@/lib/types";
 
 // See app/gallery/page.tsx — same reasoning, fetches the backend at request
 // time, not buildable statically without it running.
@@ -34,7 +35,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function GalleryItemPage({ params }: Props) {
   const { id } = await params;
 
-  let item;
+  let item: GalleryItemRead;
   try {
     item = await getGalleryItem(id);
   } catch {
