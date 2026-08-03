@@ -5,15 +5,13 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "prepare": "husky",
-    "guard:cdk-context": "node scripts/check-cdk-context-account.ts",
-    "format-staged": "node scripts/format-staged.ts",
-    "lint": "node scripts/lint.ts",
-    "typecheck": "node scripts/typecheck.ts"
+    "guard:cdk-context": "node scripts/check-cdk-context-account.js",
+    "format-staged": "node scripts/format-staged.js",
+    "lint": "node scripts/lint.js",
+    "typecheck": "node scripts/typecheck.js"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.6",
-    "@types/node": "^24",
-    "husky": "^9.1.7",
-    "typescript": "^6.0.3"
+    "husky": "^9.1.7"
   }
 }

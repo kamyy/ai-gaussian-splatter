@@ -3,7 +3,7 @@
 // pre-commit auto-fix step for both JS/TS (via Biome) and Python (via
 // ruff format), so a developer doesn't have to remember to run either by
 // hand before committing. CI enforces the same thing as a hard check
-// (scripts/lint.ts's `biome lint .` and `ruff format --check`), since
+// (scripts/lint.js's `biome lint .` and `ruff format --check`), since
 // there's no "re-stage and continue" concept there.
 //
 // `biome check --write --staged` fixes the working tree but doesn't
