@@ -5,11 +5,12 @@ from aws_cdk import aws_ecs as ecs
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_rds as rds
 from aws_cdk import aws_s3 as s3
+from aws_cdk import aws_secretsmanager as secretsmanager
 from constructs import Construct
 
 from stacks.tags import WORKER_TAG_KEY, WORKER_TAG_VALUE
 
-# Single source of truth for the FastAPI container's listen port — used by
+# Single source of truth for the Next.js container's listen port — used by
 # both the task definition and the health check path below, so they can't
 # drift out of sync with each other.
 CONTAINER_PORT = 8000
@@ -18,11 +19,16 @@ key_value_pair = ecs.CfnExpressGatewayService.KeyValuePairProperty
 
 
 class BackendStack(cdk.Stack):
-    """FastAPI backend on ECS Express Mode (`AWS::ECS::ExpressGatewayService`) —
-    App Runner's replacement, since App Runner stopped accepting new customers
-    2026-04-30. Express Mode auto-provisions the ECS cluster/service, ALB,
-    security groups, and auto-scaling from a single resource, aiming at the
-    same "no hand-wired orchestration" DX App Runner had.
+    """The Next.js app (pages + the REST API as Route Handlers) on ECS Express
+    Mode (`AWS::ECS::ExpressGatewayService`) — App Runner's replacement, since
+    App Runner stopped accepting new customers 2026-04-30. Express Mode
+    auto-provisions the ECS cluster/service, ALB, security groups, and
+    auto-scaling from a single resource, aiming at the same "no hand-wired
+    orchestration" DX App Runner had.
+
+    Named "Backend" from when this ran a separate FastAPI service (2026-08-03);
+    the stack/service/repo names are kept so the rename doesn't force a
+    replacement of already-named resources.
 
     Only an L1 construct (`CfnExpressGatewayService`) exists as of
     aws-cdk-lib 2.262 — no L2 yet (tracked in aws/aws-cdk#36234) — so, same as
@@ -44,6 +50,7 @@ class BackendStack(cdk.Stack):
         worker_role_arn: str,
         worker_security_group_id: str,
         worker_subnet_id: str,
+        app_public_url: str,
         **kwargs,
     ) -> None:
         super().__init__(scope, id, **kwargs)
@@ -52,6 +59,24 @@ class BackendStack(cdk.Stack):
             self,
             "BackendRepository",
             repository_name="ai-gaussian-splatter-backend",
+            removal_policy=cdk.RemovalPolicy.RETAIN,
+        )
+
+        # Clerk's server-side API key. Created empty; populate it out-of-band
+        # (console or `aws secretsmanager put-secret-value`) after the first
+        # deploy — the value must never be in source or in CloudFormation
+        # template JSON. Same treatment as the RDS-generated DATABASE_URL.
+        #
+        # Its public counterpart, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, is
+        # deliberately NOT here: Next.js inlines NEXT_PUBLIC_* variables into
+        # the bundle at build time, so setting it as a container env var has no
+        # effect. It is a `docker build --build-arg` instead (see the web
+        # Dockerfile).
+        self.clerk_secret = secretsmanager.Secret(
+            self,
+            "ClerkSecretKey",
+            secret_name="ai-gaussian-splatter/clerk-secret-key",
+            description="Clerk CLERK_SECRET_KEY — set manually after deploy",
             removal_policy=cdk.RemovalPolicy.RETAIN,
         )
 
@@ -106,6 +131,7 @@ class BackendStack(cdk.Stack):
         assert database.secret is not None
         db_secret = database.secret
         db_secret.grant_read(execution_role)
+        self.clerk_secret.grant_read(execution_role)
 
         # The running application code's own permissions — S3 rw on both
         # buckets, ec2:RunInstances/TerminateInstances scoped by tag (plan §6's
@@ -187,9 +213,19 @@ class BackendStack(cdk.Stack):
                     key_value_pair(name="WORKER_SUBNET_ID", value=worker_subnet_id),
                     key_value_pair(name="WORKER_SECURITY_GROUP_ID", value=worker_security_group_id),
                     key_value_pair(name="WORKER_INSTANCE_PROFILE_ARN", value=worker_instance_profile_arn),
+                    # Where the GPU worker PATCHes job status back to. Passed
+                    # in rather than read from this service's own
+                    # attr_endpoint: referencing a resource's attribute inside
+                    # its own properties is a circular CloudFormation
+                    # dependency. Point it at the custom domain, or at the
+                    # ALB endpoint from the first deploy's output.
+                    key_value_pair(name="APP_PUBLIC_URL", value=app_public_url),
                 ],
                 secrets=[
-                    ecs.CfnExpressGatewayService.SecretProperty(name="DATABASE_URL", value_from=db_secret.secret_arn)
+                    ecs.CfnExpressGatewayService.SecretProperty(name="DATABASE_URL", value_from=db_secret.secret_arn),
+                    ecs.CfnExpressGatewayService.SecretProperty(
+                        name="CLERK_SECRET_KEY", value_from=self.clerk_secret.secret_arn
+                    ),
                 ],
             ),
         )

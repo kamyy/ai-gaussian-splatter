@@ -20,4 +20,5 @@ def wired_stacks():
         ENV,
         worker_ami_id="ami-000000000000",
         alert_email="kam.yin.yip@gmail.com",
+        app_public_url="https://app.example.com",
     )

@@ -18,7 +18,14 @@ def context_or(app: cdk.App, key: str, default: str) -> str:
     return value if value is not None else default
 
 
-def build_stacks(app: cdk.App, env: cdk.Environment, *, worker_ami_id: str, alert_email: str) -> dict[str, cdk.Stack]:
+def build_stacks(
+    app: cdk.App,
+    env: cdk.Environment,
+    *,
+    worker_ami_id: str,
+    alert_email: str,
+    app_public_url: str,
+) -> dict[str, cdk.Stack]:
     """Wires all 5 stacks together. Pulled out of module scope so
     infra/tests/conftest.py can import and reuse this exact wiring instead
     of hand-duplicating it — keeps the test suite's stack graph from
@@ -56,6 +63,7 @@ def build_stacks(app: cdk.App, env: cdk.Environment, *, worker_ami_id: str, aler
         worker_role_arn=worker_iam.role.role_arn,
         worker_security_group_id=network.worker_security_group.security_group_id,
         worker_subnet_id=network.vpc.private_subnets[0].subnet_id,
+        app_public_url=app_public_url,
     )
 
     # Billing metrics only exist in us-east-1 regardless of where the rest of
@@ -109,7 +117,18 @@ if __name__ == "__main__":
     # are what let `cdk synth` succeed before those exist.
     worker_ami_id = context_or(app, "workerAmiId", "ami-000000000000")
     alert_email = context_or(app, "alertEmail", "kam.yin.yip@gmail.com")
+    # Chicken-and-egg: the app has to tell the worker where to call back to,
+    # but that address is the ALB this very stack creates. Placeholder until
+    # the first deploy publishes an endpoint (or a custom domain is set up),
+    # then pass `-c appPublicUrl=https://...`.
+    app_public_url = context_or(app, "appPublicUrl", "https://app.example.com")
 
-    build_stacks(app, env, worker_ami_id=worker_ami_id, alert_email=alert_email)
+    build_stacks(
+        app,
+        env,
+        worker_ami_id=worker_ami_id,
+        alert_email=alert_email,
+        app_public_url=app_public_url,
+    )
 
     app.synth()
