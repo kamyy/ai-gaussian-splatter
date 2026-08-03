@@ -8,7 +8,7 @@ def test_database_config(wired_stacks):
         "AWS::RDS::DBInstance",
         {
             "Engine": "postgres",
-            "EngineVersion": "16",
+            "EngineVersion": "18",
             "DBInstanceClass": "db.t4g.micro",
             "MultiAZ": False,
             "AllocatedStorage": "20",
