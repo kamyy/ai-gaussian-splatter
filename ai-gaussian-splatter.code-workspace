@@ -21,20 +21,11 @@
       "**/*.tsbuildinfo": true
     },
     "files.exclude": {
-      // Exclude patterns are matched relative to each workspace root
-      // independently. This hides the redundant nested frontend/backend/
-      // worker/infra/docs copies inside the "root" entry (path ".")
-      // without affecting their own dedicated top-level entries, since
-      // none of those folders contain a subfolder literally named after
-      // one of the others.
       "frontend": true,
       "backend": true,
       "worker": true,
       "infra": true,
       "docs": true,
-      // Generated/cache dirs — gitignored already, but files.exclude is a
-      // separate setting from search.exclude (above) and doesn't inherit
-      // from it, so they're still visible in the explorer tree without this.
       "**/node_modules": true,
       "**/.venv": true,
       "**/.next": true,
@@ -48,26 +39,7 @@
       "**/next-env.d.ts": true
     },
     "js/ts.tsdk.path": "frontend/node_modules/typescript/lib",
-    // Default off: the "root" folder below (path ".") physically nests
-    // frontend/backend/worker/infra/docs inside it (same overlap
-    // files.exclude special-cases above), and biome-vscode starts one LSP
-    // session per declared folder without deduping nested ones — every
-    // folder left enabled here would double up on root's coverage of the
-    // same files ("Biome started multiple sessions for some of the same
-    // files"). root/.vscode/settings.json re-enables it just for "root",
-    // which alone already covers the whole tree. This only takes effect
-    // when this .code-workspace file itself is opened — opening frontend/
-    // (or any other folder) standalone falls back to Biome's own default
-    // (enabled), so it still works there without a workspace loaded.
     "biome.enabled": false,
-    // Scoped to TS/JS/JSON so this doesn't touch backend/worker's Python
-    // formatting. Biome owns both formatting and linting for these
-    // languages now (biome.json), so there's no separate linter to
-    // conflict with — unlike the old ESLint+Prettier split, editor and
-    // CI/pre-commit both run the exact same tool. codeActionsOnSave uses
-    // the namespaced "source.organizeImports.biome" id specifically
-    // (not the generic "source.organizeImports") so it can't resolve to
-    // a different extension/language-service on save.
     "[typescript]": {
       "editor.defaultFormatter": "biomejs.biome",
       "editor.formatOnSave": true,
