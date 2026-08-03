@@ -8,6 +8,10 @@
 // the repo root to typecheck.
 import { execFileSync } from "node:child_process";
 
+// `next typegen` first: the API Route Handlers reference `RouteContext<"...">`,
+// a global type Next.js generates into web/.next/types/ (gitignored). Without
+// this, tsc fails on a clean checkout with "Cannot find name 'RouteContext'".
+execFileSync("pnpm", ["--dir", "web", "exec", "next", "typegen"], { stdio: "inherit" });
 execFileSync("pnpm", ["--dir", "web", "exec", "tsc", "--noEmit"], { stdio: "inherit" });
 
 const PACKAGES = [
