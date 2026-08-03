@@ -5,11 +5,11 @@ import { Card, CardSection, Image, SimpleGrid, Stack, Text, Title } from "@manti
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { getGallery } from "@/lib/api";
+import { listGallery } from "@/lib/server/data";
 
-// This fetches from the backend at request time, which isn't reachable at
-// `next build` time (CI/deploy builds run without the backend up) — force
-// dynamic rendering rather than letting Next try to statically prerender it.
+// Reads the database at request time. Still force-dynamic, but no longer
+// because a separate backend was unreachable during `next build` — now it's
+// simply that gallery contents must not be frozen into a build artifact.
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 };
 
 export default async function GalleryPage() {
-  const items = await getGallery();
+  const items = await listGallery();
 
   return (
     <Stack p="md">
@@ -33,7 +33,7 @@ export default async function GalleryPage() {
           <Link key={item.id} href={`/gallery/${item.id}`} style={{ textDecoration: "none", color: "inherit" }}>
             <Card withBorder padding="lg">
               <CardSection>
-                <Image src={item.thumbnail_url} alt={item.title} height={180} />
+                <Image src={item.thumbnailUrl} alt={item.title} height={180} />
               </CardSection>
               <Text fw={500} mt="sm">
                 {item.title}

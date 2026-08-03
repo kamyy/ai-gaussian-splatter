@@ -1,0 +1,67 @@
+import { randomUUID } from "node:crypto";
+import path from "node:path";
+import type { Prisma } from "@prisma/client";
+import { type NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { getClientIp, requireUser } from "@/lib/server/auth";
+import { getEnv } from "@/lib/server/env";
+import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
+import { getPrisma } from "@/lib/server/prisma";
+import { checkAndIncrementIp, checkAndIncrementUser } from "@/lib/server/rateLimit";
+import { presignPhotoUpload } from "@/lib/server/s3";
+import type { PhotoPresignItem } from "@/lib/types";
+
+// Rate limiting happens here — see plan §5: this gates *before* any upload
+// happens (per-IP + per-user), separate from the global daily cap which only
+// gates the expensive job-launch step (../process).
+const presignSchema = z.array(z.object({ filename: z.string().min(1), contentType: z.string().min(1) })).min(1);
+
+export const POST = withErrorHandling(
+  async (request: NextRequest, ctx: RouteContext<"/api/v1/objects/[objectId]/photos/presign">) => {
+    const env = getEnv();
+    const user = await requireUser();
+    const { objectId } = await ctx.params;
+    requireUuid(objectId, 404, "Object not found");
+
+    const splat = await getPrisma().splat.findFirst({ where: { id: objectId, userId: user.id } });
+    if (splat === null) {
+      throw new HttpError(404, "Object not found");
+    }
+
+    const parsed = presignSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
+      throw new HttpError(422, "Invalid request body");
+    }
+
+    // Both checks before any S3 URL is issued — the actual multi-account
+    // defense (per-IP) plus the per-user quota, per plan §5.
+    await checkAndIncrementIp(getClientIp(request), env.RATE_LIMIT_IP_PER_HOUR);
+    await checkAndIncrementUser(user.id, env.RATE_LIMIT_USER_PER_DAY);
+
+    const items: PhotoPresignItem[] = [];
+    const rows: Prisma.PhotoCreateManyInput[] = [];
+    for (const item of parsed.data) {
+      const photoId = randomUUID();
+      const extension = path.extname(item.filename) || ".jpg";
+      const { key, url } = await presignPhotoUpload(objectId, photoId, extension, item.contentType);
+
+      rows.push({
+        id: photoId,
+        splatId: objectId,
+        s3Key: key,
+        originalFilename: item.filename,
+        contentType: item.contentType,
+        uploadStatus: "Pending",
+      });
+      items.push({ photoId, presignedPutUrl: url, s3Key: key });
+    }
+
+    // One insert, not one per photo. The FastAPI version committed once after
+    // the loop; inserting row-by-row would leave a partial batch of Pending
+    // photos behind on a mid-loop failure, with the caller holding no ids to
+    // retry against and the rate-limit increment already spent.
+    await getPrisma().photo.createMany({ data: rows });
+
+    return NextResponse.json({ photos: items });
+  },
+);

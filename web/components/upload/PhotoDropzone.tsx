@@ -35,7 +35,7 @@ export function PhotoDropzone({ objectId, onAllUploaded }: PhotoDropzoneProps) {
       const { photos } = await presignPhotos(
         token,
         objectId,
-        files.map(f => ({ filename: f.name, content_type: f.type || "image/jpeg" })),
+        files.map(f => ({ filename: f.name, contentType: f.type || "image/jpeg" })),
       );
 
       await Promise.all(
@@ -43,9 +43,9 @@ export function PhotoDropzone({ objectId, onAllUploaded }: PhotoDropzoneProps) {
           const presigned = photos[index];
           setUploadStatus(file.name, "uploading");
           try {
-            await uploadToS3(presigned.presigned_put_url, file);
+            await uploadToS3(presigned.presignedPutUrl, file);
             setUploadProgress(file.name, 100);
-            await completePhoto(token, objectId, presigned.photo_id);
+            await completePhoto(token, objectId, presigned.photoId);
             setUploadStatus(file.name, "uploaded");
           } catch (err) {
             setUploadStatus(file.name, "failed", err instanceof Error ? err.message : "Upload failed");

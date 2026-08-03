@@ -1,12 +1,14 @@
-// Typed REST client (plan §1: lib/api.ts, "used both server- and
-// client-side"). Public endpoints (gallery, public objects) need no token
-// and are called from Server Components' generateMetadata; authenticated
-// endpoints take a Clerk session token, obtained client-side via
+// Typed REST client for the Route Handlers in app/api/v1/.
+//
+// Authenticated endpoints take a Clerk session token, obtained client-side via
 // useAuth().getToken() and passed in by callers (lib/hooks.ts).
+//
+// Requests are same-origin now that the API lives in this app, so there is no
+// base URL to configure — NEXT_PUBLIC_API_BASE_URL is gone. Server-side callers
+// should skip this client entirely and use lib/server/data.ts directly rather
+// than have the server make an HTTP request to itself.
 
 import type { GalleryItemRead, JobRead, ObjectRead, PhotoPresignItem, PublicObjectRead } from "./types";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 class ApiError extends Error {
   constructor(
@@ -27,7 +29,7 @@ async function apiFetch<T>(
     headers.Authorization = `Bearer ${options.token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(path, {
     method: options.method ?? "GET",
     headers,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
@@ -58,7 +60,7 @@ export function getObject(token: string, objectId: string) {
   return apiFetch<ObjectRead>(`/api/v1/objects/${objectId}`, { token });
 }
 
-export function presignPhotos(token: string, objectId: string, files: { filename: string; content_type: string }[]) {
+export function presignPhotos(token: string, objectId: string, files: { filename: string; contentType: string }[]) {
   return apiFetch<{ photos: PhotoPresignItem[] }>(`/api/v1/objects/${objectId}/photos/presign`, {
     token,
     method: "POST",

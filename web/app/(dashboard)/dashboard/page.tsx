@@ -36,7 +36,7 @@ export default function DashboardPage() {
             <Card key={obj.id} component={Link} href={`/objects/${obj.id}`} withBorder padding="lg">
               <Group justify="space-between">
                 <Text fw={500}>{obj.name}</Text>
-                <Badge color={obj.status === "complete" ? "green" : obj.status === "failed" ? "red" : "blue"}>
+                <Badge color={obj.status === "Complete" ? "green" : obj.status === "Failed" ? "red" : "blue"}>
                   {obj.status}
                 </Badge>
               </Group>

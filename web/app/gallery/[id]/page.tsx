@@ -3,11 +3,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { SplatViewer } from "@/components/viewer/SplatViewer";
-import { getGalleryItem } from "@/lib/api";
-import type { GalleryItemRead } from "@/lib/types";
+import { getGalleryItem } from "@/lib/server/data";
 
-// See app/gallery/page.tsx — same reasoning, fetches the backend at request
-// time, not buildable statically without it running.
+// See app/gallery/page.tsx — same reasoning.
 export const dynamic = "force-dynamic";
 
 interface Props {
@@ -16,29 +14,26 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  try {
-    const item = await getGalleryItem(id);
-    return {
-      title: `${item.title} — AI Gaussian Splatter`,
-      description: item.description ?? "A 3D Gaussian Splat reconstruction.",
-      openGraph: {
-        title: item.title,
-        description: item.description ?? undefined,
-        images: [item.thumbnail_url],
-      },
-    };
-  } catch {
+  const item = await getGalleryItem(id);
+  if (item === null) {
     return { title: "Not found — AI Gaussian Splatter" };
   }
+  return {
+    title: `${item.title} — AI Gaussian Splatter`,
+    description: item.description ?? "A 3D Gaussian Splat reconstruction.",
+    openGraph: {
+      title: item.title,
+      description: item.description ?? undefined,
+      images: [item.thumbnailUrl],
+    },
+  };
 }
 
 export default async function GalleryItemPage({ params }: Props) {
   const { id } = await params;
 
-  let item: GalleryItemRead;
-  try {
-    item = await getGalleryItem(id);
-  } catch {
+  const item = await getGalleryItem(id);
+  if (item === null) {
     notFound();
   }
 
@@ -46,7 +41,7 @@ export default async function GalleryItemPage({ params }: Props) {
     <Stack p="md">
       <Title order={2}>{item.title}</Title>
       {item.description && <Text c="dimmed">{item.description}</Text>}
-      <SplatViewer splatUrl={item.splat_url} />
+      <SplatViewer splatUrl={item.splatUrl} />
     </Stack>
   );
 }
