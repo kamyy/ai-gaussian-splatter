@@ -10,5 +10,5 @@
     "isolatedModules": true,
     "skipLibCheck": true
   },
-  "include": ["scripts/**/*.ts", "prettier.config.ts"]
+  "include": ["scripts/**/*.ts"]
 }

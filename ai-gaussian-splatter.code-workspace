@@ -5,7 +5,7 @@
     { "name": "worker", "path": "worker" },
     { "name": "infra", "path": "infra" },
     { "name": "docs", "path": "docs" },
-    { "name": "root", "path": "." },
+    { "name": "root", "path": "." }
   ],
   "settings": {
     "search.exclude": {
@@ -18,7 +18,7 @@
       "**/.mypy_cache": true,
       "**/.pytest_cache": true,
       "**/.ruff_cache": true,
-      "**/*.tsbuildinfo": true,
+      "**/*.tsbuildinfo": true
     },
     "files.exclude": {
       // Exclude patterns are matched relative to each workspace root
@@ -45,7 +45,7 @@
       "**/.pytest_cache": true,
       "**/.ruff_cache": true,
       "**/*.tsbuildinfo": true,
-      "**/next-env.d.ts": true,
+      "**/next-env.d.ts": true
     },
     "js/ts.tsdk.path": "frontend/node_modules/typescript/lib",
     // Scoped to TS/JS/JSON so this doesn't touch backend/worker's Python
@@ -53,19 +53,19 @@
     // disables ESLint's conflicting stylistic rules so the two don't fight.
     "[typescript]": {
       "editor.defaultFormatter": "esbenp.prettier-vscode",
-      "editor.formatOnSave": true,
+      "editor.formatOnSave": true
     },
     "[typescriptreact]": {
       "editor.defaultFormatter": "esbenp.prettier-vscode",
-      "editor.formatOnSave": true,
+      "editor.formatOnSave": true
     },
     "[javascript]": {
       "editor.defaultFormatter": "esbenp.prettier-vscode",
-      "editor.formatOnSave": true,
+      "editor.formatOnSave": true
     },
     "[json]": {
       "editor.defaultFormatter": "esbenp.prettier-vscode",
-      "editor.formatOnSave": true,
-    },
-  },
+      "editor.formatOnSave": true
+    }
+  }
 }
