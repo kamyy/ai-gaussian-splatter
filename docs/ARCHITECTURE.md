@@ -27,7 +27,7 @@ The API lives in the same Next.js app as the pages, not a separate service. SSR 
 
 The tradeoff is losing a framework that derives OpenAPI docs and response schemas for you. Response field sets are explicit Prisma `select` clauses in `web/lib/server/selects.ts` instead — that is what keeps `callbackToken` out of a job response.
 
-ORM is **Prisma**. One thing it can't do: `web/lib/server/rateLimit.ts` keeps raw `$queryRaw` for `INSERT ... ON CONFLICT ... RETURNING`, because Prisma's `upsert()` is not an atomic upsert — it issues a `SELECT` then an `INSERT`/`UPDATE` (confirmed in query logs), reopening the check-and-increment race that design closes.
+ORM is **Prisma**. The rate-limit counters rely on it compiling `upsert()` to a single `INSERT ... ON CONFLICT ... DO UPDATE`, which keeps check-and-increment race-free — it does that whenever the `update` clause is non-empty, and falls back to `SELECT`-then-`INSERT` when it's empty.
 
 Wire format is camelCase, matching the Prisma client, with one exception: `PATCH /api/v1/internal/jobs/{id}/status` parses snake_case, because `worker/pipeline/status.py` sends that shape.
 
