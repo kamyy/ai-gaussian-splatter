@@ -56,9 +56,8 @@ export const POST = withErrorHandling(
       items.push({ photoId, presignedPutUrl: url, s3Key: key });
     }
 
-    // One insert, not one per photo. The FastAPI version committed once after
-    // the loop; inserting row-by-row would leave a partial batch of Pending
-    // photos behind on a mid-loop failure, with the caller holding no ids to
+    // One insert, not one per photo: a mid-loop failure would otherwise leave a
+    // partial batch of Pending rows behind, with the caller holding no ids to
     // retry against and the rate-limit increment already spent.
     await getPrisma().photo.createMany({ data: rows });
 

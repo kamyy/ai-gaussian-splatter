@@ -9,12 +9,10 @@ import { getPrisma } from "@/lib/server/prisma";
 /**
  * The worker -> app status callback (plan §3).
  *
- * This is the one endpoint whose wire format is snake_case rather than
- * camelCase: worker/ is a separate Python package that is deliberately
- * unchanged by the backend consolidation, and worker/pipeline/status.py PATCHes
- * a literal snake_case body with snake_case status values. Both the field names
- * and the status strings below are that contract — changing either requires
- * changing the worker in lockstep.
+ * The one endpoint whose wire format is snake_case: worker/pipeline/status.py
+ * PATCHes a literal snake_case body with snake_case status values. The field
+ * names and status strings below are that contract — changing either means
+ * changing worker/ in lockstep.
  *
  * Auth is the per-job bearer token, not a Clerk session.
  */
@@ -89,8 +87,7 @@ export const PATCH = withErrorHandling(
       splatData.status = splatStatus;
     }
 
-    // One transaction, matching the single db.commit() the FastAPI handler did
-    // after mutating both rows.
+    // Both rows move together or not at all.
     const prisma = getPrisma();
     await prisma.$transaction([
       prisma.job.update({ where: { id: job.id }, data: jobData }),

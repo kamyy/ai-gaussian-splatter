@@ -7,9 +7,8 @@ import Link from "next/link";
 
 import { listGallery } from "@/lib/server/data";
 
-// Reads the database at request time. Still force-dynamic, but no longer
-// because a separate backend was unreachable during `next build` — now it's
-// simply that gallery contents must not be frozen into a build artifact.
+// Reads the database per request: gallery contents must not be frozen into a
+// build artifact.
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {

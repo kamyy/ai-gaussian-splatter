@@ -47,7 +47,7 @@ export async function objectExists(bucket: string, key: string): Promise<boolean
     return true;
   } catch (error) {
     // HeadObject returns a bare 404 with no body, so the SDK surfaces it as
-    // NotFound rather than NoSuchKey — check both, as the boto3 version did.
+    // NotFound rather than NoSuchKey — check both.
     const name = (error as { name?: string })?.name;
     const statusCode = (error as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode;
     if (name === "NotFound" || name === "NoSuchKey" || statusCode === 404) {

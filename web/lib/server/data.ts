@@ -11,10 +11,8 @@ import { presignSplatDownload } from "./s3";
  * Public, unauthenticated reads (plan §3) — what the gallery and share pages
  * render from, including generateMetadata's og:title/og:image.
  *
- * These live here rather than inside the Route Handlers so Server Components
- * can call them directly. Under the old split-service architecture they had to
- * go over HTTP to reach the backend; now that would be this process making a
- * request to itself, which is pure overhead.
+ * These live outside the Route Handlers so Server Components can call them
+ * directly rather than having the server make an HTTP request to itself.
  */
 
 const THUMBNAIL_EXPIRY_SECONDS = 3600;

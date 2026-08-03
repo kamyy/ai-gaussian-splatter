@@ -6,12 +6,10 @@ import { getPrisma } from "./prisma";
 import { checkAndIncrementGlobalDaily, checkAndIncrementIp, checkAndIncrementUser } from "./rateLimit";
 
 /**
- * Ported from backend/tests/test_rate_limit.py.
- *
  * Requires a real Postgres (TEST_DATABASE_URL): these exercise the
- * `INSERT ... ON CONFLICT ... RETURNING` upsert, which is the whole point of
- * the implementation and can't be faithfully substituted. Wire TEST_DATABASE_URL
- * to CI's Postgres service container per plan §8.
+ * `INSERT ... ON CONFLICT ... RETURNING` upsert, which is the whole point of the
+ * implementation and can't be faithfully faked. CI wires it to a service
+ * container (plan §8).
  */
 const hasPostgres = Boolean(process.env.TEST_DATABASE_URL);
 

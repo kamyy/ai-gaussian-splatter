@@ -4,19 +4,15 @@ import { HttpError } from "./httpError";
 import { getPrisma } from "./prisma";
 
 /**
- * Rate limiting & the global daily job cap (plan §5) — atomic Postgres
- * counters via INSERT ... ON CONFLICT ... DO UPDATE ... RETURNING, so the
- * check-and-increment is race-free without a separate read-then-write step.
+ * Rate limiting & the global daily job cap (plan §5).
  *
- * These MUST stay raw SQL. Prisma's `upsert()` is not an atomic UPSERT: it
- * issues a SELECT and then an INSERT-or-UPDATE, reopening exactly the
- * read-then-write race this design exists to close. Under concurrent requests
- * that would let a caller exceed the limit — and the global counter is the
- * backstop bounding worst-case GPU spend.
+ * These MUST stay raw SQL. Prisma's `upsert()` is not an atomic upsert — it
+ * issues a SELECT then an INSERT/UPDATE, which reopens the check-and-increment
+ * race that `ON CONFLICT ... RETURNING` closes. Concurrent callers could then
+ * exceed the limit, and the global counter is what bounds worst-case GPU spend.
  *
- * Deliberately explicit per-endpoint checks (not blanket middleware) — see
- * plan §5's rationale: cheap read endpoints shouldn't be throttled, and the
- * costly endpoints stay easy to audit.
+ * Checks are per-endpoint rather than blanket middleware (plan §5): cheap reads
+ * shouldn't be throttled, and the costly endpoints stay easy to audit.
  */
 
 export async function checkAndIncrementIp(ip: string, limitPerHour: number): Promise<void> {

@@ -38,8 +38,7 @@ describe("getClientIp", () => {
   });
 
   it("falls back to 'unknown' when the header is absent", () => {
-    // NextRequest exposes no socket address, so there is no host to fall back
-    // to the way the old FastAPI dependency did.
+    // NextRequest exposes no socket address to fall back to.
     expect(getClientIp(fakeRequest({}))).toBe("unknown");
   });
 });

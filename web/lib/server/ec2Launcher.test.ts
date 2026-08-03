@@ -4,10 +4,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { generateCallbackToken, launchJob } from "./ec2Launcher";
 
-// Ported from backend/tests/test_ec2_launcher.py. moto simulated a real EC2
-// backend, so that test asserted on describe_instances() afterwards.
-// aws-sdk-client-mock is a call stub with no such state, so the equivalent
-// assertion is on the arguments RunInstances was actually called with.
+// aws-sdk-client-mock is a call stub with no simulated EC2 state, so these
+// assert on the arguments RunInstances received rather than on state after.
 const ec2Mock = mockClient(EC2Client);
 
 afterEach(() => {

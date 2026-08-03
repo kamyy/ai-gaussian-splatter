@@ -26,10 +26,6 @@ class BackendStack(cdk.Stack):
     auto-scaling from a single resource, aiming at the same "no hand-wired
     orchestration" DX App Runner had.
 
-    Named "Backend" from when this ran a separate FastAPI service (2026-08-03);
-    the stack/service/repo names are kept so the rename doesn't force a
-    replacement of already-named resources.
-
     Only an L1 construct (`CfnExpressGatewayService`) exists as of
     aws-cdk-lib 2.262 — no L2 yet (tracked in aws/aws-cdk#36234) — so, same as
     the App Runner resources this replaces, config is explicit with no L2
@@ -213,12 +209,10 @@ class BackendStack(cdk.Stack):
                     key_value_pair(name="WORKER_SUBNET_ID", value=worker_subnet_id),
                     key_value_pair(name="WORKER_SECURITY_GROUP_ID", value=worker_security_group_id),
                     key_value_pair(name="WORKER_INSTANCE_PROFILE_ARN", value=worker_instance_profile_arn),
-                    # Where the GPU worker PATCHes job status back to. Passed
-                    # in rather than read from this service's own
-                    # attr_endpoint: referencing a resource's attribute inside
-                    # its own properties is a circular CloudFormation
-                    # dependency. Point it at the custom domain, or at the
-                    # ALB endpoint from the first deploy's output.
+                    # Where the GPU worker PATCHes job status back to.
+                    # Passed in rather than read from this service's own
+                    # attr_endpoint, which would be a circular dependency: point
+                    # it at the custom domain or the first deploy's ALB endpoint.
                     key_value_pair(name="APP_PUBLIC_URL", value=app_public_url),
                 ],
                 secrets=[

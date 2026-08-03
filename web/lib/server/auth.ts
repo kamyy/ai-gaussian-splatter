@@ -6,15 +6,6 @@ import type { NextRequest } from "next/server";
 import { HttpError, requireUuid } from "./httpError";
 import { getPrisma } from "./prisma";
 
-/**
- * Request auth — ported from the former backend/app/deps.py.
- *
- * backend/app/auth/clerk.py has no counterpart here on purpose: it hand-verified
- * Clerk JWTs against the JWKS endpoint (PyJWKClient + jwt.decode) only because
- * it ran as a separate Python process that couldn't use Clerk's own SDK.
- * `auth()` does that verification itself now.
- */
-
 /** Throws 401 unless the request carries a valid Clerk session. */
 export async function requireClerkUserId(): Promise<string> {
   const { userId } = await auth();
@@ -68,11 +59,9 @@ export async function requireUser(): Promise<User> {
  * the last hop would then be CloudFront's address, shared by every user. That
  * change requires revisiting this function, not just the infrastructure.
  *
- * The old FastAPI version fell back to the raw socket address
- * (`request.client.host`) when the header was absent, and read the first hop.
- * NextRequest exposes no socket address — Next removed `request.ip` — so the
- * fallback is "unknown" here. In production that's unreachable; locally it
- * means unproxied requests share one bucket.
+ * NextRequest exposes no socket address, so there's no peer to fall back to.
+ * Behind the ALB the header is always present; locally, unproxied requests all
+ * share the "unknown" bucket.
  */
 export function getClientIp(request: NextRequest): string {
   const forwardedFor = request.headers.get("X-Forwarded-For");

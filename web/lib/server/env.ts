@@ -1,13 +1,6 @@
 import { z } from "zod";
 
-/**
- * Server-side configuration — ported from the former backend/app/config.py
- * (pydantic-settings) when the FastAPI service was folded into this app.
- *
- * `clerk_jwks_url` / `clerk_issuer` are deliberately absent: they existed only
- * so a separate Python process could hand-verify Clerk JWTs against the JWKS
- * endpoint. @clerk/nextjs does that itself now, from CLERK_SECRET_KEY.
- */
+/** Server-side configuration. Clerk needs no JWKS settings — its SDK verifies sessions from CLERK_SECRET_KEY. */
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
 

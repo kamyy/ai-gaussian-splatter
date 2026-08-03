@@ -1,14 +1,10 @@
-// Env for the server-side (lib/server/**) test project, replacing what
-// backend/tests/conftest.py used to set before importing any `app.*` module.
+// Env for the server-side (lib/server/**) test project.
 //
-// AWS credentials are dummies on purpose: presigning is local crypto (no
-// network), and every other AWS call is stubbed by aws-sdk-client-mock, so no
-// test should ever reach a real endpoint.
-// TEST_DATABASE_URL wins outright rather than only filling a gap. These tests
-// TRUNCATE and deleteMany() against whatever DATABASE_URL points at, and
-// server-global-setup.ts migrates TEST_DATABASE_URL — so if a developer has a
-// dev DATABASE_URL exported, `??=` below would have pointed the destructive
-// fixtures at their dev database while migrating a different one.
+// AWS credentials are dummies on purpose: presigning is local crypto, and every
+// other AWS call is stubbed, so no test should reach a real endpoint.
+// TEST_DATABASE_URL wins outright rather than only filling a gap: these fixtures
+// TRUNCATE and deleteMany() against whatever DATABASE_URL points at, so a
+// developer with a dev DATABASE_URL exported would otherwise have it wiped.
 if (process.env.TEST_DATABASE_URL) {
   process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 }

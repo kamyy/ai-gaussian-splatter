@@ -1,14 +1,11 @@
 import type { Prisma } from "@prisma/client";
 
 /**
- * Response field sets, replacing what Pydantic's `response_model` used to
- * enforce in the FastAPI backend.
+ * Which columns responses may expose.
  *
- * These are `select` clauses rather than post-hoc field stripping so the
- * omissions are guaranteed at the query, not by remembering to delete keys.
- * That matters most for Job: `callbackToken` is the worker's per-job bearer
- * credential and `ec2InstanceId` is internal infrastructure detail — neither
- * was in the old JobRead schema and neither may ever reach a client.
+ * `select` clauses rather than deleting keys afterwards, so the omissions are
+ * enforced by the query. Job matters most: `callbackToken` is the worker's
+ * bearer credential and `ec2InstanceId` is internal — neither may reach a client.
  */
 
 export const splatReadSelect = {

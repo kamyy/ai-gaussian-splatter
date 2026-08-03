@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 
 /**
- * Thrown from anywhere in a Route Handler's call stack and converted to a
- * response by `withErrorHandling` — the equivalent of FastAPI's HTTPException,
- * which the ported code (rateLimit.ts, auth.ts) relies on being able to raise
- * from deep inside a service rather than returning error tuples upward.
+ * Thrown from anywhere in a handler's call stack and turned into a response by
+ * `withErrorHandling`, so services can reject from deep inside rather than
+ * threading error tuples back up.
  */
 export class HttpError extends Error {
   readonly status: number;
@@ -26,14 +25,9 @@ export function isUuid(value: string): boolean {
  * Guards a path parameter before it reaches Prisma.
  *
  * The id columns are `@db.Uuid`, so a malformed value makes Postgres raise
- * `22P02 invalid input syntax for type uuid`; Prisma surfaces that as a plain
- * error, which `withErrorHandling` rethrows as a 500. FastAPI never had this
- * problem — declaring `object_id: uuid.UUID` made it reject malformed ids with
- * a 422 before any handler ran.
- *
- * Throws the caller's status instead of 422 because these are all
- * lookup-by-id routes that already collapse "not yours" into "not found":
- * an unparseable id can't name an existing row, so it gets the same answer.
+ * `22P02`, which surfaces as a 500. 404 rather than 422 because these are all
+ * lookup-by-id routes that already collapse "not yours" into "not found" — an
+ * unparseable id can't name a row, so it gets the same answer.
  */
 export function requireUuid(value: string, status = 404, message = "Not found"): string {
   if (!UUID_PATTERN.test(value)) {
@@ -42,10 +36,7 @@ export function requireUuid(value: string, status = 404, message = "Not found"):
   return value;
 }
 
-/**
- * Matches FastAPI's error body (`{"detail": "..."}`), which the former backend
- * returned for every HTTPException.
- */
+/** Error body shape: `{"detail": "..."}`. */
 export function errorResponse(status: number, detail: string): NextResponse {
   return NextResponse.json({ detail }, { status });
 }

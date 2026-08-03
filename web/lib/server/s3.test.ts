@@ -4,10 +4,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { objectExists, photoS3Key, presignPhotoUpload, presignSplatDownload } from "./s3";
 
-// Ported from backend/tests/test_s3.py. The presign tests need no AWS stubbing
-// at all: getSignedUrl computes the signature locally and never issues a
-// request, so there is nothing to intercept. Only objectExists actually calls
-// out, so only it gets a mocked client.
+// The presign tests need no AWS stubbing: getSignedUrl signs locally and issues
+// no request. Only objectExists calls out, so only it gets a mocked client.
 const s3Mock = mockClient(S3Client);
 
 afterEach(() => {

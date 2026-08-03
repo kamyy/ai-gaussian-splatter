@@ -1,9 +1,8 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
-// Two projects because the suite now spans both halves of the app: component
-// tests need jsdom, while the ported backend tests (lib/server/**) are plain
-// Node — no DOM, and a real Postgres for the rate-limit tier.
+// Two projects: component tests need jsdom, while lib/server/** is plain Node —
+// no DOM, and a real Postgres for the rate-limit tier.
 export default defineConfig({
   test: {
     projects: [

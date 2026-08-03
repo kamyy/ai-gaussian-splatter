@@ -1,13 +1,10 @@
 // Wire types for the REST API in app/api/v1/.
 //
-// These used to mirror backend/app/schemas.py by hand. Now the API is in this
-// same TypeScript program, so the authoritative shapes are derived from Prisma
-// in lib/server/selects.ts — these stay hand-written only because client
-// components must not import from lib/server/ (it would pull the Prisma client
-// and AWS SDK into the browser bundle). Keep them in sync with that file.
+// lib/server/selects.ts is authoritative; these are hand-written because client
+// components must not import from lib/server/ (that would pull the Prisma client
+// and AWS SDK into the browser bundle). Keep the two in sync.
 //
-// Field names and enum values are camelCase/PascalCase because responses
-// serialize Prisma records directly, with no mapping layer.
+// camelCase/PascalCase throughout: responses serialize Prisma records directly.
 
 export type SplatStatus = "Draft" | "Uploading" | "ReadyToProcess" | "Processing" | "Complete" | "Failed";
 

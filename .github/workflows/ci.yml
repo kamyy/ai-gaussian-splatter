@@ -47,9 +47,8 @@ jobs:
 
   web:
     runs-on: ubuntu-latest
-    # Postgres moved here from the deleted `backend` job: the REST API now
-    # lives in this package, so its Prisma-backed tests need a real database
-    # for the same reason the FastAPI ones did (ON CONFLICT upserts).
+    # The Prisma-backed tests need a real database — the ON CONFLICT upserts
+    # can't be faithfully faked.
     services:
       postgres:
         image: postgres:18
@@ -68,8 +67,7 @@ jobs:
         working-directory: web
     env:
       # Structurally valid dummy key (base64 of "example.clerk.accounts.dev$").
-      # It has to parse: clerkMiddleware() actually runs now that auth lives in
-      # this app, and it rejects a malformed publishable key outright.
+      # It has to parse — clerkMiddleware() rejects a malformed one outright.
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk
       CLERK_SECRET_KEY: sk_test_fake_for_ci
       TEST_DATABASE_URL: postgresql://test:test@localhost:5432/test

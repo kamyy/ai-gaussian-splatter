@@ -1,15 +1,11 @@
-// Data model — plan §2. Ported from the former backend/app/models.py
-// (SQLAlchemy) on 2026-08-03 when the FastAPI service was folded into this
-// Next.js app as Route Handlers.
+// Data model — plan §2.
 //
-// Naming convention: PascalCase models, camelCase fields, PascalCase enum
-// members — all mapped to snake_case table/column/enum values in Postgres via
-// @map/@@map, so the database keeps SQL-idiomatic names while the generated
-// client (and therefore the JSON wire format) stays TypeScript-idiomatic.
+// PascalCase models, camelCase fields, PascalCase enum members, all @map'd to
+// snake_case in Postgres: SQL-idiomatic names in the database, TypeScript-
+// idiomatic ones in the generated client and therefore the JSON wire format.
 //
-// The former `Object` model is `Splat` here: `Object` shadows the JS builtin
-// whenever its generated type is imported. The REST paths remain /objects/…
-// — those are the public API contract, unchanged by this rename.
+// The model is `Splat`, not `Object`, which would shadow the JS builtin wherever
+// its generated type is imported. REST paths stay /objects/… — public contract.
 
 generator client {
   provider = "prisma-client-js"
@@ -58,9 +54,8 @@ model User {
 
   splats Splat[]
 
-  // No separate @@index on clerkUserId: @unique already creates one. The old
-  // Alembic schema declared both (unique=True *and* create_index), which meant
-  // Postgres maintained two identical indexes on every insert.
+  // No separate @@index on clerkUserId — @unique already creates one, and a
+  // second would be maintained on every insert for nothing.
   @@map("users")
 }
 
