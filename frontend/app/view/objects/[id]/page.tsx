@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { SplatViewer } from "@/components/viewer/SplatViewer";
 import { getPublicObject } from "@/lib/api";
+import type { PublicObjectRead } from "@/lib/types";
 
 // See app/gallery/page.tsx — same reasoning, fetches the backend at request
 // time, not buildable statically without it running.
@@ -33,7 +34,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function PublicObjectViewPage({ params }: Props) {
   const { id } = await params;
 
-  let object;
+  let object: PublicObjectRead;
   try {
     object = await getPublicObject(id);
   } catch {

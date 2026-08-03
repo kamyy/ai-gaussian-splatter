@@ -9,14 +9,14 @@ import { execFileSync } from "node:child_process";
 const PLACEHOLDER_ACCOUNT = "123456789012";
 const FILE = "infra/cdk.context.json";
 
-let staged: string;
+let staged;
 try {
   staged = execFileSync("git", ["show", `:${FILE}`], { encoding: "utf8" });
 } catch {
   process.exit(0); // file isn't staged/tracked yet — nothing to guard
 }
 
-const context: Record<string, unknown> = JSON.parse(staged);
+const context = JSON.parse(staged);
 const badKeys = Object.keys(context).filter(key => {
   const match = key.match(/account=(\d+)/);
   return match && match[1] !== PLACEHOLDER_ACCOUNT;

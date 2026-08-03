@@ -20,6 +20,7 @@ export default function DashboardPage() {
       {isLoading && (
         <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }}>
           {[...Array(3)].map((_, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton count, order never changes
             <Skeleton key={i} height={160} />
           ))}
         </SimpleGrid>

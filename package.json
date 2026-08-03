@@ -5,17 +5,13 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "prepare": "husky",
-    "guard:cdk-context": "node scripts/check-cdk-context-account.ts",
-    "format-staged": "pretty-quick --staged && node scripts/format-python-staged.ts",
-    "lint": "pnpm --dir frontend lint && node scripts/lint-python.ts",
-    "typecheck": "tsc --noEmit && pnpm --dir frontend exec tsc --noEmit && node scripts/typecheck-python.ts"
+    "guard:cdk-context": "node scripts/check-cdk-context-account.js",
+    "format-staged": "node scripts/format-staged.js",
+    "lint": "node scripts/lint.js",
+    "typecheck": "node scripts/typecheck.js"
   },
   "devDependencies": {
-    "@types/node": "^24",
-    "husky": "^9.1.7",
-    "prettier": "^3.9.6",
-    "prettier-plugin-organize-imports": "^4.3.0",
-    "pretty-quick": "^4.2.2",
-    "typescript": "^6.0.3"
+    "@biomejs/biome": "^2.5.6",
+    "husky": "^9.1.7"
   }
 }

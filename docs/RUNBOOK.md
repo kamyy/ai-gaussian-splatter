@@ -47,7 +47,7 @@ pnpm dev
 ```bash
 (cd backend && uv run ruff check . && uv run mypy app && uv run pytest -v)          # 5 rate-limit tests skip without TEST_DATABASE_URL
 (cd worker && uv run ruff check . && uv run mypy pipeline && uv run pytest -v)
-(cd frontend && npx tsc --noEmit && npx eslint . && npx vitest run && npx playwright test)
+(cd frontend && npx tsc --noEmit && npx biome ci . && npx vitest run && npx playwright test)
 (cd infra && uv run ruff check . && uv run mypy app.py stacks && uv run pytest -v && npx cdk synth)
 ```
 

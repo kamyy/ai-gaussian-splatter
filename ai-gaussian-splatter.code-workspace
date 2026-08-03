@@ -5,7 +5,7 @@
     { "name": "worker", "path": "worker" },
     { "name": "infra", "path": "infra" },
     { "name": "docs", "path": "docs" },
-    { "name": "root", "path": "." },
+    { "name": "root", "path": "." }
   ],
   "settings": {
     "search.exclude": {
@@ -19,22 +19,14 @@
       "**/.pytest_cache": true,
       "**/.ruff_cache": true,
       "**/*.tsbuildinfo": true,
+      "**/.claude": true
     },
     "files.exclude": {
-      // Exclude patterns are matched relative to each workspace root
-      // independently. This hides the redundant nested frontend/backend/
-      // worker/infra/docs copies inside the "root" entry (path ".")
-      // without affecting their own dedicated top-level entries, since
-      // none of those folders contain a subfolder literally named after
-      // one of the others.
       "frontend": true,
       "backend": true,
       "worker": true,
       "infra": true,
       "docs": true,
-      // Generated/cache dirs — gitignored already, but files.exclude is a
-      // separate setting from search.exclude (above) and doesn't inherit
-      // from it, so they're still visible in the explorer tree without this.
       "**/node_modules": true,
       "**/.venv": true,
       "**/.next": true,
@@ -46,26 +38,32 @@
       "**/.ruff_cache": true,
       "**/*.tsbuildinfo": true,
       "**/next-env.d.ts": true,
+      "**/.claude": true
     },
     "js/ts.tsdk.path": "frontend/node_modules/typescript/lib",
-    // Scoped to TS/JS/JSON so this doesn't touch backend/worker's Python
-    // formatting. eslint-config-prettier (frontend/eslint.config.mjs)
-    // disables ESLint's conflicting stylistic rules so the two don't fight.
+    "biome.enabled": false,
     "[typescript]": {
-      "editor.defaultFormatter": "esbenp.prettier-vscode",
+      "editor.defaultFormatter": "biomejs.biome",
       "editor.formatOnSave": true,
+      "editor.codeActionsOnSave": { "source.organizeImports.biome": "explicit" }
     },
     "[typescriptreact]": {
-      "editor.defaultFormatter": "esbenp.prettier-vscode",
+      "editor.defaultFormatter": "biomejs.biome",
       "editor.formatOnSave": true,
+      "editor.codeActionsOnSave": { "source.organizeImports.biome": "explicit" }
     },
     "[javascript]": {
-      "editor.defaultFormatter": "esbenp.prettier-vscode",
+      "editor.defaultFormatter": "biomejs.biome",
       "editor.formatOnSave": true,
+      "editor.codeActionsOnSave": { "source.organizeImports.biome": "explicit" }
     },
     "[json]": {
-      "editor.defaultFormatter": "esbenp.prettier-vscode",
+      "editor.defaultFormatter": "biomejs.biome",
       "editor.formatOnSave": true,
-    },
+      "editor.codeActionsOnSave": { "source.organizeImports.biome": "explicit" }
+    }
   },
+  "extensions": {
+    "recommendations": ["biomejs.biome"]
+  }
 }
