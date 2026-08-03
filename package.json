@@ -6,9 +6,9 @@
   "scripts": {
     "prepare": "husky",
     "guard:cdk-context": "node scripts/check-cdk-context-account.ts",
-    "format-staged": "biome check --write --staged --no-errors-on-unmatched && git diff --name-only --cached --diff-filter=ACMR -z | xargs -0 -r git add && node scripts/format-python-staged.ts",
-    "lint": "biome lint . && node scripts/lint-python.ts",
-    "typecheck": "tsc --noEmit && pnpm --dir frontend exec tsc --noEmit && node scripts/typecheck-python.ts"
+    "format-staged": "node scripts/format-staged.ts",
+    "lint": "node scripts/lint.ts",
+    "typecheck": "node scripts/typecheck.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.6",

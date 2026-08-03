@@ -1,8 +1,11 @@
 #!/usr/bin/env node
-// Runs `ruff check` in each Python package. A small script instead of a
-// shell `&&`/`cd` chain in package.json, so a failure in one package stops
-// the run instead of letting subsequent `cd`s mask it.
+// Runs `biome lint .` (JS/TS across scripts/*.ts + frontend/) and `ruff
+// check`/`ruff format --check` in each Python package. A small script
+// instead of a shell `&&`/`cd` chain in package.json, so a failure in one
+// package stops the run instead of letting subsequent `cd`s mask it.
 import { execFileSync } from "node:child_process";
+
+execFileSync("npx", ["biome", "lint", "."], { stdio: "inherit" });
 
 const PACKAGES = ["backend", "worker", "infra"];
 
