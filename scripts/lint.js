@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Runs `biome lint .` (JS across scripts/*.js + frontend/'s TS) and `ruff
+// Runs `biome lint .` (JS across scripts/*.js + web/'s TS) and `ruff
 // check`/`ruff format --check` in each Python package. A small script
 // instead of a shell `&&`/`cd` chain in package.json, so a failure in one
 // package stops the run instead of letting subsequent `cd`s mask it.
@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 
 execFileSync("npx", ["biome", "lint", "."], { stdio: "inherit" });
 
-const PACKAGES = ["backend", "worker", "infra"];
+const PACKAGES = ["worker", "infra"];
 
 for (const pkg of PACKAGES) {
   // Linter: flags actual problems (unused imports, undefined names, etc.)

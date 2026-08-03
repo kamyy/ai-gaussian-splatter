@@ -1,0 +1,151 @@
+// Data model — plan §2.
+//
+// PascalCase models, camelCase fields, PascalCase enum members, all @map'd to
+// snake_case in Postgres: SQL-idiomatic names in the database, TypeScript-
+// idiomatic ones in the generated client and therefore the JSON wire format.
+//
+// The model is `Splat`, not `Object`, which would shadow the JS builtin wherever
+// its generated type is imported. REST paths stay /objects/… — public contract.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum SplatStatus {
+  Draft          @map("draft")
+  Uploading      @map("uploading")
+  ReadyToProcess @map("ready_to_process")
+  Processing     @map("processing")
+  Complete       @map("complete")
+  Failed         @map("failed")
+
+  @@map("splat_status")
+}
+
+enum PhotoUploadStatus {
+  Pending  @map("pending")
+  Uploaded @map("uploaded")
+  Failed   @map("failed")
+
+  @@map("photo_upload_status")
+}
+
+enum JobStatus {
+  Queued          @map("queued")
+  Launching       @map("launching")
+  ColmapRunning   @map("colmap_running")
+  TrainingRunning @map("training_running")
+  UploadingResult @map("uploading_result")
+  Complete        @map("complete")
+  Failed          @map("failed")
+  Cancelled       @map("cancelled")
+
+  @@map("job_status")
+}
+
+model User {
+  id          String   @id @default(uuid()) @db.Uuid
+  clerkUserId String   @unique @map("clerk_user_id")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  splats Splat[]
+
+  // No separate @@index on clerkUserId — @unique already creates one, and a
+  // second would be maintained on every insert for nothing.
+  @@map("users")
+}
+
+model Splat {
+  id             String      @id @default(uuid()) @db.Uuid
+  userId         String      @map("user_id") @db.Uuid
+  name           String
+  status         SplatStatus @default(Draft)
+  thumbnailS3Key String?     @map("thumbnail_s3_key")
+  isShareable    Boolean     @default(true) @map("is_shareable")
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user   User    @relation(fields: [userId], references: [id])
+  photos Photo[]
+  jobs   Job[]
+
+  @@index([userId], map: "ix_splats_user_id")
+  @@map("splats")
+}
+
+model Photo {
+  id               String            @id @default(uuid()) @db.Uuid
+  splatId          String            @map("splat_id") @db.Uuid
+  s3Key            String            @map("s3_key")
+  originalFilename String            @map("original_filename")
+  contentType      String            @map("content_type")
+  sizeBytes        Int?              @map("size_bytes")
+  uploadStatus     PhotoUploadStatus @default(Pending) @map("upload_status")
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  splat Splat @relation(fields: [splatId], references: [id], onDelete: Cascade)
+
+  @@index([splatId], map: "ix_photos_splat_id")
+  @@map("photos")
+}
+
+model Job {
+  id             String    @id @default(uuid()) @db.Uuid
+  splatId        String    @map("splat_id") @db.Uuid
+  status         JobStatus @default(Queued)
+  callbackToken  String    @map("callback_token")
+  ec2InstanceId  String?   @map("ec2_instance_id")
+  errorMessage   String?   @map("error_message")
+  resultS3Key    String?   @map("result_s3_key")
+  thumbnailS3Key String?   @map("thumbnail_s3_key")
+
+  colmapStartedAt    DateTime? @map("colmap_started_at") @db.Timestamptz(6)
+  colmapFinishedAt   DateTime? @map("colmap_finished_at") @db.Timestamptz(6)
+  trainingStartedAt  DateTime? @map("training_started_at") @db.Timestamptz(6)
+  trainingFinishedAt DateTime? @map("training_finished_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  splat Splat @relation(fields: [splatId], references: [id], onDelete: Cascade)
+
+  @@index([splatId], map: "ix_jobs_splat_id")
+  @@map("jobs")
+}
+
+/// Fixed-window counters backing per-IP/per-user rate limiting (plan §5).
+/// Incremented via raw `INSERT … ON CONFLICT … RETURNING` in lib/server/rateLimit.ts,
+/// never via Prisma's upsert() — see that file for why.
+model RateLimitCounter {
+  id          BigInt   @id @default(autoincrement())
+  scope       String
+  windowStart DateTime @map("window_start") @db.Timestamptz(6)
+  count       Int      @default(0)
+
+  @@unique([scope, windowStart], map: "uq_rate_limit_scope_window")
+  @@index([scope], map: "ix_rate_limit_counters_scope")
+  @@map("rate_limit_counters")
+}
+
+/// The hard global daily cap backstop (plan §5).
+model GlobalJobCounter {
+  day         DateTime @id @db.Timestamptz(6)
+  jobsStarted Int      @default(0) @map("jobs_started")
+
+  @@map("global_job_counters")
+}
+
+model GalleryItem {
+  id             String  @id @default(uuid()) @db.Uuid
+  title          String
+  description    String?
+  splatS3Key     String  @map("splat_s3_key")
+  thumbnailS3Key String  @map("thumbnail_s3_key")
+  displayOrder   Int     @default(0) @map("display_order")
+
+  @@map("gallery_items")
+}

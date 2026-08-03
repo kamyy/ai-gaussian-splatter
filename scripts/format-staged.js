@@ -24,7 +24,7 @@ if (stagedFiles.length > 0) {
   execFileSync("git", ["add", ...stagedFiles], { stdio: "inherit" });
 }
 
-const PACKAGES = ["backend", "worker", "infra"];
+const PACKAGES = ["worker", "infra"];
 
 for (const pkg of PACKAGES) {
   const prefix = `${pkg}/`;

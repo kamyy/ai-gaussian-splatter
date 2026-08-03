@@ -23,40 +23,10 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      # Single Biome invocation from repo root covers both scripts/*.ts
-      # and frontend/ in one pass — Biome doesn't need frontend's own
+      # Single Biome invocation from repo root covers both scripts/*.js
+      # and web/ in one pass — Biome doesn't need web's own
       # node_modules to lint/format files, only its own binary.
       - run: npx biome ci .
-
-  backend:
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:18
-        env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: test
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
-      - run: uv sync --group dev
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-      - run: uv run mypy app
-      - name: Run tests (unit tier always; Postgres-dependent tier via TEST_DATABASE_URL)
-        env:
-          TEST_DATABASE_URL: postgresql+psycopg://test:test@localhost:5432/test
-        run: uv run pytest -v
 
   worker:
     runs-on: ubuntu-latest
@@ -75,26 +45,68 @@ jobs:
       # COLMAP+gsplat pipeline. See worker/pipeline/train.py's docstring.
       - run: uv run pytest -v
 
-  frontend:
+  web:
     runs-on: ubuntu-latest
+    # The Prisma-backed tests need a real database — the ON CONFLICT upserts
+    # can't be faithfully faked.
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
-        working-directory: frontend
+        working-directory: web
     env:
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZmFrZS1rZXktZm9yLWNpJA
+      # Structurally valid dummy key (base64 of "example.clerk.accounts.dev$").
+      # It has to parse — clerkMiddleware() rejects a malformed one outright.
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk
       CLERK_SECRET_KEY: sk_test_fake_for_ci
+      TEST_DATABASE_URL: postgresql://test:test@localhost:5432/test
+      DATABASE_URL: postgresql://test:test@localhost:5432/test
+      # getEnv() validates all of these on first use, and getPrisma() calls it —
+      # so any DB-touching page throws without them, including under the dev
+      # server Playwright starts. Dummy values: presigning is local crypto and
+      # nothing in CI reaches AWS.
+      UPLOADS_BUCKET: test-uploads
+      SPLATS_BUCKET: test-splats
+      AWS_REGION: us-west-2
+      AWS_ACCESS_KEY_ID: testing
+      AWS_SECRET_ACCESS_KEY: testing
+      WORKER_AMI_ID: ami-0123456789abcdef0
+      WORKER_SUBNET_ID: subnet-0123456789abcdef0
+      WORKER_SECURITY_GROUP_ID: sg-0123456789abcdef0
+      WORKER_INSTANCE_PROFILE_ARN: arn:aws:iam::123456789012:instance-profile/worker
+      APP_PUBLIC_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          package_json_file: frontend/package.json
+          package_json_file: web/package.json
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
+          cache-dependency-path: web/pnpm-lock.yaml
+      # postinstall runs `prisma generate`, so the client exists before tsc.
       - run: pnpm install --frozen-lockfile
+      # MUST precede tsc. The Route Handlers use `RouteContext<"...">`, a global
+      # Next.js emits into .next/types/ — which is gitignored, so on a fresh
+      # checkout tsc fails with `TS2304: Cannot find name 'RouteContext'`.
+      - run: npx next typegen
       - run: npx tsc --noEmit
+      # Applies migrations to the service container; the server test project's
+      # globalSetup also does this, so this step mainly fails fast on a bad
+      # migration before the suite starts.
+      - run: npx prisma migrate deploy
       - run: npx vitest run
       - run: npx next build
       - name: Install Playwright browsers

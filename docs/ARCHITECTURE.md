@@ -13,23 +13,31 @@ The "AI" here is the training itself — a from-scratch per-object gradient-desc
 
 ## Compute
 
-Each job launches a dedicated AWS EC2 `g5.xlarge` **spot** instance (`backend/app/services/ec2_launcher.py`), runs the worker container, and self-terminates in all cases (success, failure, or a CloudWatch alarm backstop). No SQS queue, no Batch, no always-on fleet — volume is bounded by the global daily job cap, and a queue only earns its complexity at higher, decoupled-worker-fleet scale (documented future enhancement).
+Each job launches a dedicated AWS EC2 `g5.xlarge` **spot** instance (`web/lib/server/ec2Launcher.ts`), runs the worker container, and self-terminates in all cases (success, failure, or a CloudWatch alarm backstop). No SQS queue, no Batch, no always-on fleet — volume is bounded by the global daily job cap, and a queue only earns its complexity at higher, decoupled-worker-fleet scale (documented future enhancement).
 
 Not Lambda: zero GPU support, hard architectural limit. Not Fargate: also no GPU. Not hand-rolled ECS orchestration: its value (bin-packing many tasks on shared instances) doesn't apply to a one-job-one-dedicated-instance pattern.
 
 ## API & data
 
-FastAPI REST (`backend/`), not GraphQL — the API is ~9 flat endpoints, REST's ideal case. Postgres (RDS) for `users`/`objects`/`photos`/`jobs`/rate-limit counters — genuinely relational, low traffic, atomic upserts via `INSERT ... ON CONFLICT`.
+REST (`web/app/api/v1/`), not GraphQL — the API is ~9 flat endpoints, REST's ideal case. Postgres (RDS) for `users`/`objects`/`photos`/`jobs`/rate-limit counters — genuinely relational, low traffic, atomic upserts via `INSERT ... ON CONFLICT`.
 
 Auth: Clerk (`@clerk/nextjs`), not Cognito (clunkier setup) or Auth0.
 
-**2026-07-31 update**: the backend originally ran on App Runner, but App Runner stopped accepting new customers 2026-04-30 (existing services keep running, no new features). Since this project hadn't deployed yet, it moved to **ECS Express Mode** (`AWS::ECS::ExpressGatewayService`) instead — AWS's official replacement, launched Nov 2025. It auto-provisions the ECS cluster/service, ALB, security groups, and auto-scaling from one resource, same "no hand-wired orchestration" intent App Runner had. Only an L1 CDK construct exists so far (no L2 yet), so `backend_stack.py` configures it explicitly, same as it did for App Runner's L1 constructs.
+The API lives in the same Next.js app as the pages, not a separate service. SSR is load-bearing here (`generateMetadata` for Open Graph, server-side gallery reads), so a long-running Node process has to exist regardless — putting the API in it means one deployable instead of two, and one TypeScript program, so there is no cross-service contract to hand-sync.
+
+The tradeoff is losing a framework that derives OpenAPI docs and response schemas for you. Response field sets are explicit Prisma `select` clauses in `web/lib/server/selects.ts` instead — that is what keeps `callbackToken` out of a job response.
+
+ORM is **Prisma**. One thing it can't do: `web/lib/server/rateLimit.ts` keeps raw `$queryRaw` for `INSERT ... ON CONFLICT ... RETURNING`, because Prisma's `upsert()` is not an atomic upsert — it issues a `SELECT` then an `INSERT`/`UPDATE` (confirmed in query logs), reopening the check-and-increment race that design closes.
+
+Wire format is camelCase, matching the Prisma client, with one exception: `PATCH /api/v1/internal/jobs/{id}/status` parses snake_case, because `worker/pipeline/status.py` sends that shape.
+
+Hosting is **ECS Express Mode** (`AWS::ECS::ExpressGatewayService`), not App Runner — App Runner stopped accepting new customers 2026-04-30, and Express Mode is AWS's official replacement (launched Nov 2025). It auto-provisions the ECS cluster/service, ALB, security groups, and auto-scaling from one resource, same "no hand-wired orchestration" intent App Runner had. Only an L1 CDK construct exists so far (no L2 yet), so `backend_stack.py` configures it explicitly.
 
 ## Abuse protection
 
-Three independent layers (`backend/app/services/rate_limit.py`), since a per-user quota alone doesn't stop multi-accounting:
+Three independent layers (`web/lib/server/rateLimit.ts`), since a per-user quota alone doesn't stop multi-accounting:
 
-1. Per-IP rate limit (the actual multi-account defense), checked in `presign`.
+1. Per-IP rate limit (the actual multi-account defense), checked in `presign`. **The IP comes from the _last_ `X-Forwarded-For` hop, not the first** — an ALB appends the address it actually saw to whatever the client sent, so trusting the first entry would let anyone mint a fresh bucket per request with a spoofed header, which defeats the whole layer. This assumes exactly one trusted proxy; adding CloudFront in front of the ALB moves the trustworthy position again and requires revisiting `getClientIp`.
 2. Per-user rate limit, alongside it.
 3. Global daily job cap, checked only in `process` — independent of who's calling, the backstop that bounds worst-case GPU spend.
 4. AWS Budget + CloudWatch billing alarm (`infra/stacks/budgets_stack.py`), an independent ops-level safety net.
@@ -40,12 +48,16 @@ Next.js (App Router), not a Vite SPA — Open Graph previews for shared objects 
 
 ## Infra
 
-AWS CDK (Python), not Terraform — 100% AWS with no multi-cloud plans, so Terraform's core value proposition isn't exercised here. Originally TypeScript CDK (matching `frontend/`'s language), ported to Python on 2026-07-31 to match `backend/`'s and `worker/`'s tooling instead: all three non-frontend packages now share `uv` for dependency management and the same `ruff`+`mypy` lint/type story, so infra code reviews the same way backend/worker code does. The CDK CLI itself remains npm-distributed regardless of app language (there's no pip-installable `cdk` binary), so `infra/` still keeps a minimal `package.json` pinning just that CLI — Node stays a build-time dependency there, just not a source-code language. Five stacks (`infra/stacks/`): network (VPC/security groups), data (RDS/S3), worker-iam (the spot instance's scoped role), backend (ECS Express Mode), budgets (independent of the others, deployed to us-east-1 regardless of the app's region since billing metrics only exist there).
+AWS CDK (Python), not Terraform — 100% AWS with no multi-cloud plans, so Terraform's core value proposition isn't exercised here. Python rather than TypeScript so it shares `worker/`'s tooling — both use `uv` and the same `ruff`+`mypy` story, so infra reviews the same way pipeline code does. The CDK CLI itself remains npm-distributed regardless of app language (there's no pip-installable `cdk` binary), so `infra/` still keeps a minimal `package.json` pinning just that CLI — Node stays a build-time dependency there, just not a source-code language. Five stacks (`infra/stacks/`): network (VPC/security groups), data (RDS/S3), worker-iam (the spot instance's scoped role), backend (ECS Express Mode, running the `web/` image), budgets (independent of the others, deployed to us-east-1 regardless of the app's region since billing metrics only exist there).
 
 ## Testing
 
 Three tiers, split by CI-cheap vs. GPU-costly (`.github/workflows/ci.yml`):
 
-- **Unit/component** (every PR): `pytest` + `moto` (mocked AWS) for backend/worker; Vitest + React Testing Library for frontend.
-- **E2E against a mocked backend** (every PR): Playwright, covering what's reachable without live Clerk credentials (currently the public gallery path) against a real tiny mock HTTP server (`frontend/e2e/mock-backend.mjs`) — not browser-level route mocking, since the gallery/view pages fetch server-side during Next's SSR, which is invisible to `page.route()`.
+- **Unit/component** (every PR): `pytest` + `moto` (mocked AWS) for `worker/`; Vitest for `web/`, split into `client` (jsdom, React Testing Library) and `server` (Node, plus a real Postgres for the rate-limit tier).
+- **E2E against a mocked backend** (every PR): Playwright, covering what's reachable without live Clerk credentials (currently the public gallery path) against a real tiny mock HTTP server (`web/e2e/mock-backend.mjs`) — not browser-level route mocking, since the gallery/view pages fetch server-side during Next's SSR, which is invisible to `page.route()`.
+
+`web/`'s AWS tests use `aws-sdk-client-mock`, which stubs calls rather than emulating a backend the way `moto` does for `worker/` — so `ec2Launcher.test.ts` asserts on the arguments `RunInstancesCommand` received rather than on state afterwards.
+
+`web/e2e/mock-backend.mjs` **is knowingly stale**: the gallery pages it covers read Prisma directly, so it serves data nothing requests and Playwright can pass while exercising a path production doesn't use. Deferred deliberately — E2E's job here is UI flows, and server-side correctness is covered by the Vitest `server` project — but don't mistake it for working coverage of the real data path.
 - **Real-pipeline integration** (manual/milestone-gated, not CI): actual COLMAP + gsplat runs cost real GPU time/money. A "fast test mode" (tiny photo set, ~50 iterations) gives a cheap on-demand smoke test of the plumbing when needed.
