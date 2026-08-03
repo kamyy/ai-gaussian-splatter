@@ -8,7 +8,7 @@
 cd backend
 uv sync --group dev
 # Needs a real Postgres for anything beyond the auth/S3/EC2-mocked tests —
-# e.g. `docker run -p 5432:5432 -e POSTGRES_PASSWORD=test postgres:16`
+# e.g. `docker run -p 5432:5432 -e POSTGRES_PASSWORD=test postgres:18`
 DATABASE_URL=postgresql+psycopg://postgres:test@localhost/postgres \
 CLERK_JWKS_URL=https://<your-clerk-domain>/.well-known/jwks.json \
 CLERK_ISSUER=https://<your-clerk-domain> \
