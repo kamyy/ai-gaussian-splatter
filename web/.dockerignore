@@ -1,0 +1,24 @@
+# Without this, the `COPY . .` in the builder stage overwrites the deps stage's
+# node_modules with the host's — discarding the `prisma generate` output that
+# postinstall produced — and bakes local .env files into an image layer.
+node_modules
+.next
+.env
+.env.*
+!.env.example
+
+e2e
+test
+test-results
+playwright-report
+*.test.ts
+*.test.tsx
+
+.git
+.gitignore
+Dockerfile
+.dockerignore
+README.md
+AGENTS.md
+CLAUDE.md
+tsconfig.tsbuildinfo
