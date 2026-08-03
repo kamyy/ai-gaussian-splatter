@@ -45,6 +45,7 @@
       "**/.pytest_cache": true,
       "**/.ruff_cache": true,
       "**/*.tsbuildinfo": true,
+      "**/next-env.d.ts": true,
     },
     "js/ts.tsdk.path": "frontend/node_modules/typescript/lib",
     // Scoped to TS/JS/JSON so this doesn't touch backend/worker's Python
