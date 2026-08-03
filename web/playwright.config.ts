@@ -4,14 +4,14 @@ import { defineConfig, devices } from "@playwright/test";
 // fast and free to run on every PR, unlike the real-pipeline integration
 // tests which stay manual/milestone-gated.
 //
-// Two webServer entries: the mock backend (e2e/mock-backend.mjs) and the
-// Next.js dev server pointed at it. Browser-level route mocking (MSW's
-// service worker, or page.route()) can't be used for the gallery/view pages
-// specifically, since they fetch server-side during Next's SSR (force-dynamic
-// per app/gallery/page.tsx) — that's a request from the Node.js server
-// process, invisible to browser-level interception. A real (if tiny) HTTP
-// server is the correct fix for that case; MSW's browser worker remains the
-// right tool for mocking fetches made by client components.
+// STALE as of 2026-08-03 — see the skipped test in e2e/gallery.spec.ts.
+// The mock backend below exists because the gallery/view pages used to fetch a
+// separate FastAPI service during SSR, which browser-level interception
+// (page.route(), MSW's service worker) cannot see. Those pages now read Prisma
+// in-process, so nothing requests this server at all. Replacing it with a
+// seeded test database is deferred work; until then this config keeps a server
+// running that serves no one, and NEXT_PUBLIC_API_BASE_URL below is dead
+// (lib/api.ts is same-origin now).
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
