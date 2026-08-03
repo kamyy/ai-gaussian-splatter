@@ -1,0 +1,4 @@
+{
+  // See frontend/.vscode/settings.json for why this is disabled here.
+  "biome.enabled": false
+}

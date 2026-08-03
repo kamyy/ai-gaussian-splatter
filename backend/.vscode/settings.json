@@ -1,3 +1,10 @@
 {
-  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  // This folder is nested inside the "root" workspace-folder entry
+  // (ai-gaussian-splatter.code-workspace, path "."), whose own Biome
+  // session already covers the whole repo tree. Without this, biome-vscode
+  // starts a second session here that overlaps with root's, duplicating
+  // coverage of the same files (irrelevant content here, but Python
+  // packages have their own .vscode/settings.json too — keep it consistent).
+  "biome.enabled": false
 }
