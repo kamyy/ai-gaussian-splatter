@@ -6,7 +6,7 @@
   "scripts": {
     "prepare": "husky",
     "guard:cdk-context": "node scripts/check-cdk-context-account.ts",
-    "format-staged": "biome check --write --staged && node scripts/format-python-staged.ts",
+    "format-staged": "biome check --write --staged --no-errors-on-unmatched && node scripts/format-python-staged.ts",
     "lint": "biome lint . && node scripts/lint-python.ts",
     "typecheck": "tsc --noEmit && pnpm --dir frontend exec tsc --noEmit && node scripts/typecheck-python.ts"
   },
