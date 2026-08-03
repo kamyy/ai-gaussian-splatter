@@ -18,7 +18,8 @@
       "**/.mypy_cache": true,
       "**/.pytest_cache": true,
       "**/.ruff_cache": true,
-      "**/*.tsbuildinfo": true
+      "**/*.tsbuildinfo": true,
+      "**/.claude": true
     },
     "files.exclude": {
       "frontend": true,
@@ -36,7 +37,8 @@
       "**/.pytest_cache": true,
       "**/.ruff_cache": true,
       "**/*.tsbuildinfo": true,
-      "**/next-env.d.ts": true
+      "**/next-env.d.ts": true,
+      "**/.claude": true
     },
     "js/ts.tsdk.path": "frontend/node_modules/typescript/lib",
     "biome.enabled": false,
