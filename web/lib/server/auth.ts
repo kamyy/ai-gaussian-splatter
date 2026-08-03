@@ -1,6 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
 import type { Job, User } from "@prisma/client";
-import { Prisma } from "@prisma/client";
 import type { NextRequest } from "next/server";
 
 import { HttpError, requireUuid } from "./httpError";
@@ -15,27 +14,20 @@ export async function requireClerkUserId(): Promise<string> {
   return userId;
 }
 
-/** Local shadow row per plan §2 — created lazily on first request. */
+/**
+ * Local shadow row per plan §2 — created lazily on first request.
+ *
+ * The no-op `update` is deliberate: Prisma only compiles `upsert()` to a single
+ * `INSERT ... ON CONFLICT` when there is something to update. With an empty
+ * `update: {}` it falls back to SELECT-then-INSERT, and two concurrent
+ * first-requests from the same user would race to create the same row.
+ */
 export async function getOrCreateUser(clerkUserId: string): Promise<User> {
-  const prisma = getPrisma();
-
-  const existing = await prisma.user.findUnique({ where: { clerkUserId } });
-  if (existing !== null) {
-    return existing;
-  }
-
-  try {
-    return await prisma.user.create({ data: { clerkUserId } });
-  } catch (error) {
-    // Two concurrent first-requests from the same user race here. The loser
-    // hits the unique constraint and simply re-reads the winner's row.
-    // (Prisma's upsert() is not usable as a fix — it runs SELECT-then-INSERT,
-    // so it has this same race rather than closing it.)
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return prisma.user.findUniqueOrThrow({ where: { clerkUserId } });
-    }
-    throw error;
-  }
+  return getPrisma().user.upsert({
+    where: { clerkUserId },
+    create: { clerkUserId },
+    update: { clerkUserId },
+  });
 }
 
 /** The authenticated caller's local User row, or 401. */

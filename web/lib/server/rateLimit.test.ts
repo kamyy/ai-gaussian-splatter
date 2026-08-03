@@ -7,7 +7,7 @@ import { checkAndIncrementGlobalDaily, checkAndIncrementIp, checkAndIncrementUse
 
 /**
  * Requires a real Postgres (TEST_DATABASE_URL): these exercise the
- * `INSERT ... ON CONFLICT ... RETURNING` upsert, which is the whole point of the
+ * `INSERT ... ON CONFLICT` upsert, which is the whole point of the
  * implementation and can't be faithfully faked. CI wires it to a service
  * container (plan §8).
  */
@@ -77,9 +77,9 @@ describe.skipIf(!hasPostgres)("rate limiting", () => {
   });
 
   it("increments atomically under concurrency", async () => {
-    // The reason this is raw SQL and not prisma.upsert(): upsert issues a
-    // SELECT then an INSERT, so concurrent callers can both read the same
-    // count and exceed the limit. A native ON CONFLICT cannot.
+    // Guards the property, not the implementation: whatever issues the
+    // increment must do it in one statement, so concurrent callers can't both
+    // read the same count and slip past the limit.
     const results = await Promise.allSettled(Array.from({ length: 20 }, () => checkAndIncrementIp("198.51.100.1", 10)));
     const allowed = results.filter(r => r.status === "fulfilled").length;
     const rejected = results.filter(r => r.status === "rejected").length;
