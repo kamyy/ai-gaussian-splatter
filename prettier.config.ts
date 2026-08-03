@@ -1,5 +1,6 @@
-/** @type {import("prettier").Config} */
-export default {
+import type { Config } from "prettier";
+
+const config: Config = {
   // Uses TypeScript's organize imports (same as VS Code source.organizeImports)
   plugins: ["prettier-plugin-organize-imports"],
 
@@ -21,3 +22,5 @@ export default {
   // Line endings
   endOfLine: "lf", // Unix line endings, not CRLF
 };
+
+export default config;
