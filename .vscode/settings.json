@@ -1,0 +1,7 @@
+{
+  // Overrides the workspace-level default (see
+  // ai-gaussian-splatter.code-workspace) back to enabled specifically for
+  // the "root" folder entry (path "."), whose single Biome session covers
+  // the whole repo tree.
+  "biome.enabled": true
+}

@@ -1,5 +1,3 @@
 {
-  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
-  // See backend/.vscode/settings.json for why this is disabled here.
-  "biome.enabled": false
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
 }

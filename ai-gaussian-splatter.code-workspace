@@ -48,6 +48,18 @@
       "**/next-env.d.ts": true
     },
     "js/ts.tsdk.path": "frontend/node_modules/typescript/lib",
+    // Default off: the "root" folder below (path ".") physically nests
+    // frontend/backend/worker/infra/docs inside it (same overlap
+    // files.exclude special-cases above), and biome-vscode starts one LSP
+    // session per declared folder without deduping nested ones — every
+    // folder left enabled here would double up on root's coverage of the
+    // same files ("Biome started multiple sessions for some of the same
+    // files"). root/.vscode/settings.json re-enables it just for "root",
+    // which alone already covers the whole tree. This only takes effect
+    // when this .code-workspace file itself is opened — opening frontend/
+    // (or any other folder) standalone falls back to Biome's own default
+    // (enabled), so it still works there without a workspace loaded.
+    "biome.enabled": false,
     // Scoped to TS/JS/JSON so this doesn't touch backend/worker's Python
     // formatting. Biome owns both formatting and linting for these
     // languages now (biome.json), so there's no separate linter to
