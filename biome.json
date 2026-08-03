@@ -41,7 +41,7 @@
   },
   "overrides": [
     {
-      "includes": ["frontend/**"],
+      "includes": ["web/**"],
       "linter": {
         "domains": {
           "next": "recommended"

@@ -1,7 +1,6 @@
 {
   "folders": [
-    { "name": "frontend", "path": "frontend" },
-    { "name": "backend", "path": "backend" },
+    { "name": "web", "path": "web" },
     { "name": "worker", "path": "worker" },
     { "name": "infra", "path": "infra" },
     { "name": "docs", "path": "docs" },
@@ -22,8 +21,7 @@
       "**/.claude": true
     },
     "files.exclude": {
-      "frontend": true,
-      "backend": true,
+      "web": true,
       "worker": true,
       "infra": true,
       "docs": true,
@@ -40,7 +38,7 @@
       "**/next-env.d.ts": true,
       "**/.claude": true
     },
-    "js/ts.tsdk.path": "frontend/node_modules/typescript/lib",
+    "js/ts.tsdk.path": "web/node_modules/typescript/lib",
     "biome.enabled": false,
     "[typescript]": {
       "editor.defaultFormatter": "biomejs.biome",

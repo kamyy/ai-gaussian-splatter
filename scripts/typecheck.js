@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Runs `tsc --noEmit` for frontend/ and `mypy` in each Python package,
+// Runs `tsc --noEmit` for web/ and `mypy` in each Python package,
 // targeting source only (not tests, as a first pass). A small script
 // instead of a shell `&&`/`cd` chain in package.json, so a failure in one
 // package stops the run instead of letting subsequent `cd`s mask it.
@@ -8,10 +8,9 @@
 // the repo root to typecheck.
 import { execFileSync } from "node:child_process";
 
-execFileSync("pnpm", ["--dir", "frontend", "exec", "tsc", "--noEmit"], { stdio: "inherit" });
+execFileSync("pnpm", ["--dir", "web", "exec", "tsc", "--noEmit"], { stdio: "inherit" });
 
 const PACKAGES = [
-  { dir: "backend", targets: ["app"] },
   { dir: "worker", targets: ["pipeline"] },
   { dir: "infra", targets: ["app.py", "stacks"] },
 ];
