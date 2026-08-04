@@ -4,6 +4,11 @@ from aws_cdk import aws_rds as rds
 from aws_cdk import aws_s3 as s3
 from constructs import Construct
 
+# Imported by backend_stack.py to build the container's DATABASE_NAME. The RDS
+# L2 construct doesn't expose the initial database name as an attribute, so
+# without this the literal would have to be repeated in both stacks.
+DATABASE_NAME = "ai_gaussian_splatter"
+
 
 class DataStack(cdk.Stack):
     """RDS Postgres (single-AZ, db.t4g.micro — plan §2's justification: genuinely
@@ -33,7 +38,7 @@ class DataStack(cdk.Stack):
             allocated_storage=20,
             storage_encrypted=True,
             credentials=rds.Credentials.from_generated_secret("splatter_admin"),
-            database_name="ai_gaussian_splatter",
+            database_name=DATABASE_NAME,
             removal_policy=cdk.RemovalPolicy.SNAPSHOT,
             deletion_protection=False,
             # RDS windows are fixed UTC and don't shift for DST — 10:00 UTC is

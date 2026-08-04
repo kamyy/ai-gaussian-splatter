@@ -120,6 +120,20 @@ step instead:
 (cd web && DATABASE_URL=<production-url> npx drizzle-kit migrate)
 ```
 
+`drizzle.config.ts` resolves its connection the same way the running app does
+(`lib/server/databaseUrl.ts`), so the `DATABASE_HOST`/`NAME`/`USER`/`PASSWORD`
+parts work here too — useful when you're reading them straight out of the RDS
+secret rather than hand-assembling a URL:
+
+```bash
+aws secretsmanager get-secret-value --secret-id <rds-secret-arn> \
+  --query SecretString --output text | jq -r \
+  '"DATABASE_HOST=\(.host) DATABASE_PORT=\(.port) DATABASE_NAME=\(.dbname) DATABASE_USER=\(.username) DATABASE_PASSWORD=\(.password)"'
+```
+
+The database lives in a private subnet, so run this from somewhere inside the
+VPC (or over a bastion/SSM port-forward), not a laptop.
+
 ## Debugging a failed job
 
 1. Check `jobs.status` and `jobs.error_message` for the object (`GET /api/v1/objects/{id}/jobs/latest`).

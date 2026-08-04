@@ -8,6 +8,7 @@ from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_secretsmanager as secretsmanager
 from constructs import Construct
 
+from stacks.data_stack import DATABASE_NAME
 from stacks.tags import WORKER_TAG_KEY, WORKER_TAG_VALUE
 
 # Single source of truth for the Next.js container's listen port — used by
@@ -214,9 +215,28 @@ class BackendStack(cdk.Stack):
                     # attr_endpoint, which would be a circular dependency: point
                     # it at the custom domain or the first deploy's ALB endpoint.
                     key_value_pair(name="APP_PUBLIC_URL", value=app_public_url),
+                    # The non-secret half of the connection. There is no
+                    # DATABASE_URL here on purpose: RDS writes its generated
+                    # credentials to Secrets Manager as a JSON blob, and ECS
+                    # can only project individual *fields* of a secret into a
+                    # variable — it cannot assemble a postgresql:// string. So
+                    # the parts are passed separately and the app builds the
+                    # URL in web/lib/server/databaseUrl.ts.
+                    key_value_pair(name="DATABASE_HOST", value=database.db_instance_endpoint_address),
+                    key_value_pair(name="DATABASE_PORT", value=database.db_instance_endpoint_port),
+                    key_value_pair(name="DATABASE_NAME", value=DATABASE_NAME),
                 ],
                 secrets=[
-                    ecs.CfnExpressGatewayService.SecretProperty(name="DATABASE_URL", value_from=db_secret.secret_arn),
+                    # `arn:json-key:version-stage:version-id` — the trailing
+                    # empty fields mean "current version". Only the credentials
+                    # go through Secrets Manager; the endpoint and database name
+                    # above aren't secret and stay readable in the console.
+                    ecs.CfnExpressGatewayService.SecretProperty(
+                        name="DATABASE_USER", value_from=f"{db_secret.secret_arn}:username::"
+                    ),
+                    ecs.CfnExpressGatewayService.SecretProperty(
+                        name="DATABASE_PASSWORD", value_from=f"{db_secret.secret_arn}:password::"
+                    ),
                     ecs.CfnExpressGatewayService.SecretProperty(
                         name="CLERK_SECRET_KEY", value_from=self.clerk_secret.secret_arn
                     ),
