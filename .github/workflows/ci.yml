@@ -97,9 +97,12 @@ jobs:
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      # MUST precede tsc. The Route Handlers use `RouteContext<"...">`, a global
-      # Next.js emits into .next/types/ — which is gitignored, so on a fresh
-      # checkout tsc fails with `TS2304: Cannot find name 'RouteContext'`.
+      # App Router types (including global `RouteContext<"/path">`, which Route
+      # Handlers use for typed `params`) are normally written to .next/types/ by
+      # `next dev` / `next build`. That dir is gitignored, so CI hasn't run
+      # either yet and plain `tsc --noEmit` fails with
+      # `TS2304: Cannot find name 'RouteContext'`. `next typegen` emits those
+      # types without a full build — MUST precede tsc.
       - run: npx next typegen
       - run: npx tsc --noEmit
       # Applies migrations to the service container; the server test project's

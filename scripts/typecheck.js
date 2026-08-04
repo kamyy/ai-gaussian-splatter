@@ -8,9 +8,12 @@
 // the repo root to typecheck.
 import { execFileSync } from "node:child_process";
 
-// `next typegen` first: the API Route Handlers reference `RouteContext<"...">`,
-// a global type Next.js generates into web/.next/types/ (gitignored). Without
-// this, tsc fails on a clean checkout with "Cannot find name 'RouteContext'".
+// App Router types (including global `RouteContext<"/path">`, which our Route
+// Handlers use for typed `params`) are normally written to web/.next/types/ by
+// `next dev` / `next build`. That dir is gitignored, so on a clean clone those
+// commands haven't run yet and plain `tsc --noEmit` fails with "Cannot find
+// name 'RouteContext'". `next typegen` exists to emit those types without
+// starting the app or doing a full build — run it first.
 execFileSync("pnpm", ["--dir", "web", "exec", "next", "typegen"], { stdio: "inherit" });
 execFileSync("pnpm", ["--dir", "web", "exec", "tsc", "--noEmit"], { stdio: "inherit" });
 
