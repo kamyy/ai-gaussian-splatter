@@ -3,8 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Emits .next/standalone with a self-contained server.js and only the
   // traced runtime dependencies, so the container doesn't ship node_modules.
-  // Works cleanly with Prisma 7 specifically because its driver adapters are
-  // pure JS — there's no query-engine binary for file tracing to miss.
+  // drizzle-orm and pg are both pure JS — there's no native binary or generated
+  // client for file tracing to miss.
   output: "standalone",
   turbopack: {
     // frontend/ is an independent package with its own lockfile/node_modules,

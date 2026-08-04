@@ -5,28 +5,30 @@ import { Alert, Badge, Group, Progress, Stack, Text } from "@mantine/core";
 import { useJobStatus } from "@/lib/hooks";
 import type { JobStatus } from "@/lib/types";
 
+// Keys are the wire/database status values (snake_case); the values are what
+// the user actually reads.
 const STATUS_LABELS: Record<JobStatus, string> = {
-  Queued: "Queued",
-  Launching: "Starting GPU worker…",
-  ColmapRunning: "Reconstructing camera positions (COLMAP)…",
-  TrainingRunning: "Training the Gaussian Splat…",
-  UploadingResult: "Uploading result…",
-  Complete: "Complete",
-  Failed: "Failed",
-  Cancelled: "Cancelled",
+  queued: "Queued",
+  launching: "Starting GPU worker…",
+  colmap_running: "Reconstructing camera positions (COLMAP)…",
+  training_running: "Training the Gaussian Splat…",
+  uploading_result: "Uploading result…",
+  complete: "Complete",
+  failed: "Failed",
+  cancelled: "Cancelled",
 };
 
 // Rough ordinal progress for the UI bar — matches plan §2's note that
 // jobs.status doubles as the progress indicator.
 const STATUS_PROGRESS: Record<JobStatus, number> = {
-  Queued: 5,
-  Launching: 15,
-  ColmapRunning: 35,
-  TrainingRunning: 70,
-  UploadingResult: 90,
-  Complete: 100,
-  Failed: 100,
-  Cancelled: 100,
+  queued: 5,
+  launching: 15,
+  colmap_running: 35,
+  training_running: 70,
+  uploading_result: 90,
+  complete: 100,
+  failed: 100,
+  cancelled: 100,
 };
 
 interface JobStatusPollerProps {
@@ -47,12 +49,12 @@ export function JobStatusPoller({ objectId }: JobStatusPollerProps) {
   return (
     <Stack gap="xs">
       <Group justify="space-between">
-        <Badge color={job.status === "Failed" ? "red" : job.status === "Complete" ? "green" : "blue"}>
+        <Badge color={job.status === "failed" ? "red" : job.status === "complete" ? "green" : "blue"}>
           {STATUS_LABELS[job.status]}
         </Badge>
       </Group>
-      <Progress value={STATUS_PROGRESS[job.status]} animated={job.status !== "Complete" && job.status !== "Failed"} />
-      {job.status === "Failed" && job.errorMessage && (
+      <Progress value={STATUS_PROGRESS[job.status]} animated={job.status !== "complete" && job.status !== "failed"} />
+      {job.status === "failed" && job.errorMessage && (
         <Alert color="red" title="Processing failed">
           {job.errorMessage}
         </Alert>

@@ -1,9 +1,11 @@
+import { and, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 
 import { requireUser } from "@/lib/server/auth";
+import { getDb } from "@/lib/server/db";
+import { splats } from "@/lib/server/db/schema";
 import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
-import { getPrisma } from "@/lib/server/prisma";
-import { splatReadSelect } from "@/lib/server/selects";
+import { splatReadColumns } from "@/lib/server/selects";
 
 export const GET = withErrorHandling(async (_request: NextRequest, ctx: RouteContext<"/api/v1/objects/[objectId]">) => {
   const user = await requireUser();
@@ -12,11 +14,12 @@ export const GET = withErrorHandling(async (_request: NextRequest, ctx: RouteCon
 
   // Scoped by userId, and a miss is a 404 rather than a 403 — someone else's
   // object is indistinguishable from a nonexistent one.
-  const splat = await getPrisma().splat.findFirst({
-    where: { id: objectId, userId: user.id },
-    select: splatReadSelect,
-  });
-  if (splat === null) {
+  const [splat] = await getDb()
+    .select(splatReadColumns)
+    .from(splats)
+    .where(and(eq(splats.id, objectId), eq(splats.userId, user.id)))
+    .limit(1);
+  if (splat === undefined) {
     throw new HttpError(404, "Object not found");
   }
   return NextResponse.json(splat);

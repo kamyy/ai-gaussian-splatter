@@ -1,18 +1,27 @@
-import { execFileSync } from "node:child_process";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { Pool } from "pg";
 
 /**
  * Applies migrations once before the server suite runs, so CI's fresh Postgres
  * service container has the schema. No-op when TEST_DATABASE_URL is unset —
  * those tests skip anyway.
+ *
+ * Uses the programmatic migrator rather than shelling out to drizzle-kit: no
+ * subprocess, and it reads the URL directly instead of going through
+ * drizzle.config.ts's DATABASE_URL. Its pool is separate from the one the tests
+ * use and must be closed here, or Vitest hangs before a single test runs.
  */
-export default function setup(): void {
+export default async function setup(): Promise<void> {
   const databaseUrl = process.env.TEST_DATABASE_URL;
   if (!databaseUrl) {
     return;
   }
 
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    env: { ...process.env, DATABASE_URL: databaseUrl },
-    stdio: "inherit",
-  });
+  const pool = new Pool({ connectionString: databaseUrl });
+  try {
+    await migrate(drizzle(pool), { migrationsFolder: "./drizzle" });
+  } finally {
+    await pool.end();
+  }
 }

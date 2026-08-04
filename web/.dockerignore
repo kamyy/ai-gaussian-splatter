@@ -1,6 +1,6 @@
 # Without this, the `COPY . .` in the builder stage overwrites the deps stage's
-# node_modules with the host's — discarding the `prisma generate` output that
-# postinstall produced — and bakes local .env files into an image layer.
+# cleanly-installed node_modules with the host's — which may hold packages built
+# for a different platform — and bakes local .env files into an image layer.
 node_modules
 .next
 .env

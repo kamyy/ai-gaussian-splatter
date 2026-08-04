@@ -1,8 +1,10 @@
+import { count } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getClientIp, getJobForCallbackToken, getOrCreateUser } from "./auth";
-import { getPrisma } from "./prisma";
+import { closeDb, getDb } from "./db";
+import { jobs, splats, users } from "./db/schema";
 
 /**
  * Replaces backend/tests/test_auth_clerk.py, which hand-built RSA-signed JWTs
@@ -45,44 +47,56 @@ describe("getClientIp", () => {
 
 const hasPostgres = Boolean(process.env.TEST_DATABASE_URL);
 
+async function userCount(): Promise<number> {
+  const [row] = await getDb().select({ n: count() }).from(users);
+  return row.n;
+}
+
 describe.skipIf(!hasPostgres)("database-backed auth helpers", () => {
   beforeEach(async () => {
-    await getPrisma().job.deleteMany({});
-    await getPrisma().splat.deleteMany({});
-    await getPrisma().user.deleteMany({});
+    // Ordered to respect the foreign keys: jobs and photos hang off splats,
+    // splats off users.
+    await getDb().delete(jobs);
+    await getDb().delete(splats);
+    await getDb().delete(users);
   });
 
   afterAll(async () => {
-    await getPrisma().$disconnect();
+    await closeDb();
   });
 
   describe("getOrCreateUser", () => {
     it("creates the local shadow row on first request", async () => {
       const user = await getOrCreateUser("user_clerk_1");
       expect(user.clerkUserId).toBe("user_clerk_1");
-      expect(await getPrisma().user.count()).toBe(1);
+      expect(await userCount()).toBe(1);
     });
 
     it("returns the same row on subsequent requests", async () => {
       const first = await getOrCreateUser("user_clerk_1");
       const second = await getOrCreateUser("user_clerk_1");
       expect(second.id).toBe(first.id);
-      expect(await getPrisma().user.count()).toBe(1);
+      expect(await userCount()).toBe(1);
     });
 
     it("does not duplicate when concurrent first-requests race", async () => {
-      const users = await Promise.all(Array.from({ length: 10 }, () => getOrCreateUser("user_clerk_race")));
-      const ids = new Set(users.map(u => u.id));
+      // Not `users` — that name is the table import this file queries through.
+      const racers = await Promise.all(Array.from({ length: 10 }, () => getOrCreateUser("user_clerk_race")));
+      const ids = new Set(racers.map(u => u.id));
       expect(ids.size).toBe(1);
-      expect(await getPrisma().user.count()).toBe(1);
+      expect(await userCount()).toBe(1);
     });
   });
 
   describe("getJobForCallbackToken", () => {
     async function seedJob(callbackToken: string) {
-      const user = await getPrisma().user.create({ data: { clerkUserId: `u-${callbackToken}` } });
-      const splat = await getPrisma().splat.create({ data: { userId: user.id, name: "s" } });
-      return getPrisma().job.create({ data: { splatId: splat.id, callbackToken } });
+      const [user] = await getDb()
+        .insert(users)
+        .values({ clerkUserId: `u-${callbackToken}` })
+        .returning();
+      const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "s" }).returning();
+      const [job] = await getDb().insert(jobs).values({ splatId: splat.id, callbackToken }).returning();
+      return job;
     }
 
     it("returns the job when the bearer token matches", async () => {

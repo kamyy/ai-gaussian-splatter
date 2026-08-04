@@ -26,13 +26,39 @@ podman run -d --rm --name splatter-pg -p 5432:5432 \
 
 ```bash
 cd web
-pnpm install                # postinstall runs `prisma generate`
+pnpm install                # no codegen step — Drizzle's schema is plain TypeScript
 cp .env.example .env.local  # fill in Clerk keys, DATABASE_URL, buckets, worker IDs
-pnpm db:migrate             # apply migrations (prisma migrate dev)
+pnpm db:migrate             # apply pending migrations (drizzle-kit migrate)
 pnpm dev
 ```
 
-`pnpm db:studio` opens Prisma Studio to browse/edit rows.
+`pnpm db:studio` opens Drizzle Studio to browse/edit rows.
+
+**Upgrading a database created before the Drizzle port:** the migration history
+was restarted from scratch, so `pnpm db:migrate` against a database that Prisma
+already migrated fails with `type "splat_status" already exists`. The schemas
+are equivalent, so either drop and recreate (simplest for a local dev
+database)…
+
+```bash
+podman exec splatter-pg psql -U postgres -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+(cd web && pnpm db:migrate)
+```
+
+…or baseline it — record the migration as applied without running its SQL:
+
+```bash
+podman exec splatter-pg psql -U postgres -c "CREATE SCHEMA IF NOT EXISTS drizzle;
+CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at bigint);
+INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES ('<hash from drizzle/meta/_journal.json>', 0);"
+```
+
+Nothing deployed needs this — no environment was ever migrated with Prisma.
+
+After editing `web/lib/server/db/schema.ts`, run `pnpm db:generate` to emit a
+migration into `web/drizzle/`, read the SQL it produced, then `pnpm db:migrate`
+to apply it. The types update the moment you save the schema, so `tsc` will not
+catch a schema you forgot to generate a migration for.
 
 ### Full test suite
 
@@ -53,11 +79,12 @@ is set — CI wires it to a service container:
 ### Applying migrations to a deployed environment
 
 The container image deliberately does not run migrations on boot (Express Mode
-runs up to 3 tasks, which would race, and the running app would need DDL
-rights it otherwise doesn't). Run it as a deploy step instead:
+runs up to 3 tasks, which would race — drizzle-kit takes no advisory lock — and
+the running app would need DDL rights it otherwise doesn't). Run it as a deploy
+step instead:
 
 ```bash
-(cd web && DATABASE_URL=<production-url> npx prisma migrate deploy)
+(cd web && DATABASE_URL=<production-url> npx drizzle-kit migrate)
 ```
 
 ## Debugging a failed job

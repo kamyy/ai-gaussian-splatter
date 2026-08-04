@@ -9,10 +9,8 @@ RUN corepack enable
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml ./
-COPY prisma ./prisma
-COPY prisma.config.ts ./
-# --ignore-scripts would skip the postinstall that runs `prisma generate`, so
-# it is deliberately not passed here.
+# No codegen step to accommodate: Drizzle's schema is ordinary TypeScript, so
+# nothing has to be generated into node_modules before the build.
 RUN pnpm install --frozen-lockfile
 
 
@@ -56,9 +54,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
 
-# Migrations are NOT run here. `prisma migrate deploy` belongs to the deploy
-# pipeline, not container startup: Express Mode runs up to 3 tasks, so booting
-# tasks would race (Prisma's advisory lock makes that safe but serialises every
-# cold start), and the running app then wouldn't need DDL rights on the
-# database at all. See docs/RUNBOOK.md.
+# Migrations are NOT run here. `drizzle-kit migrate` belongs to the deploy
+# pipeline, not container startup: Express Mode runs up to 3 tasks, and booting
+# tasks would race to apply the same migration with nothing serialising them —
+# drizzle-kit takes no advisory lock. Keeping DDL out of the container also
+# means the running app never needs DDL rights on the database. See
+# docs/RUNBOOK.md.
 CMD ["node", "server.js"]

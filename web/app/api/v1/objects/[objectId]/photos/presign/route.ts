@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import type { Prisma } from "@prisma/client";
+import { and, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getClientIp, requireUser } from "@/lib/server/auth";
+import { getDb } from "@/lib/server/db";
+import { type NewPhoto, photos, splats } from "@/lib/server/db/schema";
 import { getEnv } from "@/lib/server/env";
 import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
-import { getPrisma } from "@/lib/server/prisma";
 import { checkAndIncrementIp, checkAndIncrementUser } from "@/lib/server/rateLimit";
 import { presignPhotoUpload } from "@/lib/server/s3";
 import type { PhotoPresignItem } from "@/lib/types";
@@ -23,8 +24,12 @@ export const POST = withErrorHandling(
     const { objectId } = await ctx.params;
     requireUuid(objectId, 404, "Object not found");
 
-    const splat = await getPrisma().splat.findFirst({ where: { id: objectId, userId: user.id } });
-    if (splat === null) {
+    const [splat] = await getDb()
+      .select({ id: splats.id })
+      .from(splats)
+      .where(and(eq(splats.id, objectId), eq(splats.userId, user.id)))
+      .limit(1);
+    if (splat === undefined) {
       throw new HttpError(404, "Object not found");
     }
 
@@ -39,7 +44,7 @@ export const POST = withErrorHandling(
     await checkAndIncrementUser(user.id, env.RATE_LIMIT_USER_PER_DAY);
 
     const items: PhotoPresignItem[] = [];
-    const rows: Prisma.PhotoCreateManyInput[] = [];
+    const rows: NewPhoto[] = [];
     for (const item of parsed.data) {
       const photoId = randomUUID();
       const extension = path.extname(item.filename) || ".jpg";
@@ -51,15 +56,15 @@ export const POST = withErrorHandling(
         s3Key: key,
         originalFilename: item.filename,
         contentType: item.contentType,
-        uploadStatus: "Pending",
+        uploadStatus: "pending",
       });
       items.push({ photoId, presignedPutUrl: url, s3Key: key });
     }
 
     // One insert, not one per photo: a mid-loop failure would otherwise leave a
-    // partial batch of Pending rows behind, with the caller holding no ids to
+    // partial batch of pending rows behind, with the caller holding no ids to
     // retry against and the rate-limit increment already spent.
-    await getPrisma().photo.createMany({ data: rows });
+    await getDb().insert(photos).values(rows);
 
     return NextResponse.json({ photos: items });
   },

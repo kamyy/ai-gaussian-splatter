@@ -1,9 +1,10 @@
 import { auth } from "@clerk/nextjs/server";
-import type { Job, User } from "@prisma/client";
+import { eq } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 
+import { getDb } from "./db";
+import { type Job, jobs, type User, users } from "./db/schema";
 import { HttpError, requireUuid } from "./httpError";
-import { getPrisma } from "./prisma";
 
 /** Throws 401 unless the request carries a valid Clerk session. */
 export async function requireClerkUserId(): Promise<string> {
@@ -17,17 +18,19 @@ export async function requireClerkUserId(): Promise<string> {
 /**
  * Local shadow row per plan §2 — created lazily on first request.
  *
- * The no-op `update` is deliberate: Prisma only compiles `upsert()` to a single
- * `INSERT ... ON CONFLICT` when there is something to update. With an empty
- * `update: {}` it falls back to SELECT-then-INSERT, and two concurrent
- * first-requests from the same user would race to create the same row.
+ * One `INSERT ... ON CONFLICT`, so two concurrent first-requests from the same
+ * user can't race to create the same row. The no-op `set` is deliberate:
+ * `onConflictDoNothing()` returns zero rows from `.returning()`, so an existing
+ * user would come back `undefined` — the update has to touch something for
+ * Postgres to hand the row back.
  */
 export async function getOrCreateUser(clerkUserId: string): Promise<User> {
-  return getPrisma().user.upsert({
-    where: { clerkUserId },
-    create: { clerkUserId },
-    update: { clerkUserId },
-  });
+  const [user] = await getDb()
+    .insert(users)
+    .values({ clerkUserId })
+    .onConflictDoUpdate({ target: users.clerkUserId, set: { clerkUserId } })
+    .returning();
+  return user;
 }
 
 /** The authenticated caller's local User row, or 401. */
@@ -85,8 +88,8 @@ export async function getJobForCallbackToken(jobId: string, request: NextRequest
   // which job ids exist — same reason an unknown job id is 401 below.
   requireUuid(jobId, 401, "Invalid job token");
 
-  const job = await getPrisma().job.findUnique({ where: { id: jobId } });
-  if (job === null || job.callbackToken !== token) {
+  const [job] = await getDb().select().from(jobs).where(eq(jobs.id, jobId)).limit(1);
+  if (job === undefined || job.callbackToken !== token) {
     throw new HttpError(401, "Invalid job token");
   }
   return job;

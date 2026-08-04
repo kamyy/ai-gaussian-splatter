@@ -5,7 +5,7 @@ import { defineConfig, devices } from "@playwright/test";
 // tests which stay manual/milestone-gated.
 //
 // STALE — see the skipped test in e2e/gallery.spec.ts. The gallery/view pages
-// read Prisma in-process, so nothing requests the mock server below and
+// read the database in-process, so nothing requests the mock server below and
 // NEXT_PUBLIC_API_BASE_URL is dead (lib/api.ts is same-origin). Replacing both
 // with a seeded test database is deferred work.
 export default defineConfig({

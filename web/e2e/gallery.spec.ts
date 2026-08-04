@@ -15,7 +15,7 @@ const GALLERY_ITEM_ID = "11111111-1111-1111-1111-111111111111";
 
 // SKIPPED, and it is a real gap rather than a flake.
 //
-// app/gallery/page.tsx reads Prisma directly, so e2e/mock-backend.mjs serves
+// app/gallery/page.tsx queries the database directly, so e2e/mock-backend.mjs serves
 // data nothing requests and the page renders empty.
 //
 // The fix is to seed the gallery row into a real test database and point the

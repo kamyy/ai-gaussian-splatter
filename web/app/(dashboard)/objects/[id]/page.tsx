@@ -15,7 +15,7 @@ export default function ObjectDetailPage({ params }: { params: Promise<{ id: str
   const { getToken } = useAuth();
   const { data: object, isLoading, error } = useObject(id);
 
-  const { data: splat } = useSWR(object?.status === "Complete" ? ["splat", id] : null, async () => {
+  const { data: splat } = useSWR(object?.status === "complete" ? ["splat", id] : null, async () => {
     const token = await getToken();
     if (!token) throw new Error("Not signed in");
     return getSplatUrl(token, id);
@@ -28,12 +28,12 @@ export default function ObjectDetailPage({ params }: { params: Promise<{ id: str
     <Stack>
       <Title order={2}>{object.name}</Title>
 
-      {object.status !== "Complete" && <JobStatusPoller objectId={id} />}
+      {object.status !== "complete" && <JobStatusPoller objectId={id} />}
 
-      {object.status === "Complete" && !splat && <SplatViewerLoading />}
-      {object.status === "Complete" && splat && <SplatViewer splatUrl={splat.url} />}
+      {object.status === "complete" && !splat && <SplatViewerLoading />}
+      {object.status === "complete" && splat && <SplatViewer splatUrl={splat.url} />}
 
-      {object.status === "Failed" && <Text c="red">Processing failed — see job status above for details.</Text>}
+      {object.status === "failed" && <Text c="red">Processing failed — see job status above for details.</Text>}
     </Stack>
   );
 }
