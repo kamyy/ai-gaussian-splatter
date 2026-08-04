@@ -8,7 +8,12 @@ from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_secretsmanager as secretsmanager
 from constructs import Construct
 
+from stacks.data_stack import DATABASE_NAME
 from stacks.tags import WORKER_TAG_KEY, WORKER_TAG_VALUE
+
+# Where web/Dockerfile's `ADD` puts Amazon's RDS global CA bundle. Must match
+# that line — the image supplies the file, this stack turns it on.
+RDS_CA_BUNDLE_PATH = "/app/certs/rds-global-bundle.pem"
 
 # Single source of truth for the Next.js container's listen port — used by
 # both the task definition and the health check path below, so they can't
@@ -214,9 +219,38 @@ class BackendStack(cdk.Stack):
                     # attr_endpoint, which would be a circular dependency: point
                     # it at the custom domain or the first deploy's ALB endpoint.
                     key_value_pair(name="APP_PUBLIC_URL", value=app_public_url),
+                    # The non-secret half of the connection. There is no
+                    # DATABASE_URL here on purpose: RDS writes its generated
+                    # credentials to Secrets Manager as a JSON blob, and ECS
+                    # can only project individual *fields* of a secret into a
+                    # variable — it cannot assemble a postgresql:// string. So
+                    # the parts are passed separately and the app builds the
+                    # URL in web/lib/server/databaseUrl.ts.
+                    key_value_pair(name="DATABASE_HOST", value=database.db_instance_endpoint_address),
+                    key_value_pair(name="DATABASE_PORT", value=database.db_instance_endpoint_port),
+                    key_value_pair(name="DATABASE_NAME", value=DATABASE_NAME),
+                    # RDS Postgres 15+ defaults to rds.force_ssl=1, and its
+                    # server certificates chain to Amazon's own root CAs, which
+                    # are absent from Node's trust store — so the connection
+                    # needs an explicit CA bundle or it fails either
+                    # unencrypted ("no pg_hba.conf entry ... no encryption") or
+                    # unverified ("UNABLE_TO_VERIFY_LEAF_SIGNATURE"). web/Dockerfile
+                    # bakes the bundle in at this path; setting it here rather
+                    # than in the image keeps a locally-run container able to
+                    # talk to a plain Postgres.
+                    key_value_pair(name="DATABASE_SSL_CA", value=RDS_CA_BUNDLE_PATH),
                 ],
                 secrets=[
-                    ecs.CfnExpressGatewayService.SecretProperty(name="DATABASE_URL", value_from=db_secret.secret_arn),
+                    # `arn:json-key:version-stage:version-id` — the trailing
+                    # empty fields mean "current version". Only the credentials
+                    # go through Secrets Manager; the endpoint and database name
+                    # above aren't secret and stay readable in the console.
+                    ecs.CfnExpressGatewayService.SecretProperty(
+                        name="DATABASE_USER", value_from=f"{db_secret.secret_arn}:username::"
+                    ),
+                    ecs.CfnExpressGatewayService.SecretProperty(
+                        name="DATABASE_PASSWORD", value_from=f"{db_secret.secret_arn}:password::"
+                    ),
                     ecs.CfnExpressGatewayService.SecretProperty(
                         name="CLERK_SECRET_KEY", value_from=self.clerk_secret.secret_arn
                     ),

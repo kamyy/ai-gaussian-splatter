@@ -1,32 +1,33 @@
-import type { Prisma } from "@prisma/client";
+import { jobs, splats } from "./db/schema";
 
 /**
  * Which columns responses may expose.
  *
- * `select` clauses rather than deleting keys afterwards, so the omissions are
- * enforced by the query. Job matters most: `callbackToken` is the worker's
- * bearer credential and `ec2InstanceId` is internal — neither may reach a client.
+ * Column maps passed to `.select()` rather than deleting keys afterwards, so the
+ * omissions are enforced by the SQL — the excluded columns are never fetched at
+ * all. Job matters most: `callbackToken` is the worker's bearer credential and
+ * `ec2InstanceId` is internal — neither may reach a client.
  */
 
-export const splatReadSelect = {
-  id: true,
-  name: true,
-  status: true,
-  thumbnailS3Key: true,
-  isShareable: true,
-  createdAt: true,
-} satisfies Prisma.SplatSelect;
+export const splatReadColumns = {
+  id: splats.id,
+  name: splats.name,
+  status: splats.status,
+  thumbnailS3Key: splats.thumbnailS3Key,
+  isShareable: splats.isShareable,
+  createdAt: splats.createdAt,
+};
 
-export const jobReadSelect = {
-  id: true,
-  splatId: true,
-  status: true,
-  errorMessage: true,
-  resultS3Key: true,
-  thumbnailS3Key: true,
-  createdAt: true,
-  updatedAt: true,
-} satisfies Prisma.JobSelect;
+export const jobReadColumns = {
+  id: jobs.id,
+  splatId: jobs.splatId,
+  status: jobs.status,
+  errorMessage: jobs.errorMessage,
+  resultS3Key: jobs.resultS3Key,
+  thumbnailS3Key: jobs.thumbnailS3Key,
+  createdAt: jobs.createdAt,
+  updatedAt: jobs.updatedAt,
+};
 
-export type SplatRead = Prisma.SplatGetPayload<{ select: typeof splatReadSelect }>;
-export type JobRead = Prisma.JobGetPayload<{ select: typeof jobReadSelect }>;
+export type SplatRead = Pick<typeof splats.$inferSelect, keyof typeof splatReadColumns>;
+export type JobRead = Pick<typeof jobs.$inferSelect, keyof typeof jobReadColumns>;

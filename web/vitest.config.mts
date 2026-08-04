@@ -1,8 +1,10 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
-// Two projects: component tests need jsdom, while lib/server/** is plain Node —
-// no DOM, and a real Postgres for the rate-limit tier.
+// Two projects: component tests need jsdom, while server-side code is plain
+// Node — no DOM, and a real Postgres for the rate-limit and Route Handler tiers.
+// Route Handlers live under app/api/, so those tests are routed to the server
+// project explicitly and excluded from the client one.
 export default defineConfig({
   test: {
     projects: [
@@ -14,7 +16,7 @@ export default defineConfig({
           environment: "jsdom",
           setupFiles: ["./test/setup.ts"],
           include: ["app/**/*.test.{ts,tsx}", "components/**/*.test.{ts,tsx}", "lib/*.test.ts"],
-          exclude: ["node_modules", ".next", "e2e/**"],
+          exclude: ["node_modules", ".next", "e2e/**", "app/api/**"],
         },
       },
       {
@@ -24,7 +26,7 @@ export default defineConfig({
           environment: "node",
           globalSetup: ["./test/server-global-setup.ts"],
           setupFiles: ["./test/server-setup.ts"],
-          include: ["lib/server/**/*.test.ts"],
+          include: ["lib/server/**/*.test.ts", "app/api/**/*.test.ts"],
           exclude: ["node_modules", ".next", "e2e/**"],
         },
       },

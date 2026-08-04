@@ -6,7 +6,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for how it's built and why, a
 
 ## Structure
 
-- `web/` — Next.js (App Router) + Mantine + SWR + Zustand + react-three-fiber, and the REST API as Route Handlers (auth, rate limiting, job orchestration) backed by Prisma
+- `web/` — Next.js (App Router) + Mantine + SWR + Zustand + react-three-fiber, and the REST API as Route Handlers (auth, rate limiting, job orchestration) backed by Drizzle
 - `worker/` — COLMAP + gsplat reconstruction pipeline, run on a GPU spot instance per job
 - `infra/` — AWS CDK (Python)
 

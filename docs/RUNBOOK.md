@@ -26,13 +26,39 @@ podman run -d --rm --name splatter-pg -p 5432:5432 \
 
 ```bash
 cd web
-pnpm install                # postinstall runs `prisma generate`
+pnpm install                # no codegen step — Drizzle's schema is plain TypeScript
 cp .env.example .env.local  # fill in Clerk keys, DATABASE_URL, buckets, worker IDs
-pnpm db:migrate             # apply migrations (prisma migrate dev)
+pnpm db:migrate             # apply pending migrations (drizzle-kit migrate)
 pnpm dev
 ```
 
-`pnpm db:studio` opens Prisma Studio to browse/edit rows.
+`pnpm db:studio` opens Drizzle Studio to browse/edit rows.
+
+**Upgrading a database created before the Drizzle port:** the migration history
+was restarted from scratch, so `pnpm db:migrate` against a database that Prisma
+already migrated fails with `type "splat_status" already exists`. The schemas
+are equivalent, so either drop and recreate (simplest for a local dev
+database)…
+
+```bash
+podman exec splatter-pg psql -U postgres -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+(cd web && pnpm db:migrate)
+```
+
+…or baseline it — record the migration as applied without running its SQL:
+
+```bash
+podman exec splatter-pg psql -U postgres -c "CREATE SCHEMA IF NOT EXISTS drizzle;
+CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at bigint);
+INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES ('<hash from drizzle/meta/_journal.json>', 0);"
+```
+
+Nothing deployed needs this — no environment was ever migrated with Prisma.
+
+After editing `web/lib/server/db/schema.ts`, run `pnpm db:generate` to emit a
+migration into `web/drizzle/`, read the SQL it produced, then `pnpm db:migrate`
+to apply it. The types update the moment you save the schema, so `tsc` will not
+catch a schema you forgot to generate a migration for.
 
 ### Full test suite
 
@@ -50,15 +76,64 @@ is set — CI wires it to a service container:
 (cd web && TEST_DATABASE_URL=postgresql://postgres:test@localhost:5432/postgres npx vitest run)
 ```
 
+### Building and running the container locally
+
+Exercises the production path — the standalone build, not `next dev`. Also the
+way to test SSR locally if your environment blocks the loopback connection
+Next's proxy makes to itself (a host-run `next dev` then 500s on every request
+with `ECONNREFUSED ::1`; the container has its own netns and is unaffected).
+
+```bash
+podman network create splatnet
+podman run -d --rm --name splatter-pg --network splatnet -p 5432:5432 \
+  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=test postgres:18
+(cd web && DATABASE_URL=postgresql://postgres:test@localhost:5432/postgres npx drizzle-kit migrate)
+
+cd web
+podman build \
+  --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk \
+  -t splatter-web:test .
+podman run -d --name splatter-web --network splatnet -p 8000:8000 \
+  -e DATABASE_URL=postgresql://postgres:test@splatter-pg:5432/postgres \
+  -e CLERK_SECRET_KEY=sk_test_fake \
+  -e UPLOADS_BUCKET=test-uploads -e SPLATS_BUCKET=test-splats \
+  -e AWS_REGION=us-west-2 -e AWS_ACCESS_KEY_ID=testing -e AWS_SECRET_ACCESS_KEY=testing \
+  -e WORKER_AMI_ID=ami-0123456789abcdef0 -e WORKER_SUBNET_ID=subnet-0123456789abcdef0 \
+  -e WORKER_SECURITY_GROUP_ID=sg-0123456789abcdef0 \
+  -e WORKER_INSTANCE_PROFILE_ARN=arn:aws:iam::123456789012:instance-profile/worker \
+  -e APP_PUBLIC_URL=http://localhost:8000 splatter-web:test
+
+curl -s http://localhost:8000/api/v1/healthz   # {"status":"ok"}
+```
+
+The publishable key must be a `--build-arg`, not `-e`: `NEXT_PUBLIC_*` is
+inlined into the browser bundle at build time. Tear down with
+`podman rm -f splatter-web splatter-pg && podman network rm splatnet`.
+
 ### Applying migrations to a deployed environment
 
 The container image deliberately does not run migrations on boot (Express Mode
-runs up to 3 tasks, which would race, and the running app would need DDL
-rights it otherwise doesn't). Run it as a deploy step instead:
+runs up to 3 tasks, which would race — drizzle-kit takes no advisory lock — and
+the running app would need DDL rights it otherwise doesn't). Run it as a deploy
+step instead:
 
 ```bash
-(cd web && DATABASE_URL=<production-url> npx prisma migrate deploy)
+(cd web && DATABASE_URL=<production-url> npx drizzle-kit migrate)
 ```
+
+`drizzle.config.ts` resolves its connection the same way the running app does
+(`lib/server/databaseUrl.ts`), so the `DATABASE_HOST`/`NAME`/`USER`/`PASSWORD`
+parts work here too — useful when you're reading them straight out of the RDS
+secret rather than hand-assembling a URL:
+
+```bash
+aws secretsmanager get-secret-value --secret-id <rds-secret-arn> \
+  --query SecretString --output text | jq -r \
+  '"DATABASE_HOST=\(.host) DATABASE_PORT=\(.port) DATABASE_NAME=\(.dbname) DATABASE_USER=\(.username) DATABASE_PASSWORD=\(.password)"'
+```
+
+The database lives in a private subnet, so run this from somewhere inside the
+VPC (or over a bastion/SSM port-forward), not a laptop.
 
 ## Debugging a failed job
 

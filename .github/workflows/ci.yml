@@ -47,7 +47,7 @@ jobs:
 
   web:
     runs-on: ubuntu-latest
-    # The Prisma-backed tests need a real database — the ON CONFLICT upserts
+    # The database-backed tests need a real database — the ON CONFLICT upserts
     # can't be faithfully faked.
     services:
       postgres:
@@ -72,7 +72,7 @@ jobs:
       CLERK_SECRET_KEY: sk_test_fake_for_ci
       TEST_DATABASE_URL: postgresql://test:test@localhost:5432/test
       DATABASE_URL: postgresql://test:test@localhost:5432/test
-      # getEnv() validates all of these on first use, and getPrisma() calls it —
+      # getEnv() validates all of these on first use, and getDb() calls it —
       # so any DB-touching page throws without them, including under the dev
       # server Playwright starts. Dummy values: presigning is local crypto and
       # nothing in CI reaches AWS.
@@ -96,7 +96,6 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
-      # postinstall runs `prisma generate`, so the client exists before tsc.
       - run: pnpm install --frozen-lockfile
       # MUST precede tsc. The Route Handlers use `RouteContext<"...">`, a global
       # Next.js emits into .next/types/ — which is gitignored, so on a fresh
@@ -106,7 +105,7 @@ jobs:
       # Applies migrations to the service container; the server test project's
       # globalSetup also does this, so this step mainly fails fast on a bad
       # migration before the suite starts.
-      - run: npx prisma migrate deploy
+      - run: npx drizzle-kit migrate
       - run: npx vitest run
       - run: npx next build
       - name: Install Playwright browsers

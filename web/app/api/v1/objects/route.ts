@@ -1,10 +1,12 @@
+import { desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { requireUser } from "@/lib/server/auth";
+import { getDb } from "@/lib/server/db";
+import { splats } from "@/lib/server/db/schema";
 import { HttpError, withErrorHandling } from "@/lib/server/httpError";
-import { getPrisma } from "@/lib/server/prisma";
-import { splatReadSelect } from "@/lib/server/selects";
+import { splatReadColumns } from "@/lib/server/selects";
 
 const createSchema = z.object({ name: z.string().min(1) });
 
@@ -16,19 +18,19 @@ export const POST = withErrorHandling(async (request: Request) => {
     throw new HttpError(422, "Invalid request body");
   }
 
-  const splat = await getPrisma().splat.create({
-    data: { userId: user.id, name: parsed.data.name },
-    select: splatReadSelect,
-  });
+  const [splat] = await getDb()
+    .insert(splats)
+    .values({ userId: user.id, name: parsed.data.name })
+    .returning(splatReadColumns);
   return NextResponse.json(splat, { status: 201 });
 });
 
 export const GET = withErrorHandling(async () => {
   const user = await requireUser();
-  const splats = await getPrisma().splat.findMany({
-    where: { userId: user.id },
-    orderBy: { createdAt: "desc" },
-    select: splatReadSelect,
-  });
-  return NextResponse.json(splats);
+  const rows = await getDb()
+    .select(splatReadColumns)
+    .from(splats)
+    .where(eq(splats.userId, user.id))
+    .orderBy(desc(splats.createdAt));
+  return NextResponse.json(rows);
 });

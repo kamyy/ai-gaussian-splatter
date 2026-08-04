@@ -1,16 +1,23 @@
+import { sql } from "drizzle-orm";
+
+import { getDb } from "./db";
+import { globalJobCounters, rateLimitCounters } from "./db/schema";
 import { HttpError } from "./httpError";
-import { getPrisma } from "./prisma";
 
 /**
  * Rate limiting & the global daily job cap (plan §5).
  *
- * Counters are incremented with `upsert()`, which Prisma compiles to a single
- * `INSERT ... ON CONFLICT ... DO UPDATE SET count = count + 1` — so the
- * check-and-increment is race-free without a read-then-write step.
+ * Counters are incremented with a single
+ * `INSERT ... ON CONFLICT ... DO UPDATE SET count = count + 1 RETURNING count`,
+ * so the check-and-increment is race-free without a read-then-write step. The
+ * statement is written out here rather than inferred from an ORM helper, which
+ * is the point: the previous Prisma `upsert()` only compiled to this when its
+ * `update` clause happened to be non-empty, and silently degraded to
+ * SELECT-then-INSERT otherwise.
  *
- * The `update` clause must stay non-empty for that to hold. Prisma only emits
- * the native statement when there is something to update; an empty `update: {}`
- * silently falls back to SELECT-then-INSERT, which does have the race.
+ * The `set` clause must reference the column (`rate_limit_counters.count + 1`),
+ * not a JavaScript value — a plain `{ count: n + 1 }` would bake in a number
+ * read before the statement ran, reopening exactly the race this avoids.
  *
  * Checks are per-endpoint rather than blanket middleware (plan §5): cheap reads
  * shouldn't be throttled, and the costly endpoints stay easy to audit.
@@ -31,11 +38,14 @@ export async function checkAndIncrementUser(userId: string, limitPerDay: number)
 export async function checkAndIncrementGlobalDaily(maxJobsPerDay: number): Promise<void> {
   const day = truncateToDay(new Date());
 
-  const counter = await getPrisma().globalJobCounter.upsert({
-    where: { day },
-    create: { day, jobsStarted: 1 },
-    update: { jobsStarted: { increment: 1 } },
-  });
+  const [counter] = await getDb()
+    .insert(globalJobCounters)
+    .values({ day, jobsStarted: 1 })
+    .onConflictDoUpdate({
+      target: globalJobCounters.day,
+      set: { jobsStarted: sql`${globalJobCounters.jobsStarted} + 1` },
+    })
+    .returning({ jobsStarted: globalJobCounters.jobsStarted });
 
   if (counter.jobsStarted > maxJobsPerDay) {
     throw new HttpError(503, "Daily processing limit reached — try again tomorrow.");
@@ -43,11 +53,14 @@ export async function checkAndIncrementGlobalDaily(maxJobsPerDay: number): Promi
 }
 
 async function checkAndIncrement(scope: string, windowStart: Date, limit: number): Promise<void> {
-  const counter = await getPrisma().rateLimitCounter.upsert({
-    where: { scope_windowStart: { scope, windowStart } },
-    create: { scope, windowStart, count: 1 },
-    update: { count: { increment: 1 } },
-  });
+  const [counter] = await getDb()
+    .insert(rateLimitCounters)
+    .values({ scope, windowStart, count: 1 })
+    .onConflictDoUpdate({
+      target: [rateLimitCounters.scope, rateLimitCounters.windowStart],
+      set: { count: sql`${rateLimitCounters.count} + 1` },
+    })
+    .returning({ count: rateLimitCounters.count });
 
   if (counter.count > limit) {
     throw new HttpError(429, "Rate limit exceeded — please slow down.");

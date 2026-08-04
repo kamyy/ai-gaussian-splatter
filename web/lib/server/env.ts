@@ -1,8 +1,15 @@
 import { z } from "zod";
 
+import { resolveDatabaseUrl } from "./databaseUrl";
+
 /** Server-side configuration. Clerk needs no JWKS settings — its SDK verifies sessions from CLERK_SECRET_KEY. */
 const envSchema = z.object({
-  DATABASE_URL: z.string().min(1),
+  // Assembled by resolveDatabaseUrl() before parsing — either DATABASE_URL
+  // directly, or the DATABASE_HOST/NAME/USER/PASSWORD parts ECS projects out
+  // of the RDS secret. See databaseUrl.ts.
+  DATABASE_URL: z
+    .string()
+    .min(1, "set DATABASE_URL, or all of DATABASE_HOST, DATABASE_NAME, DATABASE_USER and DATABASE_PASSWORD"),
 
   UPLOADS_BUCKET: z.string().min(1),
   SPLATS_BUCKET: z.string().min(1),
@@ -37,7 +44,7 @@ let cached: Env | null = null;
  */
 export function getEnv(): Env {
   if (cached === null) {
-    const parsed = envSchema.safeParse(process.env);
+    const parsed = envSchema.safeParse({ ...process.env, DATABASE_URL: resolveDatabaseUrl() ?? "" });
     if (!parsed.success) {
       const detail = parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join(", ");
       throw new Error(`Invalid server environment: ${detail}`);

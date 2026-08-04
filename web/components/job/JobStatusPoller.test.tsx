@@ -19,7 +19,7 @@ function renderPoller() {
 const baseJob: JobRead = {
   id: "job-1",
   splatId: "obj-1",
-  status: "TrainingRunning",
+  status: "training_running",
   errorMessage: null,
   resultS3Key: null,
   thumbnailS3Key: null,
@@ -52,7 +52,7 @@ describe("JobStatusPoller", () => {
 
   it("surfaces the error message when a job fails", () => {
     useJobStatusMock.mockReturnValue({
-      data: { ...baseJob, status: "Failed", errorMessage: "COLMAP registered only 40% of photos" },
+      data: { ...baseJob, status: "failed", errorMessage: "COLMAP registered only 40% of photos" },
       error: undefined,
       isLoading: false,
     });

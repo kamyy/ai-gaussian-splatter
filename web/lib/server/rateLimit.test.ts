@@ -1,8 +1,8 @@
-import { Prisma } from "@prisma/client";
+import { sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
+import { closeDb, getDb } from "./db";
 import { HttpError } from "./httpError";
-import { getPrisma } from "./prisma";
 import { checkAndIncrementGlobalDaily, checkAndIncrementIp, checkAndIncrementUser } from "./rateLimit";
 
 /**
@@ -17,13 +17,11 @@ describe.skipIf(!hasPostgres)("rate limiting", () => {
   beforeEach(async () => {
     // Truncate rather than drop/recreate per test: the schema is applied once
     // by the migrate step, and this is far faster than a full DDL cycle.
-    await getPrisma().$executeRaw(
-      Prisma.sql`TRUNCATE rate_limit_counters, global_job_counters RESTART IDENTITY CASCADE`,
-    );
+    await getDb().execute(sql`TRUNCATE rate_limit_counters, global_job_counters RESTART IDENTITY CASCADE`);
   });
 
   afterAll(async () => {
-    await getPrisma().$disconnect();
+    await closeDb();
   });
 
   it("allows requests up to the per-IP limit", async () => {
