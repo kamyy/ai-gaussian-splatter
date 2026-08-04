@@ -71,10 +71,17 @@ Handlers, the worker status callback, and rate-limit atomicity under
 concurrency. After the Prisma→Drizzle port the same suite was re-run green
 against Postgres 18, and both single-statement upserts were confirmed at the
 database level with `log_statement='all'` rather than inferred from the ORM.
-`next build` with `output: "standalone"` still succeeds; serving live HTTP
-through that build was verified pre-port but *not* re-verified after it,
-because the sandbox in use blocks the loopback connection Next's proxy makes to
-itself.
+The container image was then built with podman (~213 MB) and run against that
+same Postgres: healthz, the gallery and public-share endpoints, the worker
+status callback (including the job/splat transaction and the set-once stage
+timestamps), the malformed-UUID guard, and SSR pages with `generateMetadata`'s
+Open Graph tags all served correctly.
+
+Note if you try to reproduce that outside a container: some sandboxes block the
+loopback connection Next's proxy makes back to the server process, which makes
+a host-run `next dev`/`next start` 500 on every request with `ECONNREFUSED
+::1`. It is an environment limitation, not an app bug — the container has its
+own network namespace and is unaffected.
 
 Known gaps, in priority order:
 
@@ -82,9 +89,9 @@ Known gaps, in priority order:
    directly, so it serves data nothing requests, and `playwright.config.ts`
    still sets the unused `NEXT_PUBLIC_API_BASE_URL`. Its one test is skipped;
    redesign around a seeded test database before trusting E2E coverage.
-2. **`web/Dockerfile` has never been built.** No container runtime was available
-   to validate it. `next build` with `output: "standalone"` was verified, and the
-   standalone server was run directly, but the image itself is unproven.
+2. **`web/Dockerfile` builds and runs, but has never run on AWS.** Validated
+   locally under podman (see above). What remains unproven is everything
+   outside the image: the ECS task definition wiring and image pull from ECR.
 3. **`APP_PUBLIC_URL` is a placeholder** (`https://app.example.com`). It can't be
    derived from the stack that creates the ALB without a circular CloudFormation
    dependency, so pass `-c appPublicUrl=...` after the first deploy or set up a

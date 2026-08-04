@@ -1,8 +1,11 @@
 # The Next.js app — pages plus the REST API (Route Handlers) — for ECS Express
 # Mode. Node version tracks the repo's .nvmrc (24.x, current Active LTS).
 #
-# NOT YET BUILT/RUN in CI or on real infrastructure. Build it before trusting a
-# deploy.
+# Built and run locally under podman (~213 MB) against a real Postgres 18:
+# healthz, the gallery/public read endpoints, the worker status callback, and
+# SSR pages including generateMetadata's Open Graph tags all served correctly.
+# Still unproven on real AWS infrastructure — ECS task wiring, the RDS secret
+# shape, and image pull are untested.
 FROM node:24-alpine AS deps
 
 RUN corepack enable

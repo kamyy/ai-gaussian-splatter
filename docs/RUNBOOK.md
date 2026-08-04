@@ -76,6 +76,39 @@ is set — CI wires it to a service container:
 (cd web && TEST_DATABASE_URL=postgresql://postgres:test@localhost:5432/postgres npx vitest run)
 ```
 
+### Building and running the container locally
+
+Exercises the production path — the standalone build, not `next dev`. Also the
+way to test SSR locally if your environment blocks the loopback connection
+Next's proxy makes to itself (a host-run `next dev` then 500s on every request
+with `ECONNREFUSED ::1`; the container has its own netns and is unaffected).
+
+```bash
+podman network create splatnet
+podman run -d --rm --name splatter-pg --network splatnet -p 5432:5432 \
+  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=test postgres:18
+(cd web && DATABASE_URL=postgresql://postgres:test@localhost:5432/postgres npx drizzle-kit migrate)
+
+cd web
+podman build \
+  --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk \
+  -t splatter-web:test .
+podman run -d --name splatter-web --network splatnet -p 8000:8000 \
+  -e DATABASE_URL=postgresql://postgres:test@splatter-pg:5432/postgres \
+  -e CLERK_SECRET_KEY=sk_test_fake \
+  -e UPLOADS_BUCKET=test-uploads -e SPLATS_BUCKET=test-splats \
+  -e AWS_REGION=us-west-2 -e AWS_ACCESS_KEY_ID=testing -e AWS_SECRET_ACCESS_KEY=testing \
+  -e WORKER_AMI_ID=ami-0123456789abcdef0 -e WORKER_SUBNET_ID=subnet-0123456789abcdef0 \
+  -e WORKER_SECURITY_GROUP_ID=sg-0123456789abcdef0 \
+  -e WORKER_INSTANCE_PROFILE_ARN=arn:aws:iam::123456789012:instance-profile/worker \
+  -e APP_PUBLIC_URL=http://localhost:8000 splatter-web:test
+
+curl -s http://localhost:8000/api/v1/healthz   # {"status":"ok"}
+```
+
+The publishable key must be a `--build-arg`, not `-e`: `NEXT_PUBLIC_*` is
+inlined into the browser bundle at build time. Tear down with
+`podman rm -f splatter-web splatter-pg && podman network rm splatnet`.
 ### Applying migrations to a deployed environment
 
 The container image deliberately does not run migrations on boot (Express Mode
