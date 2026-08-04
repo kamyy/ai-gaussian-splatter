@@ -1,6 +1,6 @@
 import { defineConfig } from "drizzle-kit";
 
-import { resolveDatabaseUrl } from "./lib/server/databaseUrl";
+import { databaseSsl, resolveDatabaseUrl } from "./lib/server/databaseUrl";
 
 // Used by the drizzle-kit CLI only (generate/migrate/studio). The runtime gets
 // its connection separately, from the pg Pool in lib/server/db/index.ts — but
@@ -20,5 +20,8 @@ export default defineConfig({
   out: "./drizzle",
   dbCredentials: {
     url: resolveDatabaseUrl() ?? "",
+    // Same TLS treatment as the running app — `drizzle-kit migrate` against a
+    // deployed database hits the same rds.force_ssl requirement.
+    ssl: databaseSsl(),
   },
 });

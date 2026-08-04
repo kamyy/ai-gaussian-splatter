@@ -50,6 +50,22 @@ EXPOSE 8000
 
 RUN addgroup -g 1001 -S nodejs && adduser -u 1001 -S nextjs -G nodejs
 
+# RDS for PostgreSQL 15+ defaults to rds.force_ssl=1, so the connection must be
+# TLS — and RDS server certificates chain to Amazon's own RDS root CAs, which
+# are not in Node's bundled trust store. Without this bundle the only way to
+# connect is to stop verifying the server, so it ships in the image and
+# lib/server/databaseUrl.ts verifies against it. The global bundle covers every
+# region's CA.
+#
+# Deliberately NOT paired with `ENV DATABASE_SSL_CA=...` here: that would make
+# every run of this image demand TLS, breaking a local container pointed at a
+# plain Postgres with "The server does not support SSL connections". Using the
+# bundle is a deployment decision, so infra/stacks/backend_stack.py sets
+# DATABASE_SSL_CA to this path. Keep the two in step if it ever moves.
+ADD --chown=nextjs:nodejs \
+  https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
+  /app/certs/rds-global-bundle.pem
+
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # No `COPY /app/public` — this package has no public/ directory, and COPY of a

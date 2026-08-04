@@ -109,6 +109,7 @@ curl -s http://localhost:8000/api/v1/healthz   # {"status":"ok"}
 The publishable key must be a `--build-arg`, not `-e`: `NEXT_PUBLIC_*` is
 inlined into the browser bundle at build time. Tear down with
 `podman rm -f splatter-web splatter-pg && podman network rm splatnet`.
+
 ### Applying migrations to a deployed environment
 
 The container image deliberately does not run migrations on boot (Express Mode

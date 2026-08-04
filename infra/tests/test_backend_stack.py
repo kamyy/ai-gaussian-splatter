@@ -1,5 +1,7 @@
 from aws_cdk.assertions import Template
 
+from stacks.backend_stack import RDS_CA_BUNDLE_PATH
+
 ECR_PULL_ACTIONS = {"ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage"}
 
 
@@ -86,8 +88,13 @@ def test_database_credentials_projected_as_individual_secret_fields(wired_stacks
         assert f":{json_key}::" in str(secrets[name]), f"{name} must select the '{json_key}' field of the secret"
 
     # The non-secret half travels as plain environment variables.
-    environment = {e["Name"] for e in container["Environment"]}
-    assert {"DATABASE_HOST", "DATABASE_PORT", "DATABASE_NAME"} <= environment
+    environment = {e["Name"]: e.get("Value") for e in container["Environment"]}
+    assert {"DATABASE_HOST", "DATABASE_PORT", "DATABASE_NAME"} <= environment.keys()
+
+    # RDS requires TLS (rds.force_ssl=1 by default on Postgres 15+) and its
+    # certificates chain to Amazon roots that Node does not trust, so the app
+    # must be pointed at the CA bundle web/Dockerfile bakes into the image.
+    assert environment.get("DATABASE_SSL_CA") == RDS_CA_BUNDLE_PATH
 
 
 def test_network_configuration_uses_public_subnets(wired_stacks):

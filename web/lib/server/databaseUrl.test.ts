@@ -1,6 +1,9 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { resolveDatabaseUrl } from "./databaseUrl";
+import { databaseSsl, resolveDatabaseUrl } from "./databaseUrl";
 
 /**
  * The production path here is untestable against real AWS, so these pin the
@@ -64,5 +67,25 @@ describe("resolveDatabaseUrl", () => {
   it("returns undefined when the parts are incomplete, so drizzle-kit generate still runs", () => {
     expect(resolveDatabaseUrl({})).toBeUndefined();
     expect(resolveDatabaseUrl({ DATABASE_HOST: "h", DATABASE_NAME: "n", DATABASE_USER: "u" })).toBeUndefined();
+  });
+});
+
+describe("databaseSsl", () => {
+  it("is undefined without DATABASE_SSL_CA, keeping local dev and CI on a plain connection", () => {
+    expect(databaseSsl({})).toBeUndefined();
+  });
+
+  it("loads the CA bundle and leaves verification on", () => {
+    // rejectUnauthorized must stay at its default of true. Setting it false
+    // would connect to anything presenting a certificate, which is what
+    // shipping the bundle exists to avoid — verified against a TLS-only
+    // Postgres with a private CA: a wrong bundle is rejected.
+    const dir = mkdtempSync(join(tmpdir(), "ca-"));
+    const path = join(dir, "bundle.pem");
+    writeFileSync(path, "-----BEGIN CERTIFICATE-----\nnot-a-real-cert\n-----END CERTIFICATE-----\n");
+
+    const ssl = databaseSsl({ DATABASE_SSL_CA: path });
+    expect(ssl?.ca).toContain("BEGIN CERTIFICATE");
+    expect(ssl).not.toHaveProperty("rejectUnauthorized");
   });
 });

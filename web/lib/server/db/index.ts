@@ -1,6 +1,7 @@
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
+import { databaseSsl } from "../databaseUrl";
 import { getEnv } from "../env";
 import * as schema from "./schema";
 
@@ -19,7 +20,7 @@ const globalForDb = globalThis as unknown as {
 
 export function getDb(): NodePgDatabase<typeof schema> {
   if (globalForDb.db === undefined) {
-    const pool = new Pool({ connectionString: getEnv().DATABASE_URL });
+    const pool = new Pool({ connectionString: getEnv().DATABASE_URL, ssl: databaseSsl() });
 
     // Without this, a single dead idle connection takes down the process.
     // `pg` re-emits errors from idle pooled clients on the Pool itself, and an

@@ -11,6 +11,10 @@ from constructs import Construct
 from stacks.data_stack import DATABASE_NAME
 from stacks.tags import WORKER_TAG_KEY, WORKER_TAG_VALUE
 
+# Where web/Dockerfile's `ADD` puts Amazon's RDS global CA bundle. Must match
+# that line — the image supplies the file, this stack turns it on.
+RDS_CA_BUNDLE_PATH = "/app/certs/rds-global-bundle.pem"
+
 # Single source of truth for the Next.js container's listen port — used by
 # both the task definition and the health check path below, so they can't
 # drift out of sync with each other.
@@ -225,6 +229,16 @@ class BackendStack(cdk.Stack):
                     key_value_pair(name="DATABASE_HOST", value=database.db_instance_endpoint_address),
                     key_value_pair(name="DATABASE_PORT", value=database.db_instance_endpoint_port),
                     key_value_pair(name="DATABASE_NAME", value=DATABASE_NAME),
+                    # RDS Postgres 15+ defaults to rds.force_ssl=1, and its
+                    # server certificates chain to Amazon's own root CAs, which
+                    # are absent from Node's trust store — so the connection
+                    # needs an explicit CA bundle or it fails either
+                    # unencrypted ("no pg_hba.conf entry ... no encryption") or
+                    # unverified ("UNABLE_TO_VERIFY_LEAF_SIGNATURE"). web/Dockerfile
+                    # bakes the bundle in at this path; setting it here rather
+                    # than in the image keeps a locally-run container able to
+                    # talk to a plain Postgres.
+                    key_value_pair(name="DATABASE_SSL_CA", value=RDS_CA_BUNDLE_PATH),
                 ],
                 secrets=[
                     # `arn:json-key:version-stage:version-id` — the trailing
