@@ -1,4 +1,4 @@
-// Route protection for the authenticated (dashboard) route group.
+// Route protection for the (authenticated) route group.
 //
 // Named `proxy.ts` (not `middleware.ts`) — Next.js 16 renamed the file
 // convention and exported function name from `middleware` to `proxy`

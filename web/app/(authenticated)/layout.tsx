@@ -7,7 +7,7 @@ import { UserButton } from "@clerk/nextjs";
 import { AppShell, AppShellHeader, AppShellMain, Group, Title } from "@mantine/core";
 import Link from "next/link";
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
   return (
     <AppShell header={{ height: 60 }} padding="md">
       <AppShellHeader>
