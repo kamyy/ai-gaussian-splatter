@@ -19,8 +19,21 @@ const globalForDb = globalThis as unknown as {
 
 export function getDb(): NodePgDatabase<typeof schema> {
   if (globalForDb.db === undefined) {
-    globalForDb.pool = new Pool({ connectionString: getEnv().DATABASE_URL });
-    globalForDb.db = drizzle(globalForDb.pool, { schema });
+    const pool = new Pool({ connectionString: getEnv().DATABASE_URL });
+
+    // Without this, a single dead idle connection takes down the process.
+    // `pg` re-emits errors from idle pooled clients on the Pool itself, and an
+    // unhandled "error" event on an EventEmitter is an uncaught exception —
+    // so an RDS failover, a maintenance reboot, or any server-side idle reap
+    // would kill the whole task and drop every in-flight request instead of
+    // the pool quietly discarding one client. Prisma's client absorbed this
+    // internally; with a raw Pool it has to be explicit.
+    pool.on("error", error => {
+      console.error("Idle pg client error (connection discarded):", error);
+    });
+
+    globalForDb.pool = pool;
+    globalForDb.db = drizzle(pool, { schema });
   }
   return globalForDb.db;
 }
