@@ -1,5 +1,5 @@
 // CardSection (standalone) rather than Card.Section — see the note in
-// app/(dashboard)/layout.tsx about compound static properties not resolving
+// app/(authenticated)/layout.tsx about compound static properties not resolving
 // through the bundler in this @mantine/core version.
 import { Card, CardSection, Image, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import type { Metadata } from "next";
