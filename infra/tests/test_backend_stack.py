@@ -1,6 +1,12 @@
 from aws_cdk.assertions import Template
 
-from stacks.backend_stack import RDS_CA_BUNDLE_PATH
+from stacks.backend_stack import (
+    APP_HOSTNAME,
+    CLUSTER_NAME,
+    CONTAINER_PORT,
+    RDS_CA_BUNDLE_PATH,
+    SERVICE_NAME,
+)
 
 ECR_PULL_ACTIONS = {"ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage"}
 
@@ -50,15 +56,17 @@ def test_pass_role_targets_worker_role_not_instance_profile(wired_stacks):
     assert "WorkerInstanceProfile" not in resource_str
 
 
-def test_health_check_path_format(wired_stacks):
-    """Regression test: Express Mode's healthCheckPath is PROTOCOL:PORT/PATH,
-    not a bare path (CDK's own default is "HTTP:80/ping").
+def test_health_check_targets_the_container_port(wired_stacks):
+    """The health check must hit the app's own port and its real health
+    endpoint. Both are set explicitly in backend_stack.py — the target group's
+    defaults are "/" on the traffic port, which would report a task healthy
+    off the Next.js root page without ever exercising /api/v1/healthz.
     """
     template = Template.from_stack(wired_stacks["backend"])
 
     template.has_resource_properties(
-        "AWS::ECS::ExpressGatewayService",
-        {"HealthCheckPath": "HTTP:8000/api/v1/healthz"},
+        "AWS::ElasticLoadBalancingV2::TargetGroup",
+        {"HealthCheckPath": "/api/v1/healthz", "HealthCheckPort": str(CONTAINER_PORT)},
     )
 
 
@@ -75,9 +83,9 @@ def test_database_credentials_projected_as_individual_secret_fields(wired_stacks
     """
     template = Template.from_stack(wired_stacks["backend"])
 
-    services = template.find_resources("AWS::ECS::ExpressGatewayService")
-    (service_props,) = services.values()
-    container = service_props["Properties"]["PrimaryContainer"]
+    task_definitions = template.find_resources("AWS::ECS::TaskDefinition")
+    (task_definition_props,) = task_definitions.values()
+    (container,) = task_definition_props["Properties"]["ContainerDefinitions"]
 
     secrets = {s["Name"]: s["ValueFrom"] for s in container["Secrets"]}
     assert "DATABASE_URL" not in secrets, "the RDS secret is a JSON blob and must not be passed as DATABASE_URL"
@@ -97,13 +105,152 @@ def test_database_credentials_projected_as_individual_secret_fields(wired_stacks
     assert environment.get("DATABASE_SSL_CA") == RDS_CA_BUNDLE_PATH
 
 
-def test_network_configuration_uses_public_subnets(wired_stacks):
+def test_tasks_run_in_private_subnets_without_a_public_ip(wired_stacks):
+    """The tasks must not be internet-addressable. They sit in the private
+    subnets and reach AWS APIs through the VPC's NAT gateway; only the load
+    balancer is internet-facing.
+    """
     template = Template.from_stack(wired_stacks["backend"])
 
-    services = template.find_resources("AWS::ECS::ExpressGatewayService")
+    services = template.find_resources("AWS::ECS::Service")
     assert len(services) == 1
     (service_props,) = services.values()
-    subnets = service_props["Properties"]["NetworkConfiguration"]["Subnets"]
+    awsvpc = service_props["Properties"]["NetworkConfiguration"]["AwsvpcConfiguration"]
+
+    assert awsvpc["AssignPublicIp"] == "DISABLED"
+    subnets = awsvpc["Subnets"]
+    assert len(subnets) == 2
+    for subnet_ref in subnets:
+        assert "privateSubnet" in str(subnet_ref)
+
+
+def test_cluster_and_service_names_are_fixed(wired_stacks):
+    """docs/RUNBOOK.md writes the `aws ecs update-service
+    --force-new-deployment` command out literally, since pushing to the fixed
+    image tag is otherwise invisible to the running service. Generated names
+    would make that command wrong.
+    """
+    template = Template.from_stack(wired_stacks["backend"])
+
+    (cluster_props,) = template.find_resources("AWS::ECS::Cluster").values()
+    assert cluster_props["Properties"]["ClusterName"] == CLUSTER_NAME
+
+    (service_props,) = template.find_resources("AWS::ECS::Service").values()
+    assert service_props["Properties"]["ServiceName"] == SERVICE_NAME
+
+
+def test_a_failed_deployment_rolls_back_instead_of_hanging(wired_stacks):
+    """Without the circuit breaker, a deployment whose tasks never stabilize
+    (unpullable image, container crashing on boot) sits in progress for hours
+    before ECS calls it failed. Rollback must also be on, or the breaker only
+    stops the deployment and leaves the service with no healthy tasks.
+    """
+    template = Template.from_stack(wired_stacks["backend"])
+
+    (service_props,) = template.find_resources("AWS::ECS::Service").values()
+    config = service_props["Properties"]["DeploymentConfiguration"]
+
+    assert config["DeploymentCircuitBreaker"] == {"Enable": True, "Rollback": True}
+
+
+def test_deployments_keep_a_healthy_task_serving(wired_stacks):
+    """At desired_count 1 the 50% default floors to zero healthy tasks: ECS
+    may stop the only running task before its replacement passes health
+    checks, which is a window of 503s on every deploy.
+    """
+    template = Template.from_stack(wired_stacks["backend"])
+
+    (service_props,) = template.find_resources("AWS::ECS::Service").values()
+    config = service_props["Properties"]["DeploymentConfiguration"]
+
+    assert config["MinimumHealthyPercent"] == 100
+
+
+def test_health_check_grace_period_covers_a_cold_start(wired_stacks):
+    """A task killed inside the grace period never gets far enough to report
+    why it failed. The default 60s can be shorter than a cold Next.js start.
+    """
+    template = Template.from_stack(wired_stacks["backend"])
+
+    (service_props,) = template.find_resources("AWS::ECS::Service").values()
+
+    assert service_props["Properties"]["HealthCheckGracePeriodSeconds"] == 300
+
+
+def test_load_balancer_is_internet_facing_in_the_public_subnets(wired_stacks):
+    template = Template.from_stack(wired_stacks["backend"])
+
+    load_balancers = template.find_resources("AWS::ElasticLoadBalancingV2::LoadBalancer")
+    assert len(load_balancers) == 1
+    (lb_props,) = load_balancers.values()
+
+    assert lb_props["Properties"]["Scheme"] == "internet-facing"
+    subnets = lb_props["Properties"]["Subnets"]
     assert len(subnets) == 2
     for subnet_ref in subnets:
         assert "publicSubnet" in str(subnet_ref)
+
+
+def test_traffic_is_https_with_http_redirected(wired_stacks):
+    """Regression test: the app serves session cookies, so it must never fall
+    back to a plaintext listener. An ALB terminates TLS only if a certificate
+    is attached, and the certificate must be in the ALB's own region — which
+    is what declaring it in this stack achieves.
+    """
+    template = Template.from_stack(wired_stacks["backend"])
+
+    listeners = template.find_resources("AWS::ElasticLoadBalancingV2::Listener")
+    by_port = {props["Properties"]["Port"]: props["Properties"] for props in listeners.values()}
+    assert set(by_port) == {80, 443}
+
+    assert by_port[443]["Protocol"] == "HTTPS"
+    assert len(by_port[443]["Certificates"]) == 1
+    assert by_port[443]["DefaultActions"][0]["Type"] == "forward"
+
+    # Must be set explicitly: an unset policy is not "the sensible default"
+    # here, it is ELBSecurityPolicy-2016-08, which still allows TLS 1.0/1.1.
+    assert by_port[443]["SslPolicy"] == "ELBSecurityPolicy-TLS13-1-2-2021-06"
+
+    assert by_port[80]["DefaultActions"][0]["Type"] == "redirect"
+    assert by_port[80]["DefaultActions"][0]["RedirectConfig"]["Protocol"] == "HTTPS"
+
+    template.has_resource_properties(
+        "AWS::CertificateManager::Certificate",
+        {"DomainName": APP_HOSTNAME},
+    )
+
+
+def test_autoscaling_is_bounded(wired_stacks):
+    template = Template.from_stack(wired_stacks["backend"])
+
+    template.has_resource_properties(
+        "AWS::ApplicationAutoScaling::ScalableTarget",
+        {"MinCapacity": 1, "MaxCapacity": 3},
+    )
+    template.has_resource_properties(
+        "AWS::ApplicationAutoScaling::ScalingPolicy",
+        {
+            "PolicyType": "TargetTrackingScaling",
+            "TargetTrackingScalingPolicyConfiguration": {
+                "PredefinedMetricSpecification": {"PredefinedMetricType": "ECSServiceAverageCPUUtilization"},
+            },
+        },
+    )
+
+
+def test_hosted_zone_is_imported_and_only_added_to(wired_stacks):
+    """Regression guard on the orky.net zone: the stack must never own it.
+    An imported zone is not in the resource set, so no CloudFormation
+    operation can modify or delete the zone or any pre-existing record. The
+    one record this stack does create is the app's own alias; the certificate's
+    validation record is written by ACM itself, not by CloudFormation.
+    """
+    template = Template.from_stack(wired_stacks["backend"])
+
+    assert template.find_resources("AWS::Route53::HostedZone") == {}
+
+    record_sets = template.find_resources("AWS::Route53::RecordSet")
+    assert len(record_sets) == 1
+    (record_props,) = record_sets.values()
+    assert record_props["Properties"]["Name"] == f"{APP_HOSTNAME}."
+    assert record_props["Properties"]["Type"] == "A"

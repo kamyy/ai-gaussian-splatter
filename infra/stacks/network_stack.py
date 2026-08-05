@@ -32,22 +32,32 @@ class NetworkStack(cdk.Stack):
         # punctuation characters (e.g. ">", the unicode em dash "—") that
         # are easy to reach for by habit — plain ASCII only below.
         #
-        # Deliberately has no ingress rule of its own. Per AWS's Express Mode
-        # docs (Resources created by Amazon ECS Express Mode services —
-        # "networkConfiguration.SecurityGroups"), Express Mode always creates
-        # its own Load Balancer + Service security group pair with minimal
-        # required ingress, regardless of what's passed in; a security group
-        # you provide is only an *additional* ingress path, not a replacement.
-        # So this group needs no ingress rule of its own — its only job is to
-        # give the backend tasks a stable identity that db_security_group's
-        # own ingress rule below can reference as a source, since
-        # security-group references check ENI membership, not the referenced
-        # group's own rules.
+        # Passed to the ALB in BackendStack, but declared here so that both
+        # ends of the ALB-to-tasks ingress rule live in one stack. That rule is
+        # not written by hand anywhere: ApplicationLoadBalancedFargateService
+        # registers the target group as a connectable, and CDK derives the rule
+        # from the container port. Declaring this group in BackendStack instead
+        # makes `cdk synth` fail outright — the rule's source would be a
+        # BackendStack group while its target (backend_security_group) is a
+        # NetworkStack one, and BackendStack already depends on NetworkStack,
+        # so CDK reports a DependencyCycle.
+        self.alb_security_group = ec2.SecurityGroup(
+            self,
+            "AlbSecurityGroup",
+            vpc=self.vpc,
+            description="Public ALB in front of the backend ECS service",
+            allow_all_outbound=True,
+        )
+
+        # Receives the generated ALB-to-tasks rule described above, and gives
+        # the backend tasks a stable identity that db_security_group's own
+        # ingress rule can name as a source — security-group references check
+        # ENI membership, not the referenced group's own rules.
         self.backend_security_group = ec2.SecurityGroup(
             self,
             "BackendSecurityGroup",
             vpc=self.vpc,
-            description="ECS Express Mode backend service to RDS",
+            description="Backend ECS service to RDS",
             allow_all_outbound=True,
         )
 
@@ -63,11 +73,11 @@ class NetworkStack(cdk.Stack):
             self,
             "DbSecurityGroup",
             vpc=self.vpc,
-            description="RDS Postgres, inbound only from the backend ECS Express Mode service",
+            description="RDS Postgres, inbound only from the backend ECS service",
             allow_all_outbound=False,
         )
         self.db_security_group.add_ingress_rule(
             self.backend_security_group,
             ec2.Port.tcp(5432),
-            "Backend (ECS Express Mode service) to Postgres",
+            "Backend to Postgres",
         )
