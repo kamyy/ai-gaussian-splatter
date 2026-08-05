@@ -11,8 +11,8 @@ import { HttpError } from "./httpError";
  * `INSERT ... ON CONFLICT ... DO UPDATE SET count = count + 1 RETURNING count`,
  * so the check-and-increment is race-free without a read-then-write step. The
  * statement is written out here rather than inferred from an ORM helper, which
- * is the point: the previous Prisma `upsert()` only compiled to this when its
- * `update` clause happened to be non-empty, and silently degraded to
+ * is the point: an ORM's `upsert()` helper only compiles to this when its
+ * `update` clause happens to be non-empty, and silently degrades to
  * SELECT-then-INSERT otherwise.
  *
  * The `set` clause must reference the column (`rate_limit_counters.count + 1`),

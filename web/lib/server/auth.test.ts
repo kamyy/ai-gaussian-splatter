@@ -7,11 +7,9 @@ import { closeDb, getDb } from "./db";
 import { jobs, splats, users } from "./db/schema";
 
 /**
- * Replaces backend/tests/test_auth_clerk.py, which hand-built RSA-signed JWTs
- * to exercise a hand-rolled JWKS verifier. That verifier is gone — @clerk/nextjs
- * does the verification now, and testing Clerk's own code isn't this suite's
- * job. What remains worth testing is the app-specific logic that used to live
- * in deps.py: the lazy shadow-row upsert and the worker's per-job token check.
+ * @clerk/nextjs verifies JWTs, and testing Clerk's own code isn't this
+ * suite's job. What's worth testing is the app-specific logic: the lazy
+ * shadow-row upsert and the worker's per-job token check.
  */
 vi.mock("@clerk/nextjs/server", () => ({ auth: vi.fn() }));
 

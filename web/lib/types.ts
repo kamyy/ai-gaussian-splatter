@@ -9,9 +9,9 @@
 // drift apart.
 //
 // Values are snake_case because they are simultaneously the Postgres enum
-// labels — Drizzle has no equivalent of Prisma's @@map, so there is exactly one
-// spelling from the database through to the JSON responses. Field *names* stay
-// camelCase; only these values are snake_case.
+// labels, so there is exactly one spelling from the database through to the
+// JSON responses. Field *names* stay camelCase; only these values are
+// snake_case.
 
 export const SPLAT_STATUSES = ["draft", "uploading", "ready_to_process", "processing", "complete", "failed"] as const;
 export type SplatStatus = (typeof SPLAT_STATUSES)[number];
