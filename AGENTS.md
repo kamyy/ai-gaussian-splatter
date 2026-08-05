@@ -55,6 +55,7 @@ Grouped by area so you can jump to the part you're touching.
 ### Git workflow
 
 - **`main` is push-protected — all changes land via PR.** Create a feature branch for any change, however small (docs, config, `.gitignore` included); a direct push to `main` is rejected.
+- **Branch names are mandatorily prefixed with their change type** (`chore/`, `refactor/`, `rename/`, `docs/`, `fix/`, etc.), e.g. `chore/upgrade-next-16.3-typescript-7`, `refactor/prisma-to-drizzle`, `rename/dashboard-to-authenticated-route-group`. This applies to the branch name only — commit messages follow their own convention (e.g. Conventional Commits' `chore:`, `fix:`), which is a separate, unrelated style and not a substitute for the branch prefix.
 - **Merge PRs with `gh pr merge --merge`, not `--squash` or `--rebase`.** Branch history here is kept as logically-scoped, individually-described commits (see e.g. the infra Python port PR), and `--merge` preserves that granularity in `main`'s history instead of collapsing it into one commit or dropping the "this is where the PR landed" marker.
 - **To bring a stale PR branch up to date with `main`, `git rebase main` (then `push --force-with-lease`), not `git merge origin/main` into the branch.** A merge commit works too, but it adds noise to the branch's history that rebase avoids; CI needs to re-run on the rebased commits before merging.
 
