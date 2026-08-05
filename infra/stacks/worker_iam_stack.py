@@ -47,11 +47,11 @@ class WorkerIamStack(cdk.Stack):
             )
         )
 
-        self.instance_profile = iam.CfnInstanceProfile(
+        self.instance_profile = iam.InstanceProfile(
             self,
             "WorkerInstanceProfile",
-            roles=[self.role.role_name],
+            role=self.role,
         )
-        self.instance_profile_arn = self.instance_profile.attr_arn
+        self.instance_profile_arn = self.instance_profile.instance_profile_arn
 
         cdk.CfnOutput(self, "WorkerInstanceProfileArnOutput", value=self.instance_profile_arn)
