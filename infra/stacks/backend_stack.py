@@ -1,14 +1,19 @@
 import aws_cdk as cdk
+from aws_cdk import aws_certificatemanager as acm
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_ecr as ecr
 from aws_cdk import aws_ecs as ecs
+from aws_cdk import aws_ecs_patterns as ecs_patterns
+from aws_cdk import aws_elasticloadbalancingv2 as elbv2
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_rds as rds
+from aws_cdk import aws_route53 as route53
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_secretsmanager as secretsmanager
 from constructs import Construct
 
 from stacks.data_stack import DATABASE_NAME
+from stacks.registry_stack import IMAGE_TAG
 from stacks.tags import WORKER_TAG_KEY, WORKER_TAG_VALUE
 
 # Where web/Dockerfile's `ADD` puts Amazon's RDS global CA bundle. Must match
@@ -16,25 +21,35 @@ from stacks.tags import WORKER_TAG_KEY, WORKER_TAG_VALUE
 RDS_CA_BUNDLE_PATH = "/app/certs/rds-global-bundle.pem"
 
 # Single source of truth for the Next.js container's listen port — used by
-# both the task definition and the health check path below, so they can't
-# drift out of sync with each other.
+# both the task definition and the target group's health check below, so they
+# can't drift out of sync with each other. The ALB-to-tasks ingress rule
+# derives from it too, but is generated rather than written down. The copies
+# that do have to be changed by hand are web/Dockerfile's PORT and the port
+# asserted in infra/tests/test_network_stack.py.
 CONTAINER_PORT = 8000
 
-key_value_pair = ecs.CfnExpressGatewayService.KeyValuePairProperty
+# The public hostname. The Route 53 zone is registered in this account; only
+# its ID varies by environment, so that alone is passed in.
+DOMAIN_ZONE_NAME = "orky.net"
+APP_HOSTNAME = f"ai-gaussian-splatter.{DOMAIN_ZONE_NAME}"
+
+# Both named explicitly rather than left to CloudFormation's generated names,
+# so `aws ecs update-service --force-new-deployment` — the only way a push to
+# the fixed image tag reaches the running service — can be written down
+# literally in docs/RUNBOOK.md instead of looked up per environment.
+CLUSTER_NAME = "ai-gaussian-splatter"
+SERVICE_NAME = "ai-gaussian-splatter-backend"
 
 
 class BackendStack(cdk.Stack):
-    """The Next.js app (pages + the REST API as Route Handlers) on ECS Express
-    Mode (`AWS::ECS::ExpressGatewayService`) — App Runner's replacement, since
-    App Runner stopped accepting new customers 2026-04-30. Express Mode
-    auto-provisions the ECS cluster/service, ALB, security groups, and
-    auto-scaling from a single resource, aiming at the same "no hand-wired
-    orchestration" DX App Runner had.
+    """The Next.js app (pages + the REST API as Route Handlers) on Fargate,
+    behind an internet-facing Application Load Balancer.
 
-    Only an L1 construct (`CfnExpressGatewayService`) exists as of
-    aws-cdk-lib 2.262 — no L2 yet (tracked in aws/aws-cdk#36234) — so, same as
-    the App Runner resources this replaces, config is explicit with no L2
-    conveniences.
+    The ALB sits in the public subnets and is the only internet-facing part;
+    the tasks run in the private subnets with no public IP, reaching AWS APIs
+    (S3, EC2 RunInstances) through the VPC's NAT gateway. TLS terminates at
+    the ALB with an ACM certificate for APP_HOSTNAME, and plain HTTP is
+    redirected to HTTPS.
     """
 
     def __init__(
@@ -43,6 +58,8 @@ class BackendStack(cdk.Stack):
         id: str,
         vpc: ec2.Vpc,
         backend_security_group: ec2.SecurityGroup,
+        alb_security_group: ec2.SecurityGroup,
+        repository: ecr.IRepository,
         database: rds.DatabaseInstance,
         uploads_bucket: s3.Bucket,
         splats_bucket: s3.Bucket,
@@ -52,16 +69,10 @@ class BackendStack(cdk.Stack):
         worker_security_group_id: str,
         worker_subnet_id: str,
         app_public_url: str,
+        hosted_zone_id: str,
         **kwargs,
     ) -> None:
         super().__init__(scope, id, **kwargs)
-
-        self.repository = ecr.Repository(
-            self,
-            "BackendRepository",
-            repository_name="ai-gaussian-splatter-backend",
-            removal_policy=cdk.RemovalPolicy.RETAIN,
-        )
 
         # Clerk's server-side API key. Created empty; populate it out-of-band
         # (console or `aws secretsmanager put-secret-value`) after the first
@@ -79,21 +90,6 @@ class BackendStack(cdk.Stack):
             secret_name="ai-gaussian-splatter/clerk-secret-key",
             description="Clerk CLERK_SECRET_KEY — set manually after deploy",
             removal_policy=cdk.RemovalPolicy.RETAIN,
-        )
-
-        # Lets ECS provision the ALB/security groups/auto-scaling on this
-        # service's behalf. Trust + managed policy per AWS's Express Mode setup
-        # docs — this role is assumed by the ECS control plane, not the running
-        # container.
-        infrastructure_role = iam.Role(
-            self,
-            "ExpressInfrastructureRole",
-            assumed_by=iam.ServicePrincipal("ecs.amazonaws.com"),
-            managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AmazonECSInfrastructureRoleforExpressGatewayServices"
-                ),
-            ],
         )
 
         # Pulls the container image and writes logs — also the role ECS uses to
@@ -124,7 +120,7 @@ class BackendStack(cdk.Stack):
                 resources=["*"],
             )
         )
-        self.repository.grant_pull(execution_role)  # also grants ecr:GetAuthorizationToken (Resource: "*", unavoidably)
+        repository.grant_pull(execution_role)  # also grants ecr:GetAuthorizationToken (Resource: "*", unavoidably)
         # database.secret is always populated — credentials come from
         # from_generated_secret in data_stack.py — so this is safe to assert
         # once and reuse, rather than encoding the same invariant two
@@ -170,55 +166,110 @@ class BackendStack(cdk.Stack):
             )
         )
 
-        ecs.CfnExpressGatewayService(
+        # Imported, never managed: this stack only adds records to the zone.
+        # An imported zone is not part of the template's resource set, so no
+        # CloudFormation operation — `cdk destroy` included — can modify or
+        # delete the zone itself or anything already in it.
+        hosted_zone = route53.HostedZone.from_hosted_zone_attributes(
+            self,
+            "HostedZone",
+            hosted_zone_id=hosted_zone_id,
+            zone_name=DOMAIN_ZONE_NAME,
+        )
+
+        # An ALB is regional and can only reference a certificate in its own
+        # region, so this has to be a certificate in this stack's region —
+        # which is what declaring it here gets. A us-east-1 certificate cannot
+        # be attached to this ALB: us-east-1 is special only for CloudFront,
+        # which reads certificates from that region alone no matter where the
+        # origin lives. Public ACM certificates are free, and Route 53 hosted
+        # zones are global, so DNS validation resolves against the same zone
+        # regardless of which region the certificate is issued in.
+        certificate = acm.Certificate(
+            self,
+            "Certificate",
+            domain_name=APP_HOSTNAME,
+            validation=acm.CertificateValidation.from_dns(hosted_zone),
+        )
+
+        # Built here rather than left to the pattern so its security group can
+        # be one that NetworkStack owns. If the pattern creates the security
+        # group itself, the ALB-to-tasks ingress rule ends up pointing at a
+        # BackendStack group from a NetworkStack one and `cdk synth` fails with
+        # a DependencyCycle, since BackendStack already depends on NetworkStack.
+        self.load_balancer = elbv2.ApplicationLoadBalancer(
+            self,
+            "LoadBalancer",
+            vpc=vpc,
+            internet_facing=True,
+            security_group=alb_security_group,
+            vpc_subnets=ec2.SubnetSelection(subnets=vpc.public_subnets),
+        )
+
+        cluster = ecs.Cluster(self, "Cluster", vpc=vpc, cluster_name=CLUSTER_NAME)
+
+        self.service = ecs_patterns.ApplicationLoadBalancedFargateService(
             self,
             "Service",
-            service_name="ai-gaussian-splatter-backend",
-            infrastructure_role_arn=infrastructure_role.role_arn,
-            execution_role_arn=execution_role.role_arn,
-            task_role_arn=task_role.role_arn,
-            cpu="256",  # 0.25 vCPU, matching the App Runner sizing this replaces
-            memory="512",  # 0.5 GB
-            # Express Mode's healthCheckPath is PROTOCOL:PORT/PATH (CDK's own
-            # default is "HTTP:80/ping"), not a bare path.
-            health_check_path=f"HTTP:{CONTAINER_PORT}/api/v1/healthz",
-            # Express Mode requires subnets with an Internet Gateway route to
-            # provision an internet-facing ALB. Providing public subnets also
-            # auto-enables assignPublicIp on the Fargate tasks themselves, which
-            # is what lets them reach AWS APIs (S3, EC2 RunInstances) without a
-            # NAT gateway — verified against AWS's docs ("Resources created by
-            # Amazon ECS Express Mode services" > Network configuration
-            # defaults): "If you provide custom public subnets, Express Mode
-            # will provision an internet-facing ALB and turn on assignPublicIP
-            # for your tasks." Private subnets would leave both the ALB internal
-            # and the tasks' own outbound calls broken (assignPublicIp is
-            # disabled for private subnets per the same doc, making you
-            # responsible for a NAT gateway yourself).
-            network_configuration=ecs.CfnExpressGatewayService.ExpressGatewayServiceNetworkConfigurationProperty(
-                subnets=[subnet.subnet_id for subnet in vpc.public_subnets],
-                security_groups=[backend_security_group.security_group_id],
-            ),
-            # Bounded auto-scaling — matches the "auto-scaling like App Runner
-            # had" intent; without this it defaults to a fixed single task.
-            scaling_target=ecs.CfnExpressGatewayService.ExpressGatewayScalingTargetProperty(
-                min_task_count=1,
-                max_task_count=3,
-            ),
-            primary_container=ecs.CfnExpressGatewayService.ExpressGatewayContainerProperty(
-                image=f"{self.repository.repository_uri}:latest",
+            service_name=SERVICE_NAME,
+            load_balancer=self.load_balancer,
+            certificate=certificate,
+            domain_name=APP_HOSTNAME,
+            domain_zone=hosted_zone,
+            protocol=elbv2.ApplicationProtocol.HTTPS,
+            redirect_http=True,
+            # Set explicitly because the default is weak: a listener created
+            # through the API or CloudFormation, as this one is, falls back to
+            # ELBSecurityPolicy-2016-08, which still negotiates TLS 1.0 and
+            # 1.1. (The console's default is the strong policy, so the AWS UI
+            # gives a misleading impression of what an unset policy means.)
+            # This is TLS 1.2 and 1.3 only, which every browser since ~2014
+            # and the worker's Python client all speak.
+            ssl_policy=elbv2.SslPolicy.RECOMMENDED_TLS,
+            cpu=256,  # 0.25 vCPU
+            memory_limit_mib=512,
+            # Mutually exclusive with `vpc`: the pattern creates a cluster of
+            # its own when given a VPC, and that one gets a generated name.
+            cluster=cluster,
+            # The point of the private subnets here is that tasks get no public
+            # IP; their outbound calls to S3 and the EC2 API go through the
+            # VPC's NAT gateway instead. Only the ALB above is internet-facing.
+            task_subnets=ec2.SubnetSelection(subnets=vpc.private_subnets),
+            security_groups=[backend_security_group],
+            # A cold Next.js server start can outrun the default 60s, and a
+            # task killed inside the grace period never gets far enough to say
+            # why. /api/v1/healthz answers from the app alone — it does not
+            # touch the database, so a passing health check says nothing about
+            # RDS connectivity.
+            health_check_grace_period=cdk.Duration.seconds(300),
+            # Without this, a deployment whose tasks never reach a steady state
+            # (an image that isn't in ECR yet, a container that crashes on
+            # boot) is not reported as failed until ECS's own timeout expires,
+            # which takes hours. Roll back instead.
+            circuit_breaker=ecs.DeploymentCircuitBreaker(rollback=True),
+            # The default 50% floors to zero healthy tasks at desired_count 1,
+            # letting ECS stop the only running task before its replacement
+            # passes health checks — a window of 503s on every deploy.
+            min_healthy_percent=100,
+            task_image_options=ecs_patterns.ApplicationLoadBalancedTaskImageOptions(
+                # from_ecr_repository rather than from_registry: it reads the
+                # repository's ARN to scope the execution role's pull grant,
+                # instead of treating the URI as an opaque public image name.
+                image=ecs.ContainerImage.from_ecr_repository(repository, tag=IMAGE_TAG),
                 container_port=CONTAINER_PORT,
-                environment=[
-                    key_value_pair(name="UPLOADS_BUCKET", value=uploads_bucket.bucket_name),
-                    key_value_pair(name="SPLATS_BUCKET", value=splats_bucket.bucket_name),
-                    key_value_pair(name="WORKER_AMI_ID", value=worker_ami_id),
-                    key_value_pair(name="WORKER_SUBNET_ID", value=worker_subnet_id),
-                    key_value_pair(name="WORKER_SECURITY_GROUP_ID", value=worker_security_group_id),
-                    key_value_pair(name="WORKER_INSTANCE_PROFILE_ARN", value=worker_instance_profile_arn),
-                    # Where the GPU worker PATCHes job status back to.
-                    # Passed in rather than read from this service's own
-                    # attr_endpoint, which would be a circular dependency: point
-                    # it at the custom domain or the first deploy's ALB endpoint.
-                    key_value_pair(name="APP_PUBLIC_URL", value=app_public_url),
+                execution_role=execution_role,
+                task_role=task_role,
+                environment={
+                    "UPLOADS_BUCKET": uploads_bucket.bucket_name,
+                    "SPLATS_BUCKET": splats_bucket.bucket_name,
+                    "WORKER_AMI_ID": worker_ami_id,
+                    "WORKER_SUBNET_ID": worker_subnet_id,
+                    "WORKER_SECURITY_GROUP_ID": worker_security_group_id,
+                    "WORKER_INSTANCE_PROFILE_ARN": worker_instance_profile_arn,
+                    # Where the GPU worker PATCHes job status back to. Passed in
+                    # rather than read off the load balancer, so it stays the
+                    # stable custom domain the ALB is aliased to.
+                    "APP_PUBLIC_URL": app_public_url,
                     # The non-secret half of the connection. There is no
                     # DATABASE_URL here on purpose: RDS writes its generated
                     # credentials to Secrets Manager as a JSON blob, and ECS
@@ -226,9 +277,9 @@ class BackendStack(cdk.Stack):
                     # variable — it cannot assemble a postgresql:// string. So
                     # the parts are passed separately and the app builds the
                     # URL in web/lib/server/databaseUrl.ts.
-                    key_value_pair(name="DATABASE_HOST", value=database.db_instance_endpoint_address),
-                    key_value_pair(name="DATABASE_PORT", value=database.db_instance_endpoint_port),
-                    key_value_pair(name="DATABASE_NAME", value=DATABASE_NAME),
+                    "DATABASE_HOST": database.db_instance_endpoint_address,
+                    "DATABASE_PORT": database.db_instance_endpoint_port,
+                    "DATABASE_NAME": DATABASE_NAME,
                     # RDS Postgres 15+ defaults to rds.force_ssl=1, and its
                     # server certificates chain to Amazon's own root CAs, which
                     # are absent from Node's trust store — so the connection
@@ -238,22 +289,24 @@ class BackendStack(cdk.Stack):
                     # bakes the bundle in at this path; setting it here rather
                     # than in the image keeps a locally-run container able to
                     # talk to a plain Postgres.
-                    key_value_pair(name="DATABASE_SSL_CA", value=RDS_CA_BUNDLE_PATH),
-                ],
-                secrets=[
-                    # `arn:json-key:version-stage:version-id` — the trailing
-                    # empty fields mean "current version". Only the credentials
-                    # go through Secrets Manager; the endpoint and database name
-                    # above aren't secret and stay readable in the console.
-                    ecs.CfnExpressGatewayService.SecretProperty(
-                        name="DATABASE_USER", value_from=f"{db_secret.secret_arn}:username::"
-                    ),
-                    ecs.CfnExpressGatewayService.SecretProperty(
-                        name="DATABASE_PASSWORD", value_from=f"{db_secret.secret_arn}:password::"
-                    ),
-                    ecs.CfnExpressGatewayService.SecretProperty(
-                        name="CLERK_SECRET_KEY", value_from=self.clerk_secret.secret_arn
-                    ),
-                ],
+                    "DATABASE_SSL_CA": RDS_CA_BUNDLE_PATH,
+                },
+                # `field=` is what makes ECS extract a single JSON key rather
+                # than handing over the whole secret. Only the credentials go
+                # through Secrets Manager; the endpoint and database name above
+                # aren't secret and stay readable in the console.
+                secrets={
+                    "DATABASE_USER": ecs.Secret.from_secrets_manager(db_secret, field="username"),
+                    "DATABASE_PASSWORD": ecs.Secret.from_secrets_manager(db_secret, field="password"),
+                    "CLERK_SECRET_KEY": ecs.Secret.from_secrets_manager(self.clerk_secret),
+                },
             ),
         )
+        self.service.target_group.configure_health_check(
+            path="/api/v1/healthz",
+            port=str(CONTAINER_PORT),
+        )
+
+        # Without this the service sits at a fixed single task.
+        scaling = self.service.service.auto_scale_task_count(min_capacity=1, max_capacity=3)
+        scaling.scale_on_cpu_utilization("CpuScaling", target_utilization_percent=60)

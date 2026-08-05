@@ -12,7 +12,7 @@ Monorepo, three independent packages, each with its own dependency manager:
 
 - `web/` — Next.js 16 (App Router) + Mantine + SWR + Zustand + react-three-fiber, **and** the REST API as Route Handlers under `app/api/v1/` backed by Drizzle. `pnpm`.
 - `worker/` — COLMAP + gsplat pipeline, runs on an EC2 GPU spot instance per job. `uv`.
-- `infra/` — AWS CDK (Python), 5 stacks. `uv` + `pnpm` (the CDK CLI itself is npm-distributed regardless of app language).
+- `infra/` — AWS CDK (Python), 6 stacks. `uv` + `pnpm` (the CDK CLI itself is npm-distributed regardless of app language).
 
 Server-only code lives in `web/lib/server/` — never import it from a
 `"use client"` file, or the database client and AWS SDK end up in the browser
@@ -65,6 +65,9 @@ Grouped by area so you can jump to the part you're touching.
 
 ### Infra (CDK / AWS)
 
+- **The ALB's ACM certificate must be issued in the ALB's own region (`us-west-2`), not `us-east-1`.** An ALB is regional and can only reference a certificate in its region; a `us-east-1` certificate for the same hostname cannot be attached to it. `us-east-1` is special only for CloudFront, which reads certificates from that region alone regardless of where its origin runs — there is no CloudFront here. `backend_stack.py` declares the certificate inline, which is what places it in the right region. Public ACM certificates are free, so the same hostname having a certificate in more than one region is normal and costs nothing. The listener's `ssl_policy` is also set explicitly (`RECOMMENDED_TLS`, i.e. TLS 1.2/1.3 only): leaving it unset does *not* inherit the strong default seen in the console — listeners created through the API or CloudFormation fall back to `ELBSecurityPolicy-2016-08`, which still negotiates TLS 1.0 and 1.1.
+- **The Route 53 zone is imported with `from_hosted_zone_attributes`, never `from_lookup()`.** `from_lookup()` is a context lookup: it needs live credentials and caches account-specific data into the checked-in `cdk.context.json`, the same local-login-state dependence the `AWS_ACCOUNT_ID` handling below exists to avoid. The zone ID arrives as CDK context (`-c hostedZoneId=...`) with a placeholder default so `cdk synth` still works with no credentials. Importing also keeps the zone outside the stack's resource set, so no CloudFormation operation — `cdk destroy` included — can alter or delete the zone itself or any record the stack did not create. The only record in the template is the app's own A-alias, which a destroy removes; the certificate's DNS validation CNAME is added by ACM rather than by CloudFormation ("the `HostedZoneId` option ... causes ACM to add your CNAME to the domain record"), so it is not a template resource either way.
+- **A security group attached to the ECS service is an ingress path in its own right.** The tasks run in private subnets with no public IP, and `backend_security_group`'s single ingress rule (from the ALB's security group, on `CONTAINER_PORT`) is what makes the ALB their only reachable route. Adding another rule to that group re-opens a path around the load balancer. `network_stack.py` owns both that group and the ALB's — deliberately, since creating the ALB's group in `BackendStack` instead makes the rule cross-stack and `cdk synth` fails with a `DependencyCycle` (`BackendStack` already depends on `NetworkStack`).
 - **`CDK_DEFAULT_REGION` can't be used to control the deploy region via shell export.** The CDK CLI unconditionally overwrites it right before spawning `app.py`, using the AWS SDK's own default-region resolution — which falls back to `us-east-1` with no credentials configured, clobbering whatever you exported. `app.py` hardcodes the deploy region (`us-west-2`) directly for this reason. Account deliberately avoids `CDK_DEFAULT_ACCOUNT` too, for the inverse reason: whenever real AWS credentials _are_ active, the CLI resolves them via a live STS call and overwrites `CDK_DEFAULT_ACCOUNT` with that real account ID before spawning `app.py` — which would make `cdk synth`'s AZ-lookup cache writes to `cdk.context.json` depend on whoever's local login state happens to be active (real account IDs from a dev's SSO session have ended up as unwanted diffs to this checked-in file). `app.py` instead reads `AWS_ACCOUNT_ID`, a name the CDK CLI never touches, falling back to AWS's well-known placeholder account ID (`123456789012`) when unset — so `cdk synth` behaves identically regardless of local AWS login state, and only a deliberate `AWS_ACCOUNT_ID` (a GitHub Actions secret in CI, or an explicit export for a manual deploy) changes it. This is CDK-CLI-level behavior, not specific to the language `infra/` is written in. `cdk.context.json` caches the AZ lookups for both `us-west-2` (main stacks) and `us-east-1` (`BudgetsStack`, pinned there since billing metrics only publish in that region) against the placeholder account, so `cdk synth` works without live credentials or setup.
 
 ## Database
@@ -165,10 +168,9 @@ Known gaps, in priority order:
 2. **`web/Dockerfile` builds and runs, but has never run on AWS.** Validated
    locally under podman (see above). What remains unproven is everything
    outside the image: the ECS task definition wiring and image pull from ECR.
-3. **`APP_PUBLIC_URL` is a placeholder** (`https://app.example.com`). It can't be
-   derived from the stack that creates the ALB without a circular CloudFormation
-   dependency, so pass `-c appPublicUrl=...` after the first deploy or set up a
-   custom domain. The worker cannot report status until this is real.
+3. **`hostedZoneId` must be passed on every real deploy** (`-c hostedZoneId=...`,
+   the `orky.net` zone). It defaults to a placeholder so `cdk synth` works with
+   no credentials, and a deploy carrying that placeholder fails.
 
 Per the plan's build order, **M0 is still next**: a real physical object needs
 to be photographed (~50 photos, multi-angle) so the COLMAP→gsplat pipeline can

@@ -1,5 +1,5 @@
-# The Next.js app — pages plus the REST API (Route Handlers) — for ECS Express
-# Mode. Node version tracks the repo's .nvmrc (24.x, current Active LTS).
+# The Next.js app — pages plus the REST API (Route Handlers) — for ECS
+# Fargate. Node version tracks the repo's .nvmrc (24.x, current Active LTS).
 #
 # Built and run locally under podman (~213 MB) against a real Postgres 18:
 # healthz, the gallery/public read endpoints, the worker status callback, and
@@ -42,8 +42,8 @@ FROM node:24-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Matches infra/stacks/backend_stack.py's CONTAINER_PORT, which the Express
-# Mode health check (HTTP:8000/api/v1/healthz) also derives from.
+# Matches infra/stacks/backend_stack.py's CONTAINER_PORT, which the load
+# balancer's target group also health-checks on.
 ENV PORT=8000
 ENV HOSTNAME=0.0.0.0
 EXPOSE 8000
@@ -74,7 +74,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 USER nextjs
 
 # Migrations are NOT run here. `drizzle-kit migrate` belongs to the deploy
-# pipeline, not container startup: Express Mode runs up to 3 tasks, and booting
+# pipeline, not container startup: the service runs up to 3 tasks, and booting
 # tasks would race to apply the same migration with nothing serialising them —
 # drizzle-kit takes no advisory lock. Keeping DDL out of the container also
 # means the running app never needs DDL rights on the database. See

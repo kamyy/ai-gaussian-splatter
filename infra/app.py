@@ -3,10 +3,11 @@ import os
 
 import aws_cdk as cdk
 
-from stacks.backend_stack import BackendStack
+from stacks.backend_stack import APP_HOSTNAME, BackendStack
 from stacks.budgets_stack import BudgetsStack
 from stacks.data_stack import DataStack
 from stacks.network_stack import NetworkStack
+from stacks.registry_stack import RegistryStack
 from stacks.worker_iam_stack import WorkerIamStack
 
 
@@ -25,13 +26,18 @@ def build_stacks(
     worker_ami_id: str,
     alert_email: str,
     app_public_url: str,
+    hosted_zone_id: str,
 ) -> dict[str, cdk.Stack]:
-    """Wires all 5 stacks together. Pulled out of module scope so
+    """Wires all 6 stacks together. Pulled out of module scope so
     infra/tests/conftest.py can import and reuse this exact wiring instead
     of hand-duplicating it — keeps the test suite's stack graph from
     silently drifting out of sync with what actually gets deployed.
     """
     network = NetworkStack(app, "NetworkStack", env=env)
+
+    # Deploys before BackendStack and holds the image its service pulls, so
+    # the image can be pushed in between. See RegistryStack's own docstring.
+    registry = RegistryStack(app, "RegistryStack", env=env)
 
     data = DataStack(
         app,
@@ -55,6 +61,7 @@ def build_stacks(
         env=env,
         vpc=network.vpc,
         backend_security_group=network.backend_security_group,
+        repository=registry.repository,
         database=data.database,
         uploads_bucket=data.uploads_bucket,
         splats_bucket=data.splats_bucket,
@@ -64,6 +71,8 @@ def build_stacks(
         worker_security_group_id=network.worker_security_group.security_group_id,
         worker_subnet_id=network.vpc.private_subnets[0].subnet_id,
         app_public_url=app_public_url,
+        alb_security_group=network.alb_security_group,
+        hosted_zone_id=hosted_zone_id,
     )
 
     # Billing metrics only exist in us-east-1 regardless of where the rest of
@@ -77,6 +86,7 @@ def build_stacks(
 
     return {
         "network": network,
+        "registry": registry,
         "data": data,
         "worker_iam": worker_iam,
         "backend": backend,
@@ -117,11 +127,16 @@ if __name__ == "__main__":
     # are what let `cdk synth` succeed before those exist.
     worker_ami_id = context_or(app, "workerAmiId", "ami-000000000000")
     alert_email = context_or(app, "alertEmail", "kam.yin.yip@gmail.com")
-    # Chicken-and-egg: the app has to tell the worker where to call back to,
-    # but that address is the ALB this very stack creates. Placeholder until
-    # the first deploy publishes an endpoint (or a custom domain is set up),
-    # then pass `-c appPublicUrl=https://...`.
-    app_public_url = context_or(app, "appPublicUrl", "https://app.example.com")
+    # Where the worker PATCHes job status back to. A stable custom domain, so
+    # there is no chicken-and-egg with the ALB this app creates: the ALB is
+    # aliased to this name rather than the name being read off the ALB.
+    app_public_url = context_or(app, "appPublicUrl", f"https://{APP_HOSTNAME}")
+    # The orky.net hosted zone's ID. Read via context rather than hardcoded so
+    # this app stays account-independent, for the same reason the account ID
+    # above is not read from CDK_DEFAULT_ACCOUNT. The placeholder keeps
+    # `cdk synth` working with no credentials and no setup; a real deploy
+    # passes `-c hostedZoneId=Z...`.
+    hosted_zone_id = context_or(app, "hostedZoneId", "Z00000000000000000000")
 
     build_stacks(
         app,
@@ -129,6 +144,7 @@ if __name__ == "__main__":
         worker_ami_id=worker_ami_id,
         alert_email=alert_email,
         app_public_url=app_public_url,
+        hosted_zone_id=hosted_zone_id,
     )
 
     app.synth()
