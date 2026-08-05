@@ -28,8 +28,7 @@ const envSchema = z.object({
   GLOBAL_MAX_JOBS_PER_DAY: z.coerce.number().int().positive().default(20),
   MIN_PHOTOS_PER_OBJECT: z.coerce.number().int().positive().default(20),
 
-  // Where the GPU worker PATCHes its status back to. Was BACKEND_PUBLIC_URL;
-  // renamed since the backend is no longer a separate deployable.
+  // Where the GPU worker PATCHes its status back to.
   APP_PUBLIC_URL: z.string().url(),
 });
 

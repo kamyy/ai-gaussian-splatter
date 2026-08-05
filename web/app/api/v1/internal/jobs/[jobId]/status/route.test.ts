@@ -8,11 +8,9 @@ import { jobReadColumns } from "@/lib/server/selects";
 import { PATCH } from "./route";
 
 /**
- * Requires a real Postgres (TEST_DATABASE_URL). Covers the three things the
- * Drizzle port could have silently broken on this route: the enum values now
- * being snake_case end to end, `updatedAt` moving via `.$onUpdate()` rather
- * than an ORM's implicit behaviour, and the job/splat pair still updating
- * inside one transaction.
+ * Requires a real Postgres (TEST_DATABASE_URL). Covers three invariants of
+ * this route: the enum values are snake_case end to end, `updatedAt` moves
+ * via `.$onUpdate()`, and the job/splat pair updates inside one transaction.
  */
 const hasPostgres = Boolean(process.env.TEST_DATABASE_URL);
 
@@ -55,7 +53,7 @@ describe.skipIf(!hasPostgres)("worker status callback", () => {
     const [updated] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
     expect(updated.status).toBe("colmap_running");
     expect(updated.colmapStartedAt).not.toBeNull();
-    // .$onUpdate() replaces Prisma's @updatedAt; nothing in the database does it.
+    // updatedAt only moves via .$onUpdate(); nothing in the database does it.
     expect(updated.updatedAt.getTime()).toBeGreaterThan(job.updatedAt.getTime());
   });
 
@@ -88,8 +86,7 @@ describe.skipIf(!hasPostgres)("worker status callback", () => {
   });
 
   it("rejects a status value that is not a database enum label", async () => {
-    // "ColmapRunning" was the wire value before the Drizzle port; it is now
-    // simply invalid rather than something that could be written.
+    // Only the snake_case enum label is a valid wire value; PascalCase is rejected.
     const { job } = await seed();
     const res = await PATCH(req("tok", { status: "ColmapRunning" }), ctx(job.id));
     expect(res.status).toBe(422);

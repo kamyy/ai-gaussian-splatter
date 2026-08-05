@@ -27,8 +27,7 @@ export function getDb(): NodePgDatabase<typeof schema> {
     // unhandled "error" event on an EventEmitter is an uncaught exception —
     // so an RDS failover, a maintenance reboot, or any server-side idle reap
     // would kill the whole task and drop every in-flight request instead of
-    // the pool quietly discarding one client. Prisma's client absorbed this
-    // internally; with a raw Pool it has to be explicit.
+    // the pool quietly discarding one client.
     pool.on("error", error => {
       console.error("Idle pg client error (connection discarded):", error);
     });

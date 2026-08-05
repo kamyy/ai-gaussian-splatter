@@ -13,10 +13,8 @@ Validation status as of writing: `_init_gaussians`, `_build_optimizer`, and
 the call signature/return-tuple unpacking in `_render` were smoke-tested
 against `gsplat.rasterization()`'s actual installed signature (confirmed
 `(means, quats, scales, opacities, colors, viewmats, Ks, width, height, ...)
--> (renders, alphas, meta)`, matching this module) — this caught and fixed a
-real bug where `_render` originally returned a single tensor instead of the
-3-tuple the training loop unpacks. The actual CUDA kernel execution was
-*not* verified end-to-end: the sandbox this was written in has a GPU driver
+-> (renders, alphas, meta)`, matching this module). The actual CUDA kernel
+execution was *not* verified end-to-end: the sandbox this was written in has a GPU driver
 but no `nvcc`/CUDA toolkit for gsplat's JIT-compiled kernels, which will be
 present on the real worker AMI (plan §6) but wasn't worth installing just
 for this check. Per plan M0/M1: run this against a real capture on real
