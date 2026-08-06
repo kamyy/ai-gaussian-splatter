@@ -25,7 +25,13 @@ def test_backend_security_group_has_exactly_one_ingress_rule_from_alb(wired_stac
         {"Properties": {"GroupDescription": "Backend ECS service to RDS"}},
     )
     assert len(security_groups) == 1
-    backend_sg_logical_id = next(iter(security_groups))
+    backend_sg_logical_id, backend_sg_props = next(iter(security_groups.items()))
+
+    # A CIDR peer added directly to this group (e.g. via add_ingress_rule)
+    # inlines onto the group's own SecurityGroupIngress property instead of
+    # synthesizing as a standalone resource, so the standalone-resource count
+    # below would not catch it — this rules that route out too.
+    assert "SecurityGroupIngress" not in backend_sg_props["Properties"]
 
     ingress_rules = template.find_resources(SECURITY_GROUP_INGRESS)
     targeting_backend_sg = [
@@ -47,6 +53,19 @@ def test_backend_security_group_has_exactly_one_ingress_rule_from_alb(wired_stac
 
 def test_db_security_group_has_exactly_one_ingress_rule_from_backend(wired_stacks):
     template = Template.from_stack(wired_stacks["network"])
+
+    security_groups = template.find_resources(
+        "AWS::EC2::SecurityGroup",
+        {"Properties": {"GroupDescription": "RDS Postgres, inbound only from the backend ECS service"}},
+    )
+    assert len(security_groups) == 1
+    (db_sg_props,) = security_groups.values()
+
+    # Same rationale as the backend SG check above: a CIDR peer added directly
+    # to this group would inline onto its own properties instead of
+    # synthesizing as a standalone resource, so the count below alone
+    # wouldn't catch it.
+    assert "SecurityGroupIngress" not in db_sg_props["Properties"]
 
     # The backend-from-ALB rule and this one; see SECURITY_GROUP_INGRESS above.
     template.resource_count_is(SECURITY_GROUP_INGRESS, 2)

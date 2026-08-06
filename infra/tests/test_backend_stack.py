@@ -4,6 +4,7 @@ from stacks.backend_stack import (
     APP_HOSTNAME,
     CLUSTER_NAME,
     CONTAINER_PORT,
+    KEEP_ALIVE_TIMEOUT_MS,
     RDS_CA_BUNDLE_PATH,
     SERVICE_NAME,
 )
@@ -103,6 +104,24 @@ def test_database_credentials_projected_as_individual_secret_fields(wired_stacks
     # certificates chain to Amazon roots that Node does not trust, so the app
     # must be pointed at the CA bundle web/Dockerfile bakes into the image.
     assert environment.get("DATABASE_SSL_CA") == RDS_CA_BUNDLE_PATH
+
+
+def test_keep_alive_timeout_exceeds_the_albs_idle_timeout(wired_stacks):
+    """Regression test: without this env var, Node's standalone server closes
+    idle keep-alive sockets after its 5s default, well under the ALB's 60s
+    idle timeout — the ALB can then hand a request to a socket the app already
+    closed, a 502 with no application-level log to explain it. Silent to drop
+    or mistype, so it's pinned here rather than left to only show up as
+    intermittent production 502s.
+    """
+    template = Template.from_stack(wired_stacks["backend"])
+
+    task_definitions = template.find_resources("AWS::ECS::TaskDefinition")
+    (task_definition_props,) = task_definitions.values()
+    (container,) = task_definition_props["Properties"]["ContainerDefinitions"]
+    environment = {e["Name"]: e.get("Value") for e in container["Environment"]}
+
+    assert environment.get("KEEP_ALIVE_TIMEOUT") == KEEP_ALIVE_TIMEOUT_MS
 
 
 def test_tasks_run_in_private_subnets_without_a_public_ip(wired_stacks):
