@@ -40,6 +40,11 @@ APP_HOSTNAME = f"ai-gaussian-splatter.{DOMAIN_ZONE_NAME}"
 CLUSTER_NAME = "ai-gaussian-splatter"
 SERVICE_NAME = "ai-gaussian-splatter-backend"
 
+# Must exceed the ALB's own idle timeout (60s, left at the CDK default below)
+# or the ALB can hand a request to a keep-alive socket Node already closed —
+# see the KEEP_ALIVE_TIMEOUT env var below for the full explanation.
+KEEP_ALIVE_TIMEOUT_MS = "65000"
+
 
 class BackendStack(cdk.Stack):
     """The Next.js app (pages + the REST API as Route Handlers) on Fargate,
@@ -290,6 +295,17 @@ class BackendStack(cdk.Stack):
                     # than in the image keeps a locally-run container able to
                     # talk to a plain Postgres.
                     "DATABASE_SSL_CA": RDS_CA_BUNDLE_PATH,
+                    # The ALB above pools and reuses connections to the target
+                    # for up to its own idle timeout (60s, the CDK default we
+                    # don't override). Node's http server closes idle keep-alive
+                    # sockets after 5s by default, and Next's standalone
+                    # server.js only overrides that when this env var is set
+                    # (build/utils.js). Without it, the ALB can hand a request
+                    # to a socket the app already closed — a 502 with no
+                    # application-level error, since the app never saw the
+                    # request. Kept a little above the ALB's timeout so the ALB
+                    # always closes (or reuses) first, per AWS's own guidance.
+                    "KEEP_ALIVE_TIMEOUT": KEEP_ALIVE_TIMEOUT_MS,
                 },
                 # `field=` is what makes ECS extract a single JSON key rather
                 # than handing over the whole secret. Only the credentials go
