@@ -17,17 +17,33 @@ FAST_TEST_MODE=true \
 
 ### Web (frontend + REST API)
 
-Needs a real Postgres — the API layer lives here now:
+The REST API is served via Route Handlers in this package (`web/app/api/v1/`),
+backed by Postgres via Drizzle — start a database before `pnpm dev`:
 
 ```bash
-podman run -d --rm --name splatter-pg -p 5432:5432 \
-  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=test postgres:18
+podman run -d --name splatter-pg --restart=always \
+  -p 5432:5432 \
+  -v splatter-pg-data:/var/lib/postgresql/data \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=test \
+  -e POSTGRES_DB=ai_gaussian_splatter \
+  postgres:18
 ```
+
+Named volume keeps PG data across container recreate/reboot; `--restart=always` (and no `--rm`) brings the
+container back after a reboot. On Fedora with rootless Podman, also enable the restart helper once so that
+policy is honored after boot:
+
+```bash
+systemctl --user enable --now podman-restart.service
+```
+
+(For rootful Podman use `sudo systemctl enable --now podman-restart.service` instead.)
 
 ```bash
 cd web
 pnpm install                # no codegen step — Drizzle's schema is plain TypeScript
-cp .env.example .env.local  # fill in Clerk keys, DATABASE_URL, buckets, worker IDs
+cp .env.example .env.local  # fill in Clerk keys, database parts, buckets, worker IDs
 pnpm db:migrate             # apply pending migrations (drizzle-kit migrate)
 pnpm dev
 ```
@@ -47,7 +63,7 @@ After editing `web/lib/server/db/schema.ts`, run `pnpm db:generate` to emit a mi
 The `lib/server/**` Vitest project's Postgres-dependent tests (rate limiting, `getOrCreateUser`, the worker callback token) skip unless `TEST_DATABASE_URL` is set — CI wires it to a service container:
 
 ```bash
-(cd web && TEST_DATABASE_URL=postgresql://postgres:test@localhost:5432/postgres npx vitest run)
+(cd web && TEST_DATABASE_URL=postgresql://postgres:test@localhost:5432/ai_gaussian_splatter npx vitest run)
 ```
 
 ### Building and running the container locally
@@ -57,22 +73,34 @@ Exercises the production path — the standalone build, not `next dev`. Also the
 ```bash
 podman network create splatnet
 podman run -d --rm --name splatter-pg --network splatnet -p 5432:5432 \
-  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=test postgres:18
-(cd web && DATABASE_URL=postgresql://postgres:test@localhost:5432/postgres npx drizzle-kit migrate)
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=test \
+  -e POSTGRES_DB=ai_gaussian_splatter \
+  postgres:18
+(cd web && DATABASE_HOST=localhost DATABASE_NAME=ai_gaussian_splatter DATABASE_USER=postgres \
+  DATABASE_PASSWORD=test npx drizzle-kit migrate)
 
 cd web
 podman build \
   --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk \
   -t splatter-web:test .
 podman run -d --name splatter-web --network splatnet -p 8000:8000 \
-  -e DATABASE_URL=postgresql://postgres:test@splatter-pg:5432/postgres \
+  -e DATABASE_HOST=splatter-pg \
+  -e DATABASE_NAME=ai_gaussian_splatter \
+  -e DATABASE_USER=postgres \
+  -e DATABASE_PASSWORD=test \
   -e CLERK_SECRET_KEY=sk_test_fake \
-  -e UPLOADS_BUCKET=test-uploads -e SPLATS_BUCKET=test-splats \
-  -e AWS_REGION=us-west-2 -e AWS_ACCESS_KEY_ID=testing -e AWS_SECRET_ACCESS_KEY=testing \
-  -e WORKER_AMI_ID=ami-0123456789abcdef0 -e WORKER_SUBNET_ID=subnet-0123456789abcdef0 \
+  -e UPLOADS_BUCKET=test-uploads \
+  -e SPLATS_BUCKET=test-splats \
+  -e AWS_REGION=us-west-2 \
+  -e AWS_ACCESS_KEY_ID=testing \
+  -e AWS_SECRET_ACCESS_KEY=testing \
+  -e WORKER_AMI_ID=ami-0123456789abcdef0 \
+  -e WORKER_SUBNET_ID=subnet-0123456789abcdef0 \
   -e WORKER_SECURITY_GROUP_ID=sg-0123456789abcdef0 \
   -e WORKER_INSTANCE_PROFILE_ARN=arn:aws:iam::123456789012:instance-profile/worker \
-  -e APP_PUBLIC_URL=http://localhost:8000 splatter-web:test
+  -e APP_PUBLIC_URL=http://localhost:8000 \
+  splatter-web:test
 
 curl -s http://localhost:8000/api/v1/healthz   # {"status":"ok"}
 ```
@@ -83,16 +111,13 @@ The publishable key must be a `--build-arg`, not `-e`: `NEXT_PUBLIC_*` is inline
 
 The container image deliberately does not run migrations on boot (the service runs up to 3 tasks, which would race — drizzle-kit takes no advisory lock — and the running app would need DDL rights it otherwise doesn't). Run it as a deploy step instead:
 
-```bash
-(cd web && DATABASE_URL=<production-url> npx drizzle-kit migrate)
-```
-
-`drizzle.config.ts` resolves its connection the same way the running app does (`lib/server/databaseUrl.ts`), so the `DATABASE_HOST`/`NAME`/`USER`/`PASSWORD` parts work here too — useful when you're reading them straight out of the RDS secret rather than hand-assembling a URL:
+`drizzle.config.ts` resolves its connection the same way the running app does (`lib/server/databaseUrl.ts`), from the `DATABASE_HOST`/`PORT`/`NAME`/`USER`/`PASSWORD` parts — read those straight out of the RDS secret:
 
 ```bash
-aws secretsmanager get-secret-value --secret-id <rds-secret-arn> \
+eval "$(aws secretsmanager get-secret-value --secret-id <rds-secret-arn> \
   --query SecretString --output text | jq -r \
-  '"DATABASE_HOST=\(.host) DATABASE_PORT=\(.port) DATABASE_NAME=\(.dbname) DATABASE_USER=\(.username) DATABASE_PASSWORD=\(.password)"'
+  '"export DATABASE_HOST=\(.host) DATABASE_PORT=\(.port) DATABASE_NAME=\(.dbname) DATABASE_USER=\(.username) DATABASE_PASSWORD=\(.password)"')"
+(cd web && npx drizzle-kit migrate)
 ```
 
 The database lives in a private subnet, so run this from somewhere inside the VPC (or over a bastion/SSM port-forward), not a laptop.
