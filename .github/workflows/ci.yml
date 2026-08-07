@@ -71,7 +71,11 @@ jobs:
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk
       CLERK_SECRET_KEY: sk_test_fake_for_ci
       TEST_DATABASE_URL: postgresql://test:test@localhost:5432/test
-      DATABASE_URL: postgresql://test:test@localhost:5432/test
+      DATABASE_HOST: localhost
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: test
+      DATABASE_USER: test
+      DATABASE_PASSWORD: test
       # getEnv() validates all of these on first use, and getDb() calls it —
       # so any DB-touching page throws without them, including under the dev
       # server Playwright starts. Dummy values: presigning is local crypto and

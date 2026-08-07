@@ -12,11 +12,6 @@ import { databaseSsl, resolveDatabaseUrl } from "./databaseUrl";
  * infra/tests/test_backend_stack.py) and this assembles the URL from them.
  */
 describe("resolveDatabaseUrl", () => {
-  it("uses DATABASE_URL verbatim when set", () => {
-    const url = "postgresql://postgres:test@localhost:5432/postgres";
-    expect(resolveDatabaseUrl({ DATABASE_URL: url })).toBe(url);
-  });
-
   it("assembles the URL from the parts ECS supplies", () => {
     expect(
       resolveDatabaseUrl({
@@ -51,17 +46,6 @@ describe("resolveDatabaseUrl", () => {
     expect(url).toBe("postgresql://u:p%3Aa%3Fb%23c%25d@h:5432/n");
     // Round-trips: pg decodes these back to the original password.
     expect(decodeURIComponent(new URL(url as string).password)).toBe("p:a?b#c%d");
-  });
-
-  it("prefers DATABASE_URL when both forms are present", () => {
-    const url = resolveDatabaseUrl({
-      DATABASE_URL: "postgresql://override@h/db",
-      DATABASE_HOST: "h",
-      DATABASE_NAME: "n",
-      DATABASE_USER: "u",
-      DATABASE_PASSWORD: "p",
-    });
-    expect(url).toBe("postgresql://override@h/db");
   });
 
   it("returns undefined when the parts are incomplete, so drizzle-kit generate still runs", () => {

@@ -275,13 +275,12 @@ class BackendStack(cdk.Stack):
                     # rather than read off the load balancer, so it stays the
                     # stable custom domain the ALB is aliased to.
                     "APP_PUBLIC_URL": app_public_url,
-                    # The non-secret half of the connection. There is no
-                    # DATABASE_URL here on purpose: RDS writes its generated
+                    # The non-secret half of the connection, passed as parts
+                    # rather than an assembled URL: RDS writes its generated
                     # credentials to Secrets Manager as a JSON blob, and ECS
-                    # can only project individual *fields* of a secret into a
-                    # variable — it cannot assemble a postgresql:// string. So
-                    # the parts are passed separately and the app builds the
-                    # URL in web/lib/server/databaseUrl.ts.
+                    # cannot assemble a postgresql:// URL out of that blob
+                    # itself. The app builds the URL in
+                    # web/lib/server/databaseUrl.ts.
                     "DATABASE_HOST": database.db_instance_endpoint_address,
                     "DATABASE_PORT": database.db_instance_endpoint_port,
                     "DATABASE_NAME": DATABASE_NAME,
