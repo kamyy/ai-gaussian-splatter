@@ -15,7 +15,9 @@ export function UploadProgress() {
   const uploads = useAppStore(state => state.uploads);
   const items = Object.values(uploads);
 
-  if (items.length === 0) return null;
+  if (items.length === 0) {
+    return null;
+  }
 
   return (
     <Stack gap="xs">

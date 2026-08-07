@@ -18,7 +18,9 @@ export function useObjects() {
   const { getToken } = useAuth();
   return useSWR("objects", async () => {
     const token = await getToken();
-    if (!token) throw new Error("Not signed in");
+    if (!token) {
+      throw new Error("Not signed in");
+    }
     return listObjects(token);
   });
 }
@@ -27,7 +29,9 @@ export function useObject(objectId: string | undefined) {
   const { getToken } = useAuth();
   return useSWR(objectId ? ["object", objectId] : null, async () => {
     const token = await getToken();
-    if (!token) throw new Error("Not signed in");
+    if (!token) {
+      throw new Error("Not signed in");
+    }
     return getObject(token, objectId as string);
   });
 }
@@ -38,7 +42,9 @@ export function useJobStatus(objectId: string | undefined) {
     objectId ? ["job-status", objectId] : null,
     async () => {
       const token = await getToken();
-      if (!token) throw new Error("Not signed in");
+      if (!token) {
+        throw new Error("Not signed in");
+      }
       return getLatestJob(token, objectId as string);
     },
     {

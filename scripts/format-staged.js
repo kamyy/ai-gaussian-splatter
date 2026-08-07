@@ -14,7 +14,9 @@
 import { execFileSync } from "node:child_process";
 
 function hashFiles(files) {
-  if (files.length === 0) return new Map();
+  if (files.length === 0) {
+    return new Map();
+  }
   const hashes = execFileSync("git", ["hash-object", ...files], { encoding: "utf8" })
     .trim()
     .split("\n");
@@ -39,7 +41,9 @@ for (const pkg of PACKAGES) {
     .filter(f => f.startsWith(prefix) && f.endsWith(".py"))
     .map(f => f.slice(prefix.length));
 
-  if (relativePaths.length === 0) continue;
+  if (relativePaths.length === 0) {
+    continue;
+  }
 
   console.log(`\n> ${pkg}: uv run ruff format ${relativePaths.join(" ")}`);
   execFileSync("uv", ["run", "ruff", "format", ...relativePaths], { cwd: pkg, stdio: "inherit" });

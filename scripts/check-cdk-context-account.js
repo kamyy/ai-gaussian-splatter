@@ -24,7 +24,9 @@ const badKeys = Object.keys(context).filter(key => {
 
 if (badKeys.length > 0) {
   console.error(`\ncommit blocked: ${FILE} has a non-placeholder AWS account ID cached in:`);
-  for (const key of badKeys) console.error(`  ${key}`);
+  for (const key of badKeys) {
+    console.error(`  ${key}`);
+  }
   console.error(
     `\nThis repo is public — ${FILE} should only ever cache the placeholder account (${PLACEHOLDER_ACCOUNT}).`,
   );
