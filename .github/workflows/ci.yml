@@ -13,11 +13,11 @@ jobs:
   lint-format:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: package.json
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -34,8 +34,8 @@ jobs:
       run:
         working-directory: worker
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
       - run: uv sync --group dev
       - run: uv run ruff check .
       - run: uv run ruff format --check .
@@ -91,11 +91,11 @@ jobs:
       WORKER_INSTANCE_PROFILE_ARN: arn:aws:iam::123456789012:instance-profile/worker
       APP_PUBLIC_URL: http://localhost:3000
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: web/package.json
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -121,22 +121,22 @@ jobs:
       run:
         working-directory: infra
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Python checks run first and need only uv — no Node/pnpm setup cost
       # if one of them fails. Node's only needed for the `cdk` CLI
       # (npm-distributed regardless of app language — there's no
       # pip-installable substitute), so it's set up last, right before the
       # one step that actually needs it.
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v9.0.0
       - run: uv sync --group dev
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy app.py stacks
       - run: uv run pytest -v
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: infra/package.json
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
