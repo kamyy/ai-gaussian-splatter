@@ -26,7 +26,7 @@ jobs:
       # Single Biome invocation from repo root covers both scripts/*.js
       # and web/ in one pass — Biome doesn't need web's own
       # node_modules to lint/format files, only its own binary.
-      - run: npx biome ci .
+      - run: pnpm biome:ci
 
   worker:
     runs-on: ubuntu-latest
@@ -101,23 +101,19 @@ jobs:
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      # App Router types (including global `RouteContext<"/path">`, which Route
-      # Handlers use for typed `params`) are normally written to .next/types/ by
-      # `next dev` / `next build`. That dir is gitignored, so CI hasn't run
-      # either yet and plain `tsc --noEmit` fails with
-      # `TS2304: Cannot find name 'RouteContext'`. `next typegen` emits those
-      # types without a full build — MUST precede tsc.
-      - run: npx next typegen
-      - run: npx tsc --noEmit
+      # pnpm typecheck runs `next typegen` before `tsc --noEmit` — required on
+      # a clean checkout, since CI has never run `next dev`/`next build` to
+      # generate the App Router route types tsc needs. See AGENTS.md.
+      - run: pnpm typecheck
       # Applies migrations to the service container; the server test project's
       # globalSetup also does this, so this step mainly fails fast on a bad
       # migration before the suite starts.
-      - run: npx drizzle-kit migrate
-      - run: npx vitest run
-      - run: npx next build
+      - run: pnpm db:migrate
+      - run: pnpm test
+      - run: pnpm build
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
-      - run: npx playwright test
+      - run: pnpm test:e2e
 
   infra:
     runs-on: ubuntu-latest
@@ -151,4 +147,4 @@ jobs:
       # credentials configured (it runs on every pull_request, including
       # forks) — validates templates only, never a real deploy.
       - name: cdk synth
-        run: npx cdk synth
+        run: pnpm synth

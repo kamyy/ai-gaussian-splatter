@@ -17,8 +17,7 @@ FAST_TEST_MODE=true \
 
 ### Web (frontend + REST API)
 
-The REST API is served via Route Handlers in this package (`web/app/api/v1/`),
-backed by Postgres via Drizzle — start a database before `pnpm dev`:
+The REST API is served via Route Handlers in this package (`web/app/api/v1/`), backed by Postgres via Drizzle — start a database before `pnpm dev`:
 
 ```bash
 podman run -d --name splatter-pg --restart=always \
@@ -30,9 +29,7 @@ podman run -d --name splatter-pg --restart=always \
   postgres:18
 ```
 
-Named volume keeps PG data across container recreate/reboot; `--restart=always` (and no `--rm`) brings the
-container back after a reboot. On Fedora with rootless Podman, also enable the restart helper once so that
-policy is honored after boot:
+Named volume keeps PG data across container recreate/reboot; `--restart=always` (and no `--rm`) brings the container back after a reboot. On Fedora with rootless Podman, also enable the restart helper once so that policy is honored after boot:
 
 ```bash
 systemctl --user enable --now podman-restart.service
@@ -55,15 +52,15 @@ After editing `web/lib/server/db/schema.ts`, run `pnpm db:generate` to emit a mi
 ### Full test suite
 
 ```bash
-(cd web && npx tsc --noEmit && npx biome ci . && npx vitest run && npx playwright test)
+(cd web && pnpm typecheck && pnpm biome:ci && pnpm test && pnpm test:e2e)
 (cd worker && uv run ruff check . && uv run mypy pipeline && uv run pytest -v)
-(cd infra && uv run ruff check . && uv run mypy app.py stacks && uv run pytest -v && npx cdk synth)
+(cd infra && uv run ruff check . && uv run mypy app.py stacks && uv run pytest -v && pnpm synth)
 ```
 
 The `lib/server/**` Vitest project's Postgres-dependent tests (rate limiting, `getOrCreateUser`, the worker callback token) skip unless `TEST_DATABASE_URL` is set — CI wires it to a service container:
 
 ```bash
-(cd web && TEST_DATABASE_URL=postgresql://postgres:test@localhost:5432/ai_gaussian_splatter npx vitest run)
+(cd web && TEST_DATABASE_URL=postgresql://postgres:test@localhost:5432/ai_gaussian_splatter pnpm test)
 ```
 
 ### Building and running the container locally
@@ -78,7 +75,7 @@ podman run -d --rm --name splatter-pg --network splatnet -p 5432:5432 \
   -e POSTGRES_DB=ai_gaussian_splatter \
   postgres:18
 (cd web && DATABASE_HOST=localhost DATABASE_NAME=ai_gaussian_splatter DATABASE_USER=postgres \
-  DATABASE_PASSWORD=test npx drizzle-kit migrate)
+  DATABASE_PASSWORD=test pnpm db:migrate)
 
 cd web
 podman build \
@@ -117,7 +114,7 @@ The container image deliberately does not run migrations on boot (the service ru
 eval "$(aws secretsmanager get-secret-value --secret-id <rds-secret-arn> \
   --query SecretString --output text | jq -r \
   '"export DATABASE_HOST=\(.host) DATABASE_PORT=\(.port) DATABASE_NAME=\(.dbname) DATABASE_USER=\(.username) DATABASE_PASSWORD=\(.password)"')"
-(cd web && npx drizzle-kit migrate)
+(cd web && pnpm db:migrate)
 ```
 
 The database lives in a private subnet, so run this from somewhere inside the VPC (or over a bastion/SSM port-forward), not a laptop.

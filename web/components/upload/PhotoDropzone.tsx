@@ -21,7 +21,9 @@ export function PhotoDropzone({ objectId, onAllUploaded }: PhotoDropzoneProps) {
   const showBanner = useAppStore(state => state.showBanner);
 
   const handleUpload = async () => {
-    if (files.length === 0) return;
+    if (files.length === 0) {
+      return;
+    }
     setSubmitting(true);
 
     const token = await getToken();

@@ -17,12 +17,18 @@ export default function ObjectDetailPage({ params }: { params: Promise<{ id: str
 
   const { data: splat } = useSWR(object?.status === "complete" ? ["splat", id] : null, async () => {
     const token = await getToken();
-    if (!token) throw new Error("Not signed in");
+    if (!token) {
+      throw new Error("Not signed in");
+    }
     return getSplatUrl(token, id);
   });
 
-  if (isLoading) return <Skeleton height={300} />;
-  if (error || !object) return <Alert color="red">Object not found.</Alert>;
+  if (isLoading) {
+    return <Skeleton height={300} />;
+  }
+  if (error || !object) {
+    return <Alert color="red">Object not found.</Alert>;
+  }
 
   return (
     <Stack>

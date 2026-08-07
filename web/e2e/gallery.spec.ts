@@ -6,22 +6,20 @@ import { expect, test } from "@playwright/test";
 // route mocking — see playwright.config.ts for why.
 //
 // The full authenticated golden path (sign in -> upload -> trigger -> poll
-// -> view, per plan §8) additionally needs Clerk's `@clerk/testing` package
-// with real Clerk test-mode API keys to bypass interactive sign-in, which
-// this sandbox doesn't have configured. That's the next piece to add here,
-// not something to fake — see plan M6/M7.
+// -> view, per plan §8) needs Clerk's `@clerk/testing` package with real
+// Clerk test-mode API keys to bypass interactive sign-in, not configured in
+// this sandbox — see plan M6/M7.
 
 const GALLERY_ITEM_ID = "11111111-1111-1111-1111-111111111111";
 
-// SKIPPED, and it is a real gap rather than a flake.
+// SKIPPED: a real gap, not a flake. app/gallery/page.tsx queries the database
+// directly, so e2e/mock-backend.mjs serves data nothing requests and the page
+// renders empty.
 //
-// app/gallery/page.tsx queries the database directly, so e2e/mock-backend.mjs serves
-// data nothing requests and the page renders empty.
-//
-// The fix is to seed the gallery row into a real test database and point the
-// dev server at it, deleting mock-backend.mjs entirely — a harness redesign
-// deliberately deferred out of the consolidation. Un-skip as part of that work;
-// do not "fix" it by asserting against an empty page.
+// Fix: seed the gallery row into a real test database and point the dev
+// server at it, deleting mock-backend.mjs — a deferred harness redesign.
+// Un-skip as part of that work; don't fix this by asserting against an empty
+// page.
 test.skip("gallery page lists items and links to detail pages with real OG data", async ({ page }) => {
   await page.goto("/gallery");
 

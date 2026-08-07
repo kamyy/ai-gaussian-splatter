@@ -1,24 +1,17 @@
 """3D Gaussian Splatting training via gsplat (plan: Apache-2.0, actively
 maintained, reduced iteration count for object-centric captures).
 
-IMPORTANT — this is the one module in the pipeline that genuinely cannot be
-fully verified without a real GPU with a CUDA toolkit and a real COLMAP
-reconstruction (see plan §8, M0/M1: "the one piece of real complexity...
-needs real-hardware validation"). The structure below (parse sparse model ->
-init Gaussians from the point cloud -> optimize against posed photos ->
-periodic densification) follows the standard 3DGS training algorithm and
-gsplat's public `rasterization()` API.
-
-Validation status as of writing: `_init_gaussians`, `_build_optimizer`, and
-the call signature/return-tuple unpacking in `_render` were smoke-tested
-against `gsplat.rasterization()`'s actual installed signature (confirmed
-`(means, quats, scales, opacities, colors, viewmats, Ks, width, height, ...)
--> (renders, alphas, meta)`, matching this module). The actual CUDA kernel
-execution was *not* verified end-to-end: the sandbox this was written in has a GPU driver
-but no `nvcc`/CUDA toolkit for gsplat's JIT-compiled kernels, which will be
-present on the real worker AMI (plan §6) but wasn't worth installing just
-for this check. Per plan M0/M1: run this against a real capture on real
-hardware before trusting it in production.
+Not verified end-to-end on real GPU hardware: the sandbox this was written in
+has a GPU driver but no `nvcc`/CUDA toolkit for gsplat's JIT-compiled kernels
+(present on the real worker AMI, plan §6, but not installed here). The
+structure (parse sparse model -> init Gaussians from the point cloud ->
+optimize against posed photos -> periodic densification) follows the standard
+3DGS algorithm and gsplat's public `rasterization()` API; `_init_gaussians`,
+`_build_optimizer`, and `_render`'s call signature were smoke-tested against
+gsplat's actual installed signature (`(means, quats, scales, opacities,
+colors, viewmats, Ks, width, height, ...) -> (renders, alphas, meta)`), but
+the CUDA kernel execution itself was not. Run this against a real capture on
+real hardware before trusting it in production (plan M0/M1).
 
 Simplifications relative to the original paper, made deliberately for a
 reduced-iteration, object-centric MVP rather than by oversight:

@@ -18,20 +18,28 @@ export default function NewObjectPage() {
   const [starting, setStarting] = useState(false);
 
   const handleCreate = async () => {
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      return;
+    }
     setCreating(true);
     const token = await getToken();
-    if (!token) return;
+    if (!token) {
+      return;
+    }
     const obj = await createObject(token, name.trim());
     setObjectId(obj.id);
     setCreating(false);
   };
 
   const handleStartProcessing = async () => {
-    if (!objectId) return;
+    if (!objectId) {
+      return;
+    }
     setStarting(true);
     const token = await getToken();
-    if (!token) return;
+    if (!token) {
+      return;
+    }
     await triggerProcess(token, objectId);
     router.push(`/objects/${objectId}`);
   };

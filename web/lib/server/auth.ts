@@ -39,24 +39,18 @@ export async function requireUser(): Promise<User> {
 }
 
 /**
- * The client IP the per-IP rate limit is keyed on (plan §5) — read from
- * X-Forwarded-For, which the ALB in front of this app always sets.
+ * The client IP the per-IP rate limit is keyed on (plan §5), from the LAST
+ * hop of `X-Forwarded-For`. The ALB appends the address it actually saw
+ * rather than replacing the header, so a spoofed `X-Forwarded-For: 1.2.3.4`
+ * arrives as `1.2.3.4, <real client>` — trusting the first entry would let a
+ * caller mint a fresh rate-limit bucket per request just by varying it.
  *
- * Takes the LAST hop, not the first. An ALB *appends* the address it actually
- * saw to whatever the client sent, so with a spoofed
- * `X-Forwarded-For: 1.2.3.4` the header arrives as `1.2.3.4, <real client>`.
- * Trusting the first entry would let any caller mint a fresh rate-limit bucket
- * per request just by varying that header, defeating the multi-account defense
- * this exists to be. Only the entry the ALB itself appended is trustworthy.
+ * This assumes exactly one trusted proxy (the ALB); adding a second one
+ * (e.g. CloudFront) in front of it would make the last hop that proxy's own
+ * shared address instead, and this function would need to change too.
  *
- * NOTE: this assumes exactly one trusted proxy. Putting CloudFront (or any
- * second proxy) in front of the ALB shifts the trustworthy position again —
- * the last hop would then be CloudFront's address, shared by every user. That
- * change requires revisiting this function, not just the infrastructure.
- *
- * NextRequest exposes no socket address, so there's no peer to fall back to.
- * Behind the ALB the header is always present; locally, unproxied requests all
- * share the "unknown" bucket.
+ * `NextRequest` has no socket address to fall back to: unproxied local
+ * requests all share the "unknown" bucket.
  */
 export function getClientIp(request: NextRequest): string {
   const forwardedFor = request.headers.get("X-Forwarded-For");

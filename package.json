@@ -8,7 +8,8 @@
     "guard:cdk-context": "node scripts/check-cdk-context-account.js",
     "format-staged": "node scripts/format-staged.js",
     "lint": "node scripts/lint.js",
-    "typecheck": "node scripts/typecheck.js"
+    "typecheck": "node scripts/typecheck.js",
+    "biome:ci": "biome ci ."
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.6",

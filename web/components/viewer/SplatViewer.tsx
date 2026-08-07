@@ -27,7 +27,9 @@ function SplatScene({ splatUrl, onError }: { splatUrl: string; onError: (message
     dropInViewer
       .addSplatScenes([{ path: splatUrl }])
       .then(() => {
-        if (!disposed) setViewer(dropInViewer);
+        if (!disposed) {
+          setViewer(dropInViewer);
+        }
       })
       .catch((err: unknown) => onError(err instanceof Error ? err.message : "Failed to load splat"));
 
@@ -37,7 +39,9 @@ function SplatScene({ splatUrl, onError }: { splatUrl: string; onError: (message
     };
   }, [splatUrl, onError]);
 
-  if (!viewer) return null;
+  if (!viewer) {
+    return null;
+  }
   return <primitive object={viewer} />;
 }
 

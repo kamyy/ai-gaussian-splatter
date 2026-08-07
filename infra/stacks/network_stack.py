@@ -28,19 +28,18 @@ class NetworkStack(cdk.Stack):
             ],
         )
 
-        # CloudFormation's GroupDescription pattern disallows several common
-        # punctuation characters (e.g. ">", the unicode em dash "—") that
-        # are easy to reach for by habit — plain ASCII only below.
+        # CloudFormation's GroupDescription disallows several common
+        # punctuation characters (e.g. ">", em dash "—") — plain ASCII only
+        # below.
         #
-        # Passed to the ALB in BackendStack, but declared here so that both
-        # ends of the ALB-to-tasks ingress rule live in one stack. That rule is
-        # not written by hand anywhere: ApplicationLoadBalancedFargateService
-        # registers the target group as a connectable, and CDK derives the rule
-        # from the container port. Declaring this group in BackendStack instead
-        # makes `cdk synth` fail outright — the rule's source would be a
-        # BackendStack group while its target (backend_security_group) is a
-        # NetworkStack one, and BackendStack already depends on NetworkStack,
-        # so CDK reports a DependencyCycle.
+        # Declared here, not in BackendStack, so both ends of the
+        # auto-generated ALB-to-tasks ingress rule live in one stack:
+        # declaring it in BackendStack instead would make its source a
+        # BackendStack group referencing a NetworkStack one, which fails
+        # `cdk synth` with a DependencyCycle (BackendStack already depends on
+        # NetworkStack). This is also why backend_stack.py builds its ALB
+        # manually rather than via the CDK pattern — the pattern would create
+        # its own security group instead of using this one.
         self.alb_security_group = ec2.SecurityGroup(
             self,
             "AlbSecurityGroup",

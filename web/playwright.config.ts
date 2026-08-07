@@ -4,10 +4,10 @@ import { defineConfig, devices } from "@playwright/test";
 // fast and free to run on every PR, unlike the real-pipeline integration
 // tests which stay manual/milestone-gated.
 //
-// STALE — see the skipped test in e2e/gallery.spec.ts. The gallery/view pages
-// read the database in-process, so nothing requests the mock server below and
-// NEXT_PUBLIC_API_BASE_URL is dead (lib/api.ts is same-origin). Replacing both
-// with a seeded test database is deferred work.
+// STALE — see the skipped test in e2e/gallery.spec.ts: gallery/view pages
+// read the database in-process, so nothing requests the mock server below,
+// and NEXT_PUBLIC_API_BASE_URL is dead (lib/api.ts is same-origin). A seeded
+// test database is the deferred replacement for both.
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,

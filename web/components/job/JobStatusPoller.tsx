@@ -44,7 +44,9 @@ export function JobStatusPoller({ objectId }: JobStatusPollerProps) {
   if (error) {
     return <Text c="dimmed">No processing job yet.</Text>;
   }
-  if (!job) return null;
+  if (!job) {
+    return null;
+  }
 
   return (
     <Stack gap="xs">
