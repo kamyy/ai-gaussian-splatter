@@ -6,13 +6,20 @@
 // (scripts/lint.js's `biome lint .` and `ruff format --check`), since
 // there's no "re-stage and continue" concept there.
 //
-// `biome check --write --staged` fixes the working tree but doesn't
-// re-stage — unlike the old pretty-quick --staged, which did — so the
-// fix is re-added explicitly below, the same way the Python half
-// already did.
+// Re-stages only files the formatters actually changed, by comparing working
+// tree content hashes before and after: `git add <every originally staged
+// file>` would also re-stage any other unstaged edit already sitting in that
+// file's working tree (e.g. a deliberate partial `git add -p` stage),
+// silently pulling unrelated changes into the commit.
 import { execFileSync } from "node:child_process";
 
-execFileSync("npx", ["biome", "check", "--write", "--staged", "--no-errors-on-unmatched"], { stdio: "inherit" });
+function hashFiles(files) {
+  if (files.length === 0) return new Map();
+  const hashes = execFileSync("git", ["hash-object", ...files], { encoding: "utf8" })
+    .trim()
+    .split("\n");
+  return new Map(files.map((file, i) => [file, hashes[i]]));
+}
 
 const stagedFiles = execFileSync("git", ["diff", "--cached", "--name-only", "--diff-filter=ACMR"], {
   encoding: "utf8",
@@ -20,9 +27,9 @@ const stagedFiles = execFileSync("git", ["diff", "--cached", "--name-only", "--d
   .split("\n")
   .filter(Boolean);
 
-if (stagedFiles.length > 0) {
-  execFileSync("git", ["add", ...stagedFiles], { stdio: "inherit" });
-}
+const before = hashFiles(stagedFiles);
+
+execFileSync("npx", ["biome", "check", "--write", "--staged", "--no-errors-on-unmatched"], { stdio: "inherit" });
 
 const PACKAGES = ["worker", "infra"];
 
@@ -36,5 +43,11 @@ for (const pkg of PACKAGES) {
 
   console.log(`\n> ${pkg}: uv run ruff format ${relativePaths.join(" ")}`);
   execFileSync("uv", ["run", "ruff", "format", ...relativePaths], { cwd: pkg, stdio: "inherit" });
-  execFileSync("git", ["add", ...relativePaths.map(p => `${pkg}/${p}`)], { stdio: "inherit" });
+}
+
+const after = hashFiles(stagedFiles);
+const changed = stagedFiles.filter(f => before.get(f) !== after.get(f));
+
+if (changed.length > 0) {
+  execFileSync("git", ["add", ...changed], { stdio: "inherit" });
 }
