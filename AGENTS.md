@@ -6,6 +6,8 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
 
 **Code comments and markdown docs (this file, `docs/`, etc.) describe current behavior only — never the history of what changed to get here.** No prior libraries that were replaced, no old version numbers, no "this used to fail with X" or "this was blocked until Y." That's what `git log`/commit messages are for; a reader here wants the current fact, not an implementation's backstory.
 
+**Be concise — say the fact and the non-obvious reason for it, not a tl;dr essay around it.** A comment or doc paragraph should be the shortest accurate statement of the current behavior and its reason, not a walkthrough of alternatives considered or a restatement of the same point from multiple angles.
+
 ## Structure
 
 Monorepo, three independent packages, each with its own dependency manager:
