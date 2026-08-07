@@ -31,7 +31,7 @@ These cost real debugging time — check here before assuming standard behavior.
 
 - **Prefer `function` declarations/expressions over arrow functions**, except when a function is assigned to a locally-scoped variable (a closure over surrounding state/props, e.g. `const handleClick = () => {...}` inside a component) or passed inline as an argument (`.map(x => ...)`, `useEffect(() => {...})`). This includes top-level exports: `export function foo() {}`, not `export const foo = () => {}` — a module-scope `const` that just names a function declaration isn't a closure, so it doesn't qualify for the exception even though it "assigns to a variable."
 - **`next typegen` must run before `tsc --noEmit` on a clean checkout.** Our Route Handlers type `params` with the global `RouteContext<"/path">` helper. Next normally writes that (and the rest of the App Router types) into `web/.next/types/` as a side effect of `next dev` or `next build` — but that directory is gitignored, so a fresh clone has never run either command and the helpers are missing. Plain `tsc --noEmit` then fails with `TS2304: Cannot find name 'RouteContext'`. `next typegen` exists for exactly this: emit those route types without starting the app or doing a full build. CI and `scripts/typecheck.js` run it first; locally it often "just works" only because you already ran `next dev`/`next build` earlier.
-- **`web/` runs TypeScript `^7.0.2`, which has no JS Compiler API — Next.js's typecheck step needs `useTypeScriptCli` for that reason, and it defaults on as of Next `16.3.0`.** Without it, Next can't load `typescript` at all, including failing to load `next.config.ts` itself. No manual flag is needed on `16.3.0+`; confirmed by both `npx tsc --noEmit` and `npx next build`'s own "Running TypeScript" step passing clean. `infra/` has no TypeScript dependency at all (Python CDK).
+- **`web/` runs TypeScript `^7.0.2`, which has no JS Compiler API — Next.js's typecheck step needs `useTypeScriptCli` for that reason, and it defaults on as of Next `16.3.0`.** Without it, Next can't load `typescript` at all, including failing to load `next.config.ts` itself. No manual flag is needed on `16.3.0+`; confirmed by both `pnpm typecheck` and `pnpm build`'s own "Running TypeScript" step passing clean. `infra/` has no TypeScript dependency at all (Python CDK).
 - **Server Components reading request-time data need `export const dynamic = "force-dynamic"`** — otherwise `next build` tries to statically prerender them and bakes the data into the build. They call `web/lib/server/data.ts` directly rather than fetching this app's own API over HTTP.
 - **Playwright's `page.route()` can't intercept server-side work** done in Next's SSR process (a different Node process than the browser) — gallery/share pages read the database via `lib/server/data.ts` directly, so `web/e2e/mock-backend.mjs` and `NEXT_PUBLIC_API_BASE_URL` in `playwright.config.ts` are unused (the gallery E2E stays `test.skip`). Seed a test database for E2E instead of mocking HTTP; see Known gaps.
 
@@ -109,16 +109,16 @@ All five `sslmode` variants (`disable`, `require`, `prefer`, `verify-ca`, `verif
 ## Testing
 
 ```bash
-(cd web && npx next typegen && npx tsc --noEmit && npx biome ci . && npx vitest run && npx playwright test)
+(cd web && pnpm typecheck && pnpm biome:ci && pnpm test && pnpm test:e2e)
 (cd worker && uv run ruff check . && uv run mypy pipeline && uv run pytest -v)
-(cd infra && uv run ruff check . && uv run mypy app.py stacks && uv run pytest -v && npx cdk synth)
+(cd infra && uv run ruff check . && uv run mypy app.py stacks && uv run pytest -v && pnpm synth)
 ```
 
 `web/`'s Postgres-dependent tests skip unless `TEST_DATABASE_URL` is set — pass it to actually run them (see `docs/RUNBOOK.md`).
 
 Run the relevant subset after any change — all of the above pass cleanly as of this writing. Real bugs were caught this way repeatedly during initial scaffolding (see `docs/ARCHITECTURE.md`'s testing section and git history) — don't skip validation because something "looks right."
 
-Note: `npx biome ci .` above validates the same thing CI checks, but not from inside CI's `web` job — it's a separate root-scoped `lint-format` job (single `biome ci .` run from repo root, covering `scripts/*.js` too, not just `web/`). The `web` job itself only runs `next typegen`/`tsc`/`drizzle-kit migrate`/`vitest`/`next build`/`playwright`.
+Note: `pnpm biome:ci` above validates the same thing CI checks, but not from inside CI's `web` job — it's a separate root-scoped `lint-format` job (its own `pnpm biome:ci`, run from repo root, covering `scripts/*.js` too, not just `web/`). The `web` job itself only runs `next typegen`/`tsc`/`drizzle-kit migrate`/`vitest`/`next build`/`playwright`.
 
 ## State / what's next
 
