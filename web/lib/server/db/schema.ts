@@ -16,17 +16,17 @@ import { JOB_STATUSES, PHOTO_UPLOAD_STATUSES, SPLAT_STATUSES } from "@/lib/types
 /**
  * Data model — plan §2.
  *
- * PascalCase-free by design: table names, column names and enum labels are all
- * snake_case in Postgres, and every column states its database name explicitly
- * rather than relying on drizzle's `casing` option. The name is then written
- * where it is read, and there is no derivation rule that could disagree between
- * a generated migration and a runtime query.
+ * PascalCase-free by design: table, column, and enum names are all snake_case
+ * in Postgres, with each column stating its database name explicitly rather
+ * than relying on drizzle's `casing` option — so a migration and a runtime
+ * query can never silently disagree on a name.
  *
- * The table export is `splats`, not `objects`, which would shadow nothing but
- * reads badly next to JS's Object. REST paths stay /objects/… — public contract.
+ * The table export is `splats`, not `objects`, to avoid shadowing JS's
+ * `Object`; REST paths stay /objects/… regardless — that's the public
+ * contract.
  *
- * Enum labels come from lib/types.ts so the client-side unions and the Postgres
- * labels are one list.
+ * Enum labels come from lib/types.ts, so the client-side unions and the
+ * Postgres labels are one list.
  */
 
 export const splatStatus = pgEnum("splat_status", SPLAT_STATUSES);

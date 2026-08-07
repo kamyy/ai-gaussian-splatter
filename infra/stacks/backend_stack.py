@@ -97,23 +97,20 @@ class BackendStack(cdk.Stack):
             removal_policy=cdk.RemovalPolicy.RETAIN,
         )
 
-        # Pulls the container image and writes logs — also the role ECS uses to
-        # fetch the DATABASE_URL secret's value before handing it to the
-        # container as an env var, so the DB secret grant belongs here, not on
-        # the task role.
+        # Pulls the container image and writes logs — also the role ECS uses
+        # to fetch the DB secret's value before handing it to the container as
+        # an env var, so the DB secret grant belongs here, not on the task
+        # role.
         #
         # Deliberately not using the AmazonECSTaskExecutionRolePolicy managed
-        # policy: its JSON (verified against AWS's managed policy reference)
-        # grants ecr:GetAuthorizationToken, logs:CreateLogStream, and
-        # logs:PutLogEvents at Resource: "*" — all three are unavoidably
-        # account-wide (GetAuthorizationToken isn't resource-scopable; ECS
-        # doesn't know the log group ahead of time) — but it also grants the
-        # actual image-pull actions (BatchCheckLayerAvailability,
-        # GetDownloadUrlForLayer, BatchGetImage) at Resource: "*", i.e. read
-        # access to every ECR repo in the account. Reconstructed below: the two
-        # unavoidably-broad logs actions explicitly, and GetAuthorizationToken
-        # comes along for free from grant_pull, which scopes the real pull
-        # actions to this one repository instead of every repo in the account.
+        # policy: besides the two logs actions below (unavoidably
+        # account-wide, since ECS doesn't know the log group ahead of time),
+        # it also grants the image-pull actions (BatchCheckLayerAvailability,
+        # GetDownloadUrlForLayer, BatchGetImage) at Resource: "*" — read
+        # access to every ECR repo in the account. Reconstructed below
+        # instead: the two logs actions explicitly, plus `grant_pull`, which
+        # scopes the real pull actions to this one repository (see its inline
+        # comment for the one action that stays account-wide).
         execution_role = iam.Role(
             self,
             "ExecutionRole",
@@ -183,13 +180,12 @@ class BackendStack(cdk.Stack):
         )
 
         # An ALB is regional and can only reference a certificate in its own
-        # region, so this has to be a certificate in this stack's region —
-        # which is what declaring it here gets. A us-east-1 certificate cannot
-        # be attached to this ALB: us-east-1 is special only for CloudFront,
-        # which reads certificates from that region alone no matter where the
-        # origin lives. Public ACM certificates are free, and Route 53 hosted
-        # zones are global, so DNS validation resolves against the same zone
-        # regardless of which region the certificate is issued in.
+        # region, which declaring it here gets — a us-east-1 certificate can't
+        # attach to this ALB. (us-east-1 is only special for CloudFront,
+        # unused here, which reads certificates from that region regardless of
+        # where the origin lives.) Certificates are free and Route 53 zones
+        # are global, so DNS validation is unaffected by which region issues
+        # the certificate.
         certificate = acm.Certificate(
             self,
             "Certificate",
@@ -197,11 +193,10 @@ class BackendStack(cdk.Stack):
             validation=acm.CertificateValidation.from_dns(hosted_zone),
         )
 
-        # Built here rather than left to the pattern so its security group can
-        # be one that NetworkStack owns. If the pattern creates the security
-        # group itself, the ALB-to-tasks ingress rule ends up pointing at a
-        # BackendStack group from a NetworkStack one and `cdk synth` fails with
-        # a DependencyCycle, since BackendStack already depends on NetworkStack.
+        # Built manually rather than via the CDK pattern, so its security
+        # group can be the one NetworkStack owns — see network_stack.py's
+        # alb_security_group comment for why the pattern's own group would
+        # cause a DependencyCycle.
         self.load_balancer = elbv2.ApplicationLoadBalancer(
             self,
             "LoadBalancer",
@@ -223,13 +218,11 @@ class BackendStack(cdk.Stack):
             domain_zone=hosted_zone,
             protocol=elbv2.ApplicationProtocol.HTTPS,
             redirect_http=True,
-            # Set explicitly because the default is weak: a listener created
-            # through the API or CloudFormation, as this one is, falls back to
-            # ELBSecurityPolicy-2016-08, which still negotiates TLS 1.0 and
-            # 1.1. (The console's default is the strong policy, so the AWS UI
-            # gives a misleading impression of what an unset policy means.)
-            # This is TLS 1.2 and 1.3 only, which every browser since ~2014
-            # and the worker's Python client all speak.
+            # Set explicitly: a listener created via the API or CloudFormation
+            # (as this one is) defaults to the weak ELBSecurityPolicy-2016-08,
+            # which still negotiates TLS 1.0/1.1 — unlike the console, whose
+            # default is this same strong policy. TLS 1.2/1.3 only, which
+            # every browser since ~2014 and the worker's Python client speak.
             ssl_policy=elbv2.SslPolicy.RECOMMENDED_TLS,
             cpu=256,  # 0.25 vCPU
             memory_limit_mib=512,
@@ -285,25 +278,25 @@ class BackendStack(cdk.Stack):
                     "DATABASE_PORT": database.db_instance_endpoint_port,
                     "DATABASE_NAME": DATABASE_NAME,
                     # RDS Postgres 15+ defaults to rds.force_ssl=1, and its
-                    # server certificates chain to Amazon's own root CAs, which
-                    # are absent from Node's trust store — so the connection
-                    # needs an explicit CA bundle or it fails either
-                    # unencrypted ("no pg_hba.conf entry ... no encryption") or
-                    # unverified ("UNABLE_TO_VERIFY_LEAF_SIGNATURE"). web/Dockerfile
-                    # bakes the bundle in at this path; setting it here rather
-                    # than in the image keeps a locally-run container able to
-                    # talk to a plain Postgres.
+                    # certificates chain to Amazon's own root CAs, absent from
+                    # Node's trust store — without this CA bundle the
+                    # connection fails either unencrypted ("no pg_hba.conf
+                    # entry ... no encryption") or unverified
+                    # ("UNABLE_TO_VERIFY_LEAF_SIGNATURE"). web/Dockerfile bakes
+                    # the bundle into the image; set as an env var (not
+                    # hardcoded) so a locally-run container can still talk to
+                    # a plain Postgres.
                     "DATABASE_SSL_CA": RDS_CA_BUNDLE_PATH,
-                    # The ALB above pools and reuses connections to the target
-                    # for up to its own idle timeout (60s, the CDK default we
-                    # don't override). Node's http server closes idle keep-alive
-                    # sockets after 5s by default, and Next's standalone
-                    # server.js only overrides that when this env var is set
-                    # (build/utils.js). Without it, the ALB can hand a request
-                    # to a socket the app already closed — a 502 with no
-                    # application-level error, since the app never saw the
-                    # request. Kept a little above the ALB's timeout so the ALB
-                    # always closes (or reuses) first, per AWS's own guidance.
+                    # The ALB pools connections to the target for up to its
+                    # own idle timeout (60s, the CDK default, unchanged).
+                    # Node's http server closes idle keep-alive sockets after
+                    # 5s by default; Next's standalone server.js only
+                    # overrides that when this env var is set (build/utils.js).
+                    # Without it, the ALB can hand a request to a socket the
+                    # app already closed — a 502 with no application-level
+                    # error, since the app never saw the request. Kept a
+                    # little above the ALB's timeout so the ALB always closes
+                    # (or reuses) the connection first, per AWS's guidance.
                     "KEEP_ALIVE_TIMEOUT": KEEP_ALIVE_TIMEOUT_MS,
                 },
                 # `field=` is what makes ECS extract a single JSON key rather

@@ -11,14 +11,13 @@ IMAGE_TAG = "latest"
 class RegistryStack(cdk.Stack):
     """The ECR repository holding the `web/` container image.
 
-    Separate from BackendStack because its contents outlive any particular
-    service, the same reason DataStack holds RDS and S3. Keeping it apart is
-    also what makes a first deploy possible: the ECS service is pinned to an
-    image tag, so the repository has to exist and hold an image *before* the
-    service is created. If both lived in one stack, the service's tasks would
-    have nothing to pull, the deployment circuit breaker would roll the stack
-    back, and the retained repository would then collide by name with the
-    next attempt to create it — a state no retry can clear.
+    Separate from BackendStack for the same reason DataStack holds RDS and
+    S3: its contents outlive any particular service. This also makes a first
+    deploy possible — the ECS service is pinned to an image tag, so the
+    repository must exist and hold an image before the service is created.
+    If both lived in one stack, the circuit breaker would roll a first
+    deploy back with nothing to pull, and the retained repository would then
+    collide by name with the next attempt — a state no retry clears.
     """
 
     def __init__(self, scope: Construct, id: str, **kwargs) -> None:

@@ -98,28 +98,19 @@ if __name__ == "__main__":
     app = cdk.App()
 
     # Region is hardcoded, not read from CDK_DEFAULT_REGION: the CDK CLI
-    # unconditionally overwrites that env var right before spawning this app,
-    # using the SDK's own default-region resolution (which falls back to
-    # us-east-1 with no credentials configured) — any value we export for it
-    # gets silently clobbered.
+    # unconditionally overwrites that env var before spawning this app (via
+    # the SDK's own default-region resolution, which falls back to us-east-1
+    # with no credentials), so anything exported for it gets clobbered.
     #
-    # Account deliberately does NOT read CDK_DEFAULT_ACCOUNT either, even
-    # though the CLI leaves that one alone when it can't resolve an account.
-    # The problem is the inverse case: whenever real AWS credentials ARE
-    # active (e.g. an SSO login on a dev machine), the CLI resolves them via a
-    # real STS call and sets CDK_DEFAULT_ACCOUNT to that real account ID
-    # before spawning this app — so reading it would make `cdk synth`'s
-    # behavior (and its AZ-lookup cache writes to cdk.context.json) depend on
-    # whoever's local login state happens to be active. AWS_ACCOUNT_ID is a
-    # name the CDK CLI never touches, so this app's account resolution is
-    # fully decoupled from STS and from local/CI login state — it only ever
-    # changes when a real deploy deliberately sets it (a GitHub Actions
-    # secret in CI, or an explicit export for a manual deploy). The fallback
-    # below is AWS's own well-known placeholder account ID, used so
-    # `cdk synth` works out of the box with no setup — it only ever lands in
-    # template ARNs, never in an actual deploy, since `cdk deploy` still needs
-    # real credentials to authenticate against CloudFormation regardless of
-    # this value.
+    # Account reads AWS_ACCOUNT_ID, not CDK_DEFAULT_ACCOUNT, for the opposite
+    # reason: whenever real AWS credentials ARE active, the CLI resolves them
+    # via STS and overwrites CDK_DEFAULT_ACCOUNT with that real account ID —
+    # so `cdk synth`'s behavior (and its cdk.context.json AZ-lookup cache)
+    # would otherwise depend on whoever's local login happens to be active.
+    # AWS_ACCOUNT_ID is a name the CLI never touches, so it only changes when
+    # a deploy deliberately sets it (a CI secret, or an explicit export). The
+    # fallback below is AWS's placeholder account ID, letting `cdk synth` work
+    # with no setup — `cdk deploy` still needs real credentials regardless.
     env = cdk.Environment(account=os.environ.get("AWS_ACCOUNT_ID", "123456789012"), region="us-west-2")
 
     # Worker AMI/subnet are filled in once M5 (EC2 spot launch, per plan §7)
