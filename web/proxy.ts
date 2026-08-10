@@ -1,4 +1,5 @@
-// Route protection for the (authenticated) route group.
+// Session parsing for every route. Auth checks live on the resources
+// themselves, not here.
 //
 // Named `proxy.ts`, not `middleware.ts`: Next.js 16 renamed the file
 // convention and exported function to `proxy`. clerkMiddleware()'s handler
@@ -9,20 +10,13 @@
 // from nowhere else, and every handler calling auth() then throws
 // "clerkMiddleware() was not run". `next build` listing "Proxy (Middleware)"
 // confirms it's wired up.
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { clerkMiddleware } from "@clerk/nextjs/server";
 
-// Page routes only. API routes still run through the proxy (config.matcher
-// below) so auth() can read the session, but each authenticated handler calls
-// auth() itself — protecting /api here would lock out the public endpoints and
-// the worker's token-authenticated callback.
-const isProtectedRoute = createRouteMatcher(["/dashboard(.*)", "/objects(.*)"]);
+export default clerkMiddleware();
 
-export default clerkMiddleware(async (auth, req) => {
-  if (isProtectedRoute(req)) {
-    await auth.protect();
-  }
-});
-
+// Covers /api deliberately: clerkMiddleware() doesn't only block, it parses the
+// session and attaches the context auth() reads inside a Route Handler. Drop
+// `/(api|trpc)(.*)` and every authenticated handler throws.
 export const config = {
   matcher: ["/((?!_next|.*\\..*).*)", "/(api|trpc)(.*)"],
 };
