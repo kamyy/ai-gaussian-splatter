@@ -11,8 +11,12 @@ e2e
 test
 test-results
 playwright-report
-*.test.ts
-*.test.tsx
+# `**/` is required: a bare `*.test.ts` matches root-level paths only, which
+# leaves nested tests in the context while `test/` — holding the setup file
+# their matcher types come from — is excluded, and `next build` type-checks
+# them and fails.
+**/*.test.ts
+**/*.test.tsx
 
 .git
 .gitignore
