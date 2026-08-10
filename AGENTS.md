@@ -10,11 +10,11 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
 
 ## Structure
 
-Monorepo, three independent packages, each with its own dependency manager:
+Monorepo, three independent packages:
 
-- `web/` — Next.js 16 (App Router) + Mantine + SWR + Zustand + react-three-fiber, **and** the REST API as Route Handlers under `app/api/v1/` backed by Drizzle. `pnpm`.
-- `worker/` — COLMAP + gsplat pipeline, runs on an EC2 GPU spot instance per job. `uv`.
-- `infra/` — AWS CDK (Python), 6 stacks. `uv` + `pnpm` (the CDK CLI itself is npm-distributed regardless of app language).
+- `web/` — Next.js 16 (App Router) + Mantine + SWR + Zustand + react-three-fiber, **and** the REST API as Route Handlers under `app/api/v1/` backed by Drizzle.
+- `worker/` — COLMAP + gsplat pipeline, runs on an EC2 GPU spot instance per job.
+- `infra/` — AWS CDK (Python), 6 stacks. Carries a `package.json` despite being Python: the CDK CLI is npm-distributed regardless of app language.
 
 Server-only code lives in `web/lib/server/` — never import it from a `"use client"` file, or the database client and AWS SDK end up in the browser bundle. The one thing shared across that boundary is `web/lib/types.ts`, which holds the status-value tuples the Drizzle schema builds its `pgEnum`s from; the import runs client-safe-module → schema, never the reverse.
 
