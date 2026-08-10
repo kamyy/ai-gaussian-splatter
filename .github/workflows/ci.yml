@@ -105,6 +105,21 @@ jobs:
       # a clean checkout, since CI has never run `next dev`/`next build` to
       # generate the App Router route types tsc needs. See AGENTS.md.
       - run: pnpm typecheck
+      # A schema edit with no matching migration is otherwise invisible: the
+      # types come straight from schema.ts, so tsc stays green while the
+      # database drifts, and it surfaces as a runtime SQL error. db:generate
+      # is a no-op when the schema matches the snapshot in web/drizzle/meta/,
+      # so anything new on disk here means the migration was never generated.
+      - name: Check migrations are up to date with the schema
+        run: |
+          pnpm db:generate
+          # --porcelain, not `git diff`: a new migration arrives as untracked
+          # files, which git diff does not report.
+          if [ -n "$(git status --porcelain -- drizzle)" ]; then
+            echo "::error::web/lib/server/db/schema.ts changed without a migration. Run 'pnpm db:generate' and commit web/drizzle/."
+            git status --porcelain -- drizzle
+            exit 1
+          fi
       # Applies migrations to the service container; the server test project's
       # globalSetup also does this, so this step mainly fails fast on a bad
       # migration before the suite starts.

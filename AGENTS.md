@@ -132,7 +132,8 @@ Note if you try to reproduce that outside a container: some sandboxes block the 
 Known gaps, in priority order:
 
 1. **`web/e2e/mock-backend.mjs` is stale** — the pages it covers query the database directly, so it serves data nothing requests, and `playwright.config.ts` still sets the unused `NEXT_PUBLIC_API_BASE_URL`. Its one test is skipped; redesign around a seeded test database before trusting E2E coverage.
-2. **`web/Dockerfile` builds and runs, but has never run on AWS.** Validated locally under podman (see above). What remains unproven is everything outside the image: the ECS task definition wiring and image pull from ECR.
-3. **`hostedZoneId` must be passed on every real deploy** (`-c hostedZoneId=...`, the `orky.net` zone). It defaults to a placeholder so `cdk synth` works with no credentials, and a deploy carrying that placeholder fails.
+2. **Nothing in the deploy path applies migrations, including the initial schema.** `DataStack`'s `database_name` only makes RDS create an empty database, and the image deliberately doesn't migrate on boot (up to 3 tasks would race — drizzle-kit takes no advisory lock), so a freshly deployed environment has no tables and every route 500s until someone runs `drizzle-kit migrate` by hand. `docs/RUNBOOK.md` documents that procedure — including the `DATABASE_SSL_CA` export it needs against RDS; automating it (a one-off ECS task from CI, or a CDK custom resource) is an open decision.
+3. **`web/Dockerfile` builds and runs, but has never run on AWS.** Validated locally under podman (see above). What remains unproven is everything outside the image: the ECS task definition wiring and image pull from ECR.
+4. **`hostedZoneId` must be passed on every real deploy** (`-c hostedZoneId=...`, the `orky.net` zone). It defaults to a placeholder so `cdk synth` works with no credentials, and a deploy carrying that placeholder fails.
 
 Per the plan's build order, **M0 is still next**: a real physical object needs to be photographed (~50 photos, multi-angle) so the COLMAP→gsplat pipeline can be validated end-to-end on real hardware before anything else is trusted. That step needs the user, not an agent.
