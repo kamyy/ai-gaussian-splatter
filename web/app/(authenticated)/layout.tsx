@@ -15,8 +15,9 @@ import Link from "next/link";
 // Next preserves layouts across client-side navigation between sibling routes,
 // so this does not re-run on /dashboard → /objects/new. That's sufficient only
 // because it isn't the security boundary: no page here server-renders
-// protected data, and every /api/v1 handler calls requireUser() itself. A page
-// that starts reading protected data server-side needs its own auth.protect().
+// protected data, and every /api/v1 handler serving user data calls
+// requireUser() itself. A page that starts reading protected data server-side
+// needs its own auth.protect().
 export default async function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
   await auth.protect();
 
