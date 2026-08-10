@@ -20,27 +20,25 @@ FAST_TEST_MODE=true \
 The REST API is served via Route Handlers in this package (`web/app/api/v1/`), backed by Postgres via Drizzle — start a database before `pnpm dev`:
 
 ```bash
-podman run -d --name splatter-pg --restart=always \
+podman run -d --name splat-pg --restart=always \
   -p 5432:5432 \
-  -v splatter-pg-data:/var/lib/postgresql/data \
+  -v splat-pg-data:/var/lib/postgresql \
   -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=test \
   -e POSTGRES_DB=ai_gaussian_splatter \
   postgres:18
 ```
 
-Named volume keeps PG data across container recreate/reboot; `--restart=always` (and no `--rm`) brings the container back after a reboot. On Fedora with rootless Podman, also enable the restart helper once so that policy is honored after boot:
+This is the only database container you need. The published port serves everything: `next dev` and `drizzle-kit` reach it on `localhost:5432`, and the `splat-web` container below comes back in through the host as `host.containers.internal:5432`. Mount the volume at `/var/lib/postgresql`, since `postgres:18` stores data in a major-version subdirectory below that. Enable the restart helper once so `--restart=always` is honored after boot:
 
 ```bash
 systemctl --user enable --now podman-restart.service
 ```
 
-(For rootful Podman use `sudo systemctl enable --now podman-restart.service` instead.)
-
 ```bash
 cd web
 pnpm install                # no codegen step — Drizzle's schema is plain TypeScript
-cp .env.example .env.local  # fill in Clerk keys, database parts, buckets, worker IDs
+cp .env.example .env        # fill in Clerk keys, database parts, buckets, worker IDs
 pnpm db:migrate             # apply pending migrations (drizzle-kit migrate)
 pnpm dev
 ```
@@ -67,42 +65,23 @@ The `lib/server/**` Vitest project's Postgres-dependent tests (rate limiting, `g
 
 Exercises the production path — the standalone build, not `next dev`. Also the way to test SSR locally if your environment blocks the loopback connection Next's proxy makes to itself (a host-run `next dev` then 500s on every request with `ECONNREFUSED ::1`; the container has its own netns and is unaffected).
 
-```bash
-podman network create splatnet
-podman run -d --rm --name splatter-pg --network splatnet -p 5432:5432 \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=test \
-  -e POSTGRES_DB=ai_gaussian_splatter \
-  postgres:18
-(cd web && DATABASE_HOST=localhost DATABASE_NAME=ai_gaussian_splatter DATABASE_USER=postgres \
-  DATABASE_PASSWORD=test pnpm db:migrate)
+Uses the `splat-pg` container from above — nothing extra to start.
 
+```bash
 cd web
 podman build \
   --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk \
-  -t splatter-web:test .
-podman run -d --name splatter-web --network splatnet -p 8000:8000 \
-  -e DATABASE_HOST=splatter-pg \
-  -e DATABASE_NAME=ai_gaussian_splatter \
-  -e DATABASE_USER=postgres \
-  -e DATABASE_PASSWORD=test \
-  -e CLERK_SECRET_KEY=sk_test_fake \
-  -e UPLOADS_BUCKET=test-uploads \
-  -e SPLATS_BUCKET=test-splats \
-  -e AWS_REGION=us-west-2 \
-  -e AWS_ACCESS_KEY_ID=testing \
-  -e AWS_SECRET_ACCESS_KEY=testing \
-  -e WORKER_AMI_ID=ami-0123456789abcdef0 \
-  -e WORKER_SUBNET_ID=subnet-0123456789abcdef0 \
-  -e WORKER_SECURITY_GROUP_ID=sg-0123456789abcdef0 \
-  -e WORKER_INSTANCE_PROFILE_ARN=arn:aws:iam::123456789012:instance-profile/worker \
+  -t splat-web:test .
+podman run -d --name splat-web -p 8000:8000 \
+  --env-file .env \
+  -e DATABASE_HOST=host.containers.internal \
   -e APP_PUBLIC_URL=http://localhost:8000 \
-  splatter-web:test
+  splat-web:test
 
 curl -s http://localhost:8000/api/v1/healthz   # {"status":"ok"}
 ```
 
-The publishable key must be a `--build-arg`, not `-e`: `NEXT_PUBLIC_*` is inlined into the browser bundle at build time. Tear down with `podman rm -f splatter-web splatter-pg && podman network rm splatnet`.
+`--env-file .env` supplies everything else the container needs (Clerk, S3 buckets, worker IDs, fake AWS credentials) straight from the same file `next dev` and `db:migrate` already use. Only `DATABASE_HOST` and `APP_PUBLIC_URL` stay on the command line, since they differ by context: `localhost` inside a container is that container, so it reaches Postgres through `host.containers.internal` (a name Podman resolves to the host, where 5432 is published), and it serves on 8000 rather than `next dev`'s 3000. The publishable key must be a `--build-arg`, not `-e`/`--env-file`: `NEXT_PUBLIC_*` is inlined into the browser bundle at build time. It's baked in as the dummy CI key above, which won't pair with a real `CLERK_SECRET_KEY` from `.env` — so this container exercises unauthenticated paths only; pass your own publishable key as the build-arg to reach signed-in routes. Tear down with `podman rm -f splat-web` — leave `splat-pg` up, it's your dev database.
 
 ### Applying migrations to a deployed environment
 
