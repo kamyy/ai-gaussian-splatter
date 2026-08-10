@@ -87,16 +87,21 @@ curl -s http://localhost:8000/api/v1/healthz   # {"status":"ok"}
 
 The container image deliberately does not run migrations on boot (the service runs up to 3 tasks, which would race — drizzle-kit takes no advisory lock — and the running app would need DDL rights it otherwise doesn't). Run it as a deploy step instead:
 
-`drizzle.config.ts` resolves its connection the same way the running app does (`lib/server/databaseUrl.ts`), from the `DATABASE_HOST`/`PORT`/`NAME`/`USER`/`PASSWORD` parts — read those straight out of the RDS secret:
+`drizzle.config.ts` resolves its connection the same way the running app does (`lib/server/databaseUrl.ts`), from the `DATABASE_HOST`/`PORT`/`NAME`/`USER`/`PASSWORD` parts — read those straight out of the RDS secret, plus `DATABASE_SSL_CA`:
 
 ```bash
+curl -fsSo /tmp/rds-global-bundle.pem \
+  https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+export DATABASE_SSL_CA=/tmp/rds-global-bundle.pem
 eval "$(aws secretsmanager get-secret-value --secret-id <rds-secret-arn> \
   --query SecretString --output text | jq -r \
   '"export DATABASE_HOST=\(.host) DATABASE_PORT=\(.port) DATABASE_NAME=\(.dbname) DATABASE_USER=\(.username) DATABASE_PASSWORD=\(.password)"')"
 (cd web && pnpm db:migrate)
 ```
 
-The database lives in a private subnet, so run this from somewhere inside the VPC (or over a bastion/SSM port-forward), not a laptop.
+`DATABASE_SSL_CA` is what makes this work against RDS at all: without it `databaseSsl()` returns undefined, drizzle-kit opens an unencrypted connection, and `rds.force_ssl = 1` refuses it. The bundle is the same one `web/Dockerfile` bakes into the image — the running task gets the path from `backend_stack.py`, but a shell running migrations has to fetch its own copy. Exported variables win over `web/.env`, which dotenv never overwrites, so a local `.env` can't redirect this at your production database.
+
+The database lives in a private subnet, so run this from somewhere inside the VPC, not a laptop. Prefer a bastion that can reach the RDS endpoint directly: a port-forward makes the client connect to `localhost`, which fails certificate hostname verification — and the fix for *that* is disabling verification, which defeats the point of supplying the CA.
 
 ## Debugging a failed job
 
