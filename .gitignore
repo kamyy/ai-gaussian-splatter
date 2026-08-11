@@ -42,3 +42,6 @@ worker/*.splat
 
 # Logs
 *.log
+
+# Claude Code local scheduler state
+.claude/scheduled_tasks.lock
