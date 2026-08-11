@@ -10,13 +10,13 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
 
 ## Structure
 
-Monorepo, three independent packages, each with its own dependency manager:
+Monorepo, three independent packages:
 
-- `web/` — Next.js 16 (App Router) + Mantine + SWR + Zustand + react-three-fiber, **and** the REST API as Route Handlers under `app/api/v1/` backed by Drizzle. `pnpm`.
-- `worker/` — COLMAP + gsplat pipeline, runs on an EC2 GPU spot instance per job. `uv`.
-- `infra/` — AWS CDK (Python), 6 stacks. `uv` + `pnpm` (the CDK CLI itself is npm-distributed regardless of app language).
+- `web/` — Next.js 16 (App Router) + Mantine + SWR + Zustand + react-three-fiber, **and** the REST API as Route Handlers under `app/api/v1/` backed by Drizzle.
+- `worker/` — COLMAP + gsplat pipeline, runs on an EC2 GPU spot instance per job.
+- `infra/` — AWS CDK (Python), 6 stacks. Carries a `package.json` despite being Python: the CDK CLI is npm-distributed regardless of app language.
 
-Server-only code lives in `web/lib/server/` — never import it from a `"use client"` file, or the database client and AWS SDK end up in the browser bundle. The one thing shared across that boundary is `web/lib/types.ts`, which holds the status-value tuples the Drizzle schema builds its `pgEnum`s from; the import runs client-safe-module → schema, never the reverse.
+Server-only code lives in `web/lib/server/` — never import it from a `"use client"` file. The one thing shared across the client-server boundary is `web/lib/types.ts`, which holds the status-value tuples the Drizzle schema builds its `pgEnum`s from; the import runs client-safe-module → schema, never the reverse.
 
 ## Environment gotchas hit while building this
 
@@ -24,9 +24,11 @@ These cost real debugging time — check here before assuming standard behavior.
 
 ### Auth (Clerk)
 
-- **Next.js 16 renamed `middleware.ts` → `proxy.ts`** (function name `middleware` → `proxy` too). `@clerk/nextjs`'s `clerkMiddleware()` works unchanged under the new name. **It must sit at the package root, beside `app/`, not inside it** — Next loads it from nowhere else and says nothing when it's misplaced; the symptom is every authenticated route 500'ing with "clerkMiddleware() was not run". Verify `ƒ Proxy (Middleware)` appears in `next build`'s route table.
-- **`proxy.ts`'s two matchers do different jobs, and narrowing the wrong one breaks `auth()` app-wide.** `config.matcher` decides which requests Next runs the proxy for at all; `isProtectedRoute` decides which of those Clerk forces a login on. `/api/*` is deliberately in the first and not the second: `clerkMiddleware()` doesn't only block, it also parses the session and attaches the auth context that `auth()` later reads inside a Route Handler. Drop `/(api|trpc)(.*)` from `config.matcher` and every handler calling `auth()` throws "clerkMiddleware() was not run"; add `/api` to `isProtectedRoute` instead and the public endpoints (gallery, healthz, and the worker's token-authenticated callback, which has no Clerk session by design) start demanding a login.
+- **`proxy.ts` must sit at `web/`'s root, beside `app/` — not the repo root, and not inside `app/`.** Next loads it from nowhere else and says nothing when it's misplaced; the symptom is every authenticated route 500'ing with "clerkMiddleware() was not run". Verify `ƒ Proxy (Middleware)` appears in `next build`'s route table.
+- **`proxy.ts` runs `clerkMiddleware()` with no auth check of its own — protection is per-resource, and `config.matcher` must stay broad for it to work.** The matcher decides which requests Next runs the proxy for at all, and it excludes static assets **by file extension**, not by "path contains a dot" — a page route can contain one too (`/objects/my.splat.v2`), and skipping the proxy for it makes `auth()` throw inside the `(authenticated)` layout, so a mistyped URL 500s instead of redirecting to sign-in. `/api/*` is deliberately included: `clerkMiddleware()` doesn't only block, it parses the session and attaches the auth context that `auth()` later reads inside a Route Handler. Drop `/(api|trpc)(.*)` and every handler calling `auth()` throws "clerkMiddleware() was not run". The actual checks live where the data does — every authenticated Route Handler calls `requireUser()`/`requireClerkUserId()` (`lib/server/auth.ts`), which is also why the public endpoints (gallery, healthz, and the worker's token-authenticated callback, which has no Clerk session by design) keep working.
+- **`app/(authenticated)/layout.tsx`'s `auth.protect()` is a sign-in redirect, not the security boundary.** All three pages in that group are `"use client"` and hold no server-fetched data, so the layout — the group's only Server Component — is where a signed-out visitor gets bounced instead of loading a shell that fires 401s. Next preserves layouts across client-side navigation between sibling routes, so it doesn't re-run on `/dashboard` → `/objects/new`; that's fine only as long as nothing here server-renders protected data. A page that starts doing so needs its own `auth.protect()`.
 - **Dummy Clerk publishable keys must still be structurally valid.** `clerkMiddleware()` parses the key and rejects a malformed one outright. CI uses `pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk` — base64 of `"example.clerk.accounts.dev$"` — which parses offline without contacting Clerk.
+- **Clerk telemetry opt-out is `NEXT_PUBLIC_CLERK_TELEMETRY_DISABLED`, and it's needed in three places.** `@clerk/nextjs` reads it server-side *and* inlines it into the client bundle, so the unprefixed `CLERK_TELEMETRY_DISABLED` (server collector only) adds nothing. Collection gates on the instance being a development one — `isCI()` suppresses the printed notice, not the reporting — so a `pk_test_…` key means CI and local container builds report too, hence the entries in `ci.yml` and `web/Dockerfile`. `pk_live_…` images are exempt either way.
 - **`NEXT_PUBLIC_*` is inlined at build time, not read at runtime.** Setting `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` as a container env var does nothing — it has to be a `docker build --build-arg` (see `web/Dockerfile`). Only `CLERK_SECRET_KEY` is a genuine runtime secret, injected from Secrets Manager.
 
 ### Next.js & TypeScript
