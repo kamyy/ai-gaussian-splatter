@@ -22,6 +22,11 @@ export default async function GalleryPage() {
   return (
     <Stack p="md">
       <Title order={2}>Gallery</Title>
+
+      {/* gallery_items is curated — nothing in the app writes to it, so an
+          empty table is the normal state until examples are added by hand. */}
+      {items.length === 0 && <Text c="dimmed">No examples yet — check back soon.</Text>}
+
       <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }}>
         {items.map(item => (
           // Nesting <Link> around <Card> rather than Card's polymorphic
