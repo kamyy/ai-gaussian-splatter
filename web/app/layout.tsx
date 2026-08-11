@@ -2,8 +2,13 @@ import "@mantine/core/styles.css";
 import "./globals.css";
 
 import { ClerkProvider } from "@clerk/nextjs";
-import { ColorSchemeScript, MantineProvider, mantineHtmlProps } from "@mantine/core";
+// AppShellMain (standalone) rather than AppShell.Main — see the note in
+// AGENTS.md about compound static properties not resolving through the bundler
+// in this @mantine/core version.
+import { AppShell, AppShellMain, ColorSchemeScript, MantineProvider, mantineHtmlProps } from "@mantine/core";
 import type { Metadata } from "next";
+
+import { SiteHeader } from "@/components/layout/SiteHeader";
 
 export const metadata: Metadata = {
   title: "AI Gaussian Splatter",
@@ -18,7 +23,12 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           <ColorSchemeScript />
         </head>
         <body>
-          <MantineProvider defaultColorScheme="dark">{children}</MantineProvider>
+          <MantineProvider defaultColorScheme="dark">
+            <AppShell header={{ height: 60 }} padding="md">
+              <SiteHeader />
+              <AppShellMain>{children}</AppShellMain>
+            </AppShell>
+          </MantineProvider>
         </body>
       </html>
     </ClerkProvider>
