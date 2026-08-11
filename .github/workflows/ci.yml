@@ -74,6 +74,13 @@ jobs:
       # only the printed disclosure notice is CI-aware — collection itself is
       # not. Without this, CI runs report telemetry.
       NEXT_PUBLIC_CLERK_TELEMETRY_DISABLED: "1"
+      # Inlined at build time, so `next build` here needs them to match what a
+      # real image ships — otherwise the built bundle points at Clerk's hosted
+      # Account Portal rather than the app's own sign-in page.
+      NEXT_PUBLIC_CLERK_SIGN_IN_URL: /sign-in
+      NEXT_PUBLIC_CLERK_SIGN_UP_URL: /sign-up
+      NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: /dashboard
+      NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: /dashboard
       TEST_DATABASE_URL: postgresql://test:test@localhost:5432/test
       DATABASE_HOST: localhost
       DATABASE_PORT: "5432"

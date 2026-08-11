@@ -39,6 +39,15 @@ ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 # pk_test_ key would otherwise ship a browser bundle with telemetry on.
 ENV NEXT_PUBLIC_CLERK_TELEMETRY_DISABLED=1
 
+# Same build-time inlining rule as the publishable key above, but these are
+# fixed route paths rather than per-environment values, so they're baked in
+# rather than passed as build-args. Omitting them sends users to Clerk's
+# hosted Account Portal instead of the app's own sign-in page.
+ENV NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
+ENV NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+ENV NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=/dashboard
+ENV NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/dashboard
+
 RUN pnpm exec next build
 
 
