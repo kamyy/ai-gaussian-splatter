@@ -124,10 +124,11 @@ def test_keep_alive_timeout_exceeds_the_albs_idle_timeout(wired_stacks):
     assert environment.get("KEEP_ALIVE_TIMEOUT") == KEEP_ALIVE_TIMEOUT_MS
 
 
-def test_tasks_run_in_private_subnets_without_a_public_ip(wired_stacks):
-    """The tasks must not be internet-addressable. They sit in the private
-    subnets and reach AWS APIs through the VPC's NAT gateway; only the load
-    balancer is internet-facing.
+def test_tasks_run_in_public_subnets_with_a_public_ip(wired_stacks):
+    """The tasks egress through the internet gateway rather than a NAT
+    gateway, which requires both a public subnet and a public IP — without the
+    IP they cannot even pull their own image from ECR. What keeps them
+    unreachable is backend_security_group, asserted in test_network_stack.py.
     """
     template = Template.from_stack(wired_stacks["backend"])
 
@@ -136,11 +137,43 @@ def test_tasks_run_in_private_subnets_without_a_public_ip(wired_stacks):
     (service_props,) = services.values()
     awsvpc = service_props["Properties"]["NetworkConfiguration"]["AwsvpcConfiguration"]
 
-    assert awsvpc["AssignPublicIp"] == "DISABLED"
+    assert awsvpc["AssignPublicIp"] == "ENABLED"
     subnets = awsvpc["Subnets"]
     assert len(subnets) == 2
     for subnet_ref in subnets:
-        assert "privateSubnet" in str(subnet_ref)
+        assert "publicSubnet" in str(subnet_ref)
+
+
+def test_service_runs_on_fargate_spot(wired_stacks):
+    """~70% of the task's compute cost. A strategy naming only FARGATE_SPOT
+    also has to leave LaunchType unset — ECS rejects a service that specifies
+    both.
+    """
+    template = Template.from_stack(wired_stacks["backend"])
+
+    services = template.find_resources("AWS::ECS::Service")
+    (service_props,) = services.values()
+
+    assert "LaunchType" not in service_props["Properties"]
+    assert service_props["Properties"]["CapacityProviderStrategy"] == [
+        {"CapacityProvider": "FARGATE_SPOT", "Weight": 1},
+    ]
+
+
+def test_service_waits_for_the_capacity_provider_association(wired_stacks):
+    """CreateService fails if it names FARGATE_SPOT before the cluster has an
+    association for it, and both resources merely Ref the cluster — so without
+    an explicit dependency CloudFormation is free to order them the wrong way
+    and the first deploy fails intermittently.
+    """
+    template = Template.from_stack(wired_stacks["backend"])
+
+    associations = template.find_resources("AWS::ECS::ClusterCapacityProviderAssociations")
+    assert len(associations) == 1
+    (association_id,) = associations.keys()
+
+    (service_props,) = template.find_resources("AWS::ECS::Service").values()
+    assert association_id in service_props["DependsOn"]
 
 
 def test_cluster_and_service_names_are_fixed(wired_stacks):

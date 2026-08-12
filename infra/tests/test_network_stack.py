@@ -10,8 +10,9 @@ SECURITY_GROUP_INGRESS = "AWS::EC2::SecurityGroupIngress"
 
 def test_backend_security_group_has_exactly_one_ingress_rule_from_alb(wired_stacks):
     """The backend tasks must be reachable only from the load balancer. They
-    run in private subnets with no public IP, so the ALB is their sole ingress
-    path.
+    run in public subnets with a public IP, so this group is the whole of what
+    stands between them and the internet — a second rule here is a route
+    around the ALB.
 
     The rule itself is generated, not hand-written: the load-balanced Fargate
     pattern registers the target group as a connectable and CDK derives the
@@ -49,6 +50,50 @@ def test_backend_security_group_has_exactly_one_ingress_rule_from_alb(wired_stac
     # An SG source, not a CIDR — nothing outside the ALB may reach the tasks.
     assert "SourceSecurityGroupId" in rule["Properties"]
     assert "CidrIp" not in rule["Properties"]
+
+
+def test_public_subnets_assign_public_ips_on_launch(wired_stacks):
+    """The GPU worker gets its only route out from this attribute:
+    ec2Launcher.ts calls RunInstances with a plain SubnetId and no
+    AssociatePublicIpAddress, so the address comes from the subnet default —
+    and with no NAT gateway there is no second path. If this ever turns off,
+    workers boot unable to reach ECR, S3, or the status callback, and the job
+    hangs until the runtime alarm kills it.
+    """
+    template = Template.from_stack(wired_stacks["network"])
+
+    public_subnets = [
+        props
+        for props in template.find_resources("AWS::EC2::Subnet").values()
+        if {"Key": "aws-cdk:subnet-type", "Value": "Public"} in props["Properties"]["Tags"]
+    ]
+    assert len(public_subnets) == 2
+    for props in public_subnets:
+        assert props["Properties"]["MapPublicIpOnLaunch"] is True
+
+
+def test_vpc_has_no_nat_gateway(wired_stacks):
+    """~$33/month plus $0.045/GB, and nothing needs it: everything with
+    outbound traffic runs in the public subnets.
+
+    The default routes are asserted alongside the resource counts because they
+    are what a returning NAT gateway would actually be wired into. Note this
+    does not catch the subnet type drifting back to PRIVATE_WITH_EGRESS on its
+    own — CDK pairs that with nat_gateways=0 without complaint, synthesizing
+    subnets that are isolated in everything but name.
+    """
+    template = Template.from_stack(wired_stacks["network"])
+
+    template.resource_count_is("AWS::EC2::NatGateway", 0)
+    template.resource_count_is("AWS::EC2::EIP", 0)
+
+    # One per public subnet, both to the internet gateway. The isolated
+    # subnets have no default route at all.
+    routes = template.find_resources("AWS::EC2::Route")
+    assert len(routes) == 2
+    for route_props in routes.values():
+        assert "GatewayId" in route_props["Properties"]
+        assert "NatGatewayId" not in route_props["Properties"]
 
 
 def test_db_security_group_has_exactly_one_ingress_rule_from_backend(wired_stacks):

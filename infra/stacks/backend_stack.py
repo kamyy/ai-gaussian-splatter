@@ -49,11 +49,12 @@ class BackendStack(cdk.Stack):
     """The Next.js app (pages + the REST API as Route Handlers) on Fargate,
     behind an internet-facing Application Load Balancer.
 
-    The ALB sits in the public subnets and is the only internet-facing part;
-    the tasks run in the private subnets with no public IP, reaching AWS APIs
-    (S3, EC2 RunInstances) through the VPC's NAT gateway. TLS terminates at
-    the ALB with an ACM certificate for APP_HOSTNAME, and plain HTTP is
-    redirected to HTTPS.
+    The tasks share the public subnets with the ALB and carry a public IP, so
+    their calls to S3 and the EC2 API egress through the internet gateway
+    rather than a NAT gateway (see network_stack.py for the cost reasoning).
+    Nothing can open a connection to them regardless: backend_security_group
+    admits only alb_security_group. TLS terminates at the ALB with an ACM
+    certificate for APP_HOSTNAME, and plain HTTP is redirected to HTTPS.
     """
 
     def __init__(
@@ -195,7 +196,15 @@ class BackendStack(cdk.Stack):
             vpc_subnets=ec2.SubnetSelection(subnets=vpc.public_subnets),
         )
 
-        cluster = ecs.Cluster(self, "Cluster", vpc=vpc, cluster_name=CLUSTER_NAME)
+        # Fargate capacity providers must be enabled on the cluster before the
+        # service below can name FARGATE_SPOT in a strategy.
+        cluster = ecs.Cluster(
+            self,
+            "Cluster",
+            vpc=vpc,
+            cluster_name=CLUSTER_NAME,
+            enable_fargate_capacity_providers=True,
+        )
 
         self.service = ecs_patterns.ApplicationLoadBalancedFargateService(
             self,
@@ -212,13 +221,28 @@ class BackendStack(cdk.Stack):
             ssl_policy=elbv2.SslPolicy.RECOMMENDED_TLS,
             cpu=256,  # 0.25 vCPU
             memory_limit_mib=512,
+            # ~70% off on-demand Fargate, accepting two exposures that come
+            # with it: a reclaim stops the task about two minutes after its
+            # notice, and at desired_count 1 there is no other task in the
+            # target group, so the site 503s until a replacement passes health
+            # checks; and a Spot capacity shortage in the region leaves ECS
+            # unable to place a task at all. min_healthy_percent below governs
+            # deployments only and does not cover either case. No on-demand
+            # `base` because a base of 1 against a single-task service would
+            # put every task on on-demand and save nothing.
+            capacity_provider_strategies=[
+                ecs.CapacityProviderStrategy(capacity_provider="FARGATE_SPOT", weight=1),
+            ],
             # Mutually exclusive with `vpc`: the pattern creates a cluster of
             # its own when given a VPC, and that one gets a generated name.
             cluster=cluster,
-            # The point of the private subnets here is that tasks get no public
-            # IP; their outbound calls to S3 and the EC2 API go through the
-            # VPC's NAT gateway instead. Only the ALB above is internet-facing.
-            task_subnets=ec2.SubnetSelection(subnets=vpc.private_subnets),
+            # Public subnets with a public IP, so outbound calls to S3 and the
+            # EC2 API reach the internet gateway directly instead of needing a
+            # NAT gateway. Without assign_public_ip the tasks cannot pull from
+            # ECR at all and the deployment hangs until the circuit breaker
+            # trips. backend_security_group is what keeps them unreachable.
+            task_subnets=ec2.SubnetSelection(subnets=vpc.public_subnets),
+            assign_public_ip=True,
             security_groups=[backend_security_group],
             # A cold Next.js server start can outrun the default 60s, and a
             # task killed inside the grace period never gets far enough to say
@@ -281,6 +305,15 @@ class BackendStack(cdk.Stack):
                 },
             ),
         )
+        # Otherwise the first deploy is a race. enable_fargate_capacity_providers
+        # emits a ClusterCapacityProviderAssociations resource, and both it and
+        # the service only Ref the cluster — nothing orders them — so
+        # CloudFormation may create the service first, and CreateService naming
+        # a capacity provider the cluster has no association for yet fails.
+        # The associations resource is a child of the Cluster construct, so
+        # depending on the construct is what covers it.
+        self.service.service.node.add_dependency(cluster)
+
         self.service.target_group.configure_health_check(
             path="/api/v1/healthz",
             port=str(CONTAINER_PORT),

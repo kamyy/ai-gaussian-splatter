@@ -32,7 +32,11 @@ class DataStack(cdk.Stack):
             engine=rds.DatabaseInstanceEngine.postgres(version=rds.PostgresEngineVersion.VER_18),
             instance_type=ec2.InstanceType.of(ec2.InstanceClass.BURSTABLE4_GRAVITON, ec2.InstanceSize.MICRO),
             vpc=vpc,
-            vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS),
+            # Isolated, not public like the tasks and workers: RDS needs no
+            # outbound internet, so it keeps the stronger placement — no route
+            # in or out, reachable only from db_security_group's one ingress
+            # rule.
+            vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PRIVATE_ISOLATED),
             security_groups=[db_security_group],
             multi_az=False,
             allocated_storage=20,

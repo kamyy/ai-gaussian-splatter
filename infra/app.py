@@ -61,7 +61,9 @@ def build_stacks(
         worker_instance_profile_arn=worker_iam.instance_profile_arn,
         worker_role_arn=worker_iam.role.role_arn,
         worker_security_group_id=network.worker_security_group.security_group_id,
-        worker_subnet_id=network.vpc.private_subnets[0].subnet_id,
+        # Public, so the worker's multi-GB ECR image pull goes out through the
+        # internet gateway rather than being billed per-GB by a NAT gateway.
+        worker_subnet_id=network.vpc.public_subnets[0].subnet_id,
         app_public_url=app_public_url,
         alb_security_group=network.alb_security_group,
         hosted_zone_id=hosted_zone_id,

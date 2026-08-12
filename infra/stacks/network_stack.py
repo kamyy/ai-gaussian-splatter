@@ -5,9 +5,9 @@ from constructs import Construct
 
 class NetworkStack(cdk.Stack):
     """VPC, subnets, and security groups (plan §6). Deliberately minimal — one
-    VPC with public + private-with-egress subnets across 2 AZs, no NAT
-    redundancy or multi-AZ complexity, since this is a low-traffic portfolio
-    project, not a production-scale service.
+    VPC with public + isolated subnets across 2 AZs, no NAT gateway or
+    multi-AZ complexity, since this is a low-traffic portfolio project, not a
+    production-scale service.
     """
 
     def __init__(self, scope: Construct, id: str, **kwargs) -> None:
@@ -17,14 +17,23 @@ class NetworkStack(cdk.Stack):
         # lookup (a real AWS call) to enumerate available AZs — this way
         # `cdk synth` works without live credentials. Still just 2 AZs, same
         # as intended.
+        #
+        # No NAT gateway: everything needing outbound internet (the backend
+        # tasks, the GPU workers) runs in the public subnets with a public IP
+        # and egresses through the internet gateway, which is free — a NAT
+        # gateway is ~$33/month plus $0.045/GB, and the worker's multi-GB ECR
+        # pull alone would cost more per job than its spot instance does. The
+        # security groups, not the absence of a route, are what keep those
+        # tasks unreachable from outside. The isolated subnets hold only RDS,
+        # which needs no outbound access at all.
         self.vpc = ec2.Vpc(
             self,
             "Vpc",
             availability_zones=[f"{self.region}a", f"{self.region}b"],
-            nat_gateways=1,
+            nat_gateways=0,
             subnet_configuration=[
                 ec2.SubnetConfiguration(name="public", subnet_type=ec2.SubnetType.PUBLIC, cidr_mask=24),
-                ec2.SubnetConfiguration(name="private", subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS, cidr_mask=24),
+                ec2.SubnetConfiguration(name="private", subnet_type=ec2.SubnetType.PRIVATE_ISOLATED, cidr_mask=24),
             ],
         )
 
