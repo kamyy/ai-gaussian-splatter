@@ -94,6 +94,7 @@ Postgres/Drizzle/RDS-specific gotchas, grouped by area. Written assuming no prio
 
 - **DB-backed tests must `await closeDb()` in `afterAll`** or Vitest hangs after the last assertion: an open `pg` Pool keeps the event loop alive. `test/server-global-setup.ts` has its own separate pool for the migration and closes it in a `finally`.
 - **Postgres may not be available in a dev sandbox** — try `podman run postgres:18` before assuming it isn't. `web/lib/server/rateLimit.test.ts` and the DB-backed auth tests skip unless `TEST_DATABASE_URL` is set (CI wires a service container; see `.github/workflows/ci.yml`).
+- **Test files run one at a time — `fileParallelism: false` in `web/vitest.config.mts`.** The DB-backed files share one database and each clears its tables in `beforeEach`, so run in parallel every file's cleanup deletes the others' fixtures mid-test; the symptom is failures that move between files from run to run. Restoring parallelism means giving each Vitest worker its own database or schema first. Transaction-per-test is not the way out: a transaction is one connection and `pg` queues queries on a connection, so the two tests asserting behavior under real concurrency (the `getOrCreateUser` race in `lib/server/auth.test.ts` and rate-limit atomicity) would keep passing while testing nothing.
 
 ### Connecting to RDS in production
 
