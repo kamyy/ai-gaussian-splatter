@@ -11,14 +11,6 @@ from stacks.registry_stack import RegistryStack
 from stacks.worker_iam_stack import WorkerIamStack
 
 
-def context_or(app: cdk.App, key: str, default: str) -> str:
-    # Mirrors TypeScript's `??` (nullish coalescing), not `or` — falls back
-    # only when the context value is genuinely unset, not for any other
-    # falsy value (e.g. an explicitly-passed empty string).
-    value = app.node.try_get_context(key)
-    return value if value is not None else default
-
-
 def build_stacks(
     app: cdk.App,
     env: cdk.Environment,
@@ -75,8 +67,7 @@ def build_stacks(
         hosted_zone_id=hosted_zone_id,
     )
 
-    # Billing metrics only exist in us-east-1 regardless of where the rest of
-    # the app is deployed — see budgets_stack.py.
+    # Pinned to us-east-1 — see budgets_stack.py.
     budgets = BudgetsStack(
         app,
         "BudgetsStack",
@@ -97,37 +88,28 @@ def build_stacks(
 if __name__ == "__main__":
     app = cdk.App()
 
-    # Region is hardcoded, not read from CDK_DEFAULT_REGION: the CDK CLI
-    # unconditionally overwrites that env var before spawning this app (via
-    # the SDK's own default-region resolution, which falls back to us-east-1
-    # with no credentials), so anything exported for it gets clobbered.
-    #
-    # Account reads AWS_ACCOUNT_ID, not CDK_DEFAULT_ACCOUNT, for the opposite
-    # reason: whenever real AWS credentials ARE active, the CLI resolves them
-    # via STS and overwrites CDK_DEFAULT_ACCOUNT with that real account ID —
-    # so `cdk synth`'s behavior (and its cdk.context.json AZ-lookup cache)
-    # would otherwise depend on whoever's local login happens to be active.
-    # AWS_ACCOUNT_ID is a name the CLI never touches, so it only changes when
-    # a deploy deliberately sets it (a CI secret, or an explicit export). The
-    # fallback below is AWS's placeholder account ID, letting `cdk synth` work
-    # with no setup — `cdk deploy` still needs real credentials regardless.
+    # Region and account are set here rather than read from CDK_DEFAULT_REGION /
+    # CDK_DEFAULT_ACCOUNT, both of which the CDK CLI overwrites — see AGENTS.md.
+    # The account falls back to AWS's placeholder so `cdk synth` works with no
+    # setup; `cdk deploy` still needs real credentials.
     env = cdk.Environment(account=os.environ.get("AWS_ACCOUNT_ID", "123456789012"), region="us-west-2")
 
     # Worker AMI/subnet are filled in once M5 (EC2 spot launch, per plan §7)
     # actually builds the worker image and picks a subnet — placeholders here
     # are what let `cdk synth` succeed before those exist.
-    worker_ami_id = context_or(app, "workerAmiId", "ami-000000000000")
-    alert_email = context_or(app, "alertEmail", "kam.yin.yip@gmail.com")
+    worker_ami_id = app.node.try_get_context("workerAmiId") or "ami-000000000000"
+
+    alert_email = app.node.try_get_context("alertEmail") or "kam.yin.yip@gmail.com"
+
     # Where the worker PATCHes job status back to. A stable custom domain, so
     # there is no chicken-and-egg with the ALB this app creates: the ALB is
     # aliased to this name rather than the name being read off the ALB.
-    app_public_url = context_or(app, "appPublicUrl", f"https://{APP_HOSTNAME}")
-    # The orky.net hosted zone's ID. Read via context rather than hardcoded so
-    # this app stays account-independent, for the same reason the account ID
-    # above is not read from CDK_DEFAULT_ACCOUNT. The placeholder keeps
-    # `cdk synth` working with no credentials and no setup; a real deploy
-    # passes `-c hostedZoneId=Z...`.
-    hosted_zone_id = context_or(app, "hostedZoneId", "Z00000000000000000000")
+    app_public_url = app.node.try_get_context("appPublicUrl") or f"https://{APP_HOSTNAME}"
+
+    # The orky.net hosted zone's ID. The placeholder default keeps `cdk synth`
+    # working with no credentials; a real deploy passes `-c hostedZoneId=Z...`
+    # — see AGENTS.md.
+    hosted_zone_id = app.node.try_get_context("hostedZoneId") or "Z00000000000000000000"
 
     build_stacks(
         app,

@@ -33,13 +33,11 @@ class NetworkStack(cdk.Stack):
         # below.
         #
         # Declared here, not in BackendStack, so both ends of the
-        # auto-generated ALB-to-tasks ingress rule live in one stack:
-        # declaring it in BackendStack instead would make its source a
-        # BackendStack group referencing a NetworkStack one, which fails
-        # `cdk synth` with a DependencyCycle (BackendStack already depends on
-        # NetworkStack). This is also why backend_stack.py builds its ALB
-        # manually rather than via the CDK pattern — the pattern would create
-        # its own security group instead of using this one.
+        # auto-generated ALB-to-tasks ingress rule live in one stack —
+        # declaring this group in BackendStack instead fails `cdk synth` with a
+        # DependencyCycle (see AGENTS.md). This is also why backend_stack.py
+        # builds its ALB manually rather than via the CDK pattern — the pattern
+        # would create its own security group instead of using this one.
         self.alb_security_group = ec2.SecurityGroup(
             self,
             "AlbSecurityGroup",
