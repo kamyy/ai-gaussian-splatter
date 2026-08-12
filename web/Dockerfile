@@ -92,5 +92,5 @@ USER nextjs
 # tasks would race to apply the same migration with nothing serialising them —
 # drizzle-kit takes no advisory lock. Keeping DDL out of the container also
 # means the running app never needs DDL rights on the database. See
-# docs/RUNBOOK.md.
+# RUNBOOK.md.
 CMD ["node", "server.js"]

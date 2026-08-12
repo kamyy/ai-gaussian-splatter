@@ -14,7 +14,7 @@ import {
 import { JOB_STATUSES, PHOTO_UPLOAD_STATUSES, SPLAT_STATUSES } from "@/lib/types";
 
 /**
- * Data model — plan §2.
+ * Data model.
  *
  * PascalCase-free by design: table, column, and enum names are all snake_case
  * in Postgres, with each column stating its database name explicitly rather
@@ -107,7 +107,7 @@ export const jobs = pgTable(
 );
 
 /**
- * Fixed-window counters backing per-IP/per-user rate limiting (plan §5).
+ * Fixed-window counters backing per-IP/per-user rate limiting.
  * Incremented via `INSERT … ON CONFLICT … DO UPDATE … RETURNING` in
  * lib/server/rateLimit.ts — the unique index below is that statement's conflict
  * target, so it is load-bearing, not just an optimisation.
@@ -126,7 +126,7 @@ export const rateLimitCounters = pgTable(
   ],
 );
 
-/** The hard global daily cap backstop (plan §5). */
+/** The hard global daily cap backstop. */
 export const globalJobCounters = pgTable("global_job_counters", {
   day: timestamp("day", { withTimezone: true, precision: 6 }).primaryKey(),
   jobsStarted: integer("jobs_started").notNull().default(0),

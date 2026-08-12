@@ -2,7 +2,7 @@
 
 Upload multi-angle photos of a physical object, get back a real-time, interactive 3D Gaussian Splat you can view in the browser and share.
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for how it's built and why, and [`docs/RUNBOOK.md`](docs/RUNBOOK.md) for local development and operational tasks.
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) for how it's built and why, and [`RUNBOOK.md`](RUNBOOK.md) for local development and operational tasks.
 
 ## Structure
 
@@ -11,6 +11,8 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for how it's built and why, a
 - `infra/` — AWS CDK (Python)
 
 ## Quick start
+
+`pnpm dev` needs a local Postgres and a filled-in `.env` first — see [`RUNBOOK.md`](RUNBOOK.md#web-frontend--rest-api).
 
 ```bash
 # Web (frontend + API)

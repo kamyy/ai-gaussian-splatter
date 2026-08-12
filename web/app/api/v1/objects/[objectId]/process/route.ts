@@ -11,7 +11,7 @@ import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
 import { jobReadColumns } from "@/lib/server/selects";
 
 // Populated from the ECR repo CDK stack output once infra is deployed
-// (plan §9) — placeholders for local/pre-deploy development.
+// Placeholders for local/pre-deploy development.
 function workerImageUri(): string {
   return process.env.WORKER_IMAGE_URI ?? "REPLACE_WITH_ECR_IMAGE_URI";
 }
@@ -45,7 +45,7 @@ export const POST = withErrorHandling(
     }
 
     // The hard backstop, checked last so per-user/IP limits already screened
-    // most abuse before this expensive step is even considered (plan §5).
+    // most abuse before this expensive step is even considered.
     await checkAndIncrementGlobalDaily(env.GLOBAL_MAX_JOBS_PER_DAY);
 
     const callbackToken = generateCallbackToken();

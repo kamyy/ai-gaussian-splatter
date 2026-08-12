@@ -18,8 +18,8 @@ const STATUS_LABELS: Record<JobStatus, string> = {
   cancelled: "Cancelled",
 };
 
-// Rough ordinal progress for the UI bar — matches plan §2's note that
-// jobs.status doubles as the progress indicator.
+// Rough ordinal progress for the UI bar — jobs.status doubles as the
+// progress indicator.
 const STATUS_PROGRESS: Record<JobStatus, number> = {
   queued: 5,
   launching: 15,

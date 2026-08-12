@@ -1,4 +1,4 @@
-// Zustand store (plan §1: lib/store.ts) — scoped to genuinely client-only
+// Zustand store — scoped to genuinely client-only
 // UI state that SWR doesn't cover: upload-queue progress before the server
 // acknowledges it, and rate-limit/error banner visibility. Server-derived
 // data (objects, job status) lives in SWR's cache instead — see lib/hooks.ts.

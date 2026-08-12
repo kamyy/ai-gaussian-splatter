@@ -1,17 +1,9 @@
-"""3D Gaussian Splatting training via gsplat (plan: Apache-2.0, actively
-maintained, reduced iteration count for object-centric captures).
+"""3D Gaussian Splatting training via gsplat, at a reduced iteration count for
+object-centric captures.
 
-Not verified end-to-end on real GPU hardware: the sandbox this was written in
-has a GPU driver but no `nvcc`/CUDA toolkit for gsplat's JIT-compiled kernels
-(present on the real worker AMI, plan §6, but not installed here). The
-structure (parse sparse model -> init Gaussians from the point cloud ->
-optimize against posed photos -> periodic densification) follows the standard
-3DGS algorithm and gsplat's public `rasterization()` API; `_init_gaussians`,
-`_build_optimizer`, and `_render`'s call signature were smoke-tested against
-gsplat's actual installed signature (`(means, quats, scales, opacities,
-colors, viewmats, Ks, width, height, ...) -> (renders, alphas, meta)`), but
-the CUDA kernel execution itself was not. Run this against a real capture on
-real hardware before trusting it in production (plan M0/M1).
+The training loop below has never executed on a GPU — the structure follows
+the standard 3DGS algorithm and gsplat's `rasterization()` signature, but no
+CUDA kernel here has ever run. Nothing in it is proven; see AGENTS.md.
 
 Simplifications relative to the original paper, made deliberately for a
 reduced-iteration, object-centric MVP rather than by oversight:

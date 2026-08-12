@@ -1,8 +1,8 @@
-"""Structure-from-Motion via COLMAP (plan: exhaustive matching, favor accuracy
-over speed for a small object-centric photo set — see plan Context).
+"""Structure-from-Motion via COLMAP: exhaustive matching, favouring accuracy
+over speed for a small object-centric photo set.
 
-Requires the `colmap` CLI to be on PATH (installed via the worker Dockerfile /
-baked AMI, per plan §6 — not a pip package, hence subprocess rather than pycolmap).
+Requires the `colmap` CLI on PATH (installed via the worker Dockerfile / baked
+AMI) — it is not a pip package, hence subprocess rather than pycolmap.
 """
 
 import logging
@@ -31,10 +31,10 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
     """Run the standard COLMAP CLI pipeline (feature extraction -> exhaustive
     matching -> incremental mapping) and return the sparse reconstruction.
 
-    A low registered_ratio (see plan §8 M0/M1 verification: "should be ~100%
-    for a good object-centric capture") signals a capture-quality problem, not
-    a pipeline bug — the caller should surface this rather than silently
-    proceeding to train on a broken reconstruction.
+    A good object-centric capture registers close to every photo, so a low
+    registered_ratio signals a capture-quality problem rather than a pipeline
+    bug — the caller should surface it instead of silently training on a
+    broken reconstruction.
     """
     database_path = workdir / "database.db"
     sparse_dir = workdir / "sparse"
@@ -83,10 +83,11 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
         ]
     )
 
-    # `mapper` can produce multiple disconnected reconstructions (sub-models
-    # named 0, 1, 2...) if the photo set doesn't fully connect; take the
-    # largest one, which model_analyzer reports first for model 0 in the
-    # common case of a single well-connected object-centric capture.
+    # `mapper` writes one sub-model per connected component (0, 1, 2...) when
+    # the photo set doesn't fully connect. Only model 0 is used, and the other
+    # components' images are therefore never counted as registered below — so a
+    # capture that fragments shows up as a low registered ratio, which is what
+    # run_job.py rejects it on.
     model_dir = sparse_dir / "0"
     if not model_dir.exists():
         raise RuntimeError(

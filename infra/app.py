@@ -104,9 +104,9 @@ if __name__ == "__main__":
     # setup; `cdk deploy` still needs real credentials.
     env = cdk.Environment(account=os.environ.get("AWS_ACCOUNT_ID", "123456789012"), region="us-west-2")
 
-    # Worker AMI/subnet are filled in once M5 (EC2 spot launch, per plan §7)
-    # actually builds the worker image and picks a subnet — placeholders here
-    # are what let `cdk synth` succeed before those exist.
+    # Worker AMI/subnet are filled in once M5 (see ARCHITECTURE.md's build
+    # order) actually builds the worker image and picks a subnet — placeholders
+    # here are what let `cdk synth` succeed before those exist.
     worker_ami_id = app.node.try_get_context("workerAmiId") or "ami-000000000000"
 
     alert_email = app.node.try_get_context("alertEmail") or "kam.yin.yip@gmail.com"

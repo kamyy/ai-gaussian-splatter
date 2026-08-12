@@ -10,7 +10,7 @@ import { isUuid } from "./httpError";
 import { presignSplatDownload } from "./s3";
 
 /**
- * Public, unauthenticated reads (plan §3) — what the gallery and share pages
+ * Public, unauthenticated reads — what the gallery and share pages
  * render from, including generateMetadata's og:title/og:image.
  *
  * These live outside the Route Handlers so Server Components can call them
@@ -62,7 +62,7 @@ export async function getGalleryItem(itemId: string): Promise<GalleryItemRead | 
 }
 
 /**
- * Only exposes Complete + shareable splats (plan §2's sharing default) — else
+ * Only exposes Complete + shareable splats — else
  * null, which callers surface as a 404, same as if it simply didn't exist.
  */
 export async function getPublicSplat(splatId: string): Promise<PublicObjectRead | null> {

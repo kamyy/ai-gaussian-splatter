@@ -2,7 +2,7 @@
   "name": "infra",
   "version": "1.0.0",
   "private": true,
-  "description": "CDK CLI pin for the Python CDK app in this directory (plan §6, §9)",
+  "description": "CDK CLI pin for the Python CDK app in this directory (the CDK CLI has no pip distribution)",
   "scripts": {
     "synth": "cdk synth",
     "diff": "cdk diff",

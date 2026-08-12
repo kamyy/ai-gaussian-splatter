@@ -4,7 +4,7 @@ from constructs import Construct
 
 
 class NetworkStack(cdk.Stack):
-    """VPC, subnets, and security groups (plan §6). Deliberately minimal — one
+    """VPC, subnets, and security groups. Deliberately minimal — one
     VPC with public + isolated subnets across 2 AZs, no NAT gateway or
     multi-AZ complexity, since this is a low-traffic portfolio project, not a
     production-scale service.
@@ -18,14 +18,12 @@ class NetworkStack(cdk.Stack):
         # `cdk synth` works without live credentials. Still just 2 AZs, same
         # as intended.
         #
-        # No NAT gateway: everything needing outbound internet (the backend
+        # nat_gateways=0: everything needing outbound internet (the backend
         # tasks, the GPU workers) runs in the public subnets with a public IP
-        # and egresses through the internet gateway, which is free — a NAT
-        # gateway is ~$33/month plus $0.045/GB, and the worker's multi-GB ECR
-        # pull alone would cost more per job than its spot instance does. The
-        # security groups, not the absence of a route, are what keep those
-        # tasks unreachable from outside. The isolated subnets hold only RDS,
-        # which needs no outbound access at all.
+        # and egresses through the internet gateway instead — ARCHITECTURE.md
+        # has the cost reasoning. The security groups, not the absence of a
+        # route, are therefore what keep those tasks unreachable from outside.
+        # The isolated subnets hold only RDS, which needs no outbound access.
         self.vpc = ec2.Vpc(
             self,
             "Vpc",

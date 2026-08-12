@@ -117,7 +117,7 @@ describe.skipIf(!hasPostgres)("database-backed auth helpers", () => {
 
     it("rejects a valid token for a different job", async () => {
       // The token is scoped to one job, so a compromised instance can't
-      // mutate anyone else's (plan §3).
+      // mutate anyone else's.
       await seedJob("tok-a");
       const other = await seedJob("tok-b");
       await expect(

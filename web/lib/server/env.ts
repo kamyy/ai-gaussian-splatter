@@ -19,7 +19,7 @@ const envSchema = z.object({
   WORKER_SECURITY_GROUP_ID: z.string().min(1),
   WORKER_INSTANCE_PROFILE_ARN: z.string().min(1),
 
-  // Rate limiting (plan §5) — deliberately simple config knobs, not
+  // Rate limiting — deliberately simple config knobs, not
   // architecture; tune based on real usage once deployed.
   RATE_LIMIT_IP_PER_HOUR: z.coerce.number().int().positive().default(5),
   RATE_LIMIT_USER_PER_DAY: z.coerce.number().int().positive().default(3),

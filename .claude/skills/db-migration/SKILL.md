@@ -46,7 +46,7 @@ Never hand-edit `web/drizzle/meta/*.json`. They are `generate`'s record of the l
 pnpm db:migrate
 ```
 
-Needs the local Postgres running (`podman ps` should show `splat-pg`) and the `DATABASE_*` variables from `web/.env`. See `docs/RUNBOOK.md` if it isn't up.
+Needs the local Postgres running (`podman ps` should show `splat-pg`) and the `DATABASE_*` variables from `web/.env`. See `RUNBOOK.md` if it isn't up.
 
 **5. Verify.**
 
@@ -61,4 +61,4 @@ The database-backed tests skip silently without `TEST_DATABASE_URL`, so a run th
 
 ## Applying to a deployed database
 
-Not covered here, and not automatic: the image deliberately does not migrate on boot, since up to three tasks would race with nothing serialising them. `docs/RUNBOOK.md` has the procedure, including the `DATABASE_SSL_CA` export it needs against RDS.
+Not covered here, and not automatic: the image deliberately does not migrate on boot, since up to three tasks would race with nothing serialising them. `RUNBOOK.md` has the procedure, including the `DATABASE_SSL_CA` export it needs against RDS.

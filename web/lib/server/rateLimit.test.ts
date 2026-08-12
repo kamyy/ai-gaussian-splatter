@@ -9,7 +9,7 @@ import { checkAndIncrementGlobalDaily, checkAndIncrementIp, checkAndIncrementUse
  * Requires a real Postgres (TEST_DATABASE_URL): these exercise the
  * `INSERT ... ON CONFLICT` upsert, which is the whole point of the
  * implementation and can't be faithfully faked. CI wires it to a service
- * container (plan §8).
+ * container.
  */
 const hasPostgres = Boolean(process.env.TEST_DATABASE_URL);
 
@@ -61,7 +61,7 @@ describe.skipIf(!hasPostgres)("rate limiting", () => {
   });
 
   it("applies the global cap regardless of caller", async () => {
-    // The whole point of the global cap (plan §5): it isn't keyed by user/IP,
+    // The whole point of the global cap: it isn't keyed by user/IP,
     // so no amount of multi-accounting raises the effective ceiling.
     await checkAndIncrementIp("1.1.1.1", 100);
     await checkAndIncrementGlobalDaily(1);

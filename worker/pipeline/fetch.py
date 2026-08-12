@@ -1,4 +1,4 @@
-"""Download a job's uploaded photos from S3 (plan §4 step 3)."""
+"""Download a job's uploaded photos from S3."""
 
 from pathlib import Path
 

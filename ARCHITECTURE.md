@@ -1,25 +1,25 @@
 # Architecture
 
-Full rationale for every decision below lives in the original plan (`/home/kam/.claude/plans/i-m-writing-a-full-stack-crispy-engelbart.md` at the time this was written) — this is the condensed reference version.
+Why the system is shaped this way: the decisions, the alternatives rejected, and the costs accepted. `AGENTS.md` covers what breaks if you don't know it, and `RUNBOOK.md` covers how to run and operate it — each fact lives in exactly one of the three.
 
 ## Pipeline
 
 1. User uploads discrete multi-angle photos of one object (not a panorama sweep — walk around it, individual stills).
-2. **COLMAP** (`worker/pipeline/sfm.py`): exhaustive feature matching → camera poses + sparse point cloud. Favors accuracy over speed for a small object-centric photo set. A registered-image ratio below 50% fails the job — that's a capture-quality problem, not a pipeline bug.
-3. **gsplat** (`worker/pipeline/train.py`): per-object 3D Gaussian Splatting training, ~7k-15k iterations (reduced from the paper's 30k default — single-object-against-plain-background scenes converge faster). Apache 2.0 licensed, unlike the original INRIA repo's non-commercial license.
+2. **COLMAP** (`worker/pipeline/sfm.py`): exhaustive feature matching → camera poses + sparse point cloud. Favors accuracy over speed for a small object-centric photo set. `run_job.py` fails the job when the registered-image ratio falls below 50% — that's a capture-quality problem, not a pipeline bug.
+3. **gsplat** (`worker/pipeline/train.py`): per-object 3D Gaussian Splatting training, 10k iterations by default (`worker/pipeline/config.py`), against the paper's 30k — single-object-against-plain-background scenes converge faster. Apache 2.0 licensed, unlike the original INRIA repo's non-commercial license.
 4. **Export** (`worker/pipeline/export.py`): writes the trained scene as a viewer-compatible `.ply`, plus a thumbnail rendered via gsplat's own rasterizer (reused, not a new dependency) for Open Graph previews.
 
 The "AI" here is the training itself — a from-scratch per-object gradient-descent optimization through a differentiable rasterizer, not a pretrained inference model. COLMAP is classical computer vision (bundle adjustment), not ML.
 
 ## Compute
 
-Each job launches a dedicated AWS EC2 `g5.xlarge` **spot** instance (`web/lib/server/ec2Launcher.ts`), runs the worker container, and self-terminates in all cases (success, failure, or a CloudWatch alarm backstop). No SQS queue, no Batch, no always-on fleet — volume is bounded by the global daily job cap, and a queue only earns its complexity at higher, decoupled-worker-fleet scale (documented future enhancement).
+Each job launches a dedicated AWS EC2 GPU **spot** instance (`web/lib/server/ec2Launcher.ts` — type from `WORKER_INSTANCE_TYPE`, defaulting to `g5.xlarge` in `lib/server/env.ts`), runs the worker container, and self-terminates on both success and failure. An instance-runtime CloudWatch alarm is the intended backstop for a worker that dies without reporting; it is not in `infra/` yet. No SQS queue, no Batch, no always-on fleet — volume is bounded by the global daily job cap, and a queue only earns its complexity at higher, decoupled-worker-fleet scale (documented future enhancement).
 
 Not Lambda: zero GPU support, hard architectural limit. Not Fargate: also no GPU. Not hand-rolled ECS orchestration: its value (bin-packing many tasks on shared instances) doesn't apply to a one-job-one-dedicated-instance pattern.
 
 ## API & data
 
-REST (`web/app/api/v1/`), not GraphQL — the API is ~9 flat endpoints, REST's ideal case. Postgres (RDS) for `users`/`objects`/`photos`/`jobs`/rate-limit counters — genuinely relational, low traffic, atomic upserts via `INSERT ... ON CONFLICT`.
+REST (`web/app/api/v1/`), not GraphQL — the API is 12 flat endpoints, REST's ideal case. Postgres (RDS) for `users`/`objects`/`photos`/`jobs`/rate-limit counters — genuinely relational, low traffic, atomic upserts via `INSERT ... ON CONFLICT`.
 
 Auth: Clerk (`@clerk/nextjs`), not Cognito (clunkier setup) or Auth0.
 
@@ -35,7 +35,9 @@ Wire format (the API's JSON request/response shape) is camelCase for field names
 
 Hosting is **Fargate behind an Application Load Balancer** (`ecs_patterns.ApplicationLoadBalancedFargateService`), on the `FARGATE_SPOT` capacity provider — ~70% off on-demand, in exchange for a reclaim taking the single task down until a replacement passes health checks, and for Spot capacity shortages being able to block placement entirely. `min_healthy_percent=100` does not help with either; it governs deployments only. An on-demand `base` would remove the exposure but also the discount, since a single-task service would then be entirely on-demand. Auto-scaling is CPU-based, 1 to 3 tasks.
 
-The tasks share the public subnets with the ALB and carry a public IP, so their calls to S3 and the EC2 API egress through the internet gateway. There is no NAT gateway anywhere in the VPC: one costs ~$33/month plus $0.045/GB, and the GPU worker's multi-GB ECR pull alone would be billed more per job than its spot instance costs. `backend_security_group`, whose only ingress rule names `alb_security_group` as its source, is what keeps the tasks unreachable — with no NAT there is no second layer behind it, so a rule added there is the whole of the exposure. RDS alone keeps the stronger placement, in `PRIVATE_ISOLATED` subnets — no route to the internet in either direction, as against `PRIVATE_WITH_EGRESS`, whose outbound route is the NAT gateway itself. It makes no outbound calls, so it gives up nothing by having none. The type is stated explicitly because CDK does not infer it: `PRIVATE_WITH_EGRESS` alongside `nat_gateways=0` synthesizes without complaint into subnets that are isolated in everything but name.
+The tasks share the public subnets with the ALB and carry a public IP, so their calls to S3 and the EC2 API egress through the internet gateway. There is no NAT gateway anywhere in the VPC: one costs ~$33/month plus $0.045/GB, and the GPU worker's multi-GB ECR pull alone would be billed more per job than its spot instance costs. The price is that `backend_security_group`, whose only ingress rule names `alb_security_group` as its source, is the entire barrier between the tasks and the internet — there is no second layer behind it.
+
+RDS alone keeps the stronger placement, in `PRIVATE_ISOLATED` subnets: it makes no outbound calls, so it gives up nothing by having no route in either direction. The type is stated explicitly because CDK does not infer it — `PRIVATE_WITH_EGRESS` alongside `nat_gateways=0` synthesizes without complaint into subnets that are isolated in everything but name. `network_stack.py` owns both security groups rather than letting `BackendStack` declare the ALB's: that would make the ingress rule cross-stack, and `cdk synth` fails with a `DependencyCycle` since `BackendStack` already depends on `NetworkStack`.
 
 TLS terminates at the ALB using an ACM certificate for `ai-gaussian-splatter.orky.net`, with port 80 redirected to 443. The certificate is declared in `backend_stack.py` so it lands in the ALB's own region — an ALB can only reference a certificate issued in its region; `us-east-1` is special only for CloudFront, unused here.
 
@@ -43,12 +45,13 @@ The Route 53 zone is *imported* (`from_hosted_zone_attributes`, zone ID passed a
 
 ## Abuse protection
 
-Three independent layers (`web/lib/server/rateLimit.ts`), since a per-user quota alone doesn't stop multi-accounting:
+Three request-path layers (`web/lib/server/rateLimit.ts`), since a per-user quota alone doesn't stop multi-accounting:
 
 1. Per-IP rate limit (the actual multi-account defense), checked in `presign`. **The IP comes from the _last_ `X-Forwarded-For` hop, not the first** — an ALB appends the address it actually saw to whatever the client sent, so trusting the first entry would let anyone mint a fresh bucket per request with a spoofed header, which defeats the whole layer. This assumes exactly one trusted proxy; adding CloudFront in front of the ALB moves the trustworthy position again and requires revisiting `getClientIp`.
 2. Per-user rate limit, alongside it.
 3. Global daily job cap, checked only in `process` — independent of who's calling, the backstop that bounds worst-case GPU spend.
-4. AWS Budget + CloudWatch billing alarm (`infra/stacks/budgets_stack.py`), an independent ops-level safety net.
+
+Behind all three, an AWS Budget plus a CloudWatch billing alarm (`infra/stacks/budgets_stack.py`) is a separate ops-level net: it catches spend the request path never sees, so a bug in this logic can't quietly run up a bill.
 
 ## Frontend
 
@@ -63,12 +66,10 @@ AWS CDK (Python), not Terraform — 100% AWS with no multi-cloud plans, so Terra
 Three tiers, split by CI-cheap vs. GPU-costly (`.github/workflows/ci.yml`):
 
 - **Unit/component** (every PR): `pytest` + `moto` (mocked AWS) for `worker/`; Vitest for `web/`, split into `client` (jsdom, React Testing Library) and `server` (Node, plus a real Postgres for the rate-limit tier).
-- **E2E** (every PR): Playwright against the app itself, scoped to what's reachable without live Clerk credentials — currently the public gallery path.
+- **E2E** (every PR): Playwright against the app itself, scoped to what's reachable without live Clerk credentials — currently the public gallery path. The one spec **is skipped, so the tier asserts nothing today**: the gallery pages read the database during SSR, which `page.route()` cannot intercept, and they render empty without seeded data. Deferred deliberately — E2E's job here is UI flows, and server-side correctness is covered by the Vitest `server` project.
+- **Real-pipeline integration** (manual/milestone-gated, not CI): actual COLMAP + gsplat runs cost real GPU time/money. A "fast test mode" (tiny photo set, ~50 iterations) gives a cheap on-demand smoke test of the plumbing when needed.
 
 `web/`'s AWS tests use `aws-sdk-client-mock`, which stubs calls rather than emulating a backend the way `moto` does for `worker/` — so `ec2Launcher.test.ts` asserts on the arguments `RunInstancesCommand` received rather than on state afterwards.
-
-That E2E spec **is skipped, so the tier asserts nothing today**: the gallery pages read the database during SSR, which `page.route()` cannot intercept, and they render empty without seeded data. Deferred deliberately — E2E's job here is UI flows, and server-side correctness is covered by the Vitest `server` project.
-- **Real-pipeline integration** (manual/milestone-gated, not CI): actual COLMAP + gsplat runs cost real GPU time/money. A "fast test mode" (tiny photo set, ~50 iterations) gives a cheap on-demand smoke test of the plumbing when needed.
 
 ## Build order
 

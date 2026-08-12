@@ -8,7 +8,7 @@ from constructs import Construct
 
 
 class BudgetsStack(cdk.Stack):
-    """The independent, infra-level safety net (plan §5): an AWS Budget alert
+    """The independent, infra-level safety net: an AWS Budget alert
     plus a CloudWatch billing alarm, deliberately separate from the
     application-level rate limiting/daily-cap logic in the backend, so a bug
     in that logic can't silently blow the budget unnoticed.

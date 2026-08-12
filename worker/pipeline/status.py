@@ -1,4 +1,4 @@
-"""Worker -> backend status callback (plan §3: PATCH /api/v1/internal/jobs/{id}/status)."""
+"""Worker -> backend status callback: PATCH /api/v1/internal/jobs/{id}/status."""
 
 import logging
 

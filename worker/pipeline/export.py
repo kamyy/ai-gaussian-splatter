@@ -1,6 +1,6 @@
 """Write the trained splat to a viewer-compatible .ply, render one thumbnail
-image via gsplat's own rasterizer (plan §4: "reusing the same renderer
-already used during training — no new dependency"), and upload both to S3.
+image via gsplat's own rasterizer — the same renderer training already uses,
+so the thumbnail costs no new dependency — and upload both to S3.
 """
 
 from pathlib import Path
