@@ -7,6 +7,7 @@ import { defineConfig } from "vitest/config";
 // project explicitly and excluded from the client one.
 export default defineConfig({
   test: {
+    fileParallelism: false,
     projects: [
       {
         plugins: [react()],
