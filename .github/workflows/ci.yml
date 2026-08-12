@@ -1,8 +1,9 @@
 name: CI
 
-# Plan §8: unit/component tests + the mocked-backend E2E test run on every
-# PR here. Real-pipeline integration tests (COLMAP + gsplat on a real GPU)
-# are deliberately NOT run here — they cost real time/money and stay
+# Plan §8: unit/component tests run on every PR here. Playwright runs too,
+# but its one spec is skipped pending a seeded test database, so it currently
+# asserts nothing. Real-pipeline integration tests (COLMAP + gsplat on a real
+# GPU) are deliberately NOT run here — they cost real time/money and stay
 # manual/milestone-gated, per the plan's testing strategy.
 on:
   pull_request:

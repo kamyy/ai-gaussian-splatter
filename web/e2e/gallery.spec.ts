@@ -1,9 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 // Public-path E2E: no auth needed, so no Clerk test-mode setup required —
-// this is the piece of the golden path we can actually run here. Data comes
-// from the real mock backend server (e2e/mock-backend.mjs), not browser-level
-// route mocking — see playwright.config.ts for why.
+// this is the piece of the golden path reachable here.
 //
 // The full authenticated golden path (sign in -> upload -> trigger -> poll
 // -> view, per plan §8) needs Clerk's `@clerk/testing` package with real
@@ -13,13 +11,13 @@ import { expect, test } from "@playwright/test";
 const GALLERY_ITEM_ID = "11111111-1111-1111-1111-111111111111";
 
 // SKIPPED: a real gap, not a flake. app/gallery/page.tsx queries the database
-// directly, so e2e/mock-backend.mjs serves data nothing requests and the page
-// renders empty.
+// directly during SSR, so with no data seeded the page renders empty — and
+// browser-level route mocking cannot reach a query made in Next's server
+// process.
 //
 // Fix: seed the gallery row into a real test database and point the dev
-// server at it, deleting mock-backend.mjs — a deferred harness redesign.
-// Un-skip as part of that work; don't fix this by asserting against an empty
-// page.
+// server at it — a deferred harness redesign. Un-skip as part of that work;
+// don't fix this by asserting against an empty page.
 test.skip("gallery page lists items and links to detail pages with real OG data", async ({ page }) => {
   await page.goto("/gallery");
 
