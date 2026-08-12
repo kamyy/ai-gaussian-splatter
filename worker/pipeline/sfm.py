@@ -54,7 +54,7 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
             str(photos_dir),
             "--ImageReader.single_camera",
             "1",
-            "--SiftExtraction.use_gpu",
+            "--FeatureExtraction.use_gpu",
             "1",
         ]
     )
@@ -65,7 +65,7 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
             "exhaustive_matcher",
             "--database_path",
             str(database_path),
-            "--SiftMatching.use_gpu",
+            "--FeatureMatching.use_gpu",
             "1",
         ]
     )
@@ -105,9 +105,14 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
 
 def _count_registered_images(model_dir: Path) -> int:
     result = _run(["colmap", "model_analyzer", "--path", str(model_dir)], capture=True)
-    match = re.search(r"Registered images:\s*(\d+)", result.stdout)
+    # COLMAP reports through glog, which writes to stderr and never to stdout,
+    # so the count is not where a plain `colmap ... | grep` would look for it.
+    # Both streams are searched rather than stderr alone, so the parse does not
+    # break again if a future version prints it directly.
+    output = f"{result.stdout}\n{result.stderr}"
+    match = re.search(r"Registered images:\s*(\d+)", output)
     if not match:
-        raise RuntimeError(f"Could not parse registered image count from model_analyzer output: {result.stdout!r}")
+        raise RuntimeError(f"Could not parse registered image count from model_analyzer output: {output!r}")
     return int(match.group(1))
 
 

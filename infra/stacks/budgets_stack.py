@@ -24,7 +24,12 @@ class BudgetsStack(cdk.Stack):
     ) -> None:
         super().__init__(scope, id, **kwargs)
 
-        limit = monthly_budget_limit_usd if monthly_budget_limit_usd is not None else 25
+        # Must stay above the stack's own fixed monthly cost (~$35: ALB, RDS,
+        # one Fargate Spot task, secrets, logs) or both notifications fire
+        # every month regardless of usage and the alert stops meaning
+        # anything. Below the ~$110/month that GLOBAL_MAX_JOBS_PER_DAY would
+        # allow, so it still catches the runaway case it exists to bound.
+        limit = monthly_budget_limit_usd if monthly_budget_limit_usd is not None else 75
 
         alert_topic = sns.Topic(self, "BillingAlertTopic")
         alert_topic.add_subscription(subscriptions.EmailSubscription(alert_email))

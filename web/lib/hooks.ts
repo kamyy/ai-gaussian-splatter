@@ -9,7 +9,7 @@
 import { useAuth } from "@clerk/nextjs";
 import useSWR from "swr";
 
-import { getGallery, getLatestJob, getObject, listObjects } from "./api";
+import { getLatestJob, getObject, listObjects } from "./api";
 import { TERMINAL_JOB_STATUSES } from "./types";
 
 const JOB_POLL_INTERVAL_MS = 4500;
@@ -56,8 +56,4 @@ export function useJobStatus(objectId: string | undefined) {
       },
     },
   );
-}
-
-export function useGallery() {
-  return useSWR("gallery", getGallery);
 }

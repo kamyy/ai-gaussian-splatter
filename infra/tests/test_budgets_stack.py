@@ -11,7 +11,7 @@ def test_budget_has_both_notification_thresholds(wired_stacks):
                 {
                     "BudgetType": "COST",
                     "TimeUnit": "MONTHLY",
-                    "BudgetLimit": {"Amount": 25, "Unit": "USD"},
+                    "BudgetLimit": {"Amount": 75, "Unit": "USD"},
                 }
             ),
             "NotificationsWithSubscribers": Match.array_with(
@@ -56,7 +56,7 @@ def test_billing_alarm_config(wired_stacks):
             "MetricName": "EstimatedCharges",
             "Statistic": "Maximum",
             "Period": 21600,
-            "Threshold": 25,
+            "Threshold": 75,
             "EvaluationPeriods": 1,
             "ComparisonOperator": "GreaterThanThreshold",
         },

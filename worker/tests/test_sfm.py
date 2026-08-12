@@ -2,14 +2,30 @@ import subprocess
 
 from pipeline.sfm import SfmResult, _count_registered_images
 
+FAKE_ANALYZER_OUTPUT = "Cameras: 1\nImages: 50\nRegistered images: 47\nPoints: 12345\n"
 
-def test_count_registered_images_parses_model_analyzer_output(monkeypatch, tmp_path):
-    fake_output = "Cameras: 1\nImages: 50\nRegistered images: 47\nPoints: 12345\n"
 
+def _fake_run(stdout: str, stderr: str):
     def fake_run(cmd, check, capture_output, text):
-        return subprocess.CompletedProcess(cmd, 0, stdout=fake_output, stderr="")
+        return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr=stderr)
 
-    monkeypatch.setattr("pipeline.sfm.subprocess.run", fake_run)
+    return fake_run
+
+
+def test_count_registered_images_reads_stderr(monkeypatch, tmp_path):
+    """Where COLMAP actually reports it: the count goes through glog, which
+    writes to stderr and never to stdout. A fixture that puts it on stdout
+    passes while the real pipeline raises on every successful reconstruction.
+    """
+    monkeypatch.setattr("pipeline.sfm.subprocess.run", _fake_run("", FAKE_ANALYZER_OUTPUT))
+
+    assert _count_registered_images(tmp_path) == 47
+
+
+def test_count_registered_images_reads_stdout(monkeypatch, tmp_path):
+    """Both streams are searched, so a future COLMAP that prints the summary
+    directly keeps working."""
+    monkeypatch.setattr("pipeline.sfm.subprocess.run", _fake_run(FAKE_ANALYZER_OUTPUT, ""))
 
     assert _count_registered_images(tmp_path) == 47
 

@@ -8,7 +8,7 @@
 // should skip this client entirely and use lib/server/data.ts directly rather
 // than have the server make an HTTP request to itself.
 
-import type { GalleryItemRead, JobRead, ObjectRead, PhotoPresignItem, PublicObjectRead } from "./types";
+import type { JobRead, ObjectRead, PhotoPresignItem } from "./types";
 
 class ApiError extends Error {
   constructor(
@@ -85,20 +85,6 @@ export function getLatestJob(token: string, objectId: string) {
 
 export function getSplatUrl(token: string, objectId: string) {
   return apiFetch<{ url: string }>(`/api/v1/objects/${objectId}/splat`, { token });
-}
-
-// --- Public (no token; safe to call from Server Components) ---
-
-export function getGallery() {
-  return apiFetch<GalleryItemRead[]>("/api/v1/gallery");
-}
-
-export function getGalleryItem(itemId: string) {
-  return apiFetch<GalleryItemRead>(`/api/v1/gallery/${itemId}`);
-}
-
-export function getPublicObject(objectId: string) {
-  return apiFetch<PublicObjectRead>(`/api/v1/public/objects/${objectId}`);
 }
 
 // --- Direct-to-S3 upload (not through apiFetch — raw PUT with the file body,
