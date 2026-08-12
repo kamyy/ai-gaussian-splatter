@@ -40,9 +40,8 @@ APP_HOSTNAME = f"ai-gaussian-splatter.{DOMAIN_ZONE_NAME}"
 CLUSTER_NAME = "ai-gaussian-splatter"
 SERVICE_NAME = "ai-gaussian-splatter-backend"
 
-# Must exceed the ALB's own idle timeout (60s, left at the CDK default below)
-# or the ALB can hand a request to a keep-alive socket Node already closed —
-# see the KEEP_ALIVE_TIMEOUT env var below for the full explanation.
+# Must stay above the ALB's own idle timeout (60s, left at the CDK default
+# below) or the ALB serves intermittent 502s — see AGENTS.md.
 KEEP_ALIVE_TIMEOUT_MS = "65000"
 
 
@@ -85,10 +84,8 @@ class BackendStack(cdk.Stack):
         # template JSON. Same treatment as the RDS-generated DATABASE_URL.
         #
         # Its public counterpart, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, is
-        # deliberately NOT here: Next.js inlines NEXT_PUBLIC_* variables into
-        # the bundle at build time, so setting it as a container env var has no
-        # effect. It is a `docker build --build-arg` instead (see the web
-        # Dockerfile).
+        # deliberately absent: it is a `docker build --build-arg` in
+        # web/Dockerfile, not a runtime env var — see AGENTS.md.
         self.clerk_secret = secretsmanager.Secret(
             self,
             "ClerkSecretKey",
@@ -169,9 +166,7 @@ class BackendStack(cdk.Stack):
         )
 
         # Imported, never managed: this stack only adds records to the zone.
-        # An imported zone is not part of the template's resource set, so no
-        # CloudFormation operation — `cdk destroy` included — can modify or
-        # delete the zone itself or anything already in it.
+        # Never from_lookup() — see AGENTS.md.
         hosted_zone = route53.HostedZone.from_hosted_zone_attributes(
             self,
             "HostedZone",
@@ -179,13 +174,8 @@ class BackendStack(cdk.Stack):
             zone_name=DOMAIN_ZONE_NAME,
         )
 
-        # An ALB is regional and can only reference a certificate in its own
-        # region, which declaring it here gets — a us-east-1 certificate can't
-        # attach to this ALB. (us-east-1 is only special for CloudFront,
-        # unused here, which reads certificates from that region regardless of
-        # where the origin lives.) Certificates are free and Route 53 zones
-        # are global, so DNS validation is unaffected by which region issues
-        # the certificate.
+        # Declared inline so the certificate lands in the ALB's own region,
+        # which is the only region an ALB can reference — see AGENTS.md.
         certificate = acm.Certificate(
             self,
             "Certificate",
@@ -194,9 +184,8 @@ class BackendStack(cdk.Stack):
         )
 
         # Built manually rather than via the CDK pattern, so its security
-        # group can be the one NetworkStack owns — see network_stack.py's
-        # alb_security_group comment for why the pattern's own group would
-        # cause a DependencyCycle.
+        # group can be the one NetworkStack owns — see AGENTS.md for why the
+        # pattern's own group would cause a DependencyCycle.
         self.load_balancer = elbv2.ApplicationLoadBalancer(
             self,
             "LoadBalancer",
@@ -218,11 +207,8 @@ class BackendStack(cdk.Stack):
             domain_zone=hosted_zone,
             protocol=elbv2.ApplicationProtocol.HTTPS,
             redirect_http=True,
-            # Set explicitly: a listener created via the API or CloudFormation
-            # (as this one is) defaults to the weak ELBSecurityPolicy-2016-08,
-            # which still negotiates TLS 1.0/1.1 — unlike the console, whose
-            # default is this same strong policy. TLS 1.2/1.3 only, which
-            # every browser since ~2014 and the worker's Python client speak.
+            # Must stay set explicitly — an unset ssl_policy is not this
+            # value, it is the weak 2016-08 default. See AGENTS.md.
             ssl_policy=elbv2.SslPolicy.RECOMMENDED_TLS,
             cpu=256,  # 0.25 vCPU
             memory_limit_mib=512,
@@ -269,40 +255,25 @@ class BackendStack(cdk.Stack):
                     # stable custom domain the ALB is aliased to.
                     "APP_PUBLIC_URL": app_public_url,
                     # The non-secret half of the connection, passed as parts
-                    # rather than an assembled URL: RDS writes its generated
-                    # credentials to Secrets Manager as a JSON blob, and ECS
-                    # cannot assemble a postgresql:// URL out of that blob
-                    # itself. The app builds the URL in
-                    # web/lib/server/databaseUrl.ts.
+                    # rather than an assembled URL — web/lib/server/databaseUrl.ts
+                    # builds the URL from these plus the two secrets below. See
+                    # AGENTS.md for why ECS can't assemble it here.
                     "DATABASE_HOST": database.db_instance_endpoint_address,
                     "DATABASE_PORT": database.db_instance_endpoint_port,
                     "DATABASE_NAME": DATABASE_NAME,
-                    # RDS Postgres 15+ defaults to rds.force_ssl=1, and its
-                    # certificates chain to Amazon's own root CAs, absent from
-                    # Node's trust store — without this CA bundle the
-                    # connection fails either unencrypted ("no pg_hba.conf
-                    # entry ... no encryption") or unverified
-                    # ("UNABLE_TO_VERIFY_LEAF_SIGNATURE"). web/Dockerfile bakes
-                    # the bundle into the image; set as an env var (not
-                    # hardcoded) so a locally-run container can still talk to
-                    # a plain Postgres.
+                    # Turns on TLS verification against RDS with the CA bundle
+                    # web/Dockerfile bakes into the image (see AGENTS.md). An
+                    # env var rather than a hardcoded path so a locally-run
+                    # container can still talk to a plain Postgres.
                     "DATABASE_SSL_CA": RDS_CA_BUNDLE_PATH,
-                    # The ALB pools connections to the target for up to its
-                    # own idle timeout (60s, the CDK default, unchanged).
-                    # Node's http server closes idle keep-alive sockets after
-                    # 5s by default; Next's standalone server.js only
-                    # overrides that when this env var is set (build/utils.js).
-                    # Without it, the ALB can hand a request to a socket the
-                    # app already closed — a 502 with no application-level
-                    # error, since the app never saw the request. Kept a
-                    # little above the ALB's timeout so the ALB always closes
-                    # (or reuses) the connection first, per AWS's guidance.
+                    # Read by Next's standalone server.js to override Node's
+                    # 5s idle-socket close, which the ALB outlives — see
+                    # AGENTS.md.
                     "KEEP_ALIVE_TIMEOUT": KEEP_ALIVE_TIMEOUT_MS,
                 },
-                # `field=` is what makes ECS extract a single JSON key rather
-                # than handing over the whole secret. Only the credentials go
-                # through Secrets Manager; the endpoint and database name above
-                # aren't secret and stay readable in the console.
+                # Only the credentials go through Secrets Manager; the endpoint
+                # and database name above aren't secret and stay readable in
+                # the console.
                 secrets={
                     "DATABASE_USER": ecs.Secret.from_secrets_manager(db_secret, field="username"),
                     "DATABASE_PASSWORD": ecs.Secret.from_secrets_manager(db_secret, field="password"),
