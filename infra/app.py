@@ -37,6 +37,14 @@ def build_stacks(
         env=env,
         vpc=network.vpc,
         db_security_group=network.db_security_group,
+        # The browser reaches both buckets directly via presigned URLs, so this
+        # is the origin their CORS rules admit. Normalized rather than passed
+        # through: app_public_url is a base URL that paths get appended to, so
+        # a trailing slash in it is harmless, while S3 matches the browser's
+        # Origin header exactly and would reject every upload and every splat
+        # fetch — with the presigned URL still valid, so the only symptom is a
+        # console error.
+        app_origin=app_public_url.rstrip("/"),
     )
 
     worker_iam = WorkerIamStack(

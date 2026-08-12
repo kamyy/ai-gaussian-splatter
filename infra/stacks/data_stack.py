@@ -14,6 +14,13 @@ class DataStack(cdk.Stack):
     """RDS Postgres (single-AZ, db.t4g.micro — plan §2's justification: genuinely
     relational schema, low traffic, no need for Multi-AZ at this scale) and
     the two S3 buckets (uploads, splats).
+
+    Both buckets' CORS rules name `app_origin` rather than "*": the browser
+    talks to S3 directly on both legs (presigned PUT on upload, presigned GET
+    in the viewer), so "*" would let any page a visitor lands on read a shared
+    or leaked splat URL cross-origin. The origin is passed in because the
+    hostname constant lives in backend_stack, which already imports from this
+    module.
     """
 
     def __init__(
@@ -22,6 +29,7 @@ class DataStack(cdk.Stack):
         id: str,
         vpc: ec2.Vpc,
         db_security_group: ec2.SecurityGroup,
+        app_origin: str,
         **kwargs,
     ) -> None:
         super().__init__(scope, id, **kwargs)
@@ -61,7 +69,7 @@ class DataStack(cdk.Stack):
             cors=[
                 s3.CorsRule(
                     allowed_methods=[s3.HttpMethods.PUT],
-                    allowed_origins=["*"],  # tightened to the real frontend origin at deploy time
+                    allowed_origins=[app_origin],
                     allowed_headers=["*"],
                 ),
             ],
@@ -69,10 +77,22 @@ class DataStack(cdk.Stack):
             removal_policy=cdk.RemovalPolicy.RETAIN,
         )
 
+        # CORS is needed here for the same reason as on uploads, in the other
+        # direction: the viewer fetches the .ply straight from S3 in the
+        # browser (components/viewer/SplatViewer.tsx passes the presigned URL
+        # to DropInViewer), so it is a cross-origin GET that S3 rejects
+        # without a matching rule.
         self.splats_bucket = s3.Bucket(
             self,
             "SplatsBucket",
             block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
             encryption=s3.BucketEncryption.S3_MANAGED,
+            cors=[
+                s3.CorsRule(
+                    allowed_methods=[s3.HttpMethods.GET, s3.HttpMethods.HEAD],
+                    allowed_origins=[app_origin],
+                    allowed_headers=["*"],
+                ),
+            ],
             removal_policy=cdk.RemovalPolicy.RETAIN,
         )

@@ -39,6 +39,64 @@ def test_splats_bucket_has_no_lifecycle_rule(wired_stacks):
     assert len(without_lifecycle) == 1
 
 
+def test_splats_bucket_allows_cross_origin_reads(wired_stacks):
+    """The viewer fetches the .ply from S3 in the browser, so without a GET
+    rule every splat fails to load — and nothing in the TypeScript suite would
+    catch it, since the presigned URL itself is valid.
+    """
+    template = Template.from_stack(wired_stacks["data"])
+
+    buckets = template.find_resources("AWS::S3::Bucket")
+    (splats_props,) = [props for props in buckets.values() if "LifecycleConfiguration" not in props["Properties"]]
+    (cors_rule,) = splats_props["Properties"]["CorsConfiguration"]["CorsRules"]
+
+    assert sorted(cors_rule["AllowedMethods"]) == ["GET", "HEAD"]
+
+
+def test_bucket_cors_origin_drops_a_trailing_slash():
+    """appPublicUrl is a base URL, so a trailing slash on it is harmless
+    everywhere except here: S3 matches the browser's Origin header exactly, so
+    an un-normalized value would reject every upload and every splat fetch
+    while the presigned URLs stayed valid. Built with its own app rather than
+    the shared fixture, since the point is a non-default input.
+    """
+    import aws_cdk as cdk
+
+    from app import build_stacks
+    from tests.conftest import ENV
+
+    stacks = build_stacks(
+        cdk.App(),
+        ENV,
+        worker_ami_id="ami-000000000000",
+        alert_email="nobody@example.com",
+        app_public_url="https://ai-gaussian-splatter.orky.net/",
+        hosted_zone_id="Z00000000000000000000",
+    )
+    template = Template.from_stack(stacks["data"])
+
+    for props in template.find_resources("AWS::S3::Bucket").values():
+        for rule in props["Properties"].get("CorsConfiguration", {}).get("CorsRules", []):
+            assert rule["AllowedOrigins"] == ["https://ai-gaussian-splatter.orky.net"]
+
+
+def test_bucket_cors_names_the_app_origin_not_a_wildcard(wired_stacks):
+    """The browser reads and writes both buckets directly through presigned
+    URLs, so a wildcard would let any page a visitor happens to load fetch a
+    shared or leaked splat URL cross-origin.
+    """
+    template = Template.from_stack(wired_stacks["data"])
+
+    rules = [
+        rule
+        for props in template.find_resources("AWS::S3::Bucket").values()
+        for rule in props["Properties"].get("CorsConfiguration", {}).get("CorsRules", [])
+    ]
+    assert len(rules) == 2
+    for rule in rules:
+        assert rule["AllowedOrigins"] == ["https://ai-gaussian-splatter.orky.net"]
+
+
 def test_database_is_in_isolated_subnets(wired_stacks):
     """RDS keeps the placement the tasks gave up: no route to or from the
     internet. It needs no outbound access, so nothing is gained by moving it
