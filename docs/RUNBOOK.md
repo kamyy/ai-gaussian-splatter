@@ -4,16 +4,97 @@
 
 ### Worker (local pipeline run, per plan M0/M1)
 
-Requires a real GPU with the CUDA toolkit and `colmap` on PATH — not available in every dev environment (this repo was scaffolded in a sandbox with a GPU driver but no CUDA toolkit, so the training path was smoke-tested but never run end-to-end; verify on real hardware before trusting it).
+Needs an NVIDIA GPU. Run it as the container rather than on the host: the image carries CUDA and a CUDA-enabled COLMAP build, so nothing but the driver and the container toolkit has to be installed locally.
+
+One-time GPU passthrough setup. `nvidia-container-toolkit` is not in Fedora's repositories or RPM Fusion's — those carry the driver only — so it comes from NVIDIA's own:
 
 ```bash
-cd worker
-uv sync --group dev
-JOB_ID=local-test OBJECT_ID=local-test CALLBACK_TOKEN=none \
-BACKEND_URL=http://localhost:8000 UPLOADS_BUCKET=... SPLATS_BUCKET=... \
-FAST_TEST_MODE=true \
-  uv run python run_job.py
+curl -fsSL https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo \
+  | sudo tee /etc/yum.repos.d/nvidia-container-toolkit.repo
+sudo dnf install -y nvidia-container-toolkit
+
+# Writes the CDI spec that podman resolves `--device nvidia.com/gpu=all` against.
+# Generated as root into /etc/cdi even though the containers run rootless.
+sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
+
+podman run --rm --security-opt=label=disable --device nvidia.com/gpu=all \
+  docker.io/nvidia/cuda:12.9.1-base-ubuntu24.04 nvidia-smi
 ```
+
+`--security-opt=label=disable` is required on every GPU run, not just this check: without it SELinux blocks access to the device nodes and NVML fails with `Insufficient Permissions` rather than anything mentioning SELinux.
+
+Upload a photo set to the dev uploads bucket, then run the job against it:
+
+```bash
+OBJECT_ID=$(uuidgen)
+aws s3 sync ./photos "s3://ai-gaussian-splatter-dev-uploads/objects/$OBJECT_ID/photos/"
+
+podman build -t splat-worker:dev worker/    # ~19 GB image; most of the time is the torch/CUDA download
+
+podman run --rm --security-opt=label=disable --device nvidia.com/gpu=all \
+  -e JOB_ID=local-test -e OBJECT_ID="$OBJECT_ID" \
+  -e CALLBACK_TOKEN=none -e BACKEND_URL=http://localhost:3000 \
+  -e UPLOADS_BUCKET=ai-gaussian-splatter-dev-uploads \
+  -e SPLATS_BUCKET=ai-gaussian-splatter-dev-splats \
+  -e AWS_DEFAULT_REGION=us-west-2 \
+  -e AWS_ACCESS_KEY_ID=... -e AWS_SECRET_ACCESS_KEY=... \
+  -e FAST_TEST_MODE=true \
+  splat-worker:dev
+```
+
+`AWS_DEFAULT_REGION`, not `AWS_REGION`: botocore's region setting reads only the former, and with neither set `boto3.client("s3")` silently falls back to the global endpoint while `boto3.client("ec2")` raises `NoRegionError`. On a real worker instance the region comes from IMDS instead, so this matters only when running locally.
+
+Nothing needs to be listening at `BACKEND_URL`: `pipeline/status.py` logs and swallows callback failures by design, and `terminate_self()` no-ops when IMDS doesn't answer, so the pipeline runs standalone. `FAST_TEST_MODE=true` cuts training to ~50 iterations — use it to prove the plumbing before paying for a full run. Success leaves `result.ply` and `thumbnail.png` under `s3://ai-gaussian-splatter-dev-splats/objects/$OBJECT_ID/`.
+
+### Development AWS resources (two S3 buckets)
+
+Almost nothing in the deployed stack is a dev dependency — the VPC, ALB, and Fargate service exist to serve the app, which locally is served by `next dev`. S3 is the exception: `components/upload/PhotoDropzone.tsx` has the browser PUT to the presigned URL directly, and the worker reads and writes both buckets with boto3, so the bytes need somewhere real to go. S3 is a plain regional endpoint, so this needs no VPC and no other stack, and costs pennies.
+
+These are created by hand rather than in `infra/`, which describes the production topology only.
+
+```bash
+for b in ai-gaussian-splatter-dev-uploads ai-gaussian-splatter-dev-splats; do
+  aws s3api create-bucket --bucket "$b" --region us-west-2 \
+    --create-bucket-configuration LocationConstraint=us-west-2
+done
+
+# Uploads take a cross-origin PUT from the app; splats take a cross-origin GET
+# from the viewer. Without these rules the browser blocks both — the presigned
+# URL is valid, so the failure shows only in the browser console.
+#
+# Both origins: 3000 is `next dev`, 8000 is the local container built below.
+aws s3api put-bucket-cors --bucket ai-gaussian-splatter-dev-uploads --cors-configuration '{
+  "CORSRules": [{"AllowedMethods": ["PUT"],
+                 "AllowedOrigins": ["http://localhost:3000", "http://localhost:8000"],
+                 "AllowedHeaders": ["*"]}]
+}'
+aws s3api put-bucket-cors --bucket ai-gaussian-splatter-dev-splats --cors-configuration '{
+  "CORSRules": [{"AllowedMethods": ["GET", "HEAD"],
+                 "AllowedOrigins": ["http://localhost:3000", "http://localhost:8000"],
+                 "AllowedHeaders": ["*"]}]
+}'
+```
+
+Then an IAM user scoped to just those two buckets, so `web/.env` never holds admin credentials:
+
+```bash
+aws iam create-user --user-name ai-gaussian-splatter-dev
+aws iam put-user-policy --user-name ai-gaussian-splatter-dev \
+  --policy-name dev-buckets --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject", "s3:ListBucket"],
+      "Resource": [
+        "arn:aws:s3:::ai-gaussian-splatter-dev-uploads", "arn:aws:s3:::ai-gaussian-splatter-dev-uploads/*",
+        "arn:aws:s3:::ai-gaussian-splatter-dev-splats", "arn:aws:s3:::ai-gaussian-splatter-dev-splats/*"
+      ]
+    }]
+  }'
+aws iam create-access-key --user-name ai-gaussian-splatter-dev
+```
+
+Put the returned key pair in `web/.env` as `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`. A 403 on the browser's PUT means either the CORS rule or this policy; the browser console distinguishes them (a CORS failure never reaches S3).
 
 ### Web (frontend + REST API)
 
