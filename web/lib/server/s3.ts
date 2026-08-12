@@ -1,4 +1,4 @@
-import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 import { getEnv } from "./env";
@@ -39,20 +39,4 @@ export async function presignSplatDownload(splatsBucketKey: string): Promise<str
   const env = getEnv();
   const command = new GetObjectCommand({ Bucket: env.SPLATS_BUCKET, Key: splatsBucketKey });
   return getSignedUrl(s3Client(), command, { expiresIn: PRESIGN_EXPIRY_SECONDS });
-}
-
-export async function objectExists(bucket: string, key: string): Promise<boolean> {
-  try {
-    await s3Client().send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
-    return true;
-  } catch (error) {
-    // HeadObject returns a bare 404 with no body, so the SDK surfaces it as
-    // NotFound rather than NoSuchKey — check both.
-    const name = (error as { name?: string })?.name;
-    const statusCode = (error as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode;
-    if (name === "NotFound" || name === "NoSuchKey" || statusCode === 404) {
-      return false;
-    }
-    throw error;
-  }
 }

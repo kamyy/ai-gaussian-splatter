@@ -70,11 +70,3 @@ export function SplatViewerLoading() {
     </Center>
   );
 }
-
-export function SplatViewerError({ message }: { message: string }) {
-  return (
-    <Center style={{ width: "100%", height: "70vh" }}>
-      <Text c="red">{message}</Text>
-    </Center>
-  );
-}
