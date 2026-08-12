@@ -4,9 +4,8 @@ import { expect, test } from "@playwright/test";
 // this is the piece of the golden path reachable here.
 //
 // The full authenticated golden path (sign in -> upload -> trigger -> poll
-// -> view, per plan §8) needs Clerk's `@clerk/testing` package with real
-// Clerk test-mode API keys to bypass interactive sign-in, not configured in
-// this sandbox — see plan M6/M7.
+// -> view) needs Clerk's `@clerk/testing` package with real Clerk test-mode
+// API keys to bypass interactive sign-in, which are not configured here.
 
 const GALLERY_ITEM_ID = "11111111-1111-1111-1111-111111111111";
 
@@ -29,7 +28,7 @@ test.skip("gallery page lists items and links to detail pages with real OG data"
   await expect(page.getByRole("heading", { name: "Ceramic mug" })).toBeVisible();
 
   // Verifies the OG tags generateMetadata produces server-side — the whole
-  // reason Next.js was chosen over the original Vite plan (see plan Context).
+  // reason this app server-renders at all (ARCHITECTURE.md, Frontend).
   const ogTitle = await page.locator('meta[property="og:title"]').getAttribute("content");
   expect(ogTitle).toBe("Ceramic mug");
 });

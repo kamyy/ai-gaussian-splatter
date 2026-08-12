@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// Plan §8: the E2E tier runs on every PR — fast and free, unlike the
+// The E2E tier runs on every PR — fast and free, unlike the
 // real-pipeline integration tests, which stay manual/milestone-gated.
 //
 // Only one server is started, the app itself. There is no HTTP mock to stand

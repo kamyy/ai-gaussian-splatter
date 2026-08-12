@@ -1,10 +1,9 @@
 "use client";
 
-// SWR hooks (plan §1: lib/hooks.ts) — owns all server-derived data (objects
-// list, job status via refreshInterval, gallery data). See plan's context
-// note on why SWR over React Query: lighter, Vercel-native, and this is the
-// one piece of real async complexity (job-status polling) worth a fetching
-// library rather than hand-rolled setInterval/useEffect.
+// SWR hooks — owns all server-derived data (objects list, job status via
+// refreshInterval, gallery data). SWR rather than React Query because it is
+// lighter, and job-status polling is the one piece of async complexity here
+// worth a fetching library over a hand-rolled setInterval/useEffect.
 
 import { useAuth } from "@clerk/nextjs";
 import useSWR from "swr";
@@ -50,7 +49,7 @@ export function useJobStatus(objectId: string | undefined) {
     {
       refreshInterval: latestData => {
         if (latestData && TERMINAL_JOB_STATUSES.includes(latestData.status)) {
-          return 0; // stop polling once terminal — plan §4
+          return 0; // stop polling once terminal
         }
         return JOB_POLL_INTERVAL_MS;
       },

@@ -4,7 +4,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getEnv } from "./env";
 
 /**
- * Presigned S3 URLs (plan §4 step 1) — uploads always go through this API so
+ * Presigned S3 URLs — uploads always go through this API so
  * the rate limit is enforced before any bytes hit S3.
  */
 const PRESIGN_EXPIRY_SECONDS = 15 * 60;

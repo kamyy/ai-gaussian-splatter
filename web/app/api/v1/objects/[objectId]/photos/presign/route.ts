@@ -12,7 +12,7 @@ import { checkAndIncrementIp, checkAndIncrementUser } from "@/lib/server/rateLim
 import { presignPhotoUpload } from "@/lib/server/s3";
 import type { PhotoPresignItem } from "@/lib/types";
 
-// Rate limiting happens here — see plan §5: this gates *before* any upload
+// Rate limiting happens here: it gates *before* any upload
 // happens (per-IP + per-user), separate from the global daily cap which only
 // gates the expensive job-launch step (../process).
 const presignSchema = z.array(z.object({ filename: z.string().min(1), contentType: z.string().min(1) })).min(1);
@@ -39,7 +39,7 @@ export const POST = withErrorHandling(
     }
 
     // Both checks before any S3 URL is issued — the actual multi-account
-    // defense (per-IP) plus the per-user quota, per plan §5.
+    // defense (per-IP) plus the per-user quota.
     await checkAndIncrementIp(getClientIp(request), env.RATE_LIMIT_IP_PER_HOUR);
     await checkAndIncrementUser(user.id, env.RATE_LIMIT_USER_PER_DAY);
 

@@ -57,7 +57,7 @@ export function PhotoDropzone({ objectId, onAllUploaded }: PhotoDropzoneProps) {
 
       onAllUploaded?.();
     } catch (err) {
-      // Most likely a 429 from the per-IP/per-user rate limit (plan §5) —
+      // Most likely a 429 from the per-IP/per-user rate limit —
       // surfaced via the banner rather than a generic error boundary, since
       // it's an expected, actionable state ("slow down"), not a bug.
       showBanner({

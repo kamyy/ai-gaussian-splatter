@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Env vars set in the EC2 launch UserData per plan §4."""
+    """Env vars set in the EC2 launch UserData (web/lib/server/ec2Launcher.ts)."""
 
     model_config = SettingsConfigDict(env_prefix="")
 
@@ -13,11 +13,11 @@ class Settings(BaseSettings):
     uploads_bucket: str
     splats_bucket: str
 
-    # Reduced default per plan's Context: single-object-against-plain-background
-    # scenes converge well below the paper's 30k default.
+    # Single-object-against-plain-background scenes converge well below the
+    # paper's 30k default.
     training_iterations: int = 10_000
 
-    # "Fast test mode" per plan §8 — tiny photo set, ~50 iterations, for a cheap
+    # "Fast test mode" — tiny photo set, ~50 iterations, for a cheap
     # on-demand smoke test of the plumbing without full-quality training cost.
     fast_test_mode: bool = False
 

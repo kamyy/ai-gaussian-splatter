@@ -9,7 +9,7 @@ import { HttpError, withErrorHandling } from "@/lib/server/httpError";
 import { JOB_STATUSES, type SplatStatus } from "@/lib/types";
 
 /**
- * The worker -> app status callback (plan §3).
+ * The worker -> app status callback.
  *
  * The one endpoint whose *field names* are snake_case: worker/pipeline/status.py
  * PATCHes a literal snake_case body. The status values need no translation —

@@ -11,9 +11,9 @@ DATABASE_NAME = "ai_gaussian_splatter"
 
 
 class DataStack(cdk.Stack):
-    """RDS Postgres (single-AZ, db.t4g.micro — plan §2's justification: genuinely
-    relational schema, low traffic, no need for Multi-AZ at this scale) and
-    the two S3 buckets (uploads, splats).
+    """RDS Postgres (single-AZ, db.t4g.micro — a genuinely relational schema at
+    low traffic, with no need for Multi-AZ at this scale) and the two S3
+    buckets (uploads, splats).
 
     Both buckets' CORS rules name `app_origin` rather than "*": the browser
     talks to S3 directly on both legs (presigned PUT on upload, presigned GET
