@@ -11,8 +11,28 @@ dependencies = [
     "pillow>=10.4",
     "torch>=2.3",
     "gsplat>=1.4",
+    # gsplat's cuda/_backend.py imports packaging but does not declare it, so
+    # nothing else pulls it in and the first rasterization() call dies with
+    # ModuleNotFoundError. Declared here on gsplat's behalf.
+    "packaging>=24.0",
     "plyfile>=1.0.3",
 ]
+
+# torch must come from the CUDA build matching the Docker image's nvcc, not
+# from PyPI's default wheel. gsplat compiles its kernels at run time through
+# torch.utils.cpp_extension, which aborts when torch's CUDA major version
+# differs from the toolkit it finds: PyPI's torch ships +cu130 while the image
+# is CUDA 12.9, so the default resolution fails with "The detected CUDA version
+# mismatches the version that was used to compile PyTorch".
+#
+# This tracks the base image in worker/Dockerfile — move one and move both.
+[tool.uv.sources]
+torch = { index = "pytorch-cu129" }
+
+[[tool.uv.index]]
+name = "pytorch-cu129"
+url = "https://download.pytorch.org/whl/cu129"
+explicit = true
 
 [dependency-groups]
 dev = [
