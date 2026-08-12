@@ -136,7 +136,7 @@ After editing `web/lib/server/db/schema.ts`, run `pnpm db:generate` to emit a mi
 (cd infra && uv run ruff check . && uv run mypy app.py stacks && uv run pytest -v && pnpm synth)
 ```
 
-The `lib/server/**` Vitest project's Postgres-dependent tests (rate limiting, `getOrCreateUser`, the worker callback token) skip unless `TEST_DATABASE_URL` is set — CI wires it to a service container:
+The `server` Vitest project's Postgres-dependent tests (rate limiting, `getOrCreateUser`, the worker callback token) skip unless `TEST_DATABASE_URL` is set — CI wires it to a service container:
 
 ```bash
 (cd web && TEST_DATABASE_URL=postgresql://postgres:test@localhost:5432/ai_gaussian_splatter pnpm test)
@@ -188,7 +188,7 @@ The database lives in a private subnet, so run this from somewhere inside the VP
 
 1. Check `jobs.status` and `jobs.error_message` for the object (`GET /api/v1/objects/{id}/jobs/latest`).
 2. If `status` is stuck (no update in ~20 min) rather than `failed`: the instance likely died without reporting — check the EC2 console for the tagged instance (`Role=worker`, `JobId=<job_id>`) and its system log.
-3. Confirm self-termination actually fired: the instance should not still be running after the job reaches a terminal state. If it is, the CloudWatch alarm backstop (kills anything worker-tagged running >90 min) is the safety net — verify it's configured (`infra/stacks/budgets_stack.py` handles cost alarms; the instance-runtime alarm is a documented addition, not yet in this stack).
+3. Confirm self-termination actually fired: the instance should not still be running after the job reaches a terminal state. **If it is, terminate it by hand** — the instance-runtime alarm meant to catch this is not in any stack yet (`AGENTS.md`, Known gaps), so nothing else will.
 4. `docker logs` on the instance (if still running) or CloudWatch Logs (once wired up) for the actual COLMAP/gsplat stack trace.
 
 ## Deploying infra
