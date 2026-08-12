@@ -177,7 +177,7 @@ def test_service_waits_for_the_capacity_provider_association(wired_stacks):
 
 
 def test_cluster_and_service_names_are_fixed(wired_stacks):
-    """docs/RUNBOOK.md writes the `aws ecs update-service
+    """RUNBOOK.md writes the `aws ecs update-service
     --force-new-deployment` command out literally, since pushing to the fixed
     image tag is otherwise invisible to the running service. Generated names
     would make that command wrong.

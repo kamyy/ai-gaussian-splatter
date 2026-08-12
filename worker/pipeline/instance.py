@@ -1,8 +1,9 @@
 """EC2 instance self-termination via the instance metadata service (IMDSv2).
 
-The instance terminating itself in all cases (success, failure, or the
-CloudWatch alarm backstop per plan §4) is what prevents runaway spend — see
-run_job.py's finally block.
+Called from run_job.py's finally block, so it runs on success and on a failed
+job alike. It is the only thing stopping a worker from billing indefinitely:
+nothing outside the instance terminates it, so a process killed outright, or a
+termination call that fails, leaves the instance running until someone notices.
 """
 
 import logging
@@ -17,8 +18,7 @@ _IMDS_BASE = "http://169.254.169.254/latest"
 
 def get_self_instance_id() -> str | None:
     """Returns None (rather than raising) when not actually running on EC2 —
-    e.g. local dev per plan M4, where the pipeline runs synchronously without
-    a real instance to terminate.
+    e.g. a local pipeline run, where there is no real instance to terminate.
     """
     try:
         token_resp = httpx.put(
@@ -47,4 +47,4 @@ def terminate_self() -> None:
         boto3.client("ec2").terminate_instances(InstanceIds=[instance_id])
         logger.info("Termination requested for %s", instance_id)
     except Exception:
-        logger.exception("Failed to terminate self (%s) — CloudWatch alarm backstop should catch this", instance_id)
+        logger.exception("Failed to terminate self (%s) — it keeps running until stopped by hand", instance_id)

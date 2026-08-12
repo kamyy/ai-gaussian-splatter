@@ -5,7 +5,7 @@ import { EC2Client, RunInstancesCommand } from "@aws-sdk/client-ec2";
 import { getEnv } from "./env";
 
 /**
- * Direct spot-instance-per-job launch (plan §4) — no SQS/Batch/Step Functions.
+ * Direct spot-instance-per-job launch — no SQS/Batch/Step Functions.
  * IAM instance profile is scoped externally (infra/stacks/worker_iam_stack.py)
  * to exactly: S3 read (uploads bucket), S3 write (splats bucket),
  * ec2:TerminateInstances on itself.
@@ -28,8 +28,9 @@ function renderUserData(p: UserDataParams): string {
   return `#!/bin/bash
 set -euo pipefail
 
-# Fetch secrets from SSM at boot rather than embedding them in plaintext
-# user-data (visible via the EC2 describe-instances API) — plan §6.
+# Plaintext, and EC2 user-data is readable by anyone holding
+# ec2:DescribeInstances. The token is per-job and only authorizes status
+# updates on that one job (lib/server/auth.ts), which is what bounds this.
 CALLBACK_TOKEN="${p.callbackToken}"
 JOB_ID="${p.jobId}"
 OBJECT_ID="${p.objectId}"
@@ -52,7 +53,7 @@ docker run --rm --gpus all \\
 }
 
 /**
- * A per-job token (plan §3), not a static shared secret — scopes what a
+ * A per-job token, not a static shared secret — scopes what a
  * compromised instance can mutate to the one job it was launched for.
  *
  * base64url of 32 random bytes, matching Python's secrets.token_urlsafe(32).

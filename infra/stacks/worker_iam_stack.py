@@ -7,7 +7,7 @@ from stacks.tags import WORKER_TAG_KEY, WORKER_TAG_VALUE
 
 
 class WorkerIamStack(cdk.Stack):
-    """The GPU spot worker's IAM role/instance profile (plan §4, §6) — scoped to
+    """The GPU spot worker's IAM role/instance profile — scoped to
     exactly: S3 read (uploads), S3 write (splats), and terminating itself.
     No other permissions, so a compromised instance can't do much beyond its
     own job.
@@ -27,15 +27,15 @@ class WorkerIamStack(cdk.Stack):
             self,
             "WorkerRole",
             assumed_by=iam.ServicePrincipal("ec2.amazonaws.com"),
-            description="GPU spot worker instance role, S3 rw scoped to the two buckets, self-terminate only",
+            description="GPU spot worker instance role: S3 read on uploads, read/write on splats, self-terminate only",
         )
 
         uploads_bucket.grant_read(self.role)
         splats_bucket.grant_read_write(self.role)
 
-        # Self-termination only — scoped so the worker can kill itself (plan §4's
-        # "instance self-terminates in all cases") but nothing else running in
-        # the account. EC2 doesn't support resource-level restriction to
+        # Self-termination only — scoped so the worker can kill itself at the
+        # end of its job (run_job.py's finally block) but nothing else running
+        # in the account. EC2 doesn't support resource-level restriction to
         # "the calling instance" directly, so this is scoped by the same
         # worker-tag convention used in backend_stack.py's RunInstances grant
         # (see stacks/tags.py — the shared source of truth for that tag).

@@ -4,21 +4,14 @@ import type { ConnectionOptions } from "node:tls";
 
 /**
  * TLS settings for the Postgres connection, or undefined for a plain one.
- * Driven by `DATABASE_SSL_CA`, a path to a PEM bundle: set it and the
- * connection is encrypted and verified against that bundle; leave it unset
- * (local dev, CI) and the connection is plain.
+ * Driven by `DATABASE_SSL_CA`, a path to a PEM bundle: set it (production,
+ * pointed at the bundle `web/Dockerfile` bakes in) and the connection is
+ * encrypted and verified against that bundle; leave it unset (local dev, CI)
+ * and the connection is plain.
  *
- * RDS Postgres 15+ rejects unencrypted connections outright (`rds.force_ssl
- * = 1`), while `pg` defaults to no TLS. Appending `?sslmode=require` looks
- * like the fix but isn't: `pg` treats `require` as `verify-full`
- * (`rejectUnauthorized: true`), and RDS's certificates chain to Amazon's own
- * root CAs, which aren't in Node's trust store — so `require` just trades a
- * "no encryption" error for "cannot verify certificate."
- *
- * Supplying the CA bundle is the actual fix: `web/Dockerfile` downloads
- * Amazon's bundle into the image and points `DATABASE_SSL_CA` at it.
- * `rejectUnauthorized` stays at its default `true` — with the right CA
- * present, there's no reason to accept an unverified server.
+ * `rejectUnauthorized` is deliberately not passed, so it stays at Node's
+ * default `true`. Reaching for `?sslmode=require` instead does not do what
+ * its name suggests here — see AGENTS.md.
  */
 export function databaseSsl(env: Record<string, string | undefined> = process.env): ConnectionOptions | undefined {
   const caPath = env.DATABASE_SSL_CA;

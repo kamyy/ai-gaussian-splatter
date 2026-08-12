@@ -36,7 +36,7 @@ APP_HOSTNAME = f"ai-gaussian-splatter.{DOMAIN_ZONE_NAME}"
 # Both named explicitly rather than left to CloudFormation's generated names,
 # so `aws ecs update-service --force-new-deployment` — the only way a push to
 # the fixed image tag reaches the running service — can be written down
-# literally in docs/RUNBOOK.md instead of looked up per environment.
+# literally in RUNBOOK.md instead of looked up per environment.
 CLUSTER_NAME = "ai-gaussian-splatter"
 SERVICE_NAME = "ai-gaussian-splatter-backend"
 
@@ -79,10 +79,10 @@ class BackendStack(cdk.Stack):
     ) -> None:
         super().__init__(scope, id, **kwargs)
 
-        # Clerk's server-side API key. Created empty; populate it out-of-band
-        # (console or `aws secretsmanager put-secret-value`) after the first
-        # deploy — the value must never be in source or in CloudFormation
-        # template JSON. Same treatment as the RDS-generated DATABASE_URL.
+        # Clerk's server-side API key, kept out of source and out of the
+        # template. CDK fills it with a generated random value, so a fresh
+        # deploy comes up with a well-formed but useless key rather than
+        # failing loudly — set the real one out-of-band, per RUNBOOK.md.
         #
         # Its public counterpart, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, is
         # deliberately absent: it is a `docker build --build-arg` in
@@ -131,8 +131,7 @@ class BackendStack(cdk.Stack):
         self.clerk_secret.grant_read(execution_role)
 
         # The running application code's own permissions — S3 rw on both
-        # buckets, ec2:RunInstances/TerminateInstances scoped by tag (plan §6's
-        # IAM section).
+        # buckets, ec2:RunInstances/TerminateInstances scoped by tag.
         task_role = iam.Role(
             self,
             "TaskRole",

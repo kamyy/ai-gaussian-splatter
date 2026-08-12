@@ -5,21 +5,16 @@ import { globalJobCounters, rateLimitCounters } from "./db/schema";
 import { HttpError } from "./httpError";
 
 /**
- * Rate limiting & the global daily job cap (plan §5).
+ * Rate limiting & the global daily job cap.
  *
  * Counters are incremented with a single
  * `INSERT ... ON CONFLICT ... DO UPDATE SET count = count + 1 RETURNING count`,
  * so the check-and-increment is race-free without a read-then-write step. The
- * statement is written out here rather than inferred from an ORM helper, which
- * is the point: an ORM's `upsert()` helper only compiles to this when its
- * `update` clause happens to be non-empty, and silently degrades to
- * SELECT-then-INSERT otherwise.
+ * `set` clause must keep referencing the column, never a JavaScript value —
+ * AGENTS.md has the race that reopens, and how to check the SQL Postgres
+ * actually received.
  *
- * The `set` clause must reference the column (`rate_limit_counters.count + 1`),
- * not a JavaScript value — a plain `{ count: n + 1 }` would bake in a number
- * read before the statement ran, reopening exactly the race this avoids.
- *
- * Checks are per-endpoint rather than blanket middleware (plan §5): cheap reads
+ * Checks are per-endpoint rather than blanket middleware: cheap reads
  * shouldn't be throttled, and the costly endpoints stay easy to audit.
  */
 
@@ -32,7 +27,7 @@ export async function checkAndIncrementUser(userId: string, limitPerDay: number)
 }
 
 /**
- * The central backstop on total GPU spend (plan §5) — independent of
+ * The central backstop on total GPU spend — independent of
  * user/IP identity, checked only when a job is actually about to launch.
  */
 export async function checkAndIncrementGlobalDaily(maxJobsPerDay: number): Promise<void> {

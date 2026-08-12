@@ -1,7 +1,8 @@
-"""Worker entrypoint (plan §4 step 3). Reads job config from env vars,
+"""Worker entrypoint. Reads job config from env vars,
 runs COLMAP -> gsplat training -> export, reports status back to the
-backend at each phase, and always self-terminates the EC2 instance
-(success, failure, or otherwise) so a stuck job never runs up spend.
+backend at each phase, and self-terminates the EC2 instance from the finally
+block below — on success and on failure alike — so a job never runs up spend
+past its own end.
 """
 
 import logging
@@ -32,7 +33,7 @@ def main() -> int:
             sfm_result.registered_ratio * 100,
         )
         if sfm_result.registered_ratio < 0.5:
-            # Per plan §8: a low registered ratio is a capture-quality problem,
+            # A low registered ratio is a capture-quality problem,
             # not a pipeline bug — fail clearly rather than training on a
             # broken reconstruction.
             raise RuntimeError(
@@ -56,8 +57,8 @@ def main() -> int:
         return 1
 
     finally:
-        # Always attempt self-termination, regardless of success/failure —
-        # this is the check that prevents runaway spend (plan §4, §8 M5).
+        # Attempted on every path out of the try, success or failure — nothing
+        # outside the instance will terminate it if this is missed.
         terminate_self()
 
 
