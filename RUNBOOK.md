@@ -2,53 +2,9 @@
 
 ## Local development
 
-### Worker (local pipeline run, per plan M0/M1)
-
-Needs an NVIDIA GPU. Run it as the container rather than on the host: the image carries CUDA and a CUDA-enabled COLMAP build, so nothing but the driver and the container toolkit has to be installed locally.
-
-One-time GPU passthrough setup. `nvidia-container-toolkit` is not in Fedora's repositories or RPM Fusion's — those carry the driver only — so it comes from NVIDIA's own:
-
-```bash
-curl -fsSL https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo \
-  | sudo tee /etc/yum.repos.d/nvidia-container-toolkit.repo
-sudo dnf install -y nvidia-container-toolkit
-
-# Writes the CDI spec that podman resolves `--device nvidia.com/gpu=all` against.
-# Generated as root into /etc/cdi even though the containers run rootless.
-sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
-
-podman run --rm --security-opt=label=disable --device nvidia.com/gpu=all \
-  docker.io/nvidia/cuda:12.9.1-base-ubuntu24.04 nvidia-smi
-```
-
-`--security-opt=label=disable` is required on every GPU run, not just this check: without it SELinux blocks access to the device nodes and NVML fails with `Insufficient Permissions` rather than anything mentioning SELinux.
-
-Upload a photo set to the dev uploads bucket, then run the job against it:
-
-```bash
-OBJECT_ID=$(uuidgen)
-aws s3 sync ./photos "s3://ai-gaussian-splatter-dev-uploads/objects/$OBJECT_ID/photos/"
-
-podman build -t splat-worker:dev worker/    # ~19 GB image; most of the time is the torch/CUDA download
-
-podman run --rm --security-opt=label=disable --device nvidia.com/gpu=all \
-  -e JOB_ID=local-test -e OBJECT_ID="$OBJECT_ID" \
-  -e CALLBACK_TOKEN=none -e BACKEND_URL=http://localhost:3000 \
-  -e UPLOADS_BUCKET=ai-gaussian-splatter-dev-uploads \
-  -e SPLATS_BUCKET=ai-gaussian-splatter-dev-splats \
-  -e AWS_DEFAULT_REGION=us-west-2 \
-  -e AWS_ACCESS_KEY_ID=... -e AWS_SECRET_ACCESS_KEY=... \
-  -e FAST_TEST_MODE=true \
-  splat-worker:dev
-```
-
-`AWS_DEFAULT_REGION`, not `AWS_REGION`: botocore's region setting reads only the former, and with neither set `boto3.client("s3")` silently falls back to the global endpoint while `boto3.client("ec2")` raises `NoRegionError`. On a real worker instance the region comes from IMDS instead, so this matters only when running locally.
-
-Nothing needs to be listening at `BACKEND_URL`: `pipeline/status.py` logs and swallows callback failures by design, and `terminate_self()` no-ops when IMDS doesn't answer, so the pipeline runs standalone. `FAST_TEST_MODE=true` cuts training to ~50 iterations — use it to prove the plumbing before paying for a full run. Success leaves `result.ply` and `thumbnail.png` under `s3://ai-gaussian-splatter-dev-splats/objects/$OBJECT_ID/`.
-
 ### Development AWS resources (two S3 buckets)
 
-Almost nothing in the deployed stack is a dev dependency — the VPC, ALB, and Fargate service exist to serve the app, which locally is served by `next dev`. S3 is the exception: `components/upload/PhotoDropzone.tsx` has the browser PUT to the presigned URL directly, and the worker reads and writes both buckets with boto3, so the bytes need somewhere real to go. S3 is a plain regional endpoint, so this needs no VPC and no other stack, and costs pennies.
+Almost nothing in the deployed stack is a dev dependency — the VPC, ALB, and Fargate service exist to serve the app from the cloud in production. During development the app is served from localhost using `next dev`. S3 is the exception: `components/upload/PhotoDropzone.tsx` has the browser PUT to the presigned URL directly, and the worker reads and writes both buckets with boto3, so the bytes need somewhere real to go. S3 is a plain regional endpoint, so this needs no VPC and no other stack, and costs pennies.
 
 These are created by hand rather than in `infra/`, which describes the production topology only.
 
@@ -95,6 +51,54 @@ aws iam create-access-key --user-name ai-gaussian-splatter-dev
 ```
 
 Put the returned key pair in `web/.env` as `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`. A 403 on the browser's PUT means either the CORS rule or this policy; the browser console distinguishes them (a CORS failure never reaches S3).
+
+### Capture
+
+Walk around the object shooting individual stills — every side, a couple of heights, each shot overlapping its neighbors. Aim for ~50. The API's floor is 20 (`MIN_PHOTOS_PER_OBJECT`, a 400 below it), which is a hard minimum rather than a quality target. Extra frames pay off only where they close a coverage gap; near-duplicates just add COLMAP matching cost. A set whose views don't connect fails outright in COLMAP instead of yielding a poor splat.
+
+### Worker (local pipeline run, per plan M0/M1)
+
+Needs an NVIDIA GPU. Run it as the container rather than on the host: the image carries CUDA and a CUDA-enabled COLMAP build, so nothing but the driver and `nvidia-container-toolkit` has to be installed locally. The toolkit lets Podman pass the host GPU into the container (`--device nvidia.com/gpu=all`).
+
+One-time GPU passthrough setup. `nvidia-container-toolkit` is not in Fedora's repositories or RPM Fusion's — those carry the driver only — so it comes from NVIDIA's own:
+
+```bash
+curl -fsSL https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo \
+  | sudo tee /etc/yum.repos.d/nvidia-container-toolkit.repo
+sudo dnf install -y nvidia-container-toolkit
+
+# Writes the CDI spec that podman resolves `--device nvidia.com/gpu=all` against.
+# Generated as root into /etc/cdi even though the containers run rootless.
+sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
+
+podman run --rm --security-opt=label=disable --device nvidia.com/gpu=all \
+  docker.io/nvidia/cuda:12.9.1-base-ubuntu24.04 nvidia-smi
+```
+
+`--security-opt=label=disable` is required on every GPU run, not just this check: without it SELinux blocks access to the device nodes and NVML fails with `Insufficient Permissions` rather than anything mentioning SELinux.
+
+Upload a photo set to the dev uploads bucket, then run the job against it:
+
+```bash
+OBJECT_ID=$(uuidgen)
+aws s3 sync ./photos "s3://ai-gaussian-splatter-dev-uploads/objects/$OBJECT_ID/photos/"
+
+podman build -t splat-worker:dev worker/    # ~19 GB image; most of the time is the torch/CUDA download
+
+podman run --rm --security-opt=label=disable --device nvidia.com/gpu=all \
+  -e JOB_ID=local-test -e OBJECT_ID="$OBJECT_ID" \
+  -e CALLBACK_TOKEN=none -e BACKEND_URL=http://localhost:3000 \
+  -e UPLOADS_BUCKET=ai-gaussian-splatter-dev-uploads \
+  -e SPLATS_BUCKET=ai-gaussian-splatter-dev-splats \
+  -e AWS_DEFAULT_REGION=us-west-2 \
+  -e AWS_ACCESS_KEY_ID=... -e AWS_SECRET_ACCESS_KEY=... \
+  -e FAST_TEST_MODE=true \
+  splat-worker:dev
+```
+
+`AWS_DEFAULT_REGION`, not `AWS_REGION`: botocore's region setting reads only the former, and with neither set `boto3.client("s3")` silently falls back to the global endpoint while `boto3.client("ec2")` raises `NoRegionError`. On a real worker instance the region comes from IMDS instead, so this matters only when running locally.
+
+Nothing needs to be listening at `BACKEND_URL`: `pipeline/status.py` logs and swallows callback failures by design, and `terminate_self()` no-ops when IMDS doesn't answer, so the pipeline runs standalone. `FAST_TEST_MODE=true` cuts training to 20 iterations — use it to prove the plumbing before paying for a full run. Success leaves `result.ply` and `thumbnail.png` under `s3://ai-gaussian-splatter-dev-splats/objects/$OBJECT_ID/`.
 
 ### Web (frontend + REST API)
 
