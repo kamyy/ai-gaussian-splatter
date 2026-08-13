@@ -258,6 +258,8 @@ podman push $REPO:$IMAGE_TAG
 pnpm cdk:deploy:all -c hostedZoneId=$ZONE_ID -c clerkSecretArn=$CLERK_SECRET_ARN -c imageTag=$IMAGE_TAG
 ```
 
+`cdk:deploy:registry` belongs to this section only: it exists to create the repository before there is an image to push, so once the repository exists it is never run again. The stack itself is permanent, and `cdk:deploy:all` carries it like every other stack — that is how a change to it, `RELEASES_KEPT` say, actually reaches AWS.
+
 The first deploy waits on ACM DNS validation, which can take several minutes; ACM writes the validation record into the zone itself.
 
 `AWSServiceRoleForEC2Spot` is one account-wide role shared by every Spot workload, and `WorkerIamStack` creates it. Check first, because creating a second one fails the whole stack:
