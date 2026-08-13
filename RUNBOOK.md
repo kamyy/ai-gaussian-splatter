@@ -226,6 +226,8 @@ npx cdk bootstrap aws://$AWS_ACCOUNT_ID/us-west-2 aws://$AWS_ACCOUNT_ID/us-east-
 The Clerk secret comes next: nothing creates it, so it has to exist before the stack that reads it. Create it with the real `CLERK_SECRET_KEY` from Clerk's dashboard:
 
 ```bash
+printf '%s' 'sk_live_...' > clerk-key.txt   # printf, not echo: a trailing
+                                            # newline becomes part of the key
 CLERK_SECRET_ARN=$(aws secretsmanager create-secret --region us-west-2 \
   --name ai-gaussian-splatter/clerk-secret-key \
   --description "Clerk CLERK_SECRET_KEY" \
@@ -234,7 +236,7 @@ CLERK_SECRET_ARN=$(aws secretsmanager create-secret --region us-west-2 \
 rm clerk-key.txt
 ```
 
-`file://` rather than the key itself, which would otherwise sit in shell history. No `--kms-key-id`: the default `aws/secretsmanager` key already lets the task execution role decrypt, while a customer-managed key would need an `encryption_key=` on the import in `backend_stack.py` and a `kms:Decrypt` grant alongside it.
+`file://` rather than the key itself, which would otherwise sit in shell history — and `--secret-string file://` stores the file's bytes verbatim, so a trailing newline ends up in `CLERK_SECRET_KEY` and every Clerk call fails while the deploy stays green. No `--kms-key-id`: the default `aws/secretsmanager` key already lets the task execution role decrypt, while a customer-managed key would need an `encryption_key=` on the import in `backend_stack.py` and a `kms:Decrypt` grant alongside it.
 
 Creating it up front is what makes one deploy enough. `BackendStack` only reads this secret, so the first task to start already has the real key — nothing to put there afterwards, and no second rollout to pick it up.
 
@@ -277,7 +279,7 @@ pnpm cdk:diff -c hostedZoneId=$ZONE_ID -c clerkSecretArn=$CLERK_SECRET_ARN    # 
 pnpm cdk:deploy:all -c hostedZoneId=$ZONE_ID -c clerkSecretArn=$CLERK_SECRET_ARN
 ```
 
-Pass the flags straight after the script name — **never** after a `--` separator, which pnpm eats rather than forwards. The symptom is a synth against `app.py`'s placeholders: `BackendStack` rejects the placeholder ARN, so this fails loudly, but the equivalent mistake on `hostedZoneId` alone would not.
+Pass the flags straight after the script name — **never** after a `--` separator. pnpm forwards them, but cdk's own parser then discards everything past the separator, and the app synthesizes against `app.py`'s placeholders. `BackendStack` rejects the placeholder ARN, so this fails loudly; the equivalent mistake on `hostedZoneId` alone would not.
 
 Infra changes (anything that edits a stack) go out this way; an image-only change needs `update-service` instead — see "Shipping a new image" below.
 
@@ -286,6 +288,7 @@ Infra changes (anything that edits a stack) go out this way; an image-only chang
 Changing `CLERK_SECRET_KEY` later is a write plus a rollout, because ECS resolves secrets at task start and never on live update. The ARN does not change, so no `cdk deploy` is involved:
 
 ```bash
+printf '%s' 'sk_live_...' > clerk-key.txt   # no trailing newline, as above
 aws secretsmanager put-secret-value --region us-west-2 \
   --secret-id ai-gaussian-splatter/clerk-secret-key --secret-string file://clerk-key.txt
 rm clerk-key.txt

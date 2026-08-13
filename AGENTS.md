@@ -59,7 +59,7 @@ Check here before assuming standard behavior. Grouped by area.
 
 - **Renaming/removing a CI job blocks merges until branch protection is updated too.** Required checks name jobs (`worker`, `web`, `infra`); a missing context leaves PRs unmergeable — `enforce_admins` is on, so `--admin` does not override either. Rules live in GitHub Settings → Branches, not `ci.yml`. List: `gh api repos/kamyy/ai-gaussian-splatter/branches/main/protection`.
 - **Biome does not format Markdown or YAML** (`@biomejs/biome@2.5.6`). Keep `.md`/`.yml` consistent by hand. No max source line width for Markdown — GitHub reflows paragraphs; fixed wraps only add diff noise. One line per paragraph/list item.
-- **`pnpm <script> -c foo=bar` forwards the flags; `pnpm <script> -- -c foo=bar` does not.** pnpm swallows the separator's arguments instead of passing them on, so `infra`'s `cdk:*` scripts silently run against `app.py`'s placeholder context. `BackendStack` rejects the placeholder `clerkSecretArn`, which is the only reason this surfaces at all.
+- **Never put `--` before a `cdk:*` script's flags.** pnpm forwards them — the script sees `["--", "-c", "foo=bar"]` — and then cdk's own parser discards everything after the separator, so the app synthesizes against `app.py`'s placeholder context instead. `BackendStack` rejects the placeholder `clerkSecretArn`, which is the only reason this surfaces at all.
 - **Node is pinned in root `.nvmrc` (`24.18.0`); CI jobs use `node-version-file`.** Run `nvm use` from repo root. Nothing executes `.ts` via Node directly (Next/Vitest/Playwright transform; root `scripts/*` are `.js`).
 
 ### Git workflow

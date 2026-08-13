@@ -6,6 +6,13 @@ node_modules
 .env
 .env.*
 
+# Tool state written into the working tree. `.clerk/.tmp/keyless.json` holds a
+# Clerk development secret key, which `COPY . .` would put in a builder layer.
+# It does not reach the final image — the runner stage copies only
+# .next/standalone and .next/static — but it has no business in the build.
+.clerk
+.cursor
+
 e2e
 test
 test-results
