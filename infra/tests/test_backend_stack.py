@@ -346,3 +346,13 @@ def test_tagging_on_launch_is_granted_and_scoped_to_run_instances(wired_stacks):
     statements = [s for s in _task_role_statements(wired_stacks) if s["Action"] == "ec2:CreateTags"]
     assert len(statements) == 1
     assert statements[0]["Condition"] == {"StringEquals": {"ec2:CreateAction": "RunInstances"}}
+
+
+def test_load_balancer_records_requests_and_drops_invalid_headers(wired_stacks):
+    """The ALB is the only place a request the app never handled is visible."""
+    template = Template.from_stack(wired_stacks["backend"])
+    (props,) = template.find_resources("AWS::ElasticLoadBalancingV2::LoadBalancer").values()
+    attributes = {a["Key"]: a["Value"] for a in props["Properties"]["LoadBalancerAttributes"]}
+
+    assert attributes["access_logs.s3.enabled"] == "true"
+    assert attributes["routing.http.drop_invalid_header_fields.enabled"] == "true"

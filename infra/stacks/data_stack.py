@@ -109,3 +109,19 @@ class DataStack(cdk.Stack):
             ],
             removal_policy=cdk.RemovalPolicy.RETAIN,
         )
+
+        # ALB access logs, written by the ELB service rather than by the app —
+        # so no CORS rule. 90 days is how far back an abuse investigation is
+        # likely to reach; the ALB is otherwise the one hop that keeps no
+        # record of who called. RETAIN like the buckets above, which needs no
+        # auto_delete_objects custom resource; the lifecycle rule is what
+        # bounds the cost of keeping it.
+        self.access_logs_bucket = s3.Bucket(
+            self,
+            "AccessLogsBucket",
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+            encryption=s3.BucketEncryption.S3_MANAGED,
+            enforce_ssl=True,
+            lifecycle_rules=[s3.LifecycleRule(expiration=cdk.Duration.days(90))],
+            removal_policy=cdk.RemovalPolicy.RETAIN,
+        )

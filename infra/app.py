@@ -65,6 +65,7 @@ def build_stacks(
         database=data.database,
         uploads_bucket=data.uploads_bucket,
         splats_bucket=data.splats_bucket,
+        access_logs_bucket=data.access_logs_bucket,
         worker_ami_id=worker_ami_id,
         worker_instance_profile_arn=worker_iam.instance_profile_arn,
         worker_role_arn=worker_iam.role.role_arn,

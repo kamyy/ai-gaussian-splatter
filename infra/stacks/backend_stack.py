@@ -68,6 +68,7 @@ class BackendStack(cdk.Stack):
         database: rds.DatabaseInstance,
         uploads_bucket: s3.Bucket,
         splats_bucket: s3.Bucket,
+        access_logs_bucket: s3.Bucket,
         worker_ami_id: str,
         worker_instance_profile_arn: str,
         worker_role_arn: str,
@@ -230,7 +231,13 @@ class BackendStack(cdk.Stack):
             internet_facing=True,
             security_group=alb_security_group,
             vpc_subnets=ec2.SubnetSelection(subnets=vpc.public_subnets),
+            # Headers that don't parse are dropped rather than passed to the
+            # app, so request smuggling can't be assembled out of them.
+            drop_invalid_header_fields=True,
         )
+        # The only record of who called: the app logs its own handlers, not the
+        # requests the ALB rejected or redirected before reaching them.
+        self.load_balancer.log_access_logs(access_logs_bucket)
 
         # Fargate capacity providers must be enabled on the cluster before the
         # service below can name FARGATE_SPOT in a strategy.
