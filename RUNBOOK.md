@@ -209,9 +209,11 @@ ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name orky.net \
   --output text | cut -d/ -f3)
 ```
 
-`hostedZoneId` and `clerkSecretArn` then go on **every** `cdk` invocation, `diff` and single-stack deploys included — `cdk deploy OneStack` still synthesizes the whole app, so `BackendStack` is built either way.
+`hostedZoneId`, `clerkSecretArn`, and `imageTag` then go on **every** `cdk` invocation, `diff` and single-stack deploys included — `cdk deploy OneStack` still synthesizes the whole app, so `BackendStack` is built either way.
 
 `hostedZoneId` is the `orky.net` zone the ALB's DNS record and its ACM certificate validation go into. Without it the placeholder zone ID is used, which fails at deploy time. The zone is imported rather than managed, so it is not part of the stack's resource set: `cdk destroy` removes the app's own A-alias record, but cannot delete the zone itself or any record the stack did not create.
+
+`imageTag` is the commit the service runs — `git rev-parse --short HEAD` of the build you pushed. A per-release tag rather than a moving one, so every deploy writes its own task definition; that is what lets the circuit breaker roll back to an image that still exists, and what makes rolling back by hand just this flag with an older SHA. `BackendStack` refuses anything that is not a SHA, and the repository refuses to repoint a tag that already exists.
 
 `clerkSecretArn` is the complete ARN — including Secrets Manager's six-character suffix, which is why it is captured from the CLI rather than written out — of the Clerk secret. `BackendStack` imports that secret instead of creating it, and checks the ARN against its own account and region, so a forgotten flag fails at `cdk synth` rather than silently deploying tasks that cannot start.
 
@@ -243,15 +245,17 @@ Creating it up front is what makes one deploy enough. `BackendStack` only reads 
 `BackendStack`'s service is pinned to an image tag, so an image must already be in ECR when that stack deploys — `cdk deploy --all` on a fresh account creates an empty repository and then a service whose tasks have nothing to pull, and the deployment circuit breaker rolls `BackendStack` back. `RegistryStack` holds the repository on its own for exactly this reason. It is in `--all` like every other stack; deploying it alone first is what creates a pause for the image push, which `--all` has nowhere to stop for. Deploy it, push, then deploy everything — `RegistryStack` is a no-op the second time:
 
 ```bash
-pnpm cdk:deploy:registry -c hostedZoneId=$ZONE_ID -c clerkSecretArn=$CLERK_SECRET_ARN
+pnpm cdk:deploy:registry -c hostedZoneId=$ZONE_ID -c clerkSecretArn=$CLERK_SECRET_ARN \
+  -c imageTag=$(git rev-parse --short HEAD)
 aws ecr get-login-password --region us-west-2 | podman login --username AWS --password-stdin \
   $AWS_ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com
 REPO=$AWS_ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com/ai-gaussian-splatter-backend
-podman build -t $REPO:latest \
+IMAGE_TAG=$(git rev-parse --short HEAD)
+podman build -t $REPO:$IMAGE_TAG \
   --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=<pk_live_...> ../web
-podman push $REPO:latest
+podman push $REPO:$IMAGE_TAG
 
-pnpm cdk:deploy:all -c hostedZoneId=$ZONE_ID -c clerkSecretArn=$CLERK_SECRET_ARN
+pnpm cdk:deploy:all -c hostedZoneId=$ZONE_ID -c clerkSecretArn=$CLERK_SECRET_ARN -c imageTag=$IMAGE_TAG
 ```
 
 The first deploy waits on ACM DNS validation, which can take several minutes; ACM writes the validation record into the zone itself.
@@ -275,13 +279,14 @@ The secret already exists, so read its ARN back rather than creating one, then d
 ```bash
 CLERK_SECRET_ARN=$(aws secretsmanager describe-secret --region us-west-2 \
   --secret-id ai-gaussian-splatter/clerk-secret-key --query ARN --output text)
-pnpm cdk:diff -c hostedZoneId=$ZONE_ID -c clerkSecretArn=$CLERK_SECRET_ARN    # review changes
-pnpm cdk:deploy:all -c hostedZoneId=$ZONE_ID -c clerkSecretArn=$CLERK_SECRET_ARN
+IMAGE_TAG=$(git rev-parse --short HEAD)
+pnpm cdk:diff -c hostedZoneId=$ZONE_ID -c clerkSecretArn=$CLERK_SECRET_ARN -c imageTag=$IMAGE_TAG
+pnpm cdk:deploy:all -c hostedZoneId=$ZONE_ID -c clerkSecretArn=$CLERK_SECRET_ARN -c imageTag=$IMAGE_TAG
 ```
 
 Pass the flags straight after the script name — **never** after a `--` separator. pnpm forwards them, but cdk's own parser then discards everything past the separator, and the app synthesizes against `app.py`'s placeholders. `BackendStack` rejects the placeholder ARN, so this fails loudly; the equivalent mistake on `hostedZoneId` alone would not.
 
-Infra changes (anything that edits a stack) go out this way; an image-only change needs `update-service` instead — see "Shipping a new image" below.
+A `web/` change is the same path with a build and push in front of it — see "Shipping a new image" below. Images need no `update-service` step: the tag is part of the task definition, so a new tag *is* a template change and `cdk deploy` rolls it out.
 
 ### Rotating the Clerk key
 
@@ -298,19 +303,26 @@ Then force a new deployment, as under "Shipping a new image" below.
 
 ### Shipping a new image
 
-The service is pinned to the fixed tag `latest`, so a new image does **not** change `BackendStack`'s template. `cdk deploy` is then a no-op and ECS keeps running the old digest — pushing alone rolls nothing out. Force the replacement explicitly:
+The tag is part of the task definition, so building under a new commit is what rolls a release out — `cdk deploy` sees a changed template and replaces the tasks:
 
 ```bash
 REPO=$AWS_ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com/ai-gaussian-splatter-backend
-podman build -t $REPO:latest \
+IMAGE_TAG=$(git rev-parse --short HEAD)
+podman build -t $REPO:$IMAGE_TAG \
   --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=<pk_live_...> ../web
-podman push $REPO:latest
-aws ecs update-service --region us-west-2 \
-  --cluster ai-gaussian-splatter --service ai-gaussian-splatter-backend \
-  --force-new-deployment
+podman push $REPO:$IMAGE_TAG
+pnpm cdk:deploy:all -c hostedZoneId=$ZONE_ID -c clerkSecretArn=$CLERK_SECRET_ARN -c imageTag=$IMAGE_TAG
 ```
 
-`--force-new-deployment` starts a fresh deployment against the same task definition, which re-resolves `:latest` to the digest just pushed. `min_healthy_percent=100` keeps the old task serving until the new one passes health checks. Note the circuit breaker's rollback does **not** help on this path: a rollback restarts the previous deployment against the *same* task definition, which still points at the mutable `:latest` tag — Fargate re-pulls it and gets the same broken image, not the one that was running before the push. `min_healthy_percent=100` is what actually protects availability here; if a bad push fails health checks, push a fixed image and force another deployment rather than expecting rollback to recover the old one. The cluster and service names are set explicitly in `backend_stack.py` (`CLUSTER_NAME`/`SERVICE_NAME`) so this command needs no lookup.
+The repository refuses to repoint a tag it already holds, so a rebuild of a commit that was already pushed fails at `podman push` with `ImageTagAlreadyExists`. Commit the change — even an amend gives a new SHA — and push that. This is deliberate: a repointable tag is what would leave the previous task definition naming an image that is no longer there.
+
+`min_healthy_percent=100` keeps the old task serving until the new one passes health checks. If the new image fails them, the circuit breaker rolls back to the previous task definition, which names its own still-present tag, so ECS re-pulls the build that was working. Rolling back by hand is the same deploy with an older SHA:
+
+```bash
+pnpm cdk:deploy:all -c hostedZoneId=$ZONE_ID -c clerkSecretArn=$CLERK_SECRET_ARN -c imageTag=<older-sha>
+```
+
+Only the last few releases are kept (`RELEASES_KEPT` in `registry_stack.py`); older tags are expired and can no longer be rolled back to.
 
 The `WorkerIamStack`, `DataStack`, and `RegistryStack` must exist before `BackendStack` (CDK resolves this automatically via cross-stack references in `app.py`). `BudgetsStack` deploys to `us-east-1` regardless of the app's primary region — billing metrics only exist there.
 

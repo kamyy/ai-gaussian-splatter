@@ -42,6 +42,7 @@ def build_app_stacks(*, context: dict | None = None, **overrides) -> dict[str, c
             "app_public_url": "https://ai-gaussian-splatter.orky.net",
             "hosted_zone_id": "Z00000000000000000000",
             "clerk_secret_arn": CLERK_SECRET_ARN,
+            "image_tag": "0f1e2d3",
             **overrides,
         },
     )

@@ -1,3 +1,5 @@
+import re
+
 import pytest
 from aws_cdk.assertions import Template
 
@@ -178,6 +180,40 @@ def test_a_wrong_clerk_secret_arn_fails_at_synth(bad_arn):
     """
     with pytest.raises(ValueError, match="clerkSecretArn"):
         build_app_stacks(clerk_secret_arn=bad_arn)
+
+
+def test_the_service_names_one_immutable_build(wired_stacks):
+    """The task definition must name a per-release tag. With a moving tag every
+    release shares one task definition, so the circuit breaker's rollback
+    restarts the previous deployment against that same string and Fargate
+    re-pulls the image that just failed — the rollback restores the
+    configuration faithfully, but the configuration identifies no image.
+    """
+    template = Template.from_stack(wired_stacks["backend"])
+
+    task_definitions = template.find_resources("AWS::ECS::TaskDefinition")
+    (task_definition_props,) = task_definitions.values()
+    (container,) = task_definition_props["Properties"]["ContainerDefinitions"]
+
+    # An Fn::Join of the repository URI and the tag; the tag is the last piece.
+    tag = str(container["Image"]).rsplit(":", 1)[-1].strip("'\"} ]")
+    assert re.fullmatch(r"[0-9a-f]{7,40}", tag), f"expected a commit SHA, got {tag!r}"
+
+
+@pytest.mark.parametrize(
+    "bad_tag",
+    [
+        pytest.param("latest", id="the-moving-tag-this-exists-to-prevent"),
+        pytest.param("v1.2.3", id="a-release-name"),
+        pytest.param("", id="empty"),
+    ],
+)
+def test_a_moving_image_tag_fails_at_synth(bad_tag):
+    """Rejected structurally rather than by convention: a moving tag is the one
+    input that quietly disarms rollback, and nothing downstream would complain.
+    """
+    with pytest.raises(ValueError, match="imageTag"):
+        build_app_stacks(image_tag=bad_tag)
 
 
 def test_keep_alive_timeout_exceeds_the_albs_idle_timeout(wired_stacks):

@@ -16,7 +16,6 @@ from aws_cdk import aws_secretsmanager as secretsmanager
 from constructs import Construct
 
 from stacks.data_stack import DATABASE_NAME
-from stacks.registry_stack import IMAGE_TAG
 from stacks.tags import WORKER_TAG_KEY, WORKER_TAG_VALUE
 
 # Where web/Dockerfile's `ADD` puts Amazon's RDS global CA bundle. Must match
@@ -37,8 +36,8 @@ DOMAIN_ZONE_NAME = "orky.net"
 APP_HOSTNAME = f"ai-gaussian-splatter.{DOMAIN_ZONE_NAME}"
 
 # Both named explicitly rather than left to CloudFormation's generated names,
-# so `aws ecs update-service --force-new-deployment` — the only way a push to
-# the fixed image tag reaches the running service — can be written down
+# so `aws ecs update-service --force-new-deployment` — which a Clerk key
+# rotation still needs, since that changes no template — can be written down
 # literally in RUNBOOK.md instead of looked up per environment.
 CLUSTER_NAME = "ai-gaussian-splatter"
 SERVICE_NAME = "ai-gaussian-splatter-backend"
@@ -85,6 +84,7 @@ class BackendStack(cdk.Stack):
         app_public_url: str,
         hosted_zone_id: str,
         clerk_secret_arn: str,
+        image_tag: str,
         **kwargs,
     ) -> None:
         super().__init__(scope, id, **kwargs)
@@ -114,6 +114,20 @@ class BackendStack(cdk.Stack):
                 f"(see RUNBOOK.md); got {clerk_secret_arn!r}"
             )
         clerk_secret = secretsmanager.Secret.from_secret_complete_arn(self, "ClerkSecretKey", clerk_secret_arn)
+
+        # The image tag has to identify one immutable build, which is why a
+        # commit SHA is the only accepted shape. A moving tag like `latest`
+        # would leave every task definition naming the same string, so the
+        # deployment circuit breaker's rollback would restart the previous
+        # deployment against it and Fargate would re-pull the image that just
+        # failed — the rollback restores the configuration faithfully, but the
+        # configuration would not identify an image. RegistryStack additionally
+        # refuses to let a pushed tag be repointed.
+        if re.fullmatch(r"[0-9a-f]{7,40}", image_tag) is None:
+            raise ValueError(
+                f"imageTag must be a commit SHA identifying one immutable build, "
+                f"not a moving tag (see RUNBOOK.md); got {image_tag!r}"
+            )
 
         # Pulls the container image and writes logs — also the role ECS uses
         # to fetch the DB secret's value before handing it to the container as
@@ -337,7 +351,7 @@ class BackendStack(cdk.Stack):
                 # from_ecr_repository rather than from_registry: it reads the
                 # repository's ARN to scope the execution role's pull grant,
                 # instead of treating the URI as an opaque public image name.
-                image=ecs.ContainerImage.from_ecr_repository(repository, tag=IMAGE_TAG),
+                image=ecs.ContainerImage.from_ecr_repository(repository, tag=image_tag),
                 container_port=CONTAINER_PORT,
                 execution_role=execution_role,
                 task_role=task_role,

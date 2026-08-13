@@ -20,6 +20,7 @@ def build_stacks(
     app_public_url: str,
     hosted_zone_id: str,
     clerk_secret_arn: str,
+    image_tag: str,
 ) -> dict[str, cdk.Stack]:
     """Wires all 6 stacks together. Pulled out of module scope so
     infra/tests/conftest.py can import and reuse this exact wiring instead
@@ -78,6 +79,7 @@ def build_stacks(
         alb_security_group=network.alb_security_group,
         hosted_zone_id=hosted_zone_id,
         clerk_secret_arn=clerk_secret_arn,
+        image_tag=image_tag,
     )
 
     # Pinned to us-east-1 — see budgets_stack.py.
@@ -98,6 +100,16 @@ def build_stacks(
     }
 
 
+# AWS's own documentation placeholder. Deploys target a real account, so this
+# doubles as the marker for "nobody supplied one".
+PLACEHOLDER_ACCOUNT = "123456789012"
+
+# Stands in for a commit SHA so `cdk synth` works on a clean checkout. Refused
+# below against a real account, since deploying it would name a tag that does
+# not exist in ECR and every task would fail to pull.
+PLACEHOLDER_IMAGE_TAG = "0000000"
+
+
 if __name__ == "__main__":
     app = cdk.App()
 
@@ -105,7 +117,7 @@ if __name__ == "__main__":
     # CDK_DEFAULT_ACCOUNT, both of which the CDK CLI overwrites — see AGENTS.md.
     # The account falls back to AWS's placeholder so `cdk synth` works with no
     # setup; `cdk deploy` still needs real credentials.
-    env = cdk.Environment(account=os.environ.get("AWS_ACCOUNT_ID", "123456789012"), region="us-west-2")
+    env = cdk.Environment(account=os.environ.get("AWS_ACCOUNT_ID", PLACEHOLDER_ACCOUNT), region="us-west-2")
 
     # Worker AMI/subnet are filled in once M5 (see ARCHITECTURE.md's build
     # order) actually builds the worker image and picks a subnet — placeholders
@@ -132,8 +144,16 @@ if __name__ == "__main__":
     # synth rather than at task start. See AGENTS.md.
     clerk_secret_arn = (
         app.node.try_get_context("clerkSecretArn")
-        or f"arn:aws:secretsmanager:us-west-2:123456789012:secret:{CLERK_SECRET_NAME}-AAAAAA"
+        or f"arn:aws:secretsmanager:us-west-2:{PLACEHOLDER_ACCOUNT}:secret:{CLERK_SECRET_NAME}-AAAAAA"
     )
+
+    # Which build the service runs. A commit SHA rather than a moving tag, so
+    # every release is its own task definition and the circuit breaker can roll
+    # back to one that still names the image it was deployed with — see
+    # backend_stack.py. Rolling back by hand is this same flag with an older SHA.
+    image_tag = app.node.try_get_context("imageTag") or PLACEHOLDER_IMAGE_TAG
+    if image_tag == PLACEHOLDER_IMAGE_TAG and env.account != PLACEHOLDER_ACCOUNT:
+        raise ValueError("a real deploy must pass -c imageTag=<sha> — the placeholder names no image in ECR")
 
     build_stacks(
         app,
@@ -143,6 +163,7 @@ if __name__ == "__main__":
         app_public_url=app_public_url,
         hosted_zone_id=hosted_zone_id,
         clerk_secret_arn=clerk_secret_arn,
+        image_tag=image_tag,
     )
 
     app.synth()
