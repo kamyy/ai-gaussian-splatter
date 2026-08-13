@@ -348,6 +348,17 @@ def test_tagging_on_launch_is_granted_and_scoped_to_run_instances(wired_stacks):
     assert statements[0]["Condition"] == {"StringEquals": {"ec2:CreateAction": "RunInstances"}}
 
 
+def test_container_logs_expire(wired_stacks):
+    """The log group the ecs-patterns construct creates unprompted has no
+    retention and a Retain deletion policy, so nothing ever reclaims it.
+    """
+    template = Template.from_stack(wired_stacks["backend"])
+    log_groups = template.find_resources("AWS::Logs::LogGroup")
+    assert log_groups
+    for props in log_groups.values():
+        assert props["Properties"].get("RetentionInDays") is not None
+
+
 def test_load_balancer_records_requests_and_drops_invalid_headers(wired_stacks):
     """The ALB is the only place a request the app never handled is visible."""
     template = Template.from_stack(wired_stacks["backend"])

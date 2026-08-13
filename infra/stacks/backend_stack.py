@@ -6,6 +6,7 @@ from aws_cdk import aws_ecs as ecs
 from aws_cdk import aws_ecs_patterns as ecs_patterns
 from aws_cdk import aws_elasticloadbalancingv2 as elbv2
 from aws_cdk import aws_iam as iam
+from aws_cdk import aws_logs as logs
 from aws_cdk import aws_rds as rds
 from aws_cdk import aws_route53 as route53
 from aws_cdk import aws_s3 as s3
@@ -310,6 +311,13 @@ class BackendStack(cdk.Stack):
                 container_port=CONTAINER_PORT,
                 execution_role=execution_role,
                 task_role=task_role,
+                # Passed explicitly only for the retention: the log group the
+                # pattern creates on its own keeps every line forever. The
+                # group itself is still retained on stack delete.
+                log_driver=ecs.LogDriver.aws_logs(
+                    stream_prefix="web",
+                    log_retention=logs.RetentionDays.ONE_MONTH,
+                ),
                 environment={
                     "UPLOADS_BUCKET": uploads_bucket.bucket_name,
                     "SPLATS_BUCKET": splats_bucket.bucket_name,

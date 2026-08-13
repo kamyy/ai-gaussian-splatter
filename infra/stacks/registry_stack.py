@@ -30,4 +30,15 @@ class RegistryStack(cdk.Stack):
             # The images are the deployable artifact; tearing down the service
             # should never discard them.
             removal_policy=cdk.RemovalPolicy.RETAIN,
+            image_scan_on_push=True,
+            # Pushing to a fixed tag leaves the image it replaced behind,
+            # untagged and unreferenced, on every deploy. A week is long
+            # enough to retag one by digest to roll back.
+            lifecycle_rules=[
+                ecr.LifecycleRule(
+                    tag_status=ecr.TagStatus.UNTAGGED,
+                    max_image_age=cdk.Duration.days(7),
+                    description="Expire images orphaned by a push to the fixed tag",
+                ),
+            ],
         )
