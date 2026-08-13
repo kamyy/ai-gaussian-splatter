@@ -48,7 +48,15 @@ class DataStack(cdk.Stack):
             security_groups=[db_security_group],
             multi_az=False,
             allocated_storage=20,
+            # gp2 baseline is 3 IOPS/GiB with a 100 IOPS floor, so at 20 GiB
+            # the floor is all there is. gp3 includes 3000 IOPS and 125 MiB/s
+            # at any size from 20 GiB up.
+            storage_type=rds.StorageType.GP3,
             storage_encrypted=True,
+            # RDS defaults to 1, which is the whole recovery window for a bad
+            # migration given removal_policy=SNAPSHOT and no deletion
+            # protection. Backups of a 20 GiB instance are nearly free.
+            backup_retention=cdk.Duration.days(7),
             credentials=rds.Credentials.from_generated_secret("splatter_admin"),
             database_name=DATABASE_NAME,
             removal_policy=cdk.RemovalPolicy.SNAPSHOT,
@@ -66,6 +74,10 @@ class DataStack(cdk.Stack):
             "UploadsBucket",
             block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
             encryption=s3.BucketEncryption.S3_MANAGED,
+            # Adds the aws:SecureTransport deny. The browser reaches this
+            # bucket directly on a presigned URL, which is the one hop in this
+            # architecture that leaves AWS's network.
+            enforce_ssl=True,
             cors=[
                 s3.CorsRule(
                     allowed_methods=[s3.HttpMethods.PUT],
@@ -87,6 +99,7 @@ class DataStack(cdk.Stack):
             "SplatsBucket",
             block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
             encryption=s3.BucketEncryption.S3_MANAGED,
+            enforce_ssl=True,
             cors=[
                 s3.CorsRule(
                     allowed_methods=[s3.HttpMethods.GET, s3.HttpMethods.HEAD],

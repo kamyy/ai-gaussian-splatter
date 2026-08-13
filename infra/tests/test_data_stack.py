@@ -125,3 +125,38 @@ def test_database_is_in_isolated_subnets(wired_stacks):
     # stack's logical ID.
     for subnet_ref in subnet_refs:
         assert any(logical_id in str(subnet_ref) for logical_id in isolated_subnet_ids)
+
+
+def test_every_bucket_denies_plaintext_http(wired_stacks):
+    """The browser reaches uploads and splats directly on presigned URLs — the
+    one hop in this architecture that leaves AWS's network.
+    """
+    template = Template.from_stack(wired_stacks["data"])
+    buckets = template.find_resources("AWS::S3::Bucket")
+    policies = template.find_resources("AWS::S3::BucketPolicy")
+    assert buckets
+
+    denials = [
+        statement
+        for props in policies.values()
+        for statement in props["Properties"]["PolicyDocument"]["Statement"]
+        if statement["Effect"] == "Deny"
+        and statement.get("Condition", {}).get("Bool", {}).get("aws:SecureTransport") == "false"
+    ]
+    assert len(denials) == len(buckets)
+
+
+def test_database_storage_is_not_capped_at_the_gp2_floor(wired_stacks):
+    """gp2 is 3 IOPS/GiB with a 100 IOPS floor, so at 20 GiB the floor is the
+    whole allocation. gp3 includes 3000 IOPS at the same size.
+    """
+    template = Template.from_stack(wired_stacks["data"])
+    template.has_resource_properties("AWS::RDS::DBInstance", {"StorageType": "gp3"})
+
+
+def test_backups_outlive_a_single_day(wired_stacks):
+    """RDS defaults to 1, which with removal_policy=SNAPSHOT and no deletion
+    protection is the entire recovery window for a bad migration.
+    """
+    template = Template.from_stack(wired_stacks["data"])
+    template.has_resource_properties("AWS::RDS::DBInstance", {"BackupRetentionPeriod": 7})
