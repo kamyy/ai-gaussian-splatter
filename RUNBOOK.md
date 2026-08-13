@@ -324,6 +324,38 @@ pnpm cdk:deploy:all -c hostedZoneId=$ZONE_ID -c clerkSecretArn=$CLERK_SECRET_ARN
 
 Only the last few releases are kept (`RELEASES_KEPT` in `registry_stack.py`); older tags are expired and can no longer be rolled back to.
 
+### Which release is deployed
+
+The tag names the commit, so this answers "what code is live" without correlating push times by hand. Ask the service what it intends to run:
+
+```bash
+aws ecs describe-services --region us-west-2 \
+  --cluster ai-gaussian-splatter --services ai-gaussian-splatter-backend \
+  --query 'services[0].deployments[?status==`PRIMARY`].taskDefinition' --output text
+aws ecs describe-task-definition --region us-west-2 --task-definition <arn-from-above> \
+  --query 'taskDefinition.containerDefinitions[0].image' --output text
+```
+
+Read `deployments[?status=='PRIMARY']` rather than `services[0].taskDefinition`: mid-deploy there are two, the one rolling out and the one draining, and only this distinguishes them.
+
+For what the running tasks actually pulled, digest included — the ground truth if a task looks out of step with the service:
+
+```bash
+aws ecs describe-tasks --region us-west-2 --cluster ai-gaussian-splatter \
+  --tasks $(aws ecs list-tasks --region us-west-2 --cluster ai-gaussian-splatter \
+              --service-name ai-gaussian-splatter-backend --query 'taskArns' --output text) \
+  --query 'tasks[].containers[].{image:image,digest:imageDigest}'
+```
+
+Then `git log -1 <tag>` for what is in production and `git diff <tag>..HEAD` for what is not. The tag can only ever resolve to the image it was pushed with, so the mapping cannot drift.
+
+To see which releases are still available to roll back to, newest first:
+
+```bash
+aws ecr describe-images --region us-west-2 --repository-name ai-gaussian-splatter-backend \
+  --query 'reverse(sort_by(imageDetails,&imagePushedAt))[].{tag:imageTags[0],pushed:imagePushedAt}' --output table
+```
+
 The `WorkerIamStack`, `DataStack`, and `RegistryStack` must exist before `BackendStack` (CDK resolves this automatically via cross-stack references in `app.py`). `BudgetsStack` deploys to `us-east-1` regardless of the app's primary region — billing metrics only exist there.
 
 `app.py`'s `workerAmiId` context value is a placeholder (`ami-000000000000`) until the worker image is actually built and pushed (plan M5/M10) — `cdk synth`/`diff` work fine with the placeholder, but don't `deploy` the `BackendStack` with it still set, since job launches would fail.
