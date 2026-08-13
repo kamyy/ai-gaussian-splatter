@@ -248,6 +248,14 @@ class BackendStack(cdk.Stack):
             vpc=vpc,
             cluster_name=CLUSTER_NAME,
             enable_fargate_capacity_providers=True,
+            # Exec sessions otherwise default to logging through the container's
+            # awslogs driver, which needs four logs actions on the task role
+            # that CDK does not add — the session works and silently records
+            # nothing. Nothing here needs an audit trail of debugging sessions,
+            # so turn the logging off rather than widen the task role.
+            execute_command_configuration=ecs.ExecuteCommandConfiguration(
+                logging=ecs.ExecuteCommandLogging.NONE,
+            ),
         )
 
         self.service = ecs_patterns.ApplicationLoadBalancedFargateService(
@@ -299,6 +307,10 @@ class BackendStack(cdk.Stack):
             # boot) is not reported as failed until ECS's own timeout expires,
             # which takes hours. Roll back instead.
             circuit_breaker=ecs.DeploymentCircuitBreaker(rollback=True),
+            # `aws ecs execute-command` into a running task. The alternative
+            # when a deploy misbehaves is reading CloudWatch and guessing;
+            # CDK adds the ssmmessages actions to the task role itself.
+            enable_execute_command=True,
             # The default 50% floors to zero healthy tasks at desired_count 1,
             # letting ECS stop the only running task before its replacement
             # passes health checks — a window of 503s on every deploy.
@@ -369,6 +381,10 @@ class BackendStack(cdk.Stack):
             path="/api/v1/healthz",
             port=str(CONTAINER_PORT),
         )
+        # The default 300s is a floor on how long every deployment takes to
+        # retire a task. Nothing here holds a long-lived request, so draining
+        # is only about letting in-flight ones finish.
+        self.service.target_group.set_attribute("deregistration_delay.timeout_seconds", "30")
 
         # Without this the service sits at a fixed single task.
         scaling = self.service.service.auto_scale_task_count(min_capacity=1, max_capacity=3)

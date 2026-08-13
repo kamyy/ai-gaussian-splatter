@@ -367,3 +367,8 @@ def test_load_balancer_records_requests_and_drops_invalid_headers(wired_stacks):
 
     assert attributes["access_logs.s3.enabled"] == "true"
     assert attributes["routing.http.drop_invalid_header_fields.enabled"] == "true"
+
+
+def test_execute_command_is_available_for_debugging(wired_stacks):
+    template = Template.from_stack(wired_stacks["backend"])
+    template.has_resource_properties("AWS::ECS::Service", {"EnableExecuteCommand": True})
