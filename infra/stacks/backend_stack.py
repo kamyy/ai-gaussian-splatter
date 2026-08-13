@@ -1,3 +1,5 @@
+import re
+
 import aws_cdk as cdk
 from aws_cdk import aws_certificatemanager as acm
 from aws_cdk import aws_ec2 as ec2
@@ -45,6 +47,11 @@ SERVICE_NAME = "ai-gaussian-splatter-backend"
 # below) or the ALB serves intermittent 502s — see AGENTS.md.
 KEEP_ALIVE_TIMEOUT_MS = "65000"
 
+# Clerk's server-side API key is created out of band before this stack exists
+# (RUNBOOK.md) and only read here. Naming it once lets the RUNBOOK's
+# create-secret command and the ARN check below agree by construction.
+CLERK_SECRET_NAME = "ai-gaussian-splatter/clerk-secret-key"
+
 
 class BackendStack(cdk.Stack):
     """The Next.js app (pages + the REST API as Route Handlers) on Fargate,
@@ -77,25 +84,36 @@ class BackendStack(cdk.Stack):
         worker_subnet_id: str,
         app_public_url: str,
         hosted_zone_id: str,
+        clerk_secret_arn: str,
         **kwargs,
     ) -> None:
         super().__init__(scope, id, **kwargs)
 
-        # Clerk's server-side API key, kept out of source and out of the
-        # template. CDK fills it with a generated random value, so a fresh
-        # deploy comes up with a well-formed but useless key rather than
-        # failing loudly — set the real one out-of-band, per RUNBOOK.md.
+        # Clerk's server-side API key, imported rather than created: it holds a
+        # third party's credential, so it is set once by hand and this stack
+        # only reads it. Creating it here instead would fill it with a random
+        # value on the first deploy and force a second rollout to replace that
+        # with the real key, since ECS resolves secrets at task start.
         #
         # Its public counterpart, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, is
         # deliberately absent: it is a `docker build --build-arg` in
         # web/Dockerfile, not a runtime env var — see AGENTS.md.
-        self.clerk_secret = secretsmanager.Secret(
-            self,
-            "ClerkSecretKey",
-            secret_name="ai-gaussian-splatter/clerk-secret-key",
-            description="Clerk CLERK_SECRET_KEY — set manually after deploy",
-            removal_policy=cdk.RemovalPolicy.RETAIN,
-        )
+        #
+        # CloudFormation never validates an imported ARN, so a wrong one is
+        # invisible until a task fails to start. Checked here instead. The
+        # account and region are this stack's own, which is what makes a
+        # forgotten `-c clerkSecretArn=` fail: app.py's placeholder names the
+        # placeholder account and matches nothing real. The trailing six
+        # characters are Secrets Manager's own suffix — ECS wants the complete
+        # ARN, and a partial one pasted without it is the likeliest typo.
+        expected = rf"arn:aws:secretsmanager:{self.region}:{self.account}:secret:{CLERK_SECRET_NAME}-\w{{6}}"
+        if re.fullmatch(expected, clerk_secret_arn) is None:
+            raise ValueError(
+                f"clerkSecretArn must be the complete ARN of {CLERK_SECRET_NAME} in "
+                f"{self.account}/{self.region}, as returned by `aws secretsmanager create-secret` "
+                f"(see RUNBOOK.md); got {clerk_secret_arn!r}"
+            )
+        clerk_secret = secretsmanager.Secret.from_secret_complete_arn(self, "ClerkSecretKey", clerk_secret_arn)
 
         # Pulls the container image and writes logs — also the role ECS uses
         # to fetch the DB secret's value before handing it to the container as
@@ -130,7 +148,7 @@ class BackendStack(cdk.Stack):
         assert database.secret is not None
         db_secret = database.secret
         db_secret.grant_read(execution_role)
-        self.clerk_secret.grant_read(execution_role)
+        clerk_secret.grant_read(execution_role)
 
         # The running application code's own permissions — S3 rw on both
         # buckets, ec2:RunInstances/TerminateInstances scoped by tag.
@@ -364,7 +382,7 @@ class BackendStack(cdk.Stack):
                 secrets={
                     "DATABASE_USER": ecs.Secret.from_secrets_manager(db_secret, field="username"),
                     "DATABASE_PASSWORD": ecs.Secret.from_secrets_manager(db_secret, field="password"),
-                    "CLERK_SECRET_KEY": ecs.Secret.from_secrets_manager(self.clerk_secret),
+                    "CLERK_SECRET_KEY": ecs.Secret.from_secrets_manager(clerk_secret),
                 },
             ),
         )

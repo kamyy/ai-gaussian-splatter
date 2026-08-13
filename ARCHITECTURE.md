@@ -43,6 +43,8 @@ TLS terminates at the ALB (ACM cert for `ai-gaussian-splatter.orky.net`; 80→44
 
 Route 53 zone is *imported* (`from_hosted_zone_attributes`, zone ID as CDK context) — not looked up (credentials + dirty `cdk.context.json`) or created (would put the zone in the stack's resource set). Deploy only adds records.
 
+The Clerk secret is imported the same way (`from_secret_complete_arn`, ARN as CDK context), not created. A stack-created secret comes up holding CloudFormation's generated random value, and ECS resolves secrets at task start rather than on live update — so the real key would cost a second rollout on every fresh environment. It would also claim the name, making a hand-created secret an out-of-band `ResourceExistsException` on the next deploy. Complete ARN rather than `from_secret_name_v2`'s partial one because ECS matches `valueFrom` on the six-character suffix. Cost: a second required context value on every `cdk` invocation, and a credential whose lifecycle no stack owns.
+
 ## Abuse protection
 
 Three request-path layers (`web/lib/server/rateLimit.ts`) — a per-user quota alone doesn't stop multi-accounting:

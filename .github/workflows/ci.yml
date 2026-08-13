@@ -174,4 +174,4 @@ jobs:
       # credentials configured (it runs on every pull_request, including
       # forks) — validates templates only, never a real deploy.
       - name: cdk synth
-        run: pnpm synth
+        run: pnpm cdk:synth

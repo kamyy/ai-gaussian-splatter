@@ -24,7 +24,7 @@ cd web && pnpm install && pnpm test && pnpm dev
 cd worker && uv sync --group dev && uv run pytest
 
 # Infra
-cd infra && pnpm install && uv sync --group dev && uv run pytest && pnpm synth
+cd infra && pnpm install && uv sync --group dev && uv run pytest && pnpm cdk:synth
 ```
 
 ## License

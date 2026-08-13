@@ -3,7 +3,7 @@ import os
 
 import aws_cdk as cdk
 
-from stacks.backend_stack import APP_HOSTNAME, BackendStack
+from stacks.backend_stack import APP_HOSTNAME, CLERK_SECRET_NAME, BackendStack
 from stacks.budgets_stack import BudgetsStack
 from stacks.data_stack import DataStack
 from stacks.network_stack import NetworkStack
@@ -19,6 +19,7 @@ def build_stacks(
     alert_email: str,
     app_public_url: str,
     hosted_zone_id: str,
+    clerk_secret_arn: str,
 ) -> dict[str, cdk.Stack]:
     """Wires all 6 stacks together. Pulled out of module scope so
     infra/tests/conftest.py can import and reuse this exact wiring instead
@@ -76,6 +77,7 @@ def build_stacks(
         app_public_url=app_public_url,
         alb_security_group=network.alb_security_group,
         hosted_zone_id=hosted_zone_id,
+        clerk_secret_arn=clerk_secret_arn,
     )
 
     # Pinned to us-east-1 — see budgets_stack.py.
@@ -122,6 +124,17 @@ if __name__ == "__main__":
     # — see AGENTS.md.
     hosted_zone_id = app.node.try_get_context("hostedZoneId") or "Z00000000000000000000"
 
+    # The Clerk secret is created by hand before the first deploy and imported
+    # by BackendStack, so its ARN — suffix and all — has to be passed in. The
+    # placeholder keeps `cdk synth` working with no credentials, and names the
+    # placeholder account deliberately: BackendStack checks the ARN against its
+    # own account, so a real deploy that forgets `-c clerkSecretArn=` fails at
+    # synth rather than at task start. See AGENTS.md.
+    clerk_secret_arn = (
+        app.node.try_get_context("clerkSecretArn")
+        or f"arn:aws:secretsmanager:us-west-2:123456789012:secret:{CLERK_SECRET_NAME}-AAAAAA"
+    )
+
     build_stacks(
         app,
         env,
@@ -129,6 +142,7 @@ if __name__ == "__main__":
         alert_email=alert_email,
         app_public_url=app_public_url,
         hosted_zone_id=hosted_zone_id,
+        clerk_secret_arn=clerk_secret_arn,
     )
 
     app.synth()

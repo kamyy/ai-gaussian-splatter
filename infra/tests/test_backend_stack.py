@@ -1,13 +1,16 @@
+import pytest
 from aws_cdk.assertions import Template
 
 from stacks.backend_stack import (
     APP_HOSTNAME,
+    CLERK_SECRET_NAME,
     CLUSTER_NAME,
     CONTAINER_PORT,
     KEEP_ALIVE_TIMEOUT_MS,
     RDS_CA_BUNDLE_PATH,
     SERVICE_NAME,
 )
+from tests.conftest import CLERK_SECRET_ARN, build_app_stacks
 
 ECR_PULL_ACTIONS = {"ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage"}
 
@@ -104,6 +107,77 @@ def test_database_credentials_projected_as_individual_secret_fields(wired_stacks
     # certificates chain to Amazon roots that Node does not trust, so the app
     # must be pointed at the CA bundle web/Dockerfile bakes into the image.
     assert environment.get("DATABASE_SSL_CA") == RDS_CA_BUNDLE_PATH
+
+
+def test_clerk_secret_is_imported_never_created_by_this_stack(wired_stacks):
+    """The Clerk key is created by hand before the first deploy (RUNBOOK.md),
+    so this stack must own no secret at all — the RDS one belongs to DataStack.
+    Creating it here again would break both ends: CloudFormation cannot create
+    a secret whose name is already taken, so the deploy would fail outright,
+    and on a fresh account it would instead come up holding a random value that
+    only a second rollout could replace.
+    """
+    template = Template.from_stack(wired_stacks["backend"])
+
+    template.resource_count_is("AWS::SecretsManager::Secret", 0)
+
+
+def test_clerk_secret_reaches_the_container_by_complete_arn(wired_stacks):
+    """ECS resolves a task definition's `valueFrom` against the complete ARN —
+    the one carrying Secrets Manager's six-character suffix. A partial ARN
+    (from Secret.from_secret_name_v2, say) synthesizes and deploys clean, then
+    fails at task start, so the suffix is pinned here.
+    """
+    template = Template.from_stack(wired_stacks["backend"])
+
+    task_definitions = template.find_resources("AWS::ECS::TaskDefinition")
+    (task_definition_props,) = task_definitions.values()
+    (container,) = task_definition_props["Properties"]["ContainerDefinitions"]
+
+    secrets = {s["Name"]: s["ValueFrom"] for s in container["Secrets"]}
+    assert secrets.get("CLERK_SECRET_KEY") == CLERK_SECRET_ARN
+
+
+def test_execution_role_can_read_the_clerk_secret(wired_stacks):
+    """The execution role is what fetches secret values before handing them to
+    the container, so without this grant the task never starts. It is a
+    separate failure from the DB grant next to it and would surface only as a
+    stopped task, never in the application logs.
+    """
+    template = Template.from_stack(wired_stacks["backend"])
+
+    policies = template.find_resources("AWS::IAM::Policy")
+    execution_role_policies = [props for name, props in policies.items() if "ExecutionRole" in name]
+    assert len(execution_role_policies) == 1
+
+    statements = execution_role_policies[0]["Properties"]["PolicyDocument"]["Statement"]
+    reads_clerk_secret = [
+        s
+        for s in statements
+        if "secretsmanager:GetSecretValue" in (s["Action"] if isinstance(s["Action"], list) else [s["Action"]])
+        and CLERK_SECRET_NAME in str(s["Resource"])
+    ]
+    assert len(reads_clerk_secret) == 1
+
+
+@pytest.mark.parametrize(
+    "bad_arn",
+    [
+        pytest.param(CLERK_SECRET_ARN.rsplit("-", 1)[0], id="partial-arn-missing-the-suffix"),
+        pytest.param(CLERK_SECRET_ARN.replace("123456789012", "999999999999"), id="another-accounts-secret"),
+        pytest.param(CLERK_SECRET_ARN.replace(CLERK_SECRET_NAME, "some/other-secret"), id="a-different-secret"),
+        pytest.param(CLERK_SECRET_NAME, id="the-bare-name"),
+    ],
+)
+def test_a_wrong_clerk_secret_arn_fails_at_synth(bad_arn):
+    """CloudFormation never validates an imported ARN, so every one of these
+    deploys clean and only shows up as a task that will not start. The check in
+    BackendStack is what turns them into a synth-time error instead — including
+    the case that matters most, a real deploy that forgot `-c clerkSecretArn=`
+    and is still carrying app.py's placeholder-account default.
+    """
+    with pytest.raises(ValueError, match="clerkSecretArn"):
+        build_app_stacks(clerk_secret_arn=bad_arn)
 
 
 def test_keep_alive_timeout_exceeds_the_albs_idle_timeout(wired_stacks):

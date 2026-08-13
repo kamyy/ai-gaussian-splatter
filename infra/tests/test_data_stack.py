@@ -1,5 +1,7 @@
 from aws_cdk.assertions import Match, Template
 
+from tests.conftest import build_app_stacks
+
 
 def test_database_config(wired_stacks):
     template = Template.from_stack(wired_stacks["data"])
@@ -60,19 +62,7 @@ def test_bucket_cors_origin_drops_a_trailing_slash():
     while the presigned URLs stayed valid. Built with its own app rather than
     the shared fixture, since the point is a non-default input.
     """
-    import aws_cdk as cdk
-
-    from app import build_stacks
-    from tests.conftest import ENV
-
-    stacks = build_stacks(
-        cdk.App(),
-        ENV,
-        worker_ami_id="ami-000000000000",
-        alert_email="nobody@example.com",
-        app_public_url="https://ai-gaussian-splatter.orky.net/",
-        hosted_zone_id="Z00000000000000000000",
-    )
+    stacks = build_app_stacks(app_public_url="https://ai-gaussian-splatter.orky.net/")
     template = Template.from_stack(stacks["data"])
 
     for props in template.find_resources("AWS::S3::Bucket").values():
