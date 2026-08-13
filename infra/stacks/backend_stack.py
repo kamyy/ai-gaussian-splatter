@@ -6,6 +6,7 @@ from aws_cdk import aws_ecs as ecs
 from aws_cdk import aws_ecs_patterns as ecs_patterns
 from aws_cdk import aws_elasticloadbalancingv2 as elbv2
 from aws_cdk import aws_iam as iam
+from aws_cdk import aws_logs as logs
 from aws_cdk import aws_rds as rds
 from aws_cdk import aws_route53 as route53
 from aws_cdk import aws_s3 as s3
@@ -68,6 +69,7 @@ class BackendStack(cdk.Stack):
         database: rds.DatabaseInstance,
         uploads_bucket: s3.Bucket,
         splats_bucket: s3.Bucket,
+        access_logs_bucket: s3.Bucket,
         worker_ami_id: str,
         worker_instance_profile_arn: str,
         worker_role_arn: str,
@@ -139,12 +141,49 @@ class BackendStack(cdk.Stack):
         )
         uploads_bucket.grant_read_write(task_role)
         splats_bucket.grant_read_write(task_role)
+        # RunInstances is authorized against every resource the request touches,
+        # each one separately. Only the instance carries the worker tag
+        # (ec2Launcher.ts tags ResourceType "instance"), so aws:RequestTag is
+        # absent from the request context for the rest — a single statement
+        # conditioned on that key would evaluate false for them and deny the
+        # whole call. Hence the split: the tag constrains what can be launched,
+        # this statement only names what it is launched from and into.
         task_role.add_to_policy(
             iam.PolicyStatement(
                 actions=["ec2:RunInstances"],
-                # RunInstances requires resource-level perms on multiple ARN types; tightened via conditions below
-                resources=["*"],
+                resources=[
+                    # AMIs are not account-scoped, hence the empty account.
+                    self.format_arn(service="ec2", resource="image", resource_name="*", account=""),
+                    self.format_arn(service="ec2", resource="subnet", resource_name="*"),
+                    self.format_arn(service="ec2", resource="security-group", resource_name="*"),
+                    self.format_arn(service="ec2", resource="network-interface", resource_name="*"),
+                    self.format_arn(service="ec2", resource="volume", resource_name="*"),
+                    self.format_arn(service="ec2", resource="key-pair", resource_name="*"),
+                    # Only evaluated at all if the spot request itself is
+                    # tagged on create, which ec2Launcher.ts does not do — but
+                    # adding one tag specification for it would otherwise start
+                    # failing every launch with nothing to point at.
+                    self.format_arn(service="ec2", resource="spot-instances-request", resource_name="*"),
+                ],
+            )
+        )
+        task_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["ec2:RunInstances"],
+                resources=[self.format_arn(service="ec2", resource="instance", resource_name="*")],
                 conditions={"StringEquals": {f"aws:RequestTag/{WORKER_TAG_KEY}": WORKER_TAG_VALUE}},
+            )
+        )
+        # A request carrying TagSpecifications is authorized a second time
+        # against ec2:CreateTags, separately from RunInstances — without this
+        # the launch fails even though the statements above allow it. The
+        # ec2:CreateAction condition keeps it from becoming a general
+        # tag-anything grant: it only applies to tags applied at launch.
+        task_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["ec2:CreateTags"],
+                resources=[self.format_arn(service="ec2", resource="*", resource_name="*")],
+                conditions={"StringEquals": {"ec2:CreateAction": "RunInstances"}},
             )
         )
         task_role.add_to_policy(
@@ -193,7 +232,13 @@ class BackendStack(cdk.Stack):
             internet_facing=True,
             security_group=alb_security_group,
             vpc_subnets=ec2.SubnetSelection(subnets=vpc.public_subnets),
+            # Headers that don't parse are dropped rather than passed to the
+            # app, so request smuggling can't be assembled out of them.
+            drop_invalid_header_fields=True,
         )
+        # The only record of who called: the app logs its own handlers, not the
+        # requests the ALB rejected or redirected before reaching them.
+        self.load_balancer.log_access_logs(access_logs_bucket)
 
         # Fargate capacity providers must be enabled on the cluster before the
         # service below can name FARGATE_SPOT in a strategy.
@@ -203,6 +248,14 @@ class BackendStack(cdk.Stack):
             vpc=vpc,
             cluster_name=CLUSTER_NAME,
             enable_fargate_capacity_providers=True,
+            # Exec sessions otherwise default to logging through the container's
+            # awslogs driver, which needs four logs actions on the task role
+            # that CDK does not add — the session works and silently records
+            # nothing. Nothing here needs an audit trail of debugging sessions,
+            # so turn the logging off rather than widen the task role.
+            execute_command_configuration=ecs.ExecuteCommandConfiguration(
+                logging=ecs.ExecuteCommandLogging.NONE,
+            ),
         )
 
         self.service = ecs_patterns.ApplicationLoadBalancedFargateService(
@@ -254,6 +307,10 @@ class BackendStack(cdk.Stack):
             # boot) is not reported as failed until ECS's own timeout expires,
             # which takes hours. Roll back instead.
             circuit_breaker=ecs.DeploymentCircuitBreaker(rollback=True),
+            # `aws ecs execute-command` into a running task. The alternative
+            # when a deploy misbehaves is reading CloudWatch and guessing;
+            # CDK adds the ssmmessages actions to the task role itself.
+            enable_execute_command=True,
             # The default 50% floors to zero healthy tasks at desired_count 1,
             # letting ECS stop the only running task before its replacement
             # passes health checks — a window of 503s on every deploy.
@@ -266,6 +323,13 @@ class BackendStack(cdk.Stack):
                 container_port=CONTAINER_PORT,
                 execution_role=execution_role,
                 task_role=task_role,
+                # Passed explicitly only for the retention: the log group the
+                # pattern creates on its own keeps every line forever. The
+                # group itself is still retained on stack delete.
+                log_driver=ecs.LogDriver.aws_logs(
+                    stream_prefix="web",
+                    log_retention=logs.RetentionDays.ONE_MONTH,
+                ),
                 environment={
                     "UPLOADS_BUCKET": uploads_bucket.bucket_name,
                     "SPLATS_BUCKET": splats_bucket.bucket_name,
@@ -317,6 +381,10 @@ class BackendStack(cdk.Stack):
             path="/api/v1/healthz",
             port=str(CONTAINER_PORT),
         )
+        # The default 300s is a floor on how long every deployment takes to
+        # retire a task. Nothing here holds a long-lived request, so draining
+        # is only about letting in-flight ones finish.
+        self.service.target_group.set_attribute("deregistration_delay.timeout_seconds", "30")
 
         # Without this the service sits at a fixed single task.
         scaling = self.service.service.auto_scale_task_count(min_capacity=1, max_capacity=3)

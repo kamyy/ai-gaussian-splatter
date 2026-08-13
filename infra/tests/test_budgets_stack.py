@@ -61,3 +61,28 @@ def test_billing_alarm_config(wired_stacks):
             "ComparisonOperator": "GreaterThanThreshold",
         },
     )
+
+
+def test_alarm_can_actually_publish_to_the_encrypted_topic(wired_stacks):
+    """The alias/aws/sns default key has an uneditable policy that omits
+    CloudWatch, so the alarm would fail its action and notify nobody — the one
+    failure this stack exists to prevent.
+    """
+    template = Template.from_stack(wired_stacks["budgets"])
+    (key,) = template.find_resources("AWS::KMS::Key").values()
+
+    grants = [
+        statement
+        for statement in key["Properties"]["KeyPolicy"]["Statement"]
+        if statement.get("Principal", {}).get("Service") == "cloudwatch.amazonaws.com"
+    ]
+    assert len(grants) == 1
+    assert set(grants[0]["Action"]) == {"kms:Decrypt", "kms:GenerateDataKey*"}
+
+
+def test_missing_billing_data_is_not_an_alarm(wired_stacks):
+    """EstimatedCharges publishes nothing until the account's billing-alerts
+    preference is switched on, which is a console-only setting.
+    """
+    template = Template.from_stack(wired_stacks["budgets"])
+    template.has_resource_properties("AWS::CloudWatch::Alarm", {"TreatMissingData": "notBreaching"})

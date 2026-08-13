@@ -230,7 +230,17 @@ npx cdk deploy --all -c hostedZoneId=$ZONE_ID
 
 The first deploy waits on ACM DNS validation, which can take several minutes; ACM writes the validation record into the zone itself.
 
-Two things are not part of `cdk deploy --all` and must be done before the site actually works, even though the target group will report healthy without them — `/api/v1/healthz` never touches the database or Clerk:
+`AWSServiceRoleForEC2Spot` is one account-wide role shared by every Spot workload, and `WorkerIamStack` creates it. Check first, because creating a second one fails the whole stack:
+
+```bash
+aws iam get-role --role-name AWSServiceRoleForEC2Spot >/dev/null 2>&1 && echo "already exists"
+```
+
+If it exists, add `-c createSpotServiceLinkedRole=false` to every `cdk deploy`/`cdk diff` in this section and the stack will leave it alone. (Don't delete the role to make the default path work — that breaks Spot for everything else in the account.)
+
+Turn on billing alerts, or `BudgetsStack`'s CloudWatch alarm never fires. `AWS/Billing EstimatedCharges` publishes no data at all until the account preference is set, and there is no API or CloudFormation resource for it — Billing console → Billing preferences → **Receive AWS Free Tier alerts and billing alerts**, in `us-east-1`. The AWS Budget half of that stack works regardless; only the alarm depends on this.
+
+Two more things are not part of `cdk deploy --all` and must be done before the site actually works, even though the target group will report healthy without them — `/api/v1/healthz` never touches the database or Clerk:
 
 - **Apply migrations** — see "Applying migrations to a deployed environment" above. Without this the database has no tables and every real request 500s.
 - **Populate `ai-gaussian-splatter/clerk-secret-key`** — `ClerkSecretKey` in `backend_stack.py` creates the Secrets Manager entry with CDK's own generated random value, not a usable key. Set the real `CLERK_SECRET_KEY` by hand:

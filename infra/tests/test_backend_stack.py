@@ -306,3 +306,69 @@ def test_hosted_zone_is_imported_and_only_added_to(wired_stacks):
     (record_props,) = record_sets.values()
     assert record_props["Properties"]["Name"] == f"{APP_HOSTNAME}."
     assert record_props["Properties"]["Type"] == "A"
+
+
+def _task_role_statements(wired_stacks):
+    template = Template.from_stack(wired_stacks["backend"])
+    policies = template.find_resources("AWS::IAM::Policy")
+    task_role_policies = [props for name, props in policies.items() if "TaskRole" in name]
+    assert len(task_role_policies) == 1
+    return task_role_policies[0]["Properties"]["PolicyDocument"]["Statement"]
+
+
+def test_run_instances_tag_condition_only_applies_to_the_instance(wired_stacks):
+    """Regression test: RunInstances is authorized against every resource the
+    request touches, and only the instance is tagged. A single statement
+    carrying the aws:RequestTag condition denies the AMI, subnet, and security
+    group — every launch fails with UnauthorizedOperation.
+    """
+    statements = [s for s in _task_role_statements(wired_stacks) if s["Action"] == "ec2:RunInstances"]
+    assert len(statements) == 2
+
+    (conditioned,) = [s for s in statements if "Condition" in s]
+    (unconditioned,) = [s for s in statements if "Condition" not in s]
+
+    assert conditioned["Condition"] == {"StringEquals": {"aws:RequestTag/Role": "worker"}}
+    assert "instance/*" in str(conditioned["Resource"])
+
+    # The resource types the request names but never tags. Left off, IAM has
+    # no Allow for them and denies the whole call.
+    for resource_type in ("image", "subnet", "security-group", "network-interface", "volume"):
+        assert f"{resource_type}/*" in str(unconditioned["Resource"])
+    assert "instance/*" not in str(unconditioned["Resource"])
+
+
+def test_tagging_on_launch_is_granted_and_scoped_to_run_instances(wired_stacks):
+    """TagSpecifications triggers a second authorization against
+    ec2:CreateTags. The ec2:CreateAction condition keeps that from becoming a
+    licence to retag anything in the account.
+    """
+    statements = [s for s in _task_role_statements(wired_stacks) if s["Action"] == "ec2:CreateTags"]
+    assert len(statements) == 1
+    assert statements[0]["Condition"] == {"StringEquals": {"ec2:CreateAction": "RunInstances"}}
+
+
+def test_container_logs_expire(wired_stacks):
+    """The log group the ecs-patterns construct creates unprompted has no
+    retention and a Retain deletion policy, so nothing ever reclaims it.
+    """
+    template = Template.from_stack(wired_stacks["backend"])
+    log_groups = template.find_resources("AWS::Logs::LogGroup")
+    assert log_groups
+    for props in log_groups.values():
+        assert props["Properties"].get("RetentionInDays") is not None
+
+
+def test_load_balancer_records_requests_and_drops_invalid_headers(wired_stacks):
+    """The ALB is the only place a request the app never handled is visible."""
+    template = Template.from_stack(wired_stacks["backend"])
+    (props,) = template.find_resources("AWS::ElasticLoadBalancingV2::LoadBalancer").values()
+    attributes = {a["Key"]: a["Value"] for a in props["Properties"]["LoadBalancerAttributes"]}
+
+    assert attributes["access_logs.s3.enabled"] == "true"
+    assert attributes["routing.http.drop_invalid_header_fields.enabled"] == "true"
+
+
+def test_execute_command_is_available_for_debugging(wired_stacks):
+    template = Template.from_stack(wired_stacks["backend"])
+    template.has_resource_properties("AWS::ECS::Service", {"EnableExecuteCommand": True})

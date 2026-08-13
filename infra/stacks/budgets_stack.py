@@ -2,6 +2,8 @@ import aws_cdk as cdk
 from aws_cdk import aws_budgets as budgets
 from aws_cdk import aws_cloudwatch as cloudwatch
 from aws_cdk import aws_cloudwatch_actions as cloudwatch_actions
+from aws_cdk import aws_iam as iam
+from aws_cdk import aws_kms as kms
 from aws_cdk import aws_sns as sns
 from aws_cdk import aws_sns_subscriptions as subscriptions
 from constructs import Construct
@@ -31,7 +33,28 @@ class BudgetsStack(cdk.Stack):
         # allow, so it still catches the runaway case it exists to bound.
         limit = monthly_budget_limit_usd if monthly_budget_limit_usd is not None else 75
 
-        alert_topic = sns.Topic(self, "BillingAlertTopic")
+        # A customer-managed key, not the alias/aws/sns default: the default's
+        # policy can't be edited, and it doesn't let CloudWatch call
+        # kms:GenerateDataKey — the alarm below would then fail its action with
+        # "CloudWatch Alarms does not have authorization to access the SNS
+        # topic encryption key" and silently never notify. Costs $1/month,
+        # which is the price of encrypting the one channel that reports how
+        # much this account is spending.
+        alert_key = kms.Key(
+            self,
+            "BillingAlertKey",
+            description="Encrypts the billing alert SNS topic",
+            enable_key_rotation=True,
+        )
+        alert_key.add_to_resource_policy(
+            iam.PolicyStatement(
+                principals=[iam.ServicePrincipal("cloudwatch.amazonaws.com")],
+                actions=["kms:Decrypt", "kms:GenerateDataKey*"],
+                resources=["*"],
+            )
+        )
+
+        alert_topic = sns.Topic(self, "BillingAlertTopic", master_key=alert_key)
         alert_topic.add_subscription(subscriptions.EmailSubscription(alert_email))
 
         budgets.CfnBudget(
@@ -79,5 +102,10 @@ class BudgetsStack(cdk.Stack):
             threshold=limit,
             evaluation_periods=1,
             comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+            # EstimatedCharges publishes nothing at all until "Receive Billing
+            # Alerts" is switched on in the account's billing preferences (a
+            # console-only setting — see RUNBOOK.md). Stated explicitly so the
+            # no-data case reads as "not wired up yet" rather than as an alarm.
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
         )
         billing_alarm.add_alarm_action(cloudwatch_actions.SnsAction(alert_topic))

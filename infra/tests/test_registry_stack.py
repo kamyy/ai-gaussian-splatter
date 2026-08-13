@@ -1,3 +1,5 @@
+import json
+
 from aws_cdk.assertions import Template
 
 
@@ -26,3 +28,16 @@ def test_repository_survives_stack_deletion(wired_stacks):
     (repository,) = template.find_resources("AWS::ECR::Repository").values()
     assert repository["DeletionPolicy"] == "Retain"
     assert repository["Properties"]["RepositoryName"] == "ai-gaussian-splatter-backend"
+
+
+def test_images_orphaned_by_the_fixed_tag_expire(wired_stacks):
+    """Every push to IMAGE_TAG leaves the image it replaced behind, untagged.
+    Without a lifecycle rule they accumulate for the life of the account.
+    """
+    template = Template.from_stack(wired_stacks["registry"])
+    (props,) = template.find_resources("AWS::ECR::Repository").values()
+
+    policy = json.loads(props["Properties"]["LifecyclePolicy"]["LifecyclePolicyText"])
+    (rule,) = policy["rules"]
+    assert rule["selection"]["tagStatus"] == "untagged"
+    assert props["Properties"]["ImageScanningConfiguration"] == {"ScanOnPush": True}

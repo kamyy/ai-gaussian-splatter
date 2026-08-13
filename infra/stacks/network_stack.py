@@ -33,6 +33,13 @@ class NetworkStack(cdk.Stack):
                 ec2.SubnetConfiguration(name="public", subnet_type=ec2.SubnetType.PUBLIC, cidr_mask=24),
                 ec2.SubnetConfiguration(name="private", subnet_type=ec2.SubnetType.PRIVATE_ISOLATED, cidr_mask=24),
             ],
+            # A route table entry, not a billed endpoint — free, unlike the
+            # interface kind. With nat_gateways=0 every S3 call otherwise
+            # leaves through the internet gateway, including the workers'
+            # multi-GB splat uploads; this keeps them on AWS's network.
+            gateway_endpoints={
+                "S3": ec2.GatewayVpcEndpointOptions(service=ec2.GatewayVpcEndpointAwsService.S3),
+            },
         )
 
         # CloudFormation's GroupDescription disallows several common
@@ -52,6 +59,15 @@ class NetworkStack(cdk.Stack):
             description="Public ALB in front of the backend ECS service",
             allow_all_outbound=True,
         )
+        # The app's only route in from the internet, and the only rule in this
+        # file that names a public CIDR. Written out rather than left to the
+        # ecs-patterns construct, which stops adding it once the service is
+        # handed explicit security groups (feature flag
+        # aws-ecs-patterns:secGroupsDisablesImplicitOpenListener) — the symptom
+        # is an ALB that provisions cleanly and refuses every connection.
+        # Port 80 is the redirect listener; it never reaches a task.
+        self.alb_security_group.add_ingress_rule(ec2.Peer.any_ipv4(), ec2.Port.tcp(443), "HTTPS from anyone")
+        self.alb_security_group.add_ingress_rule(ec2.Peer.any_ipv4(), ec2.Port.tcp(80), "HTTP from anyone, redirected")
 
         # Receives the generated ALB-to-tasks rule described above, and gives
         # the backend tasks a stable identity that db_security_group's own
