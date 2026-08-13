@@ -3,7 +3,7 @@
     { "name": "web", "path": "web" },
     { "name": "worker", "path": "worker" },
     { "name": "infra", "path": "infra" },
-    { "name": "docs", "path": "docs" },
+    { "name": "scripts", "path": "scripts" },
     { "name": "root", "path": "." }
   ],
   "settings": {
@@ -25,7 +25,7 @@
       "web": true,
       "worker": true,
       "infra": true,
-      "docs": true,
+      "scripts": true,
       "**/node_modules": true,
       "**/.venv": true,
       "**/.next": true,
