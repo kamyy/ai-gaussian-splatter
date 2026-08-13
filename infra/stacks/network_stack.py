@@ -33,6 +33,13 @@ class NetworkStack(cdk.Stack):
                 ec2.SubnetConfiguration(name="public", subnet_type=ec2.SubnetType.PUBLIC, cidr_mask=24),
                 ec2.SubnetConfiguration(name="private", subnet_type=ec2.SubnetType.PRIVATE_ISOLATED, cidr_mask=24),
             ],
+            # A route table entry, not a billed endpoint — free, unlike the
+            # interface kind. With nat_gateways=0 every S3 call otherwise
+            # leaves through the internet gateway, including the workers'
+            # multi-GB splat uploads; this keeps them on AWS's network.
+            gateway_endpoints={
+                "S3": ec2.GatewayVpcEndpointOptions(service=ec2.GatewayVpcEndpointAwsService.S3),
+            },
         )
 
         # CloudFormation's GroupDescription disallows several common

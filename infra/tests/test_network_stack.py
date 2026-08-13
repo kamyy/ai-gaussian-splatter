@@ -152,3 +152,13 @@ def test_alb_security_group_is_the_only_one_open_to_the_internet(wired_stacks):
     (open_ports,) = groups_open_to_internet.values()
     assert open_ports == [80, 443]
     assert "Alb" in next(iter(groups_open_to_internet))
+
+
+def test_s3_traffic_stays_on_the_aws_network(wired_stacks):
+    """With no NAT gateway, S3 calls otherwise leave through the internet
+    gateway. The gateway endpoint is a route table entry, not a billed one.
+    """
+    template = Template.from_stack(wired_stacks["network"])
+    endpoints = template.find_resources("AWS::EC2::VPCEndpoint")
+    services = [str(props["Properties"]["ServiceName"]) for props in endpoints.values()]
+    assert any("s3" in s.lower() for s in services)
