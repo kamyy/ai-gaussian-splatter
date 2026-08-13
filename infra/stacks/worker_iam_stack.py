@@ -47,6 +47,25 @@ class WorkerIamStack(cdk.Stack):
             )
         )
 
+        # EC2 creates AWSServiceRoleForEC2Spot on its own only for a Spot
+        # request made in the console; the docs require it to already exist for
+        # one made through the API, which is how ec2Launcher.ts asks (spot
+        # InstanceMarketOptions on RunInstances). Declared rather than left to
+        # a runbook step, since the failure lands on the first real job.
+        #
+        # The role is one account-wide singleton shared with every other Spot
+        # workload, so creating it fails outright in an account that already
+        # has one — hence the opt-out — and deleting it would break those other
+        # workloads, hence RETAIN. This stack borrows the role; it never owns
+        # it. See RUNBOOK.md for which case an account is in.
+        if self.node.try_get_context("createSpotServiceLinkedRole") != "false":
+            spot_role = iam.CfnServiceLinkedRole(
+                self,
+                "Ec2SpotServiceLinkedRole",
+                aws_service_name="spot.amazonaws.com",
+            )
+            spot_role.apply_removal_policy(cdk.RemovalPolicy.RETAIN)
+
         self.instance_profile = iam.InstanceProfile(
             self,
             "WorkerInstanceProfile",
