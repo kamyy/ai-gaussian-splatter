@@ -59,7 +59,16 @@ def train(sfm_sparse_dir: Path, photos_dir: Path, settings: Settings) -> Trained
     cameras, viewmats, images_tensor = _load_views(sparse, photos_dir)
     model = _init_gaussians(sparse)
 
-    iterations = 50 if settings.fast_test_mode else settings.training_iterations
+    iterations = 20 if settings.fast_test_mode else settings.training_iterations
+
+    # Schedules are fractions of the run, not fixed step counts: at the default
+    # 10k these work out to the usual densify-every-1000 / log-every-500 /
+    # stop-densifying-500-before-the-end, while a 20-iteration fast-test run
+    # still exercises _densify_and_prune instead of never reaching it.
+    densify_every = max(1, iterations // 10)
+    densify_until = iterations - max(1, iterations // 20)
+    log_every = max(1, iterations // 20)
+
     optimizer = _build_optimizer(model)
 
     for step in range(iterations):
@@ -75,10 +84,10 @@ def train(sfm_sparse_dir: Path, photos_dir: Path, settings: Settings) -> Trained
         loss.backward()
         optimizer.step()
 
-        if step % 500 == 0:
+        if step % log_every == 0:
             logger.info("iter %d/%d loss=%.4f", step, iterations, loss.item())
 
-        if step > 0 and step % 1000 == 0 and step < iterations - 500:
+        if step > 0 and step % densify_every == 0 and step < densify_until:
             model = _densify_and_prune(model)
             optimizer = _build_optimizer(model)
 
