@@ -139,12 +139,49 @@ class BackendStack(cdk.Stack):
         )
         uploads_bucket.grant_read_write(task_role)
         splats_bucket.grant_read_write(task_role)
+        # RunInstances is authorized against every resource the request touches,
+        # each one separately. Only the instance carries the worker tag
+        # (ec2Launcher.ts tags ResourceType "instance"), so aws:RequestTag is
+        # absent from the request context for the rest — a single statement
+        # conditioned on that key would evaluate false for them and deny the
+        # whole call. Hence the split: the tag constrains what can be launched,
+        # this statement only names what it is launched from and into.
         task_role.add_to_policy(
             iam.PolicyStatement(
                 actions=["ec2:RunInstances"],
-                # RunInstances requires resource-level perms on multiple ARN types; tightened via conditions below
-                resources=["*"],
+                resources=[
+                    # AMIs are not account-scoped, hence the empty account.
+                    self.format_arn(service="ec2", resource="image", resource_name="*", account=""),
+                    self.format_arn(service="ec2", resource="subnet", resource_name="*"),
+                    self.format_arn(service="ec2", resource="security-group", resource_name="*"),
+                    self.format_arn(service="ec2", resource="network-interface", resource_name="*"),
+                    self.format_arn(service="ec2", resource="volume", resource_name="*"),
+                    self.format_arn(service="ec2", resource="key-pair", resource_name="*"),
+                    # Only evaluated at all if the spot request itself is
+                    # tagged on create, which ec2Launcher.ts does not do — but
+                    # adding one tag specification for it would otherwise start
+                    # failing every launch with nothing to point at.
+                    self.format_arn(service="ec2", resource="spot-instances-request", resource_name="*"),
+                ],
+            )
+        )
+        task_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["ec2:RunInstances"],
+                resources=[self.format_arn(service="ec2", resource="instance", resource_name="*")],
                 conditions={"StringEquals": {f"aws:RequestTag/{WORKER_TAG_KEY}": WORKER_TAG_VALUE}},
+            )
+        )
+        # A request carrying TagSpecifications is authorized a second time
+        # against ec2:CreateTags, separately from RunInstances — without this
+        # the launch fails even though the statements above allow it. The
+        # ec2:CreateAction condition keeps it from becoming a general
+        # tag-anything grant: it only applies to tags applied at launch.
+        task_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["ec2:CreateTags"],
+                resources=[self.format_arn(service="ec2", resource="*", resource_name="*")],
+                conditions={"StringEquals": {"ec2:CreateAction": "RunInstances"}},
             )
         )
         task_role.add_to_policy(
