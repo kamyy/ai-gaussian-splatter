@@ -5,7 +5,16 @@ from constructs import Construct
 # How many releases the repository keeps. Each deploy pushes a new immutable
 # tag, so this is the rollback window: any of these can be redeployed by
 # passing its tag back to `-c imageTag=`.
-RELEASES_KEPT = 10
+#
+# Set well above any plausible run of pushes because an ECR lifecycle rule
+# cannot see ECS: it expires by push date alone, so a tag the service is
+# *currently running* is eligible once enough newer images exist. Running
+# tasks survive that — they already pulled — but the next placement (a Spot
+# reclaim, a scale-out, or the circuit breaker's own rollback) fails with
+# CannotPullContainerError. The exposure is real after a rollback, where the
+# live tag is deliberately an old one. Storage is a few cents a month, so the
+# headroom is close to free.
+RELEASES_KEPT = 30
 
 
 class RegistryStack(cdk.Stack):

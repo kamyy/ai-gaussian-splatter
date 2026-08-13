@@ -288,9 +288,10 @@ def test_service_waits_for_the_capacity_provider_association(wired_stacks):
 
 def test_cluster_and_service_names_are_fixed(wired_stacks):
     """RUNBOOK.md writes the `aws ecs update-service
-    --force-new-deployment` command out literally, since pushing to the fixed
-    image tag is otherwise invisible to the running service. Generated names
-    would make that command wrong.
+    --force-new-deployment` command out literally, for the one rollout that is
+    not a deploy: rotating the Clerk key changes no template, so nothing else
+    restarts the tasks that hold the old value. Generated names would make that
+    command wrong.
     """
     template = Template.from_stack(wired_stacks["backend"])
 

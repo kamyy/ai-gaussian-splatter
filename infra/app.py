@@ -110,15 +110,14 @@ PLACEHOLDER_ACCOUNT = "123456789012"
 PLACEHOLDER_IMAGE_TAG = "0000000"
 
 
-if __name__ == "__main__":
-    app = cdk.App()
+def read_context(app: cdk.App, account: str) -> dict[str, str]:
+    """Every `-c` value build_stacks needs, keyed by its parameter name.
 
-    # Region and account are set here rather than read from CDK_DEFAULT_REGION /
-    # CDK_DEFAULT_ACCOUNT, both of which the CDK CLI overwrites — see AGENTS.md.
-    # The account falls back to AWS's placeholder so `cdk synth` works with no
-    # setup; `cdk deploy` still needs real credentials.
-    env = cdk.Environment(account=os.environ.get("AWS_ACCOUNT_ID", PLACEHOLDER_ACCOUNT), region="us-west-2")
-
+    Separate from __main__ so the context *keys* are testable. Nothing else
+    reads them: a renamed key here would otherwise leave the suite green while
+    every real deploy silently synthesized against the placeholders below —
+    the failure this app's guards exist to prevent.
+    """
     # Worker AMI/subnet are filled in once M5 (see ARCHITECTURE.md's build
     # order) actually builds the worker image and picks a subnet — placeholders
     # here are what let `cdk synth` succeed before those exist.
@@ -152,18 +151,29 @@ if __name__ == "__main__":
     # back to one that still names the image it was deployed with — see
     # backend_stack.py. Rolling back by hand is this same flag with an older SHA.
     image_tag = app.node.try_get_context("imageTag") or PLACEHOLDER_IMAGE_TAG
-    if image_tag == PLACEHOLDER_IMAGE_TAG and env.account != PLACEHOLDER_ACCOUNT:
+    if image_tag == PLACEHOLDER_IMAGE_TAG and account != PLACEHOLDER_ACCOUNT:
         raise ValueError("a real deploy must pass -c imageTag=<sha> — the placeholder names no image in ECR")
 
-    build_stacks(
-        app,
-        env,
-        worker_ami_id=worker_ami_id,
-        alert_email=alert_email,
-        app_public_url=app_public_url,
-        hosted_zone_id=hosted_zone_id,
-        clerk_secret_arn=clerk_secret_arn,
-        image_tag=image_tag,
-    )
+    return {
+        "worker_ami_id": worker_ami_id,
+        "alert_email": alert_email,
+        "app_public_url": app_public_url,
+        "hosted_zone_id": hosted_zone_id,
+        "clerk_secret_arn": clerk_secret_arn,
+        "image_tag": image_tag,
+    }
+
+
+if __name__ == "__main__":
+    app = cdk.App()
+
+    # Region and account are set here rather than read from CDK_DEFAULT_REGION /
+    # CDK_DEFAULT_ACCOUNT, both of which the CDK CLI overwrites — see AGENTS.md.
+    # The account falls back to AWS's placeholder so `cdk synth` works with no
+    # setup; `cdk deploy` still needs real credentials.
+    env = cdk.Environment(account=os.environ.get("AWS_ACCOUNT_ID", PLACEHOLDER_ACCOUNT), region="us-west-2")
+    assert env.account is not None
+
+    build_stacks(app, env, **read_context(app, env.account))
 
     app.synth()

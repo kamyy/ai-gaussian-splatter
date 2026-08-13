@@ -238,6 +238,8 @@ CLERK_SECRET_ARN=$(aws secretsmanager create-secret --region us-west-2 \
 rm clerk-key.txt
 ```
 
+If `create-secret` fails with `ResourceExistsException`, the secret is already there — read its ARN back with the `describe-secret` command under "Every deploy after that" and skip to the next step. Nothing deletes it: it is created out of band and no stack owns it.
+
 `file://` rather than the key itself, which would otherwise sit in shell history — and `--secret-string file://` stores the file's bytes verbatim, so a trailing newline ends up in `CLERK_SECRET_KEY` and every Clerk call fails while the deploy stays green. No `--kms-key-id`: the default `aws/secretsmanager` key already lets the task execution role decrypt, while a customer-managed key would need an `encryption_key=` on the import in `backend_stack.py` and a `kms:Decrypt` grant alongside it.
 
 Creating it up front is what makes one deploy enough. `BackendStack` only reads this secret, so the first task to start already has the real key — nothing to put there afterwards, and no second rollout to pick it up.
@@ -301,7 +303,15 @@ aws secretsmanager put-secret-value --region us-west-2 \
 rm clerk-key.txt
 ```
 
-Then force a new deployment, as under "Shipping a new image" below.
+Then force a new deployment. Deploying will not do it: the code is unchanged, so the image tag is unchanged, so the template is identical and CloudFormation reports no changes while the tasks keep serving the old key.
+
+```bash
+aws ecs update-service --region us-west-2 \
+  --cluster ai-gaussian-splatter --service ai-gaussian-splatter-backend \
+  --force-new-deployment
+```
+
+This is the one rollout that is not a deploy, which is why `CLUSTER_NAME`/`SERVICE_NAME` are fixed in `backend_stack.py` rather than left to CloudFormation — the command can be written out here instead of looked up.
 
 ### Shipping a new image
 
