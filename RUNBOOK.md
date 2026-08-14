@@ -59,7 +59,7 @@ Needs an NVIDIA GPU. Run the pipeline in a container from the [worker image](#ru
 
 #### One-time GPU passthrough setup
 
-`nvidia-container-toolkit` is not in Fedora's repositories or RPM Fusion's — those carry the driver only — so it comes from NVIDIA's own:
+`nvidia-container-toolkit` is in neither Fedora's repositories nor RPM Fusion's — RPM Fusion nonfree carries the NVIDIA GPU driver but not the toolkit, and Fedora's own repositories carry neither — so it comes from NVIDIA's own repo:
 
 ```bash
 curl -fsSL https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo \
@@ -80,7 +80,7 @@ podman run --rm --security-opt=label=disable --device nvidia.com/gpu=all \
 
 #### Capture
 
-Walk around the object shooting individual stills — every side, a couple of heights, each shot overlapping its neighbors. Aim for ~50. The API's floor is 20 (`MIN_PHOTOS_PER_OBJECT`, a 400 below it), which is a hard minimum rather than a quality target. Extra frames pay off only where they close a coverage gap; near-duplicates just add COLMAP matching cost. A set whose views don't connect fails outright in COLMAP instead of yielding a poor splat.
+Walk around the object shooting individual stills — every side, a couple of heights, each shot overlapping its neighbors. Aim for ~50. The API's floor is 20 (`MIN_PHOTOS_PER_OBJECT`); fewer than that results in a HTTP 400. That floor is a hard minimum rather than a quality target. Extra frames pay off only where they close a coverage gap; near-duplicates just add COLMAP matching cost. A set whose views don't connect fails outright in COLMAP instead of yielding a poor splat.
 
 #### Running the pipeline
 
