@@ -15,6 +15,8 @@ The "AI" is per-object gradient descent through a differentiable rasterizer, not
 
 Each job: dedicated EC2 GPU **spot** instance (`web/lib/server/ec2Launcher.ts`; type from `WORKER_INSTANCE_TYPE`, default `g5.xlarge`), run worker container, self-terminate on success or failure. Intended fallback if a worker dies without reporting: instance-runtime CloudWatch alarm — not in `infra/` yet. No SQS, Batch, or always-on fleet; volume is bounded by the global daily job cap. A queue is only worth the complexity at higher, decoupled-fleet scale.
 
+Job wall clock splits roughly into fixed overhead — pulling and extracting the ~19 GB worker image, then gsplat's `nvcc` kernel build, which `docker run --rm` repeats on every job — a few minutes of COLMAP where `mapper`'s incremental bundle adjustment is the CPU-bound part, and training, which is the majority. M10's baked AMI therefore attacks the smaller half: training cost is set by the resolution the photos are rasterized at (`AGENTS.md`), not by boot latency. All of that is read off the code rather than observed — M0/M5 is the first run that produces real numbers.
+
 Not Lambda or Fargate (no GPU). Not hand-rolled ECS orchestration — bin-packing shared instances doesn't fit one-job-one-instance.
 
 ## API & data

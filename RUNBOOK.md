@@ -105,7 +105,7 @@ podman run --rm --security-opt=label=disable --device nvidia.com/gpu=all \
 
 `AWS_DEFAULT_REGION`, not `AWS_REGION`: botocore's region setting reads only the former, and with neither set `boto3.client("s3")` silently falls back to the global endpoint while `boto3.client("ec2")` raises `NoRegionError`. On a real worker instance the region comes from IMDS instead, so this matters only when running locally.
 
-Nothing needs to be listening at `BACKEND_URL`: `pipeline/status.py` logs and swallows callback failures by design, and `terminate_self()` no-ops when IMDS doesn't answer, so the pipeline runs standalone. `FAST_TEST_MODE=true` cuts training to 20 iterations — use it to prove the plumbing before paying for a full run. Success leaves `result.ply` and `thumbnail.png` under `s3://ai-gaussian-splatter-dev-splats/objects/$OBJECT_ID/`.
+Nothing needs to be listening at `BACKEND_URL`: `pipeline/status.py` logs and swallows callback failures by design, and `terminate_self()` no-ops when IMDS doesn't answer, so the pipeline runs standalone. `FAST_TEST_MODE=true` cuts training to 20 iterations — use it to prove the plumbing before paying for a full run. It does not cut what `_load_views` puts on the GPU, though: every photo is resident at full resolution regardless of iteration count (`AGENTS.md`), so a card with less VRAM than the worker's 24 GB A10G needs a handful of photos or downscaled ones to get through even a smoke test. Success leaves `result.ply` and `thumbnail.png` under `s3://ai-gaussian-splatter-dev-splats/objects/$OBJECT_ID/`.
 
 ### Web (frontend + REST API)
 
