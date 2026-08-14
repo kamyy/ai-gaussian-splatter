@@ -71,7 +71,7 @@ Check here before assuming standard behavior. Grouped by area.
 
 ### Worker (GPU pipeline)
 
-- **Local pipeline runs are a Podman container: they need an NVIDIA GPU, the NVIDIA driver, and `nvidia-container-toolkit`.** CUDA (including `nvcc`), COLMAP, and gsplat live in the worker image — don't install those on the host. Setup and the `podman run` command are in [RUNBOOK.md](RUNBOOK.md#worker-local-pipeline-run-per-plan-m0m1).
+- **Local pipeline runs are a Podman container: they need an NVIDIA GPU, the NVIDIA driver, and `nvidia-container-toolkit`.** CUDA (including `nvcc`), COLMAP, and gsplat live in the worker image — don't install those on the host. Setup and the `podman run` command are in [RUNBOOK.md](RUNBOOK.md#worker-local-pipeline-run).
 - **The worker container is two hops from IMDS, so `RunInstances` sets `HttpPutResponseHopLimit: 2`** (`ec2Launcher.ts`). At EC2's default of 1 the token PUT in `pipeline/instance.py` gets no reply, `get_self_instance_id()` returns `None`, and the instance never terminates itself — logging one INFO line indistinguishable from a local run while a `g5.xlarge` keeps billing. `HttpTokens: "required"` is paired with it and depends on it: on its own it removes the IMDSv1 fallback and breaks credentials too, not just self-termination.
 - **Typical agent sandboxes have none of that** (a GPU driver alone isn't enough — `gsplat` needs `nvcc` to JIT). `train.py` is structurally validated but unproven on real hardware; don't claim the training loop "works" without that.
 
