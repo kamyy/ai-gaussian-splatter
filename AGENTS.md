@@ -59,6 +59,7 @@ Check here before assuming standard behavior. Grouped by area.
 
 - **Renaming/removing a CI job blocks merges until branch protection is updated too.** Required checks name jobs (`worker`, `web`, `infra`); a missing context leaves PRs unmergeable — `enforce_admins` is on, so `--admin` does not override either. Rules live in GitHub Settings → Branches, not `ci.yml`. List: `gh api repos/kamyy/ai-gaussian-splatter/branches/main/protection`.
 - **Biome does not format Markdown or YAML** (`@biomejs/biome@2.5.6`). Keep `.md`/`.yml` consistent by hand. No max source line width for Markdown — GitHub reflows paragraphs; fixed wraps only add diff noise. One line per paragraph/list item.
+- **Never put `--` before a `cdk:*` script's flags.** pnpm forwards them — the script sees `["--", "-c", "foo=bar"]` — and then cdk's own parser discards everything after the separator, so the app synthesizes against `app.py`'s placeholder context instead. `BackendStack` rejects the placeholder `clerkSecretArn`, which is the only reason this surfaces at all.
 - **Node is pinned in root `.nvmrc` (`24.18.0`); CI jobs use `node-version-file`.** Run `nvm use` from repo root. Nothing executes `.ts` via Node directly (Next/Vitest/Playwright transform; root `scripts/*` are `.js`).
 
 ### Git workflow
@@ -71,6 +72,7 @@ Check here before assuming standard behavior. Grouped by area.
 ### Worker (GPU pipeline)
 
 - **Local pipeline runs are a Podman container: they need an NVIDIA GPU, the NVIDIA driver, and `nvidia-container-toolkit`.** CUDA (including `nvcc`), COLMAP, and gsplat live in the worker image — don't install those on the host. Setup and the `podman run` command are in [RUNBOOK.md](RUNBOOK.md#worker-local-pipeline-run-per-plan-m0m1).
+- **The worker container is two hops from IMDS, so `RunInstances` sets `HttpPutResponseHopLimit: 2`** (`ec2Launcher.ts`). At EC2's default of 1 the token PUT in `pipeline/instance.py` gets no reply, `get_self_instance_id()` returns `None`, and the instance never terminates itself — logging one INFO line indistinguishable from a local run while a `g5.xlarge` keeps billing. `HttpTokens: "required"` is paired with it and depends on it: on its own it removes the IMDSv1 fallback and breaks credentials too, not just self-termination.
 - **Typical agent sandboxes have none of that** (a GPU driver alone isn't enough — `gsplat` needs `nvcc` to JIT). `train.py` is structurally validated but unproven on real hardware; don't claim the training loop "works" without that.
 
 ### Infra (CDK / AWS)
@@ -81,6 +83,8 @@ Check here before assuming standard behavior. Grouped by area.
 - **`infra/tests/conftest.py` loads `cdk.json`'s context by hand — keep it that way.** Only the CDK CLI passes that context to the app (as `CDK_CONTEXT_JSON`); a bare `cdk.App()` sees no feature flags at all. Without it the suite asserts against a differently-synthesized app than the one that deploys, and passes while the real template breaks.
 - **The ALB's `0.0.0.0/0` ingress is written out in `network_stack.py`.** `ApplicationLoadBalancedFargateService` stops adding it once handed explicit `security_groups` (`aws-ecs-patterns:secGroupsDisablesImplicitOpenListener`, on). Deleting those two rules synthesizes and deploys fine and refuses every connection.
 - **`ec2:RunInstances` needs two statements, not one.** IAM authorizes it against each resource the request touches; `ec2Launcher.ts` tags only the instance, so `aws:RequestTag` is absent for the AMI, subnet, and security group and a single conditioned statement denies the whole call. `ec2:CreateTags` (scoped by `ec2:CreateAction`) is a separate authorization that tagging-on-launch also requires. `test_backend_stack.py` pins both.
+- **The Clerk secret is imported, not created — it must exist before the first deploy** (`RUNBOOK.md`). `BackendStack` takes its complete ARN via `-c clerkSecretArn=...`: ECS resolves a task definition's `valueFrom` against the six-character suffix, so a partial ARN synthesizes and deploys clean, then fails at task start. The ARN is checked against the stack's own account and region, so a forgotten flag fails at synth — including on `cdk:deploy:registry`, which synthesizes the whole app even though it deploys one stack.
+- **The image tag is a commit SHA, and `RegistryStack`'s repository is `IMMUTABLE`.** A pushed tag can never be repointed, so rebuilding an already-pushed commit fails at `podman push` with `ImageTagAlreadyExists` — commit again rather than retagging. `BackendStack` refuses any tag that is not a SHA at synth. Both exist to keep the deployment circuit breaker's rollback meaningful: with a moving tag every release shares one task definition, and a rollback re-pulls the image that just failed.
 - **`BudgetsStack`'s SNS topic needs a customer-managed KMS key.** `alias/aws/sns` has an uneditable policy that omits CloudWatch, so the alarm fails its action with "CloudWatch Alarms does not have authorization to access the SNS topic encryption key" and notifies nobody. Costs $1/month.
 - **`@aws-cdk/core:defaultCrossStackReferences` is pinned to `strong` deliberately** — chosen over the CLI-recommended `weak`, which drops CloudFormation's refusal to delete an in-use export (so `cdk destroy DataStack` would succeed while `BackendStack` still imports its bucket ARNs) and emits `Fn::GetStackOutput`, a CDK CLI pseudo-intrinsic that `cfn-lint` rejects with `E1022`. The cost is the deadly embrace: removing a cross-stack reference takes three deploys (`BOTH` → `WEAK` → remove).
 - **A second ingress rule on `backend_security_group` opens a path from the internet.** Tasks are in public subnets with a public IP and no NAT — that group's single ALB-sourced rule on `CONTAINER_PORT` is the only network control (`ARCHITECTURE.md`). `test_network_stack.py` pins rule count 1 and NAT count 0; tripping those is a security change. Both groups live in `network_stack.py` — moving the ALB group to `BackendStack` causes a cross-stack `DependencyCycle`.
@@ -121,7 +125,7 @@ Check here before assuming standard behavior. Grouped by area.
 ```bash
 (cd web && pnpm typecheck && pnpm biome:ci && pnpm test && pnpm test:e2e)
 (cd worker && uv run ruff check . && uv run mypy pipeline && uv run pytest -v)
-(cd infra && uv run ruff check . && uv run mypy app.py stacks && uv run pytest -v && pnpm synth)
+(cd infra && uv run ruff check . && uv run mypy app.py stacks && uv run pytest -v && pnpm cdk:synth)
 ```
 
 Postgres-dependent web tests need `TEST_DATABASE_URL` (see `RUNBOOK.md`). Run the relevant subset after changes.
@@ -139,6 +143,6 @@ Known gaps, priority order:
 3. **`web/Dockerfile` never run on AWS** — local podman only; ECS/ECR path unproven.
 4. **Worker can't pull its image.** One ECR repo (web only); `WorkerIamStack` has no ECR pull perms (`ecr:GetAuthorizationToken`, `BatchGetImage`, `GetDownloadUrlForLayer`). `ec2Launcher.ts` user-data runs `aws ecr get-login-password` then `docker pull`, so login fails and the instance keeps billing (see gap 5). `WORKER_IMAGE_URI`/`ECR_REGISTRY` still default to `REPLACE_WITH_ECR_IMAGE_URI`/`REPLACE_WITH_ECR_REGISTRY`. M5.
 5. **No fallback for a worker that never reports.** Self-terminate is in `run_job.py`'s `finally`; no CloudWatch runtime alarm yet — only `BudgetsStack` email.
-6. **`hostedZoneId` required on real deploy** (`-c hostedZoneId=...`); placeholder fails at deploy time.
+6. **`hostedZoneId`, `clerkSecretArn`, and `imageTag` required on real deploy.** The zone placeholder fails at deploy time; the ARN and tag placeholders fail at synth against a real account.
 
 **M0 is next:** photograph a real object per `RUNBOOK.md`'s capture guidance, then COLMAP→gsplat on real hardware. Needs the user, not an agent.

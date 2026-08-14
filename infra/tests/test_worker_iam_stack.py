@@ -1,10 +1,6 @@
-import json
-
-import aws_cdk as cdk
 from aws_cdk.assertions import Match, Template
 
-from app import build_stacks
-from tests.conftest import CDK_JSON, ENV
+from tests.conftest import build_app_stacks
 
 
 def test_terminate_instances_scoped_to_worker_tag(wired_stacks):
@@ -59,14 +55,6 @@ def test_spot_service_linked_role_can_be_opted_out(wired_stacks):
     """An account that already has the role can't create a second one, so the
     deploy needs a way past it that isn't deleting the existing role.
     """
-    app = cdk.App(context={**json.loads(CDK_JSON.read_text())["context"], "createSpotServiceLinkedRole": "false"})
-    stacks = build_stacks(
-        app,
-        ENV,
-        worker_ami_id="ami-000000000000",
-        alert_email="kam.yin.yip@gmail.com",
-        app_public_url="https://ai-gaussian-splatter.orky.net",
-        hosted_zone_id="Z00000000000000000000",
-    )
+    stacks = build_app_stacks(context={"createSpotServiceLinkedRole": "false"})
     template = Template.from_stack(stacks["worker_iam"])
     assert template.find_resources("AWS::IAM::ServiceLinkedRole") == {}

@@ -72,6 +72,21 @@ describe("launchJob", () => {
     expect(input.InstanceInitiatedShutdownBehavior).toBe("terminate");
   });
 
+  it("lets the worker container reach IMDS, two hops away", async () => {
+    ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
+    await launchJob(params);
+
+    // The pipeline runs in a container, so IMDS is a hop further than the host.
+    // At EC2's default limit of 1, the token PUT in worker/pipeline/instance.py
+    // never gets a reply, terminate_self() no-ops, and the GPU instance bills
+    // until stopped by hand — logging only an INFO line that reads exactly like
+    // a legitimate local run.
+    const metadata = runInstancesInput().MetadataOptions;
+    expect(metadata?.HttpPutResponseHopLimit).toBe(2);
+    // Only safe with the hop limit above: it drops the IMDSv1 fallback.
+    expect(metadata?.HttpTokens).toBe("required");
+  });
+
   it("passes the job's config to the worker through base64 user-data", async () => {
     ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
     await launchJob(params);

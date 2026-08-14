@@ -4,9 +4,10 @@
   "private": true,
   "description": "CDK CLI pin for the Python CDK app in this directory (the CDK CLI has no pip distribution)",
   "scripts": {
-    "synth": "cdk synth",
-    "diff": "cdk diff",
-    "deploy": "cdk deploy --all"
+    "cdk:synth": "cdk synth",
+    "cdk:diff": "cdk diff",
+    "cdk:deploy:all": "cdk deploy --all",
+    "cdk:deploy:registry": "cdk deploy RegistryStack"
   },
   "packageManager": "pnpm@10.33.0",
   "devDependencies": {
