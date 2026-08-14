@@ -4,9 +4,9 @@
 
 ### Development AWS resources (two S3 buckets)
 
-Almost nothing in the deployed stack is a dev dependency — the VPC, ALB, and Fargate service exist to serve the app from the cloud in production. During development the app is served from localhost using `next dev`. S3 is the exception: `components/upload/PhotoDropzone.tsx` has the browser PUT to the presigned URL directly, and the worker reads and writes both buckets with boto3, so the bytes need somewhere real to go. S3 is a plain regional endpoint, so this needs no VPC and no other stack, and costs pennies.
+Almost nothing in the deployed stack is a dev dependency — the VPC, ALB, and Fargate service exist to serve the app in production. During development the app is served from localhost using `next dev`. S3 is the exception: `components/upload/PhotoDropzone.tsx` has the browser PUT to the presigned URL directly, and the worker reads and writes both buckets with boto3, so the bytes need somewhere real to go. S3 is a plain regional endpoint, so this needs no VPC and no other stack, and costs pennies.
 
-These are created by hand rather than in `infra/`, which describes the production topology only.
+These are created by hand not in `infra/`. `infra/` describes the production topology only.
 
 ```bash
 for b in ai-gaussian-splatter-dev-uploads ai-gaussian-splatter-dev-splats; do
@@ -18,7 +18,8 @@ done
 # from the viewer. Without these rules the browser blocks both — the presigned
 # URL is valid, so the failure shows only in the browser console.
 #
-# Both origins: 3000 is `next dev`, 8000 is the local container built below.
+# localhost:3000 for `next dev`.
+# localhost:8000 for local splat-web container
 aws s3api put-bucket-cors --bucket ai-gaussian-splatter-dev-uploads --cors-configuration '{
   "CORSRules": [{"AllowedMethods": ["PUT"],
                  "AllowedOrigins": ["http://localhost:3000", "http://localhost:8000"],
@@ -52,15 +53,13 @@ aws iam create-access-key --user-name ai-gaussian-splatter-dev
 
 Put the returned key pair in `web/.env` as `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`. A 403 on the browser's PUT means either the CORS rule or this policy; the browser console distinguishes them (a CORS failure never reaches S3).
 
-### Capture
+### Worker (local pipeline run)
 
-Walk around the object shooting individual stills — every side, a couple of heights, each shot overlapping its neighbors. Aim for ~50. The API's floor is 20 (`MIN_PHOTOS_PER_OBJECT`, a 400 below it), which is a hard minimum rather than a quality target. Extra frames pay off only where they close a coverage gap; near-duplicates just add COLMAP matching cost. A set whose views don't connect fails outright in COLMAP instead of yielding a poor splat.
+Needs an NVIDIA GPU. Run the pipeline in a container from the [worker image](#running-the-pipeline). That image carries CUDA and a CUDA-enabled COLMAP build, so nothing but the driver and `nvidia-container-toolkit` has to be installed locally. The toolkit lets Podman pass the host GPU into the container (`--device nvidia.com/gpu=all`).
 
-### Worker (local pipeline run, per plan M0/M1)
+#### One-time GPU passthrough setup
 
-Needs an NVIDIA GPU. Run it as the container rather than on the host: the image carries CUDA and a CUDA-enabled COLMAP build, so nothing but the driver and `nvidia-container-toolkit` has to be installed locally. The toolkit lets Podman pass the host GPU into the container (`--device nvidia.com/gpu=all`).
-
-One-time GPU passthrough setup. `nvidia-container-toolkit` is not in Fedora's repositories or RPM Fusion's — those carry the driver only — so it comes from NVIDIA's own:
+`nvidia-container-toolkit` is not in Fedora's repositories or RPM Fusion's — those carry the driver only — so it comes from NVIDIA's own:
 
 ```bash
 curl -fsSL https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo \
@@ -71,11 +70,19 @@ sudo dnf install -y nvidia-container-toolkit
 # Generated as root into /etc/cdi even though the containers run rootless.
 sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
 
+# Verifies the passthrough against a stock CUDA image, before the worker image
+# below is worth building: nvidia-smi should report the host GPU and driver.
 podman run --rm --security-opt=label=disable --device nvidia.com/gpu=all \
   docker.io/nvidia/cuda:12.9.1-base-ubuntu24.04 nvidia-smi
 ```
 
 `--security-opt=label=disable` is required on every GPU run, not just this check: without it SELinux blocks access to the device nodes and NVML fails with `Insufficient Permissions` rather than anything mentioning SELinux.
+
+#### Capture
+
+Walk around the object shooting individual stills — every side, a couple of heights, each shot overlapping its neighbors. Aim for ~50. The API's floor is 20 (`MIN_PHOTOS_PER_OBJECT`, a 400 below it), which is a hard minimum rather than a quality target. Extra frames pay off only where they close a coverage gap; near-duplicates just add COLMAP matching cost. A set whose views don't connect fails outright in COLMAP instead of yielding a poor splat.
+
+#### Running the pipeline
 
 Upload a photo set to the dev uploads bucket, then run the job against it:
 
@@ -146,7 +153,7 @@ The `server` Vitest project's Postgres-dependent tests (rate limiting, `getOrCre
 (cd web && TEST_DATABASE_URL=postgresql://postgres:test@localhost:5432/ai_gaussian_splatter pnpm test)
 ```
 
-### Building and running the container locally
+### Building and running the splat-web container locally
 
 Exercises the production path — the standalone build, not `next dev`. Also the way to test SSR locally if your environment blocks the loopback connection Next's proxy makes to itself (a host-run `next dev` then 500s on every request with `ECONNREFUSED ::1`; the container has its own netns and is unaffected).
 
@@ -274,7 +281,7 @@ If it exists, add `-c createSpotServiceLinkedRole=false` to every `cdk deploy`/`
 
 Turn on billing alerts, or `BudgetsStack`'s CloudWatch alarm never fires. `AWS/Billing EstimatedCharges` publishes no data at all until the account preference is set, and there is no API or CloudFormation resource for it — Billing console → Billing preferences → **Receive AWS Free Tier alerts and billing alerts**, in `us-east-1`. The AWS Budget half of that stack works regardless; only the alarm depends on this.
 
-**Applying migrations is not part of `cdk deploy --all`** and must be done before the site works, even though the target group reports healthy without it — `/api/v1/healthz` never touches the database. See "Applying migrations to a deployed environment" above; without it the database has no tables and every real request 500s.
+**Applying migrations is not part of** `cdk deploy --all` and must be done before the site works, even though the target group reports healthy without it — `/api/v1/healthz` never touches the database. See "Applying migrations to a deployed environment" above; without it the database has no tables and every real request 500s.
 
 ### Every deploy after that
 

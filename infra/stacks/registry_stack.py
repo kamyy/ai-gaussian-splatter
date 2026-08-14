@@ -52,7 +52,7 @@ class RegistryStack(cdk.Stack):
             lifecycle_rules=[
                 ecr.LifecycleRule(
                     max_image_count=RELEASES_KEPT,
-                    description="Keep the last few releases as the rollback window",
+                    description=f"Keep the last {RELEASES_KEPT} releases as the rollback window",
                 ),
             ],
         )
