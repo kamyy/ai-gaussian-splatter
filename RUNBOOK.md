@@ -51,7 +51,7 @@ aws iam put-user-policy --user-name ai-gaussian-splatter-dev \
 aws iam create-access-key --user-name ai-gaussian-splatter-dev
 ```
 
-Put the returned key pair in `web/.env` as `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`. A 403 on the browser's PUT means either the CORS rule or this policy; the browser console distinguishes them (a CORS failure never reaches S3).
+Put the returned key pair in `web/.env` and `worker/.env` as `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` — the same user backs both. A 403 on the browser's PUT means either the CORS rule or this policy; the browser console distinguishes them (a CORS failure never reaches S3).
 
 ### Worker (local pipeline run)
 
@@ -87,25 +87,26 @@ Walk around the object shooting individual stills — every side, a couple of he
 Upload a photo set to the dev uploads bucket, then run the job against it:
 
 ```bash
+cp worker/.env.example worker/.env    # then fill in the dev IAM key pair
+
 OBJECT_ID=$(uuidgen)
 aws s3 sync ./photos "s3://ai-gaussian-splatter-dev-uploads/objects/$OBJECT_ID/photos/"
 
 podman build -t splat-worker:dev worker/    # ~19 GB image; most of the time is the torch/CUDA download
 
 podman run --rm --security-opt=label=disable --device nvidia.com/gpu=all \
-  -e JOB_ID=local-test -e OBJECT_ID="$OBJECT_ID" \
-  -e CALLBACK_TOKEN=none -e BACKEND_URL=http://localhost:3000 \
-  -e UPLOADS_BUCKET=ai-gaussian-splatter-dev-uploads \
-  -e SPLATS_BUCKET=ai-gaussian-splatter-dev-splats \
-  -e AWS_DEFAULT_REGION=us-west-2 \
-  -e AWS_ACCESS_KEY_ID=... -e AWS_SECRET_ACCESS_KEY=... \
-  -e FAST_TEST_MODE=true \
+  --env-file worker/.env \
+  -e OBJECT_ID="$OBJECT_ID" \
   splat-worker:dev
 ```
 
-`AWS_DEFAULT_REGION`, not `AWS_REGION`: botocore's region setting reads only the former, and with neither set `boto3.client("s3")` silently falls back to the global endpoint while `boto3.client("ec2")` raises `NoRegionError`. On a real worker instance the region comes from IMDS instead, so this matters only when running locally.
+`OBJECT_ID` stays a flag because it changes every run. A later `-e` overrides the same name from `--env-file`, which is how to vary one setting without editing the file.
 
-Nothing needs to be listening at `BACKEND_URL`: `pipeline/status.py` logs and swallows callback failures by design, and `terminate_self()` no-ops when IMDS doesn't answer, so the pipeline runs standalone. `FAST_TEST_MODE=true` cuts training to 20 iterations — use it to prove the plumbing before paying for a full run. It does not cut what `_load_views` puts on the GPU, though: every photo is resident at full resolution regardless of iteration count (`AGENTS.md`), so a card with less VRAM than the worker's 24 GB A10G needs a handful of photos or downscaled ones to get through even a smoke test. Success leaves `result.ply` and `thumbnail.png` under `s3://ai-gaussian-splatter-dev-splats/objects/$OBJECT_ID/`.
+Podman's `--env-file` is not a shell parser: it keeps quotes as part of the value and treats a trailing `# comment` after a value as value text too. Whole-line comments and blank lines are fine. Nothing in the example file needs quoting, so this only bites when editing it.
+
+`AWS_DEFAULT_REGION`, not `AWS_REGION` — which is why `worker/.env` diverges from `web/.env` on that one name. Botocore's region setting reads only the former, and with neither set `boto3.client("s3")` silently falls back to the global endpoint while `boto3.client("ec2")` raises `NoRegionError`. On a real worker instance the region comes from IMDS instead, so this matters only when running locally.
+
+Nothing needs to be listening at `BACKEND_URL`: `pipeline/status.py` logs and swallows callback failures by design, and `terminate_self()` no-ops when IMDS doesn't answer, so the pipeline runs standalone. `FAST_TEST_MODE` cuts training to 20 iterations and the example file ships with it on, to prove the plumbing before paying for a full run; pass `-e FAST_TEST_MODE=false` for a real one. It does not cut what `_load_views` puts on the GPU, though: every photo is resident at full resolution regardless of iteration count (`AGENTS.md`), so a card with less VRAM than the worker's 24 GB A10G needs a handful of photos or downscaled ones to get through even a smoke test. Success leaves `result.ply` and `thumbnail.png` under `s3://ai-gaussian-splatter-dev-splats/objects/$OBJECT_ID/`.
 
 ### Web (frontend + REST API)
 
