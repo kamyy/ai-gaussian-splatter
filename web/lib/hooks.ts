@@ -9,9 +9,18 @@ import { useAuth } from "@clerk/nextjs";
 import useSWR from "swr";
 
 import { getLatestJob, getObject, listObjects } from "./api";
-import { JOB_ENDED_STATUSES } from "./types";
+import { JOB_ENDED_STATUSES, type JobRead } from "./types";
 
 const JOB_POLL_INTERVAL_MS = 4500;
+
+// Keep this at module scope — don't put it anywhere it could be recreated on
+// a re-render, or SWR sees a new identity and restarts the countdown.
+function jobPollInterval(latestData: JobRead | undefined) {
+  if (latestData && JOB_ENDED_STATUSES.includes(latestData.status)) {
+    return 0; // stop polling once the job has ended
+  }
+  return JOB_POLL_INTERVAL_MS;
+}
 
 export function useObjects() {
   const { getToken } = useAuth();
@@ -46,13 +55,6 @@ export function useJobStatus(objectId: string | undefined) {
       }
       return getLatestJob(token, objectId as string);
     },
-    {
-      refreshInterval: latestData => {
-        if (latestData && JOB_ENDED_STATUSES.includes(latestData.status)) {
-          return 0; // stop polling once the job has ended
-        }
-        return JOB_POLL_INTERVAL_MS;
-      },
-    },
+    { refreshInterval: jobPollInterval },
   );
 }
