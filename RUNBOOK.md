@@ -53,6 +53,15 @@ aws iam create-access-key --user-name ai-gaussian-splatter-dev
 
 Put the returned key pair in `web/.env` and `worker/.env` as `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` — the same user backs both. A 403 on the browser's PUT means either the CORS rule or this policy; the browser console distinguishes them (a CORS failure never reaches S3).
 
+Give the same key pair a CLI profile, so uploads run as the user the worker reads them back as rather than as an admin identity that can mask a policy gap until the job is already burning GPU time:
+
+```bash
+aws configure --profile splat-dev    # same key pair, region us-west-2
+aws sts get-caller-identity --profile splat-dev    # expect user/ai-gaussian-splatter-dev
+```
+
+`--profile` takes precedence over exported `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, so the flag is still authoritative in a shell that has sourced one of the `.env` files. The user has a static access key and no session, so unlike an `aws login` profile it never needs reauthenticating.
+
 ### Worker (local pipeline run)
 
 Needs an NVIDIA GPU. Run the pipeline in a container from the [worker image](#running-the-pipeline). That image carries CUDA and a CUDA-enabled COLMAP build, so nothing but the driver and `nvidia-container-toolkit` has to be installed locally. The toolkit lets Podman pass the host GPU into the container (`--device nvidia.com/gpu=all`).
@@ -88,15 +97,23 @@ When a set does register poorly, COLMAP's database says why and guessing from th
 
 #### Running the pipeline
 
-Upload a photo set to the dev uploads bucket, then run the job against it:
+One-time setup, then fill in the dev IAM key pair:
 
 ```bash
-cp worker/.env.example worker/.env    # then fill in the dev IAM key pair
+cp worker/.env.example worker/.env
+```
 
+Build the image whenever `worker/` has changed since the last build — source is copied in the final two layers, so a code-only edit rebuilds in seconds and only a cold build pays the torch/CUDA download:
+
+```bash
+podman build -t splat-worker:dev worker/    # ~19 GB cold
+```
+
+Then, per photo set — upload it to the dev uploads bucket and run the job against it:
+
+```bash
 OBJECT_ID=$(uuidgen)
-aws s3 sync ./photos "s3://ai-gaussian-splatter-dev-uploads/objects/$OBJECT_ID/photos/"
-
-podman build -t splat-worker:dev worker/    # ~19 GB image; most of the time is the torch/CUDA download
+aws s3 sync ./photos "s3://ai-gaussian-splatter-dev-uploads/objects/$OBJECT_ID/photos/" --profile splat-dev
 
 podman run --rm --security-opt=label=disable --device nvidia.com/gpu=all \
   --env-file worker/.env \
