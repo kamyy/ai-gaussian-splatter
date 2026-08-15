@@ -9,7 +9,7 @@ import { useAuth } from "@clerk/nextjs";
 import useSWR from "swr";
 
 import { getLatestJob, getObject, listObjects } from "./api";
-import { TERMINAL_JOB_STATUSES } from "./types";
+import { JOB_ENDED_STATUSES } from "./types";
 
 const JOB_POLL_INTERVAL_MS = 4500;
 
@@ -48,8 +48,8 @@ export function useJobStatus(objectId: string | undefined) {
     },
     {
       refreshInterval: latestData => {
-        if (latestData && TERMINAL_JOB_STATUSES.includes(latestData.status)) {
-          return 0; // stop polling once terminal
+        if (latestData && JOB_ENDED_STATUSES.includes(latestData.status)) {
+          return 0; // stop polling once the job has ended
         }
         return JOB_POLL_INTERVAL_MS;
       },
