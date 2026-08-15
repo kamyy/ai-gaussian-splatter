@@ -51,7 +51,16 @@ aws iam put-user-policy --user-name ai-gaussian-splatter-dev \
 aws iam create-access-key --user-name ai-gaussian-splatter-dev
 ```
 
-Put the returned key pair in `web/.env` as `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`. A 403 on the browser's PUT means either the CORS rule or this policy; the browser console distinguishes them (a CORS failure never reaches S3).
+Put the returned key pair in `web/.env` and `worker/.env` as `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` — the same user backs both. A 403 on the browser's PUT means either the CORS rule or this policy; the browser console distinguishes them (a CORS failure never reaches S3).
+
+Give the same key pair a CLI profile, so uploads run as the user the worker reads them back as rather than as an admin identity that can mask a policy gap until the job is already burning GPU time:
+
+```bash
+aws configure --profile splat-dev    # same key pair, region us-west-2
+aws sts get-caller-identity --profile splat-dev    # expect user/ai-gaussian-splatter-dev
+```
+
+`--profile` takes precedence over exported `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, so the flag is still authoritative in a shell that has sourced one of the `.env` files. The user has a static access key and no session, so unlike an `aws login` profile it never needs reauthenticating.
 
 ### Worker (local pipeline run)
 
@@ -82,30 +91,43 @@ podman run --rm --security-opt=label=disable --device nvidia.com/gpu=all \
 
 Walk around the object shooting individual stills — every side, a couple of heights, each shot overlapping its neighbors. Aim for ~50. The API's floor is 20 (`MIN_PHOTOS_PER_OBJECT`); fewer than that results in a HTTP 400. That floor is a hard minimum rather than a quality target. Extra frames pay off only where they close a coverage gap; near-duplicates just add COLMAP matching cost. A set whose views don't connect fails outright in COLMAP instead of yielding a poor splat.
 
+Which object is chosen decides more than how many photos are taken of it. COLMAP triangulates features that hold still on the surface, so transparent and mirrored objects defeat it outright — what is seen through or reflected off them slides as the camera moves, and every such match is discarded as an outlier. A thin flat object fails for a second reason: its front and back arcs share no features and its edge-on views show almost nothing, so the orbit cannot close and the reconstruction fragments. Pick something opaque, matte, and genuinely three-dimensional. Stand it on a patterned surface and leave static clutter in frame: a plain floor or wall gives the solve nothing to hold onto through the viewpoints where the object's own features drop out. A flat printed face (a poster, a book cover) is also a degenerate initial pair — COLMAP reports `No good initial image pair found` and gives up.
+
+When a set does register poorly, COLMAP's database says why and guessing from the photos does not. Bind-mount the workdir (`-v ./jobdir:/tmp/job`) so it survives the container, then count, per image, the partners in `two_view_geometries` with 100+ inlier rows. Use an empty `./jobdir` per run: nothing in the pipeline clears it, photos accumulate in `photos/`, and `feature_extractor` skips any image name already in `database.db` — so a reused mount silently reconstructs two shoots at once and pairs a stale image's keypoints with a new file of the same name. Around 6–12 is a healthy orbit; images stuck at 0–3 are the ones breaking the chain. Keypoint counts in `keypoints` separate the two failure modes: a few thousand where the rest of the set has 10k+ means blur or bare surfaces, while healthy counts alongside few verified partners mean the views themselves don't connect.
+
 #### Running the pipeline
 
-Upload a photo set to the dev uploads bucket, then run the job against it:
+One-time setup, then fill in the dev IAM key pair:
+
+```bash
+cp worker/.env.example worker/.env
+```
+
+Build the image whenever `worker/` has changed since the last build — source is copied in the final two layers, so a code-only edit rebuilds in seconds and only a cold build pays the torch/CUDA download:
+
+```bash
+podman build -t splat-worker:dev worker/    # ~19 GB cold
+```
+
+Then, per photo set — upload it to the dev uploads bucket and run the job against it:
 
 ```bash
 OBJECT_ID=$(uuidgen)
-aws s3 sync ./photos "s3://ai-gaussian-splatter-dev-uploads/objects/$OBJECT_ID/photos/"
-
-podman build -t splat-worker:dev worker/    # ~19 GB image; most of the time is the torch/CUDA download
+aws s3 sync ./photos "s3://ai-gaussian-splatter-dev-uploads/objects/$OBJECT_ID/photos/" --profile splat-dev
 
 podman run --rm --security-opt=label=disable --device nvidia.com/gpu=all \
-  -e JOB_ID=local-test -e OBJECT_ID="$OBJECT_ID" \
-  -e CALLBACK_TOKEN=none -e BACKEND_URL=http://localhost:3000 \
-  -e UPLOADS_BUCKET=ai-gaussian-splatter-dev-uploads \
-  -e SPLATS_BUCKET=ai-gaussian-splatter-dev-splats \
-  -e AWS_DEFAULT_REGION=us-west-2 \
-  -e AWS_ACCESS_KEY_ID=... -e AWS_SECRET_ACCESS_KEY=... \
-  -e FAST_TEST_MODE=true \
+  --env-file worker/.env \
+  -e OBJECT_ID="$OBJECT_ID" \
   splat-worker:dev
 ```
 
-`AWS_DEFAULT_REGION`, not `AWS_REGION`: botocore's region setting reads only the former, and with neither set `boto3.client("s3")` silently falls back to the global endpoint while `boto3.client("ec2")` raises `NoRegionError`. On a real worker instance the region comes from IMDS instead, so this matters only when running locally.
+`OBJECT_ID` stays a flag because it changes every run. A later `-e` overrides the same name from `--env-file`, which is how to vary one setting without editing the file.
 
-Nothing needs to be listening at `BACKEND_URL`: `pipeline/status.py` logs and swallows callback failures by design, and `terminate_self()` no-ops when IMDS doesn't answer, so the pipeline runs standalone. `FAST_TEST_MODE=true` cuts training to 20 iterations — use it to prove the plumbing before paying for a full run. It does not cut what `_load_views` puts on the GPU, though: every photo is resident at full resolution regardless of iteration count (`AGENTS.md`), so a card with less VRAM than the worker's 24 GB A10G needs a handful of photos or downscaled ones to get through even a smoke test. Success leaves `result.ply` and `thumbnail.png` under `s3://ai-gaussian-splatter-dev-splats/objects/$OBJECT_ID/`.
+Podman's `--env-file` is not a shell parser: it keeps quotes as part of the value and treats a trailing `# comment` after a value as value text too. Whole-line comments and blank lines are fine. Nothing in the example file needs quoting, so this only bites when editing it.
+
+`AWS_DEFAULT_REGION`, not `AWS_REGION` — which is why `worker/.env` diverges from `web/.env` on that one name. Botocore's region setting reads only the former, and with neither set `boto3.client("s3")` silently falls back to the global endpoint while `boto3.client("ec2")` raises `NoRegionError`. On a real worker instance the region comes from IMDS instead, so this matters only when running locally.
+
+Nothing needs to be listening at `BACKEND_URL`: `pipeline/status.py` logs and swallows callback failures by design, and `terminate_self()` no-ops when IMDS doesn't answer, so the pipeline runs standalone. `FAST_TEST_MODE` cuts training to 20 iterations and the example file ships with it on, to prove the plumbing before paying for a full run; pass `-e FAST_TEST_MODE=false` for a real one. It does not cut what `_load_views` puts on the GPU, though: every photo is resident at full resolution regardless of iteration count (`AGENTS.md`), so a card with less VRAM than the worker's 24 GB A10G needs a handful of photos or downscaled ones to get through even a smoke test. Success leaves `result.ply` and `thumbnail.png` under `s3://ai-gaussian-splatter-dev-splats/objects/$OBJECT_ID/`.
 
 ### Web (frontend + REST API)
 

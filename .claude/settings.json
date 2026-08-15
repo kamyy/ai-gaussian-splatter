@@ -6,8 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jq -r '.tool_input.file_path // empty' | { read -r f; case \"$f\" in */web/.env.example) printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"web/.env.example was just edited. Review web/.env and make the same change there unless the divergence is intentional: the two files are kept identical apart from their values.\"}}';; esac; } 2>/dev/null || true",
-            "statusMessage": "Checking web/.env sync"
+            "command": "jq -r '.tool_input.file_path // empty' | { read -r f; case \"$f\" in */web/.env.example|*/worker/.env.example) pkg=\"${f%/.env.example}\"; pkg=\"${pkg##*/}\"; printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"%s/.env.example was just edited. Review %s/.env and make the same change there unless the divergence is intentional: the two files are kept identical apart from their values.\"}}' \"$pkg\" \"$pkg\";; esac; } 2>/dev/null || true",
+            "statusMessage": "Checking .env sync"
           }
         ]
       }
