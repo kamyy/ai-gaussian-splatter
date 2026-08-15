@@ -14,7 +14,7 @@ import { JOB_ENDED_STATUSES, type JobRead } from "./types";
 const JOB_POLL_INTERVAL_MS = 4500;
 
 // Keep this at module scope — don't put it anywhere it could be recreated on
-// a re-render, or SWR sees a new identity and restarts the countdown.
+// a re-render, otherwise SWR sees a new identity and restarts the countdown.
 function jobPollInterval(latestData: JobRead | undefined) {
   if (latestData && JOB_ENDED_STATUSES.includes(latestData.status)) {
     return 0; // stop polling once the job has ended
