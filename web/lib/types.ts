@@ -31,7 +31,7 @@ export const JOB_STATUSES = [
 ] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
-export const TERMINAL_JOB_STATUSES: JobStatus[] = ["complete", "failed", "cancelled"];
+export const JOB_ENDED_STATUSES: JobStatus[] = ["complete", "failed", "cancelled"];
 
 export interface ObjectRead {
   id: string;
