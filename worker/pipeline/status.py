@@ -42,5 +42,10 @@ def report_status(
             timeout=10.0,
         )
         response.raise_for_status()
-    except httpx.HTTPError:
-        logger.exception("Failed to report status %r for job %s", status, settings.job_id)
+    except httpx.HTTPError as exc:
+        # Warning, not exception(): the traceback of a swallowed error reads like
+        # a crash in the job log, and the backend being unreachable is expected
+        # during a local pipeline run.
+        # %r, not %s: httpx's timeout errors carry an empty message, so %s would
+        # log the failure with nothing identifying it after the colon.
+        logger.warning("Failed to report status %r for job %s: %r", status, settings.job_id, exc)
