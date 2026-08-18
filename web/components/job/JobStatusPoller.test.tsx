@@ -11,14 +11,14 @@ vi.mock("@/lib/hooks", () => ({ useJobStatus: useJobStatusMock }));
 function renderPoller() {
   return render(
     <MantineProvider>
-      <JobStatusPoller objectId="obj-1" />
+      <JobStatusPoller splatId="splat-1" />
     </MantineProvider>,
   );
 }
 
 const baseJob: JobRead = {
   id: "job-1",
-  splatId: "obj-1",
+  splatId: "splat-1",
   status: "training_running",
   errorMessage: null,
   resultS3Key: null,

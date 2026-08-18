@@ -35,12 +35,12 @@ def export_scene(scene: TrainedScene, settings: Settings) -> tuple[Path, Path]:
 
 
 def upload_result(ply_path: Path, thumbnail_path: Path, settings: Settings) -> tuple[str, str]:
-    """Uploads to s3://{splats_bucket}/objects/{object_id}/{result.ply,thumbnail.png}
+    """Uploads to s3://{splats_bucket}/splats/{splat_id}/{result.ply,thumbnail.png}
     and returns (result_s3_key, thumbnail_s3_key).
     """
     s3 = boto3.client("s3")
-    result_key = f"objects/{settings.object_id}/result.ply"
-    thumbnail_key = f"objects/{settings.object_id}/thumbnail.png"
+    result_key = f"splats/{settings.splat_id}/result.ply"
+    thumbnail_key = f"splats/{settings.splat_id}/thumbnail.png"
 
     s3.upload_file(str(ply_path), settings.splats_bucket, result_key)
     s3.upload_file(str(thumbnail_path), settings.splats_bucket, thumbnail_key)

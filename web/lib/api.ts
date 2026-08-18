@@ -8,7 +8,7 @@
 // should skip this client entirely and use lib/server/data.ts directly rather
 // than have the server make an HTTP request to itself.
 
-import type { JobRead, ObjectRead, PhotoPresignItem } from "./types";
+import type { JobRead, PhotoPresignItem, SplatRead } from "./types";
 
 class ApiError extends Error {
   constructor(
@@ -48,43 +48,43 @@ async function apiFetch<T>(
 
 // --- Authenticated ---
 
-export function listObjects(token: string) {
-  return apiFetch<ObjectRead[]>("/api/v1/objects", { token });
+export function listSplats(token: string) {
+  return apiFetch<SplatRead[]>("/api/v1/splats", { token });
 }
 
-export function createObject(token: string, name: string) {
-  return apiFetch<ObjectRead>("/api/v1/objects", { token, method: "POST", body: { name } });
+export function createSplat(token: string, name: string) {
+  return apiFetch<SplatRead>("/api/v1/splats", { token, method: "POST", body: { name } });
 }
 
-export function getObject(token: string, objectId: string) {
-  return apiFetch<ObjectRead>(`/api/v1/objects/${objectId}`, { token });
+export function getSplat(token: string, splatId: string) {
+  return apiFetch<SplatRead>(`/api/v1/splats/${splatId}`, { token });
 }
 
-export function presignPhotos(token: string, objectId: string, files: { filename: string; contentType: string }[]) {
-  return apiFetch<{ photos: PhotoPresignItem[] }>(`/api/v1/objects/${objectId}/photos/presign`, {
+export function presignPhotos(token: string, splatId: string, files: { filename: string; contentType: string }[]) {
+  return apiFetch<{ photos: PhotoPresignItem[] }>(`/api/v1/splats/${splatId}/photos/presign`, {
     token,
     method: "POST",
     body: files,
   });
 }
 
-export function completePhoto(token: string, objectId: string, photoId: string) {
-  return apiFetch<void>(`/api/v1/objects/${objectId}/photos/${photoId}/complete`, {
+export function completePhoto(token: string, splatId: string, photoId: string) {
+  return apiFetch<void>(`/api/v1/splats/${splatId}/photos/${photoId}/complete`, {
     token,
     method: "POST",
   });
 }
 
-export function triggerProcess(token: string, objectId: string) {
-  return apiFetch<JobRead>(`/api/v1/objects/${objectId}/process`, { token, method: "POST" });
+export function triggerProcess(token: string, splatId: string) {
+  return apiFetch<JobRead>(`/api/v1/splats/${splatId}/process`, { token, method: "POST" });
 }
 
-export function getLatestJob(token: string, objectId: string) {
-  return apiFetch<JobRead>(`/api/v1/objects/${objectId}/jobs/latest`, { token });
+export function getLatestJob(token: string, splatId: string) {
+  return apiFetch<JobRead>(`/api/v1/splats/${splatId}/jobs/latest`, { token });
 }
 
-export function getSplatUrl(token: string, objectId: string) {
-  return apiFetch<{ url: string }>(`/api/v1/objects/${objectId}/splat`, { token });
+export function getSplatUrl(token: string, splatId: string) {
+  return apiFetch<{ url: string }>(`/api/v1/splats/${splatId}/download`, { token });
 }
 
 // --- Direct-to-S3 upload (not through apiFetch — raw PUT with the file body,

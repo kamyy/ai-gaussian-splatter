@@ -37,7 +37,7 @@ describe("generateCallbackToken", () => {
 describe("launchJob", () => {
   const params = {
     jobId: "job-123",
-    objectId: "obj-456",
+    splatId: "splat-456",
     callbackToken: "tok-abc",
     workerImageUri: "123456789012.dkr.ecr.us-east-1.amazonaws.com/worker:latest",
     ecrRegistry: "123456789012.dkr.ecr.us-east-1.amazonaws.com",
@@ -94,7 +94,7 @@ describe("launchJob", () => {
     const userData = Buffer.from(runInstancesInput().UserData ?? "", "base64").toString();
     expect(userData).toContain('CALLBACK_TOKEN="tok-abc"');
     expect(userData).toContain('JOB_ID="job-123"');
-    expect(userData).toContain('OBJECT_ID="obj-456"');
+    expect(userData).toContain('SPLAT_ID="splat-456"');
     // BACKEND_URL is the variable name worker/pipeline/config.py reads.
     expect(userData).toContain(`BACKEND_URL="${process.env.APP_PUBLIC_URL}"`);
     expect(userData).toContain(params.workerImageUri);

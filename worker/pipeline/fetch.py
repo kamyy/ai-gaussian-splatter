@@ -8,12 +8,12 @@ from .config import Settings
 
 
 def fetch_photos(settings: Settings) -> Path:
-    """Download objects/{object_id}/photos/* into local_workdir/photos and return
+    """Download splats/{splat_id}/photos/* into local_workdir/photos and return
     that directory. Raises if no photos are found — the caller (run_job.py)
     treats that as a job failure, not a silent no-op.
     """
     s3 = boto3.client("s3")
-    prefix = f"objects/{settings.object_id}/photos/"
+    prefix = f"splats/{settings.splat_id}/photos/"
     dest_dir = Path(settings.local_workdir) / "photos"
     dest_dir.mkdir(parents=True, exist_ok=True)
 
@@ -29,8 +29,6 @@ def fetch_photos(settings: Settings) -> Path:
             downloaded += 1
 
     if downloaded == 0:
-        raise RuntimeError(
-            f"No photos found at s3://{settings.uploads_bucket}/{prefix} for object {settings.object_id}"
-        )
+        raise RuntimeError(f"No photos found at s3://{settings.uploads_bucket}/{prefix} for splat {settings.splat_id}")
 
     return dest_dir

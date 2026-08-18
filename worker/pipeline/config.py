@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="")
 
     job_id: str
-    object_id: str
+    splat_id: str
     callback_token: str
     backend_url: str
     uploads_bucket: str

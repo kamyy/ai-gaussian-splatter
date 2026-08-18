@@ -9,10 +9,10 @@ from pipeline.fetch import fetch_photos
 def test_fetch_photos_downloads_all_objects_under_prefix(settings):
     s3 = boto3.client("s3", region_name="us-east-1")
     s3.create_bucket(Bucket=settings.uploads_bucket)
-    s3.put_object(Bucket=settings.uploads_bucket, Key=f"objects/{settings.object_id}/photos/a.jpg", Body=b"fake-a")
-    s3.put_object(Bucket=settings.uploads_bucket, Key=f"objects/{settings.object_id}/photos/b.jpg", Body=b"fake-b")
-    # A photo belonging to a different object must not be pulled in.
-    s3.put_object(Bucket=settings.uploads_bucket, Key="objects/other-obj/photos/c.jpg", Body=b"fake-c")
+    s3.put_object(Bucket=settings.uploads_bucket, Key=f"splats/{settings.splat_id}/photos/a.jpg", Body=b"fake-a")
+    s3.put_object(Bucket=settings.uploads_bucket, Key=f"splats/{settings.splat_id}/photos/b.jpg", Body=b"fake-b")
+    # A photo belonging to a different splat must not be pulled in.
+    s3.put_object(Bucket=settings.uploads_bucket, Key="splats/other-splat/photos/c.jpg", Body=b"fake-c")
 
     dest_dir = fetch_photos(settings)
 

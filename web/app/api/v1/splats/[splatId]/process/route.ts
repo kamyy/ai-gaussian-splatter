@@ -21,27 +21,27 @@ function ecrRegistry(): string {
 }
 
 export const POST = withErrorHandling(
-  async (_request: NextRequest, ctx: RouteContext<"/api/v1/objects/[objectId]/process">) => {
+  async (_request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/process">) => {
     const env = getEnv();
     const user = await requireUser();
-    const { objectId } = await ctx.params;
-    requireUuid(objectId, 404, "Object not found");
+    const { splatId } = await ctx.params;
+    requireUuid(splatId, 404, "Splat not found");
 
     const [splat] = await getDb()
       .select()
       .from(splats)
-      .where(and(eq(splats.id, objectId), eq(splats.userId, user.id)))
+      .where(and(eq(splats.id, splatId), eq(splats.userId, user.id)))
       .limit(1);
     if (splat === undefined) {
-      throw new HttpError(404, "Object not found");
+      throw new HttpError(404, "Splat not found");
     }
 
     const [uploaded] = await getDb()
       .select({ n: count() })
       .from(photos)
-      .where(and(eq(photos.splatId, objectId), eq(photos.uploadStatus, "uploaded")));
-    if (uploaded.n < env.MIN_PHOTOS_PER_OBJECT) {
-      throw new HttpError(400, `Need at least ${env.MIN_PHOTOS_PER_OBJECT} uploaded photos, have ${uploaded.n}`);
+      .where(and(eq(photos.splatId, splatId), eq(photos.uploadStatus, "uploaded")));
+    if (uploaded.n < env.MIN_PHOTOS_PER_SPLAT) {
+      throw new HttpError(400, `Need at least ${env.MIN_PHOTOS_PER_SPLAT} uploaded photos, have ${uploaded.n}`);
     }
 
     // The hard backstop, checked last so per-user/IP limits already screened
@@ -51,13 +51,13 @@ export const POST = withErrorHandling(
     const callbackToken = generateCallbackToken();
     const [created] = await getDb()
       .insert(jobs)
-      .values({ splatId: objectId, status: "queued", callbackToken })
+      .values({ splatId, status: "queued", callbackToken })
       .returning({ id: jobs.id });
-    await getDb().update(splats).set({ status: "processing" }).where(eq(splats.id, objectId));
+    await getDb().update(splats).set({ status: "processing" }).where(eq(splats.id, splatId));
 
     const instanceId = await launchJob({
       jobId: created.id,
-      objectId,
+      splatId,
       callbackToken,
       workerImageUri: workerImageUri(),
       ecrRegistry: ecrRegistry(),

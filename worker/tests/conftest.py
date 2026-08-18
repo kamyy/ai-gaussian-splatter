@@ -23,7 +23,7 @@ def aws_test_credentials(monkeypatch):
 def settings(tmp_path) -> Settings:
     return Settings(
         job_id="job-123",
-        object_id="obj-456",
+        splat_id="splat-456",
         callback_token="test-token",
         backend_url="https://backend.example.com",
         uploads_bucket="test-uploads",

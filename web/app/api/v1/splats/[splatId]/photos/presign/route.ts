@@ -18,19 +18,19 @@ import type { PhotoPresignItem } from "@/lib/types";
 const presignSchema = z.array(z.object({ filename: z.string().min(1), contentType: z.string().min(1) })).min(1);
 
 export const POST = withErrorHandling(
-  async (request: NextRequest, ctx: RouteContext<"/api/v1/objects/[objectId]/photos/presign">) => {
+  async (request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/photos/presign">) => {
     const env = getEnv();
     const user = await requireUser();
-    const { objectId } = await ctx.params;
-    requireUuid(objectId, 404, "Object not found");
+    const { splatId } = await ctx.params;
+    requireUuid(splatId, 404, "Splat not found");
 
     const [splat] = await getDb()
       .select({ id: splats.id })
       .from(splats)
-      .where(and(eq(splats.id, objectId), eq(splats.userId, user.id)))
+      .where(and(eq(splats.id, splatId), eq(splats.userId, user.id)))
       .limit(1);
     if (splat === undefined) {
-      throw new HttpError(404, "Object not found");
+      throw new HttpError(404, "Splat not found");
     }
 
     const parsed = presignSchema.safeParse(await request.json().catch(() => null));
@@ -48,11 +48,11 @@ export const POST = withErrorHandling(
     for (const item of parsed.data) {
       const photoId = randomUUID();
       const extension = path.extname(item.filename) || ".jpg";
-      const { key, url } = await presignPhotoUpload(objectId, photoId, extension, item.contentType);
+      const { key, url } = await presignPhotoUpload(splatId, photoId, extension, item.contentType);
 
       rows.push({
         id: photoId,
-        splatId: objectId,
+        splatId,
         s3Key: key,
         originalFilename: item.filename,
         contentType: item.contentType,

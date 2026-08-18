@@ -22,8 +22,8 @@ import { JOB_STATUSES, PHOTO_UPLOAD_STATUSES, SPLAT_STATUSES } from "@/lib/types
  * query can never silently disagree on a name.
  *
  * The table export is `splats`, not `objects`, to avoid shadowing JS's
- * `Object`; REST paths stay /objects/… regardless — that's the public
- * contract.
+ * `Object` — the same naming is used throughout the app, including REST
+ * paths and hooks.
  *
  * Enum labels come from lib/types.ts, so the client-side unions and the
  * Postgres labels are one list.

@@ -2,7 +2,7 @@ import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { and, asc, desc, eq } from "drizzle-orm";
 
-import type { GalleryItemRead, PublicObjectRead } from "../types";
+import type { GalleryItemRead, PublicSplatRead } from "../types";
 import { getDb } from "./db";
 import { galleryItems, jobs, splats } from "./db/schema";
 import { getEnv } from "./env";
@@ -65,7 +65,7 @@ export async function getGalleryItem(itemId: string): Promise<GalleryItemRead | 
  * Only exposes Complete + shareable splats — else
  * null, which callers surface as a 404, same as if it simply didn't exist.
  */
-export async function getPublicSplat(splatId: string): Promise<PublicObjectRead | null> {
+export async function getPublicSplat(splatId: string): Promise<PublicSplatRead | null> {
   if (!isUuid(splatId)) {
     return null;
   }

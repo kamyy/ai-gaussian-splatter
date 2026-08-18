@@ -8,11 +8,11 @@ import { completePhoto, presignPhotos, uploadToS3 } from "@/lib/api";
 import { useAppStore } from "@/lib/store";
 
 interface PhotoDropzoneProps {
-  objectId: string;
+  splatId: string;
   onAllUploaded?: () => void;
 }
 
-export function PhotoDropzone({ objectId, onAllUploaded }: PhotoDropzoneProps) {
+export function PhotoDropzone({ splatId, onAllUploaded }: PhotoDropzoneProps) {
   const { getToken } = useAuth();
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -36,7 +36,7 @@ export function PhotoDropzone({ objectId, onAllUploaded }: PhotoDropzoneProps) {
     try {
       const { photos } = await presignPhotos(
         token,
-        objectId,
+        splatId,
         files.map(f => ({ filename: f.name, contentType: f.type || "image/jpeg" })),
       );
 
@@ -47,7 +47,7 @@ export function PhotoDropzone({ objectId, onAllUploaded }: PhotoDropzoneProps) {
           try {
             await uploadToS3(presigned.presignedPutUrl, file);
             setUploadProgress(file.name, 100);
-            await completePhoto(token, objectId, presigned.photoId);
+            await completePhoto(token, splatId, presigned.photoId);
             setUploadStatus(file.name, "uploaded");
           } catch (err) {
             setUploadStatus(file.name, "failed", err instanceof Error ? err.message : "Upload failed");

@@ -24,7 +24,7 @@ const envSchema = z.object({
   RATE_LIMIT_IP_PER_HOUR: z.coerce.number().int().positive().default(5),
   RATE_LIMIT_USER_PER_DAY: z.coerce.number().int().positive().default(3),
   GLOBAL_MAX_JOBS_PER_DAY: z.coerce.number().int().positive().default(20),
-  MIN_PHOTOS_PER_OBJECT: z.coerce.number().int().positive().default(20),
+  MIN_PHOTOS_PER_SPLAT: z.coerce.number().int().positive().default(20),
 
   // Where the GPU worker PATCHes its status back to.
   APP_PUBLIC_URL: z.string().url(),
