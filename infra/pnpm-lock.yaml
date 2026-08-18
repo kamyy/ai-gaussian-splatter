@@ -9,16 +9,16 @@ importers:
   .:
     devDependencies:
       aws-cdk:
-        specifier: ^2.1134.0
-        version: 2.1134.0
+        specifier: ^2.1137.0
+        version: 2.1137.0
 
 packages:
 
-  aws-cdk@2.1134.0:
-    resolution: {integrity: sha512-Fy/g+gdpMpkhAAoCNlZtX0s4mD7q58bHlDV6QfbnTeifmQ5cEge26c5rB+U4qKB/bDudxNuJjQk/mSSk0ysnug==}
+  aws-cdk@2.1137.0:
+    resolution: {integrity: sha512-SRy2df/5cqGvq8ncph1m93rWEh3RGbvP6uwElw+W0x135vZDzTpfbuq2L8oAHwK2yDt3RNS5sb7Phwb7xqQP2g==}
     engines: {node: '>= 18.0.0'}
     hasBin: true
 
 snapshots:
 
-  aws-cdk@2.1134.0: {}
+  aws-cdk@2.1137.0: {}
