@@ -8,10 +8,10 @@ import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpErro
 import { jobReadColumns } from "@/lib/server/selects";
 
 export const GET = withErrorHandling(
-  async (_request: NextRequest, ctx: RouteContext<"/api/v1/objects/[objectId]/jobs/latest">) => {
+  async (_request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/jobs/latest">) => {
     const user = await requireUser();
-    const { objectId } = await ctx.params;
-    requireUuid(objectId, 404, "No jobs for this object");
+    const { splatId } = await ctx.params;
+    requireUuid(splatId, 404, "No jobs for this splat");
 
     // Ownership is enforced through the parent splat, hence the join. The
     // explicit column map keeps the result flat despite it, and keeps
@@ -20,11 +20,11 @@ export const GET = withErrorHandling(
       .select(jobReadColumns)
       .from(jobs)
       .innerJoin(splats, eq(jobs.splatId, splats.id))
-      .where(and(eq(jobs.splatId, objectId), eq(splats.userId, user.id)))
+      .where(and(eq(jobs.splatId, splatId), eq(splats.userId, user.id)))
       .orderBy(desc(jobs.createdAt))
       .limit(1);
     if (job === undefined) {
-      throw new HttpError(404, "No jobs for this object");
+      throw new HttpError(404, "No jobs for this splat");
     }
     return NextResponse.json(job);
   },

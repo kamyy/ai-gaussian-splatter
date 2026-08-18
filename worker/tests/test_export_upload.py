@@ -16,8 +16,8 @@ def test_upload_result_puts_files_at_expected_keys(settings, tmp_path):
 
     result_key, thumbnail_key = upload_result(ply_path, thumbnail_path, settings)
 
-    assert result_key == f"objects/{settings.object_id}/result.ply"
-    assert thumbnail_key == f"objects/{settings.object_id}/thumbnail.png"
+    assert result_key == f"splats/{settings.splat_id}/result.ply"
+    assert thumbnail_key == f"splats/{settings.splat_id}/thumbnail.png"
 
     body = s3.get_object(Bucket=settings.splats_bucket, Key=result_key)["Body"].read()
     assert body == b"fake-ply-data"

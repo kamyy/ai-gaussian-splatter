@@ -3,17 +3,17 @@
 import { Badge, Button, Card, Group, SimpleGrid, Skeleton, Stack, Text, Title } from "@mantine/core";
 import Link from "next/link";
 
-import { useObjects } from "@/lib/hooks";
+import { useSplats } from "@/lib/hooks";
 
 export default function DashboardPage() {
-  const { data: objects, isLoading, error } = useObjects();
+  const { data: splats, isLoading, error } = useSplats();
 
   return (
     <Stack>
       <Group justify="space-between">
-        <Title order={2}>Your objects</Title>
-        <Button component={Link} href="/objects/new">
-          New object
+        <Title order={2}>Your splats</Title>
+        <Button component={Link} href="/splats/new">
+          New splat
         </Button>
       </Group>
 
@@ -26,18 +26,18 @@ export default function DashboardPage() {
         </SimpleGrid>
       )}
 
-      {error && <Text c="red">Failed to load objects.</Text>}
+      {error && <Text c="red">Failed to load splats.</Text>}
 
-      {objects && objects.length === 0 && <Text c="dimmed">No objects yet — create your first one.</Text>}
+      {splats && splats.length === 0 && <Text c="dimmed">No splats yet — create your first one.</Text>}
 
-      {objects && objects.length > 0 && (
+      {splats && splats.length > 0 && (
         <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }}>
-          {objects.map(obj => (
-            <Card key={obj.id} component={Link} href={`/objects/${obj.id}`} withBorder padding="lg">
+          {splats.map(splat => (
+            <Card key={splat.id} component={Link} href={`/splats/${splat.id}`} withBorder padding="lg">
               <Group justify="space-between">
-                <Text fw={500}>{obj.name}</Text>
-                <Badge color={obj.status === "complete" ? "green" : obj.status === "failed" ? "red" : "blue"}>
-                  {obj.status}
+                <Text fw={500}>{splat.name}</Text>
+                <Badge color={splat.status === "complete" ? "green" : splat.status === "failed" ? "red" : "blue"}>
+                  {splat.status}
                 </Badge>
               </Group>
             </Card>

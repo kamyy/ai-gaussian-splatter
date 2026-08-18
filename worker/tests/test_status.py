@@ -24,17 +24,15 @@ def test_report_status_includes_optional_fields_when_provided(settings):
         return_value=httpx.Response(200)
     )
 
-    report_status(
-        settings, "complete", result_s3_key="objects/x/result.ply", thumbnail_s3_key="objects/x/thumbnail.png"
-    )
+    report_status(settings, "complete", result_s3_key="splats/x/result.ply", thumbnail_s3_key="splats/x/thumbnail.png")
 
     import json
 
     payload = json.loads(route.calls.last.request.content)
     assert payload == {
         "status": "complete",
-        "result_s3_key": "objects/x/result.ply",
-        "thumbnail_s3_key": "objects/x/thumbnail.png",
+        "result_s3_key": "splats/x/result.ply",
+        "thumbnail_s3_key": "splats/x/thumbnail.png",
     }
 
 

@@ -32,11 +32,11 @@ const STATUS_PROGRESS: Record<JobStatus, number> = {
 };
 
 interface JobStatusPollerProps {
-  objectId: string;
+  splatId: string;
 }
 
-export function JobStatusPoller({ objectId }: JobStatusPollerProps) {
-  const { data: job, error, isLoading } = useJobStatus(objectId);
+export function JobStatusPoller({ splatId }: JobStatusPollerProps) {
+  const { data: job, error, isLoading } = useJobStatus(splatId);
 
   if (isLoading) {
     return <Text c="dimmed">Loading job status…</Text>;

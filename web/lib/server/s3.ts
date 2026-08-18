@@ -13,19 +13,19 @@ function s3Client(): S3Client {
   return new S3Client({ region: getEnv().AWS_REGION });
 }
 
-export function photoS3Key(objectId: string, photoId: string, extension: string): string {
-  return `objects/${objectId}/photos/${photoId}${extension}`;
+export function photoS3Key(splatId: string, photoId: string, extension: string): string {
+  return `splats/${splatId}/photos/${photoId}${extension}`;
 }
 
 /** Returns the S3 key alongside the presigned PUT URL. */
 export async function presignPhotoUpload(
-  objectId: string,
+  splatId: string,
   photoId: string,
   extension: string,
   contentType: string,
 ): Promise<{ key: string; url: string }> {
   const env = getEnv();
-  const key = photoS3Key(objectId, photoId, extension);
+  const key = photoS3Key(splatId, photoId, extension);
   const command = new PutObjectCommand({
     Bucket: env.UPLOADS_BUCKET,
     Key: key,

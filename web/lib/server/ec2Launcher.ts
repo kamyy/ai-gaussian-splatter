@@ -13,7 +13,7 @@ import { getEnv } from "./env";
 interface UserDataParams {
   callbackToken: string;
   jobId: string;
-  objectId: string;
+  splatId: string;
   backendUrl: string;
   uploadsBucket: string;
   splatsBucket: string;
@@ -33,7 +33,7 @@ set -euo pipefail
 # updates on that one job (lib/server/auth.ts), which is what bounds this.
 CALLBACK_TOKEN="${p.callbackToken}"
 JOB_ID="${p.jobId}"
-OBJECT_ID="${p.objectId}"
+SPLAT_ID="${p.splatId}"
 BACKEND_URL="${p.backendUrl}"
 UPLOADS_BUCKET="${p.uploadsBucket}"
 SPLATS_BUCKET="${p.splatsBucket}"
@@ -43,7 +43,7 @@ $(aws ecr get-login --no-include-email --region ${p.awsRegion}) || \\
 
 docker run --rm --gpus all \\
     -e JOB_ID="$JOB_ID" \\
-    -e OBJECT_ID="$OBJECT_ID" \\
+    -e SPLAT_ID="$SPLAT_ID" \\
     -e CALLBACK_TOKEN="$CALLBACK_TOKEN" \\
     -e BACKEND_URL="$BACKEND_URL" \\
     -e UPLOADS_BUCKET="$UPLOADS_BUCKET" \\
@@ -65,7 +65,7 @@ export function generateCallbackToken(): string {
 /** Launches the spot worker instance and returns its instance ID. */
 export async function launchJob(params: {
   jobId: string;
-  objectId: string;
+  splatId: string;
   callbackToken: string;
   workerImageUri: string;
   ecrRegistry: string;
@@ -76,7 +76,7 @@ export async function launchJob(params: {
   const userData = renderUserData({
     callbackToken: params.callbackToken,
     jobId: params.jobId,
-    objectId: params.objectId,
+    splatId: params.splatId,
     backendUrl: env.APP_PUBLIC_URL,
     uploadsBucket: env.UPLOADS_BUCKET,
     splatsBucket: env.SPLATS_BUCKET,

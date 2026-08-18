@@ -14,32 +14,32 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const object = await getPublicSplat(id);
-  if (object === null) {
+  const splat = await getPublicSplat(id);
+  if (splat === null) {
     return { title: "Not found — AI Gaussian Splatter" };
   }
   return {
-    title: `${object.title} — AI Gaussian Splatter`,
+    title: `${splat.title} — AI Gaussian Splatter`,
     description: "A 3D Gaussian Splat reconstruction, made with AI Gaussian Splatter.",
     openGraph: {
-      title: object.title,
-      images: [object.thumbnailUrl],
+      title: splat.title,
+      images: [splat.thumbnailUrl],
     },
   };
 }
 
-export default async function PublicObjectViewPage({ params }: Props) {
+export default async function PublicSplatViewPage({ params }: Props) {
   const { id } = await params;
 
-  const object = await getPublicSplat(id);
-  if (object === null) {
+  const splat = await getPublicSplat(id);
+  if (splat === null) {
     notFound();
   }
 
   return (
     <Stack p="md">
-      <Title order={2}>{object.title}</Title>
-      <SplatViewer splatUrl={object.splatUrl} />
+      <Title order={2}>{splat.title}</Title>
+      <SplatViewer splatUrl={splat.splatUrl} />
     </Stack>
   );
 }

@@ -33,7 +33,7 @@ export type JobStatus = (typeof JOB_STATUSES)[number];
 
 export const JOB_ENDED_STATUSES: JobStatus[] = ["complete", "failed", "cancelled"];
 
-export interface ObjectRead {
+export interface SplatRead {
   id: string;
   name: string;
   status: SplatStatus;
@@ -67,7 +67,7 @@ export interface GalleryItemRead {
   splatUrl: string;
 }
 
-export interface PublicObjectRead {
+export interface PublicSplatRead {
   title: string;
   thumbnailUrl: string;
   splatUrl: string;
