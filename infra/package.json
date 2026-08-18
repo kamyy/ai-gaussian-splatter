@@ -11,6 +11,6 @@
   },
   "packageManager": "pnpm@10.33.0",
   "devDependencies": {
-    "aws-cdk": "^2.1134.0"
+    "aws-cdk": "^2.1137.0"
   }
 }
