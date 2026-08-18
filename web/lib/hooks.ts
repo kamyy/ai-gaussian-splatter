@@ -34,52 +34,38 @@ function jobPollInterval(latestData: JobRead | undefined) {
   return JOB_POLL_INTERVAL_MS[latestData.status];
 }
 
-export function useSplats() {
-  const { getToken } = useAuth();
-
-  const key = "splats";
-
-  const fetcher = async () => {
+// Shared by every hook below: SWR only treats a thrown fetcher as an error,
+// so a signed-out session (no token) has to throw rather than return.
+function tokenGuardedFetcher<T>(getToken: () => Promise<string | null>, fetcher: (token: string) => Promise<T>) {
+  return async () => {
     const token = await getToken();
     if (token) {
-      return listSplats(token);
+      return fetcher(token);
     }
     throw new Error("Not signed in");
   };
+}
 
-  return useSWR(key, fetcher);
+export function useSplats() {
+  const { getToken } = useAuth();
+  return useSWR("splats", tokenGuardedFetcher(getToken, listSplats));
 }
 
 export function useSplat(splatId: string) {
   const { getToken } = useAuth();
-
-  const key = splatId ? ["splat", splatId] : null;
-
-  const fetcher = async () => {
-    const token = await getToken();
-    if (token) {
-      return getSplat(token, splatId);
-    }
-    throw new Error("Not signed in");
-  };
-
-  return useSWR(key, fetcher);
+  return useSWR(
+    ["splat", splatId],
+    tokenGuardedFetcher(getToken, token => getSplat(token, splatId)),
+  );
 }
 
 export function useJobStatus(splatId: string) {
   const { getToken } = useAuth();
-
-  const key = splatId ? ["job-status", splatId] : null;
-
-  const fetcher = async () => {
-    const token = await getToken();
-    if (token) {
-      return getLatestJob(token, splatId);
-    }
-    throw new Error("Not signed in");
-  };
-
-  return useSWR(key, fetcher, {
-    refreshInterval: jobPollInterval,
-  });
+  return useSWR(
+    ["job-status", splatId],
+    tokenGuardedFetcher(getToken, token => getLatestJob(token, splatId)),
+    {
+      refreshInterval: jobPollInterval,
+    },
+  );
 }
