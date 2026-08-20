@@ -258,7 +258,8 @@ export IMAGE_TAG=$(git rev-parse --short HEAD)
 # On any later run this returns ResourceExistsException — that is the secret already being there, not a 
 # failed deploy. Skip to the describe-secret below; to change the value use "Rotating the Clerk key".
 printf '%s' 'sk_live_...' > clerk-secret-key.txt   # printf, prevents any newline becoming part of the key.
-aws secretsmanager create-secret --region us-west-2 \
+aws secretsmanager create-secret \
+  --region us-west-2 \
   --name ai-gaussian-splatter/clerk-secret-key \
   --description "clerk-secret-key" \
   --secret-string file://clerk-secret-key.txt \
@@ -338,8 +339,10 @@ Changing `CLERK_SECRET_KEY` later is a write plus a rollout, because ECS only re
 
 ```bash
 printf '%s' 'sk_live_...' > clerk-secret-key.txt
-aws secretsmanager put-secret-value --region us-west-2 \
-  --secret-id ai-gaussian-splatter/clerk-secret-key --secret-string file://clerk-secret-key.txt
+aws secretsmanager put-secret-value \
+  --region us-west-2 \
+  --secret-id ai-gaussian-splatter/clerk-secret-key \
+  --secret-string file://clerk-secret-key.txt
 rm clerk-secret-key.txt
 
 # Nothing has changed image wise so force a new deployment to use that fresh Clerk secret key.
