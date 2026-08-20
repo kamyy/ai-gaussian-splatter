@@ -3,11 +3,11 @@ import os
 
 import aws_cdk as cdk
 
-from stacks.backend_stack import APP_HOSTNAME, CLERK_SECRET_KEY_NAME, BackendStack
 from stacks.budgets_stack import BudgetsStack
 from stacks.data_stack import DataStack
 from stacks.network_stack import NetworkStack
 from stacks.registry_stack import RegistryStack
+from stacks.web_stack import APP_HOSTNAME, CLERK_SECRET_KEY_NAME, WebStack
 from stacks.worker_iam_stack import WorkerIamStack
 
 
@@ -31,7 +31,7 @@ def build_stacks(
     env = cdk.Environment(account=account, region=region)
     network = NetworkStack(app, "NetworkStack", env=env)
 
-    # Deploys before BackendStack and holds the image its service pulls, so
+    # Deploys before WebStack and holds the image its service pulls, so
     # the image can be pushed in between. See RegistryStack's own docstring.
     registry = RegistryStack(app, "RegistryStack", env=env)
 
@@ -59,12 +59,12 @@ def build_stacks(
         splats_bucket=data.splats_bucket,
     )
 
-    backend = BackendStack(
+    web = WebStack(
         app,
-        "BackendStack",
+        "WebStack",
         env=env,
         vpc=network.vpc,
-        backend_security_group=network.backend_security_group,
+        web_security_group=network.web_security_group,
         repository=registry.repository,
         database=data.database,
         uploads_bucket=data.uploads_bucket,
@@ -97,7 +97,7 @@ def build_stacks(
         "registry": registry,
         "data": data,
         "worker_iam": worker_iam,
-        "backend": backend,
+        "web": web,
         "budgets": budgets,
     }
 
@@ -144,9 +144,9 @@ def read_context(app: cdk.App, account: str) -> dict[str, str]:
     hosted_zone_id = app.node.try_get_context("hostedZoneId") or "Z00000000000000000000"
 
     # The Clerk secret is created by hand before the first deploy and imported
-    # by BackendStack, so its ARN — suffix and all — has to be passed in. The
+    # by WebStack, so its ARN — suffix and all — has to be passed in. The
     # placeholder keeps `cdk synth` working with no credentials, and names the
-    # placeholder account deliberately: BackendStack checks the ARN against its
+    # placeholder account deliberately: WebStack checks the ARN against its
     # own account, so a real deploy that forgets `-c clerkSecretKeyArn=` fails at
     # synth rather than at task start. See AGENTS.md.
     clerk_secret_key_arn = (
@@ -157,7 +157,7 @@ def read_context(app: cdk.App, account: str) -> dict[str, str]:
     # Which build the service runs. A commit SHA rather than a moving tag, so
     # every release is its own task definition and the circuit breaker can roll
     # back to one that still names the image it was deployed with — see
-    # backend_stack.py. Rolling back by hand is this same flag with an older SHA.
+    # web_stack.py. Rolling back by hand is this same flag with an older SHA.
     image_tag = app.node.try_get_context("imageTag") or PLACEHOLDER_IMAGE_TAG
     if image_tag == PLACEHOLDER_IMAGE_TAG and account != PLACEHOLDER_AWS_ACCOUNT_ID:
         raise ValueError("a real deploy must pass -c imageTag=<sha> — the placeholder names no image in ECR")

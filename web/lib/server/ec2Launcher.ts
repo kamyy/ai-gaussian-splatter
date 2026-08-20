@@ -14,7 +14,7 @@ interface UserDataParams {
   callbackToken: string;
   jobId: string;
   splatId: string;
-  backendUrl: string;
+  appPublicUrl: string;
   uploadsBucket: string;
   splatsBucket: string;
   workerImageUri: string;
@@ -23,8 +23,6 @@ interface UserDataParams {
 }
 
 function renderUserData(p: UserDataParams): string {
-  // BACKEND_URL is the name the worker itself reads (worker/pipeline/status.py);
-  // it stays as-is even though this app supplies it from APP_PUBLIC_URL now.
   return `#!/bin/bash
 set -euo pipefail
 
@@ -34,7 +32,7 @@ set -euo pipefail
 CALLBACK_TOKEN="${p.callbackToken}"
 JOB_ID="${p.jobId}"
 SPLAT_ID="${p.splatId}"
-BACKEND_URL="${p.backendUrl}"
+APP_PUBLIC_URL="${p.appPublicUrl}"
 UPLOADS_BUCKET="${p.uploadsBucket}"
 SPLATS_BUCKET="${p.splatsBucket}"
 
@@ -45,7 +43,7 @@ docker run --rm --gpus all \\
     -e JOB_ID="$JOB_ID" \\
     -e SPLAT_ID="$SPLAT_ID" \\
     -e CALLBACK_TOKEN="$CALLBACK_TOKEN" \\
-    -e BACKEND_URL="$BACKEND_URL" \\
+    -e APP_PUBLIC_URL="$APP_PUBLIC_URL" \\
     -e UPLOADS_BUCKET="$UPLOADS_BUCKET" \\
     -e SPLATS_BUCKET="$SPLATS_BUCKET" \\
     ${p.workerImageUri}
@@ -77,7 +75,7 @@ export async function launchJob(params: {
     callbackToken: params.callbackToken,
     jobId: params.jobId,
     splatId: params.splatId,
-    backendUrl: env.APP_PUBLIC_URL,
+    appPublicUrl: env.APP_PUBLIC_URL,
     uploadsBucket: env.UPLOADS_BUCKET,
     splatsBucket: env.SPLATS_BUCKET,
     workerImageUri: params.workerImageUri,

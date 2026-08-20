@@ -6,16 +6,16 @@ from stacks.registry_stack import RELEASES_KEPT
 
 
 def test_repository_is_not_in_the_stack_that_pulls_from_it(wired_stacks):
-    """Regression test: the ECR repository must stay out of BackendStack.
+    """Regression test: the ECR repository must stay out of WebStack.
 
-    BackendStack's service is pinned to an image tag, so if the repository
+    WebStack's service is pinned to an image tag, so if the repository
     were created in the same stack it would be empty at the moment the
     service starts, the tasks would never reach a steady state, and the
     circuit breaker would roll the stack back. The repository is RETAIN, so
     it survives that rollback and then collides by name with the next attempt
     to create it — leaving a state no retry can clear.
     """
-    assert Template.from_stack(wired_stacks["backend"]).find_resources("AWS::ECR::Repository") == {}
+    assert Template.from_stack(wired_stacks["web"]).find_resources("AWS::ECR::Repository") == {}
 
     registry = Template.from_stack(wired_stacks["registry"])
     assert len(registry.find_resources("AWS::ECR::Repository")) == 1
@@ -29,7 +29,7 @@ def test_repository_survives_stack_deletion(wired_stacks):
 
     (repository,) = template.find_resources("AWS::ECR::Repository").values()
     assert repository["DeletionPolicy"] == "Retain"
-    assert repository["Properties"]["RepositoryName"] == "ai-gaussian-splatter-backend"
+    assert repository["Properties"]["RepositoryName"] == "ai-gaussian-splatter-web"
 
 
 def test_pushed_tags_can_never_be_repointed(wired_stacks):

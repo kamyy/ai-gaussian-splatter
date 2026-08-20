@@ -1,6 +1,6 @@
 """Worker entrypoint. Reads job config from env vars,
 runs COLMAP -> gsplat training -> export, reports status back to the
-backend at each phase, and self-terminates the EC2 instance from the finally
+web app at each phase, and self-terminates the EC2 instance from the finally
 block below — on success and on failure alike — so a job never runs up spend
 past its own end.
 """

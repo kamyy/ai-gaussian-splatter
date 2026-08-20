@@ -98,7 +98,7 @@ When a set registers poorly, `./jobdir/database.db` says why — guessing from t
 
 #### Running the pipeline
 
-The pipeline runs standalone — nothing has to be listening at `BACKEND_URL`. `pipeline/status.py` logs and swallows callback failures by design, and `terminate_self()` no-ops when IMDS doesn't answer.
+The pipeline runs standalone — nothing has to be listening at `APP_PUBLIC_URL`. `pipeline/status.py` logs and swallows callback failures by design, and `terminate_self()` no-ops when IMDS doesn't answer.
 
 ```bash
 # Build the image when ./worker/ has changed — source is copied in the final two layers.
@@ -224,7 +224,7 @@ eval "$(aws secretsmanager get-secret-value --secret-id <rds-secret-arn> \
 (cd web && pnpm db:migrate)
 ```
 
-`DATABASE_SSL_CA` is what makes this work against RDS at all: without it `databaseSsl()` returns undefined, drizzle-kit opens an unencrypted connection, and `rds.force_ssl = 1` refuses it. The bundle is the same one `web/Dockerfile` bakes into the image — the running task gets the path from `backend_stack.py`, but a shell running migrations has to fetch its own copy. Exported variables win over `web/.env`, which dotenv never overwrites, so a local `.env` can't redirect this at your production database.
+`DATABASE_SSL_CA` is what makes this work against RDS at all: without it `databaseSsl()` returns undefined, drizzle-kit opens an unencrypted connection, and `rds.force_ssl = 1` refuses it. The bundle is the same one `web/Dockerfile` bakes into the image — the running task gets the path from `web_stack.py`, but a shell running migrations has to fetch its own copy. Exported variables win over `web/.env`, which dotenv never overwrites, so a local `.env` can't redirect this at your production database.
 
 The database lives in a private subnet, so run this from somewhere inside the VPC, not a laptop. Prefer a bastion that can reach the RDS endpoint directly: a port-forward makes the client connect to `localhost`, which fails certificate hostname verification — and the fix for *that* is disabling verification, which defeats the point of supplying the CA.
 
@@ -237,7 +237,7 @@ The database lives in a private subnet, so run this from somewhere inside the VP
 
 ## Deploying infrastructure on AWS
 
- The exports listed below are required on every `pnpm cdk:*` invocation. `RegistryStack` itself  reads none of these values, but `cdk synth` always builds the whole app first, `BackendStack` included, and that's where they're required. The commands interleaved between the exports are not: `create-secret`, `cdk:bootstrap`, and `cdk:deploy:registry` each run once for the life of the account, and each says so above itself.
+ The exports listed below are required on every `pnpm cdk:*` invocation. `RegistryStack` itself  reads none of these values, but `cdk synth` always builds the whole app first, `WebStack` included, and that's where they're required. The commands interleaved between the exports are not: `create-secret`, `cdk:bootstrap`, and `cdk:deploy:registry` each run once for the life of the account, and each says so above itself.
 
 ```bash
 cd infra # Make sure you're in the right folder.
@@ -251,7 +251,7 @@ export ALERT_EMAIL=<your email>
 
 # IMAGE_TAG is the pushed build SHA. Per-release, not moving — each deploy gets its own task definition, 
 # so the circuit breaker (and manual rollback) can point at an older SHA that still exists in the repo. 
-# BackendStack requires a SHA; the ECR repo refuses to repoint an existing tag.
+# WebStack requires a SHA; the ECR repo refuses to repoint an existing tag.
 export IMAGE_TAG=$(git rev-parse --short HEAD)
 
 # One time only; Copy the real Clerk sk_live_... secret key from Clerk's dashboard to AWS Secrets Manager.
@@ -266,7 +266,7 @@ aws secretsmanager create-secret \
   --query ARN --output text
 rm clerk-secret-key.txt
 
-# CLERK_SECRET_KEY_ARN includes Secrets Manager's six-character suffix. BackendStack reads the secret and 
+# CLERK_SECRET_KEY_ARN includes Secrets Manager's six-character suffix. WebStack reads the secret and 
 # validates the ARN's account/region in `pnpm cdk:synth`.
 export CLERK_SECRET_KEY_ARN=$(aws secretsmanager describe-secret \
   --region us-west-2 \
@@ -288,7 +288,7 @@ export HOSTED_ZONE_ID=$(aws route53 list-hosted-zones-by-name \
 pnpm cdk:bootstrap aws://$AWS_ACCOUNT_ID/us-east-1
 pnpm cdk:bootstrap aws://$AWS_ACCOUNT_ID/us-west-2
 
-# BackendStack pins the web service to an image tag, so the image must already be in the ECR repo. 
+# WebStack pins the web service to an image tag, so the image must already be in the ECR repo. 
 # pnpm cdk:deploy:all on a fresh account creates an empty ECR repo with no image to pull. So one 
 # time only, deploy RegistryStack by itself first.
 pnpm cdk:deploy:registry \
@@ -299,7 +299,7 @@ pnpm cdk:deploy:registry \
 
 ECR_TOKEN=$(aws ecr get-login-password --region us-west-2)
 REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com
-REPO=$REGISTRY/ai-gaussian-splatter-backend
+REPO=$REGISTRY/ai-gaussian-splatter-web
 
 # Push the image whenever you have a new web build
 podman login --username AWS --password-stdin $REGISTRY <<< "$ECR_TOKEN"
@@ -347,12 +347,12 @@ rm clerk-secret-key.txt
 
 # Nothing has changed image wise so force a new deployment to use that fresh Clerk secret key.
 aws ecs update-service --region us-west-2 \
-  --cluster ai-gaussian-splatter --service ai-gaussian-splatter-backend \
+  --cluster ai-gaussian-splatter --service ai-gaussian-splatter-web \
   --force-new-deployment
 
 ```
 
-This is the one rollout that is not a deploy, which is why `CLUSTER_NAME`/`SERVICE_NAME` are fixed in `backend_stack.py` rather than left to CloudFormation — the command can be written out here instead of looked up.
+This is the one rollout that is not a deploy, which is why `CLUSTER_NAME`/`SERVICE_NAME` are fixed in `web_stack.py` rather than left to CloudFormation — the command can be written out here instead of looked up.
 
 ### Which release is deployed
 
@@ -360,7 +360,7 @@ The tag names the commit, so this answers "what code is live" without correlatin
 
 ```bash
 aws ecs describe-services --region us-west-2 \
-  --cluster ai-gaussian-splatter --services ai-gaussian-splatter-backend \
+  --cluster ai-gaussian-splatter --services ai-gaussian-splatter-web \
   --query 'services[0].deployments[?status==`PRIMARY`].taskDefinition' --output text
 aws ecs describe-task-definition --region us-west-2 --task-definition <arn-from-above> \
   --query 'taskDefinition.containerDefinitions[0].image' --output text
@@ -373,7 +373,7 @@ For what the running tasks actually pulled, digest included — the ground truth
 ```bash
 aws ecs describe-tasks --region us-west-2 --cluster ai-gaussian-splatter \
   --tasks $(aws ecs list-tasks --region us-west-2 --cluster ai-gaussian-splatter \
-              --service-name ai-gaussian-splatter-backend --query 'taskArns' --output text) \
+              --service-name ai-gaussian-splatter-web --query 'taskArns' --output text) \
   --query 'tasks[].containers[].{image:image,digest:imageDigest}'
 ```
 
@@ -382,10 +382,10 @@ Then `git log -1 <tag>` for what is in production and `git diff <tag>..HEAD` for
 To see which releases are still available to roll back to, newest first:
 
 ```bash
-aws ecr describe-images --region us-west-2 --repository-name ai-gaussian-splatter-backend \
+aws ecr describe-images --region us-west-2 --repository-name ai-gaussian-splatter-web \
   --query 'reverse(sort_by(imageDetails,&imagePushedAt))[].{tag:imageTags[0],pushed:imagePushedAt}' --output table
 ```
 
-The `WorkerIamStack`, `DataStack`, and `RegistryStack` must exist before `BackendStack` (CDK resolves this automatically via cross-stack references in `app.py`). `BudgetsStack` deploys to `us-east-1` regardless of the app's primary region — billing metrics only exist there.
+The `WorkerIamStack`, `DataStack`, and `RegistryStack` must exist before `WebStack` (CDK resolves this automatically via cross-stack references in `app.py`). `BudgetsStack` deploys to `us-east-1` regardless of the app's primary region — billing metrics only exist there.
 
-`app.py`'s `workerAmiId` context value is a placeholder (`ami-000000000000`) until the worker image is actually built and pushed (plan M5/M10) — `pnpm cdk:synth`/`pnpm cdk:diff` work fine with the placeholder, but don't run `pnpm cdk:deploy:all` against `BackendStack` with it still set, since job launches would fail.
+`app.py`'s `workerAmiId` context value is a placeholder (`ami-000000000000`) until the worker image is actually built and pushed (plan M5/M10) — `pnpm cdk:synth`/`pnpm cdk:diff` work fine with the placeholder, but don't run `pnpm cdk:deploy:all` against `WebStack` with it still set, since job launches would fail.

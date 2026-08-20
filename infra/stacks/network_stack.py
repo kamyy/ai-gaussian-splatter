@@ -18,7 +18,7 @@ class NetworkStack(cdk.Stack):
         # `cdk synth` works without live credentials. Still just 2 AZs, same
         # as intended.
         #
-        # nat_gateways=0: everything needing outbound internet (the backend
+        # nat_gateways=0: everything needing outbound internet (the web
         # tasks, the GPU workers) runs in the public subnets with a public IP
         # and egresses through the internet gateway instead — ARCHITECTURE.md
         # has the cost reasoning. The security groups, not the absence of a
@@ -46,17 +46,17 @@ class NetworkStack(cdk.Stack):
         # punctuation characters (e.g. ">", em dash "—") — plain ASCII only
         # below.
         #
-        # Declared here, not in BackendStack, so both ends of the
+        # Declared here, not in WebStack, so both ends of the
         # auto-generated ALB-to-tasks ingress rule live in one stack —
-        # declaring this group in BackendStack instead fails `cdk synth` with a
-        # DependencyCycle (see AGENTS.md). This is also why backend_stack.py
+        # declaring this group in WebStack instead fails `cdk synth` with a
+        # DependencyCycle (see AGENTS.md). This is also why web_stack.py
         # builds its ALB manually rather than via the CDK pattern — the pattern
         # would create its own security group instead of using this one.
         self.alb_security_group = ec2.SecurityGroup(
             self,
             "AlbSecurityGroup",
             vpc=self.vpc,
-            description="Public ALB in front of the backend ECS service",
+            description="Public ALB in front of the web ECS service",
             allow_all_outbound=True,
         )
         # The app's only route in from the internet, and the only rule in this
@@ -70,14 +70,14 @@ class NetworkStack(cdk.Stack):
         self.alb_security_group.add_ingress_rule(ec2.Peer.any_ipv4(), ec2.Port.tcp(80), "HTTP from anyone, redirected")
 
         # Receives the generated ALB-to-tasks rule described above, and gives
-        # the backend tasks a stable identity that db_security_group's own
+        # the web tasks a stable identity that db_security_group's own
         # ingress rule can name as a source — security-group references check
         # ENI membership, not the referenced group's own rules.
-        self.backend_security_group = ec2.SecurityGroup(
+        self.web_security_group = ec2.SecurityGroup(
             self,
-            "BackendSecurityGroup",
+            "WebSecurityGroup",
             vpc=self.vpc,
-            description="Backend ECS service to RDS",
+            description="Web ECS service to RDS",
             allow_all_outbound=True,
         )
 
@@ -85,7 +85,7 @@ class NetworkStack(cdk.Stack):
             self,
             "WorkerSecurityGroup",
             vpc=self.vpc,
-            description="GPU spot worker instances, outbound only (S3, backend callback)",
+            description="GPU spot worker instances, outbound only (S3, web callback)",
             allow_all_outbound=True,
         )
 
@@ -93,11 +93,11 @@ class NetworkStack(cdk.Stack):
             self,
             "DbSecurityGroup",
             vpc=self.vpc,
-            description="RDS Postgres, inbound only from the backend ECS service",
+            description="RDS Postgres, inbound only from the web ECS service",
             allow_all_outbound=False,
         )
         self.db_security_group.add_ingress_rule(
-            self.backend_security_group,
+            self.web_security_group,
             ec2.Port.tcp(5432),
-            "Backend to Postgres",
+            "Web to Postgres",
         )

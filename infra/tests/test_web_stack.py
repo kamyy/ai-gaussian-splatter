@@ -3,7 +3,7 @@ import re
 import pytest
 from aws_cdk.assertions import Template
 
-from stacks.backend_stack import (
+from stacks.web_stack import (
     APP_HOSTNAME,
     CLERK_SECRET_KEY_NAME,
     CLUSTER_NAME,
@@ -23,7 +23,7 @@ def test_execution_role_ecr_pull_scoped_to_repo_not_account_wide(wired_stacks):
     policy's over-widening (read access to every repo in the account),
     fixed by reconstructing the execution role's policy manually.
     """
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
 
     policies = template.find_resources("AWS::IAM::Policy")
     execution_role_policies = [props for name, props in policies.items() if "ExecutionRole" in name]
@@ -46,7 +46,7 @@ def test_pass_role_targets_worker_role_not_instance_profile(wired_stacks):
     instance profile ARN was the original bug (AccessDenied on every worker
     launch).
     """
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
 
     policies = template.find_resources("AWS::IAM::Policy")
     task_role_policies = [props for name, props in policies.items() if "TaskRole" in name]
@@ -64,11 +64,11 @@ def test_pass_role_targets_worker_role_not_instance_profile(wired_stacks):
 
 def test_health_check_targets_the_container_port(wired_stacks):
     """The health check must hit the app's own port and its real health
-    endpoint. Both are set explicitly in backend_stack.py — the target group's
+    endpoint. Both are set explicitly in web_stack.py — the target group's
     defaults are "/" on the traffic port, which would report a task healthy
     off the Next.js root page without ever exercising /api/v1/healthz.
     """
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
 
     template.has_resource_properties(
         "AWS::ElasticLoadBalancingV2::TargetGroup",
@@ -87,7 +87,7 @@ def test_database_credentials_projected_as_individual_secret_fields(wired_stacks
     parts are projected separately and web/lib/server/databaseUrl.ts builds the
     URL — see that file.
     """
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
 
     task_definitions = template.find_resources("AWS::ECS::TaskDefinition")
     (task_definition_props,) = task_definitions.values()
@@ -119,7 +119,7 @@ def test_clerk_secret_is_imported_never_created_by_this_stack(wired_stacks):
     and on a fresh account it would instead come up holding a random value that
     only a second rollout could replace.
     """
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
 
     template.resource_count_is("AWS::SecretsManager::Secret", 0)
 
@@ -130,7 +130,7 @@ def test_clerk_secret_reaches_the_container_by_complete_arn(wired_stacks):
     (from Secret.from_secret_name_v2, say) synthesizes and deploys clean, then
     fails at task start, so the suffix is pinned here.
     """
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
 
     task_definitions = template.find_resources("AWS::ECS::TaskDefinition")
     (task_definition_props,) = task_definitions.values()
@@ -146,7 +146,7 @@ def test_execution_role_can_read_the_clerk_secret(wired_stacks):
     separate failure from the DB grant next to it and would surface only as a
     stopped task, never in the application logs.
     """
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
 
     policies = template.find_resources("AWS::IAM::Policy")
     execution_role_policies = [props for name, props in policies.items() if "ExecutionRole" in name]
@@ -174,7 +174,7 @@ def test_execution_role_can_read_the_clerk_secret(wired_stacks):
 def test_a_wrong_clerk_secret_arn_fails_at_synth(bad_arn):
     """CloudFormation never validates an imported ARN, so every one of these
     deploys clean and only shows up as a task that will not start. The check in
-    BackendStack is what turns them into a synth-time error instead — including
+    WebStack is what turns them into a synth-time error instead — including
     the case that matters most, a real deploy that forgot `-c clerkSecretKeyArn=`
     and is still carrying app.py's placeholder-account default.
     """
@@ -189,7 +189,7 @@ def test_the_service_names_one_immutable_build(wired_stacks):
     re-pulls the image that just failed — the rollback restores the
     configuration faithfully, but the configuration identifies no image.
     """
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
 
     task_definitions = template.find_resources("AWS::ECS::TaskDefinition")
     (task_definition_props,) = task_definitions.values()
@@ -224,7 +224,7 @@ def test_keep_alive_timeout_exceeds_the_albs_idle_timeout(wired_stacks):
     or mistype, so it's pinned here rather than left to only show up as
     intermittent production 502s.
     """
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
 
     task_definitions = template.find_resources("AWS::ECS::TaskDefinition")
     (task_definition_props,) = task_definitions.values()
@@ -238,9 +238,9 @@ def test_tasks_run_in_public_subnets_with_a_public_ip(wired_stacks):
     """The tasks egress through the internet gateway rather than a NAT
     gateway, which requires both a public subnet and a public IP — without the
     IP they cannot even pull their own image from ECR. What keeps them
-    unreachable is backend_security_group, asserted in test_network_stack.py.
+    unreachable is web_security_group, asserted in test_network_stack.py.
     """
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
 
     services = template.find_resources("AWS::ECS::Service")
     assert len(services) == 1
@@ -259,7 +259,7 @@ def test_service_runs_on_fargate_spot(wired_stacks):
     also has to leave LaunchType unset — ECS rejects a service that specifies
     both.
     """
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
 
     services = template.find_resources("AWS::ECS::Service")
     (service_props,) = services.values()
@@ -276,7 +276,7 @@ def test_service_waits_for_the_capacity_provider_association(wired_stacks):
     an explicit dependency CloudFormation is free to order them the wrong way
     and the first deploy fails intermittently.
     """
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
 
     associations = template.find_resources("AWS::ECS::ClusterCapacityProviderAssociations")
     assert len(associations) == 1
@@ -293,7 +293,7 @@ def test_cluster_and_service_names_are_fixed(wired_stacks):
     restarts the tasks that hold the old value. Generated names would make that
     command wrong.
     """
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
 
     (cluster_props,) = template.find_resources("AWS::ECS::Cluster").values()
     assert cluster_props["Properties"]["ClusterName"] == CLUSTER_NAME
@@ -308,7 +308,7 @@ def test_a_failed_deployment_rolls_back_instead_of_hanging(wired_stacks):
     before ECS calls it failed. Rollback must also be on, or the breaker only
     stops the deployment and leaves the service with no healthy tasks.
     """
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
 
     (service_props,) = template.find_resources("AWS::ECS::Service").values()
     config = service_props["Properties"]["DeploymentConfiguration"]
@@ -321,7 +321,7 @@ def test_deployments_keep_a_healthy_task_serving(wired_stacks):
     may stop the only running task before its replacement passes health
     checks, which is a window of 503s on every deploy.
     """
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
 
     (service_props,) = template.find_resources("AWS::ECS::Service").values()
     config = service_props["Properties"]["DeploymentConfiguration"]
@@ -333,7 +333,7 @@ def test_health_check_grace_period_covers_a_cold_start(wired_stacks):
     """A task killed inside the grace period never gets far enough to report
     why it failed. The default 60s can be shorter than a cold Next.js start.
     """
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
 
     (service_props,) = template.find_resources("AWS::ECS::Service").values()
 
@@ -341,7 +341,7 @@ def test_health_check_grace_period_covers_a_cold_start(wired_stacks):
 
 
 def test_load_balancer_is_internet_facing_in_the_public_subnets(wired_stacks):
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
 
     load_balancers = template.find_resources("AWS::ElasticLoadBalancingV2::LoadBalancer")
     assert len(load_balancers) == 1
@@ -360,7 +360,7 @@ def test_traffic_is_https_with_http_redirected(wired_stacks):
     is attached, and the certificate must be in the ALB's own region — which
     is what declaring it in this stack achieves.
     """
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
 
     listeners = template.find_resources("AWS::ElasticLoadBalancingV2::Listener")
     by_port = {props["Properties"]["Port"]: props["Properties"] for props in listeners.values()}
@@ -384,7 +384,7 @@ def test_traffic_is_https_with_http_redirected(wired_stacks):
 
 
 def test_autoscaling_is_bounded(wired_stacks):
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
 
     template.has_resource_properties(
         "AWS::ApplicationAutoScaling::ScalableTarget",
@@ -408,7 +408,7 @@ def test_hosted_zone_is_imported_and_only_added_to(wired_stacks):
     one record this stack does create is the app's own alias; the certificate's
     validation record is written by ACM itself, not by CloudFormation.
     """
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
 
     assert template.find_resources("AWS::Route53::HostedZone") == {}
 
@@ -420,7 +420,7 @@ def test_hosted_zone_is_imported_and_only_added_to(wired_stacks):
 
 
 def _task_role_statements(wired_stacks):
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
     policies = template.find_resources("AWS::IAM::Policy")
     task_role_policies = [props for name, props in policies.items() if "TaskRole" in name]
     assert len(task_role_policies) == 1
@@ -463,7 +463,7 @@ def test_container_logs_expire(wired_stacks):
     """The log group the ecs-patterns construct creates unprompted has no
     retention and a Retain deletion policy, so nothing ever reclaims it.
     """
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
     log_groups = template.find_resources("AWS::Logs::LogGroup")
     assert log_groups
     for props in log_groups.values():
@@ -472,7 +472,7 @@ def test_container_logs_expire(wired_stacks):
 
 def test_load_balancer_records_requests_and_drops_invalid_headers(wired_stacks):
     """The ALB is the only place a request the app never handled is visible."""
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
     (props,) = template.find_resources("AWS::ElasticLoadBalancingV2::LoadBalancer").values()
     attributes = {a["Key"]: a["Value"] for a in props["Properties"]["LoadBalancerAttributes"]}
 
@@ -481,5 +481,5 @@ def test_load_balancer_records_requests_and_drops_invalid_headers(wired_stacks):
 
 
 def test_execute_command_is_available_for_debugging(wired_stacks):
-    template = Template.from_stack(wired_stacks["backend"])
+    template = Template.from_stack(wired_stacks["web"])
     template.has_resource_properties("AWS::ECS::Service", {"EnableExecuteCommand": True})

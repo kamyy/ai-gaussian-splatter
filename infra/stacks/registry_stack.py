@@ -20,7 +20,7 @@ RELEASES_KEPT = 30
 class RegistryStack(cdk.Stack):
     """The ECR repository holding the `web/` container image.
 
-    Separate from BackendStack for the same reason DataStack holds RDS and
+    Separate from WebStack for the same reason DataStack holds RDS and
     S3: its contents outlive any particular service. This also makes a first
     deploy possible — the ECS service names an image tag, so the repository
     must exist and hold that image before the service is created.
@@ -34,8 +34,8 @@ class RegistryStack(cdk.Stack):
 
         self.repository = ecr.Repository(
             self,
-            "BackendRepository",
-            repository_name="ai-gaussian-splatter-backend",
+            "WebRepository",
+            repository_name="ai-gaussian-splatter-web",
             # The images are the deployable artifact; tearing down the service
             # should never discard them.
             removal_policy=cdk.RemovalPolicy.RETAIN,
