@@ -1,0 +1,21 @@
+# Not a build-time optimization: podman reads context files lazily per COPY, so
+# a warm rebuild takes the same ~3.5s with or without this file. What it buys is
+# that `.env` — real AWS credentials — and the 5 GB `.venv` stay outside the
+# context, so a future broad `COPY . .` can't sweep them into the image the way
+# the current selective COPY lines happen not to. RUNBOOK.md's local pipeline run
+# leaves `photos/` and `jobdir/` here between rebuilds for the same reason.
+#
+# Patterns match paths relative to this directory and are not applied at every
+# level the way .gitignore's are, so anything that can appear inside pipeline/
+# needs the `**/` prefix — `__pycache__/` alone would let COPY pipeline/ ship it.
+.venv/
+**/__pycache__/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.vscode/
+.env
+.env.*
+tests/
+jobdir/
+photos/
