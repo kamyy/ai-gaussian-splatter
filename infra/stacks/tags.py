@@ -1,4 +1,4 @@
-# Shared cross-stack contract between backend_stack.py's ec2:RunInstances/
+# Shared cross-stack contract between web_stack.py's ec2:RunInstances/
 # TerminateInstances grants and worker_iam_stack.py's self-termination
 # grant — both scope their EC2 permissions to instances carrying this tag,
 # since EC2 has no native "restrict to the calling instance" condition.

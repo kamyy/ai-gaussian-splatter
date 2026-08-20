@@ -1,4 +1,4 @@
-"""Worker -> backend status callback: PATCH /api/v1/internal/jobs/{id}/status."""
+"""Worker -> web status callback: PATCH /api/v1/internal/jobs/{id}/status."""
 
 import logging
 
@@ -18,7 +18,7 @@ def report_status(
     thumbnail_s3_key: str | None = None,
     ec2_instance_id: str | None = None,
 ) -> None:
-    """PATCH the job's status back to the backend. Best-effort: logs and swallows
+    """PATCH the job's status back to the web app. Best-effort: logs and swallows
     network errors rather than raising, since a failed status update should never
     prevent the pipeline from continuing (or from reaching the finally block that
     terminates the instance) — see run_job.py.
@@ -33,7 +33,7 @@ def report_status(
     if ec2_instance_id is not None:
         payload["ec2_instance_id"] = ec2_instance_id
 
-    url = f"{settings.backend_url}/api/v1/internal/jobs/{settings.job_id}/status"
+    url = f"{settings.app_public_url}/api/v1/internal/jobs/{settings.job_id}/status"
     try:
         response = httpx.patch(
             url,
@@ -44,7 +44,7 @@ def report_status(
         response.raise_for_status()
     except httpx.HTTPError as exc:
         # Warning, not exception(): the traceback of a swallowed error reads like
-        # a crash in the job log, and the backend being unreachable is expected
+        # a crash in the job log, and the web app being unreachable is expected
         # during a local pipeline run.
         # %r, not %s: httpx's timeout errors carry an empty message, so %s would
         # log the failure with nothing identifying it after the colon.

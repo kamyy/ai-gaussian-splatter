@@ -6,7 +6,7 @@ from pipeline.status import report_status
 
 @respx.mock
 def test_report_status_sends_expected_payload_and_auth(settings):
-    route = respx.patch(f"{settings.backend_url}/api/v1/internal/jobs/{settings.job_id}/status").mock(
+    route = respx.patch(f"{settings.app_public_url}/api/v1/internal/jobs/{settings.job_id}/status").mock(
         return_value=httpx.Response(200)
     )
 
@@ -20,7 +20,7 @@ def test_report_status_sends_expected_payload_and_auth(settings):
 
 @respx.mock
 def test_report_status_includes_optional_fields_when_provided(settings):
-    route = respx.patch(f"{settings.backend_url}/api/v1/internal/jobs/{settings.job_id}/status").mock(
+    route = respx.patch(f"{settings.app_public_url}/api/v1/internal/jobs/{settings.job_id}/status").mock(
         return_value=httpx.Response(200)
     )
 
@@ -38,7 +38,7 @@ def test_report_status_includes_optional_fields_when_provided(settings):
 
 @respx.mock
 def test_report_status_swallows_network_errors(settings):
-    respx.patch(f"{settings.backend_url}/api/v1/internal/jobs/{settings.job_id}/status").mock(
+    respx.patch(f"{settings.app_public_url}/api/v1/internal/jobs/{settings.job_id}/status").mock(
         side_effect=httpx.ConnectError("connection refused")
     )
 

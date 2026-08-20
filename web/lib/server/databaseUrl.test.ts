@@ -9,7 +9,7 @@ import { databaseSsl, resolveDatabaseUrl } from "./databaseUrl";
  * The production path here is untestable against real AWS, so these pin the
  * contract instead: ECS projects the RDS secret's fields into
  * DATABASE_USER/DATABASE_PASSWORD (see the matching assertion in
- * infra/tests/test_backend_stack.py) and this assembles the URL from them.
+ * infra/tests/test_web_stack.py) and this assembles the URL from them.
  */
 describe("resolveDatabaseUrl", () => {
   it("assembles the URL from the parts ECS supplies", () => {

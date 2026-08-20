@@ -5,13 +5,13 @@ import aws_cdk as cdk
 import pytest
 
 from app import build_stacks
-from stacks.backend_stack import CLERK_SECRET_KEY_NAME
+from stacks.web_stack import CLERK_SECRET_KEY_NAME
 
 ACCOUNT = "123456789012"
 REGION = "us-west-2"
 
 # A complete secret ARN — the six trailing characters are Secrets Manager's own
-# suffix — for ACCOUNT and REGION, since BackendStack checks it against both.
+# suffix — for ACCOUNT and REGION, since WebStack checks it against both.
 # Shared with the tests that assert on what the container receives.
 CLERK_SECRET_KEY_ARN = f"arn:aws:secretsmanager:{REGION}:{ACCOUNT}:secret:{CLERK_SECRET_KEY_NAME}-AbCdEf"
 
@@ -30,7 +30,7 @@ def build_app_stacks(*, context: dict | None = None, **overrides) -> dict[str, c
     no assertion at all.
 
     Callable rather than fixture-only so tests whose whole point is a
-    non-default input — an extra context value, or one BackendStack rejects at
+    non-default input — an extra context value, or one WebStack rejects at
     synth — can build their own app without restating this wiring.
     """
     app = cdk.App(context={**json.loads(CDK_JSON.read_text())["context"], **(context or {})})

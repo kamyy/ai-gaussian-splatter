@@ -40,7 +40,7 @@ APP_HOSTNAME = f"ai-gaussian-splatter.{DOMAIN_ZONE_NAME}"
 # rotation still needs, since that changes no template — can be written down
 # literally in RUNBOOK.md instead of looked up per environment.
 CLUSTER_NAME = "ai-gaussian-splatter"
-SERVICE_NAME = "ai-gaussian-splatter-backend"
+SERVICE_NAME = "ai-gaussian-splatter-web"
 
 # Must stay above the ALB's own idle timeout (60s, left at the CDK default
 # below) or the ALB serves intermittent 502s — see AGENTS.md.
@@ -52,14 +52,14 @@ KEEP_ALIVE_TIMEOUT_MS = "65000"
 CLERK_SECRET_KEY_NAME = "ai-gaussian-splatter/clerk-secret-key"
 
 
-class BackendStack(cdk.Stack):
+class WebStack(cdk.Stack):
     """The Next.js app (pages + the REST API as Route Handlers) on Fargate,
     behind an internet-facing Application Load Balancer.
 
     The tasks share the public subnets with the ALB and carry a public IP, so
     their calls to S3 and the EC2 API egress through the internet gateway
     rather than a NAT gateway (see network_stack.py for the cost reasoning).
-    Nothing can open a connection to them regardless: backend_security_group
+    Nothing can open a connection to them regardless: web_security_group
     admits only alb_security_group. TLS terminates at the ALB with an ACM
     certificate for APP_HOSTNAME, and plain HTTP is redirected to HTTPS.
     """
@@ -69,7 +69,7 @@ class BackendStack(cdk.Stack):
         scope: Construct,
         id: str,
         vpc: ec2.Vpc,
-        backend_security_group: ec2.SecurityGroup,
+        web_security_group: ec2.SecurityGroup,
         alb_security_group: ec2.SecurityGroup,
         repository: ecr.IRepository,
         database: rds.DatabaseInstance,
@@ -324,10 +324,10 @@ class BackendStack(cdk.Stack):
             # EC2 API reach the internet gateway directly instead of needing a
             # NAT gateway. Without assign_public_ip the tasks cannot pull from
             # ECR at all and the deployment hangs until the circuit breaker
-            # trips. backend_security_group is what keeps them unreachable.
+            # trips. web_security_group is what keeps them unreachable.
             task_subnets=ec2.SubnetSelection(subnets=vpc.public_subnets),
             assign_public_ip=True,
-            security_groups=[backend_security_group],
+            security_groups=[web_security_group],
             # A cold Next.js server start can outrun the default 60s, and a
             # task killed inside the grace period never gets far enough to say
             # why. /api/v1/healthz answers from the app alone — it does not

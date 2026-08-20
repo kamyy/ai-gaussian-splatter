@@ -37,11 +37,11 @@ Hosting: the web app runs on **Fargate** behind an **Application Load Balancer**
 
 Spot tradeoffs: AWS can reclaim a task at any time — with one task running, the site is down until a replacement passes health checks. Spot capacity can also be unavailable, which blocks new placements. Setting an on-demand `base` would avoid that, but a single-task service would then run entirely on-demand and lose the discount. `min_healthy_percent=100` only applies during deployments, not to Spot reclaim. The service auto-scales on CPU between 1 and 3 tasks.
 
-Tasks share public subnets with the ALB and have a public IP (S3/EC2 API egress via IGW). No NAT — ~$33/mo + $0.045/GB, and a multi-GB worker ECR pull would cost more per job than the spot instance. Tradeoff: `backend_security_group`'s single ingress from `alb_security_group` on `CONTAINER_PORT` is the only network control between the tasks and the internet.
+Tasks share public subnets with the ALB and have a public IP (S3/EC2 API egress via IGW). No NAT — ~$33/mo + $0.045/GB, and a multi-GB worker ECR pull would cost more per job than the spot instance. Tradeoff: `web_security_group`'s single ingress from `alb_security_group` on `CONTAINER_PORT` is the only network control between the tasks and the internet.
 
-RDS is `PRIVATE_ISOLATED` (no outbound need). Type must be explicit — `PRIVATE_WITH_EGRESS` + `nat_gateways=0` synthesizes "isolated in everything but name." Both security groups live in `network_stack.py`; declaring the ALB group in `BackendStack` makes the ingress rule cross-stack → `DependencyCycle`.
+RDS is `PRIVATE_ISOLATED` (no outbound need). Type must be explicit — `PRIVATE_WITH_EGRESS` + `nat_gateways=0` synthesizes "isolated in everything but name." Both security groups live in `network_stack.py`; declaring the ALB group in `WebStack` makes the ingress rule cross-stack → `DependencyCycle`.
 
-TLS terminates at the ALB (ACM cert for `ai-gaussian-splatter.orky.net`; 80→443). Cert is in `backend_stack.py` so it lands in the ALB's region — ALBs can't use out-of-region certs; `us-east-1` matters only for CloudFront (unused).
+TLS terminates at the ALB (ACM cert for `ai-gaussian-splatter.orky.net`; 80→443). Cert is in `web_stack.py` so it lands in the ALB's region — ALBs can't use out-of-region certs; `us-east-1` matters only for CloudFront (unused).
 
 Route 53 zone is *imported* (`from_hosted_zone_attributes`, zone ID as CDK context) — not looked up (credentials + dirty `cdk.context.json`) or created (would put the zone in the stack's resource set). Deploy only adds records.
 
@@ -65,7 +65,7 @@ Next.js App Router — Open Graph needs server `generateMetadata` (crawlers don'
 
 ## Infra
 
-Infra: **AWS CDK (Python)** — shares `worker/`'s `uv`/`ruff`/`mypy` tooling. The CDK CLI is still npm-only, so `infra/` keeps a minimal `package.json`. Six stacks: network, data (RDS/S3), registry (ECR alone so the image can push before the service exists), worker-iam, backend (ALB + Fargate), budgets (us-east-1 — billing metrics only exist there).
+Infra: **AWS CDK (Python)** — shares `worker/`'s `uv`/`ruff`/`mypy` tooling. The CDK CLI is still npm-only, so `infra/` keeps a minimal `package.json`. Six stacks: network, data (RDS/S3), registry (ECR alone so the image can push before the service exists), worker-iam, web (ALB + Fargate), budgets (us-east-1 — billing metrics only exist there).
 
 ## Testing
 

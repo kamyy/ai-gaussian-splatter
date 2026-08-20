@@ -8,8 +8,8 @@ from aws_cdk.assertions import Match, Template
 SECURITY_GROUP_INGRESS = "AWS::EC2::SecurityGroupIngress"
 
 
-def test_backend_security_group_has_exactly_one_ingress_rule_from_alb(wired_stacks):
-    """The backend tasks must be reachable only from the load balancer. They
+def test_web_security_group_has_exactly_one_ingress_rule_from_alb(wired_stacks):
+    """The web tasks must be reachable only from the load balancer. They
     run in public subnets with a public IP, so this group is the whole of what
     stands between them and the internet — a second rule here is a route
     around the ALB.
@@ -23,26 +23,26 @@ def test_backend_security_group_has_exactly_one_ingress_rule_from_alb(wired_stac
 
     security_groups = template.find_resources(
         "AWS::EC2::SecurityGroup",
-        {"Properties": {"GroupDescription": "Backend ECS service to RDS"}},
+        {"Properties": {"GroupDescription": "Web ECS service to RDS"}},
     )
     assert len(security_groups) == 1
-    backend_sg_logical_id, backend_sg_props = next(iter(security_groups.items()))
+    web_sg_logical_id, web_sg_props = next(iter(security_groups.items()))
 
     # A CIDR peer added directly to this group (e.g. via add_ingress_rule)
     # inlines onto the group's own SecurityGroupIngress property instead of
     # synthesizing as a standalone resource, so the standalone-resource count
     # below would not catch it — this rules that route out too.
-    assert "SecurityGroupIngress" not in backend_sg_props["Properties"]
+    assert "SecurityGroupIngress" not in web_sg_props["Properties"]
 
     ingress_rules = template.find_resources(SECURITY_GROUP_INGRESS)
-    targeting_backend_sg = [
+    targeting_web_sg = [
         r
         for r in ingress_rules.values()
-        if r["Properties"].get("GroupId", {}).get("Fn::GetAtt", [None])[0] == backend_sg_logical_id
+        if r["Properties"].get("GroupId", {}).get("Fn::GetAtt", [None])[0] == web_sg_logical_id
     ]
-    assert len(targeting_backend_sg) == 1
+    assert len(targeting_web_sg) == 1
 
-    (rule,) = targeting_backend_sg
+    (rule,) = targeting_web_sg
     assert rule["Properties"]["IpProtocol"] == "tcp"
     assert rule["Properties"]["FromPort"] == 8000
     assert rule["Properties"]["ToPort"] == 8000
@@ -96,23 +96,23 @@ def test_vpc_has_no_nat_gateway(wired_stacks):
         assert "NatGatewayId" not in route_props["Properties"]
 
 
-def test_db_security_group_has_exactly_one_ingress_rule_from_backend(wired_stacks):
+def test_db_security_group_has_exactly_one_ingress_rule_from_web(wired_stacks):
     template = Template.from_stack(wired_stacks["network"])
 
     security_groups = template.find_resources(
         "AWS::EC2::SecurityGroup",
-        {"Properties": {"GroupDescription": "RDS Postgres, inbound only from the backend ECS service"}},
+        {"Properties": {"GroupDescription": "RDS Postgres, inbound only from the web ECS service"}},
     )
     assert len(security_groups) == 1
     (db_sg_props,) = security_groups.values()
 
-    # Same rationale as the backend SG check above: a CIDR peer added directly
+    # Same rationale as the web SG check above: a CIDR peer added directly
     # to this group would inline onto its own properties instead of
     # synthesizing as a standalone resource, so the count below alone
     # wouldn't catch it.
     assert "SecurityGroupIngress" not in db_sg_props["Properties"]
 
-    # The backend-from-ALB rule and this one; see SECURITY_GROUP_INGRESS above.
+    # The web-from-ALB rule and this one; see SECURITY_GROUP_INGRESS above.
     template.resource_count_is(SECURITY_GROUP_INGRESS, 2)
     template.has_resource_properties(
         SECURITY_GROUP_INGRESS,
@@ -120,7 +120,7 @@ def test_db_security_group_has_exactly_one_ingress_rule_from_backend(wired_stack
             "IpProtocol": "tcp",
             "FromPort": 5432,
             "ToPort": 5432,
-            "Description": "Backend to Postgres",
+            "Description": "Web to Postgres",
             "GroupId": Match.any_value(),
             "SourceSecurityGroupId": Match.any_value(),
         },

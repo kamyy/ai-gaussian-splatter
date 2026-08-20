@@ -2,7 +2,7 @@ import aws_cdk as cdk
 import pytest
 
 from app import PLACEHOLDER_AWS_ACCOUNT_ID, PLACEHOLDER_IMAGE_TAG, read_context
-from stacks.backend_stack import CLERK_SECRET_KEY_NAME
+from stacks.web_stack import CLERK_SECRET_KEY_NAME
 
 REAL_ACCOUNT = "999999999999"
 

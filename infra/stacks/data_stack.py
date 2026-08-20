@@ -4,7 +4,7 @@ from aws_cdk import aws_rds as rds
 from aws_cdk import aws_s3 as s3
 from constructs import Construct
 
-# Imported by backend_stack.py to build the container's DATABASE_NAME. The RDS
+# Imported by web_stack.py to build the container's DATABASE_NAME. The RDS
 # L2 construct doesn't expose the initial database name as an attribute, so
 # without this the literal would have to be repeated in both stacks.
 DATABASE_NAME = "ai_gaussian_splatter"
@@ -19,7 +19,7 @@ class DataStack(cdk.Stack):
     talks to S3 directly on both legs (presigned PUT on upload, presigned GET
     in the viewer), so "*" would let any page a visitor lands on read a shared
     or leaked splat URL cross-origin. The origin is passed in because the
-    hostname constant lives in backend_stack, which already imports from this
+    hostname constant lives in web_stack, which already imports from this
     module.
     """
 

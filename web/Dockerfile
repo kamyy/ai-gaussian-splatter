@@ -30,7 +30,7 @@ COPY . .
 # environment variable at runtime has no effect on the browser bundle.
 # It is not a secret (it is public by design); CLERK_SECRET_KEY is the one that
 # must stay out of the image, and that one is injected at runtime from Secrets
-# Manager (see infra/stacks/backend_stack.py).
+# Manager (see infra/stacks/web_stack.py).
 ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 
@@ -56,7 +56,7 @@ FROM node:24-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Matches infra/stacks/backend_stack.py's CONTAINER_PORT, which the load
+# Matches infra/stacks/web_stack.py's CONTAINER_PORT, which the load
 # balancer's target group also health-checks on.
 ENV PORT=8000
 ENV HOSTNAME=0.0.0.0
@@ -74,7 +74,7 @@ RUN addgroup -g 1001 -S nodejs && adduser -u 1001 -S nextjs -G nodejs
 # Deliberately NOT paired with `ENV DATABASE_SSL_CA=...` here: that would make
 # every run of this image demand TLS, breaking a local container pointed at a
 # plain Postgres with "The server does not support SSL connections". Using the
-# bundle is a deployment decision, so infra/stacks/backend_stack.py sets
+# bundle is a deployment decision, so infra/stacks/web_stack.py sets
 # DATABASE_SSL_CA to this path. Keep the two in step if it ever moves.
 ADD --chown=nextjs:nodejs \
   https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \

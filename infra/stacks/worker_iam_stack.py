@@ -37,7 +37,7 @@ class WorkerIamStack(cdk.Stack):
         # end of its job (run_job.py's finally block) but nothing else running
         # in the account. EC2 doesn't support resource-level restriction to
         # "the calling instance" directly, so this is scoped by the same
-        # worker-tag convention used in backend_stack.py's RunInstances grant
+        # worker-tag convention used in web_stack.py's RunInstances grant
         # (see stacks/tags.py — the shared source of truth for that tag).
         self.role.add_to_policy(
             iam.PolicyStatement(

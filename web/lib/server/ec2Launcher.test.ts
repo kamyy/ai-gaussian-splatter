@@ -95,8 +95,7 @@ describe("launchJob", () => {
     expect(userData).toContain('CALLBACK_TOKEN="tok-abc"');
     expect(userData).toContain('JOB_ID="job-123"');
     expect(userData).toContain('SPLAT_ID="splat-456"');
-    // BACKEND_URL is the variable name worker/pipeline/config.py reads.
-    expect(userData).toContain(`BACKEND_URL="${process.env.APP_PUBLIC_URL}"`);
+    expect(userData).toContain(`APP_PUBLIC_URL="${process.env.APP_PUBLIC_URL}"`);
     expect(userData).toContain(params.workerImageUri);
   });
 

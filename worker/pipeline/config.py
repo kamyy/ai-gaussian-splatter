@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     job_id: str
     splat_id: str
     callback_token: str
-    backend_url: str
+    app_public_url: str
     uploads_bucket: str
     splats_bucket: str
 
