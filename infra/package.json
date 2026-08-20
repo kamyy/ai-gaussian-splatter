@@ -4,6 +4,7 @@
   "private": true,
   "description": "CDK CLI pin for the Python CDK app in this directory (the CDK CLI has no pip distribution)",
   "scripts": {
+    "cdk:bootstrap": "cdk bootstrap",
     "cdk:synth": "cdk synth",
     "cdk:diff": "cdk diff",
     "cdk:deploy:all": "cdk deploy --all",

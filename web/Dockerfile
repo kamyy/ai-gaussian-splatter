@@ -36,7 +36,7 @@ ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 
 # Baked in rather than passed as a build-arg: it is the same value for every
 # image, and `.dockerignore` excludes `.env`, so a local image built with a
-# pk_test_ key would otherwise ship a browser bundle with telemetry on.
+# pk_test_* key would otherwise ship a browser bundle with telemetry on.
 ENV NEXT_PUBLIC_CLERK_TELEMETRY_DISABLED=1
 
 # Same build-time inlining rule as the publishable key above, but these are

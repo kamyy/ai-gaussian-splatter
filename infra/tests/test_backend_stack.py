@@ -5,14 +5,14 @@ from aws_cdk.assertions import Template
 
 from stacks.backend_stack import (
     APP_HOSTNAME,
-    CLERK_SECRET_NAME,
+    CLERK_SECRET_KEY_NAME,
     CLUSTER_NAME,
     CONTAINER_PORT,
     KEEP_ALIVE_TIMEOUT_MS,
     RDS_CA_BUNDLE_PATH,
     SERVICE_NAME,
 )
-from tests.conftest import CLERK_SECRET_ARN, build_app_stacks
+from tests.conftest import CLERK_SECRET_KEY_ARN, build_app_stacks
 
 ECR_PULL_ACTIONS = {"ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage"}
 
@@ -137,7 +137,7 @@ def test_clerk_secret_reaches_the_container_by_complete_arn(wired_stacks):
     (container,) = task_definition_props["Properties"]["ContainerDefinitions"]
 
     secrets = {s["Name"]: s["ValueFrom"] for s in container["Secrets"]}
-    assert secrets.get("CLERK_SECRET_KEY") == CLERK_SECRET_ARN
+    assert secrets.get("CLERK_SECRET_KEY") == CLERK_SECRET_KEY_ARN
 
 
 def test_execution_role_can_read_the_clerk_secret(wired_stacks):
@@ -157,7 +157,7 @@ def test_execution_role_can_read_the_clerk_secret(wired_stacks):
         s
         for s in statements
         if "secretsmanager:GetSecretValue" in (s["Action"] if isinstance(s["Action"], list) else [s["Action"]])
-        and CLERK_SECRET_NAME in str(s["Resource"])
+        and CLERK_SECRET_KEY_NAME in str(s["Resource"])
     ]
     assert len(reads_clerk_secret) == 1
 
@@ -165,21 +165,21 @@ def test_execution_role_can_read_the_clerk_secret(wired_stacks):
 @pytest.mark.parametrize(
     "bad_arn",
     [
-        pytest.param(CLERK_SECRET_ARN.rsplit("-", 1)[0], id="partial-arn-missing-the-suffix"),
-        pytest.param(CLERK_SECRET_ARN.replace("123456789012", "999999999999"), id="another-accounts-secret"),
-        pytest.param(CLERK_SECRET_ARN.replace(CLERK_SECRET_NAME, "some/other-secret"), id="a-different-secret"),
-        pytest.param(CLERK_SECRET_NAME, id="the-bare-name"),
+        pytest.param(CLERK_SECRET_KEY_ARN.rsplit("-", 1)[0], id="partial-arn-missing-the-suffix"),
+        pytest.param(CLERK_SECRET_KEY_ARN.replace("123456789012", "999999999999"), id="another-accounts-secret"),
+        pytest.param(CLERK_SECRET_KEY_ARN.replace(CLERK_SECRET_KEY_NAME, "some/other-secret"), id="a-different-secret"),
+        pytest.param(CLERK_SECRET_KEY_NAME, id="the-bare-name"),
     ],
 )
 def test_a_wrong_clerk_secret_arn_fails_at_synth(bad_arn):
     """CloudFormation never validates an imported ARN, so every one of these
     deploys clean and only shows up as a task that will not start. The check in
     BackendStack is what turns them into a synth-time error instead — including
-    the case that matters most, a real deploy that forgot `-c clerkSecretArn=`
+    the case that matters most, a real deploy that forgot `-c clerkSecretKeyArn=`
     and is still carrying app.py's placeholder-account default.
     """
-    with pytest.raises(ValueError, match="clerkSecretArn"):
-        build_app_stacks(clerk_secret_arn=bad_arn)
+    with pytest.raises(ValueError, match="clerkSecretKeyArn"):
+        build_app_stacks(clerk_secret_key_arn=bad_arn)
 
 
 def test_the_service_names_one_immutable_build(wired_stacks):

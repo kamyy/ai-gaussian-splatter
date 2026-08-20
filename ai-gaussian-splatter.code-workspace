@@ -39,6 +39,7 @@
       "**/next-env.d.ts": true,
       "**/.claude": true
     },
+    "js/ts.experimental.useTsgo": true,
     "js/ts.tsdk.path": "web/node_modules/typescript/lib",
     "biome.enabled": false,
     "[typescript]": {
@@ -60,9 +61,19 @@
       "editor.defaultFormatter": "biomejs.biome",
       "editor.formatOnSave": true,
       "editor.codeActionsOnSave": { "source.organizeImports.biome": "explicit" }
+    },
+    "ruff.importStrategy": "fromEnvironment",
+    "mypy-type-checker.importStrategy": "fromEnvironment",
+    "[python]": {
+      "editor.defaultFormatter": "charliermarsh.ruff",
+      "editor.formatOnSave": true,
+      "editor.codeActionsOnSave": {
+        "source.fixAll.ruff": "explicit",
+        "source.organizeImports.ruff": "explicit"
+      }
     }
   },
   "extensions": {
-    "recommendations": ["biomejs.biome"]
+    "recommendations": ["biomejs.biome", "charliermarsh.ruff", "ms-python.python", "ms-python.mypy-type-checker"]
   }
 }
