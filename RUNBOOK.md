@@ -88,7 +88,7 @@ Object choice matters more than photo count. COLMAP triangulates surface feature
 
 Pick something opaque, matte, and genuinely three-dimensional. Stand it on a patterned surface with static clutter in frame: a plain floor or wall gives the solve nothing to hold onto where the object's own features drop out.
 
-When a set registers poorly, `./jobdir/database.db` says why — guessing from the photos doesn't. Per image, count the keypoints in `keypoints`, and the partners in `two_view_geometries` with 100+ inlier rows:
+When a set registers poorly, `worker/jobdir/database.db` says why — guessing from the photos doesn't. Per image, count the keypoints in `keypoints`, and the partners in `two_view_geometries` with 100+ inlier rows:
 
 | Keypoints | Partners | Reading |
 |---|---|---|
@@ -101,18 +101,21 @@ When a set registers poorly, `./jobdir/database.db` says why — guessing from t
 The pipeline runs standalone — nothing has to be listening at `APP_PUBLIC_URL`. `pipeline/status.py` logs and swallows callback failures by design, and `terminate_self()` no-ops when IMDS doesn't answer.
 
 ```bash
-# Build the image when ./worker/ has changed — source is copied in the final two layers.
-# A code-only edit rebuilds in seconds and only a cold build has to download torch/CUDA.
-podman build -t splat-worker:dev worker/ # ~19 GB cold
+cd worker # Make sure you're in the right folder.
 
-# Create `worker/.env` from the SHARED and WORKER sections of .env.example.
-export $(grep -E '^AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|DEFAULT_REGION)=' worker/.env)
+# Build the image when anything here has changed. ./pipeline/ and ./run_job.py are copied
+# in the final two layers, so a code-only edit rebuilds in seconds; touching pyproject.toml
+# or uv.lock re-runs `uv sync` as well. Only a cold build downloads torch/CUDA.
+podman build -t splat-worker:dev . # ~19 GB cold
+
+# Create `.env` from the SHARED and WORKER sections of the repo root's .env.example.
+export $(grep -E '^AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|DEFAULT_REGION)=' .env)
 
 SPLAT_ID=$(uuidgen) # Needs to be different for every run.
 
 # Upload photo set to the dev uploads bucket. The AWS CLI reads the same AWS_ACCESS_KEY_ID,
 # AWS_SECRET_ACCESS_KEY and AWS_DEFAULT_REGION the SDKs do, so exporting those out of 
-# worker/.env is enough to run as the IAM user ai-gaussian-splatter-dev.
+# .env is enough to run as the IAM user ai-gaussian-splatter-dev.
 aws s3 sync ./photos "s3://ai-gaussian-splatter-dev-uploads/splats/$SPLAT_ID/photos/"
 
 # The `rm -rf`/`mkdir` is required to setup ./jobdir for a new run.
@@ -125,7 +128,7 @@ rm -rf ./jobdir && mkdir ./jobdir
 podman run --rm \
   --security-opt=label=disable \
   --device nvidia.com/gpu=all \
-  --env-file worker/.env \
+  --env-file .env \
   -e SPLAT_ID=$SPLAT_ID \
   -v ./jobdir:/tmp/job \
   splat-worker:dev
@@ -135,7 +138,6 @@ podman run --rm \
 ```
 
 Botocore's region setting reads `AWS_DEFAULT_REGION` only, never `AWS_REGION` — which is why `.env.example`'s SHARED section carries both names. With neither set `boto3.client("s3")` silently falls back to the global endpoint while `boto3.client("ec2")` raises `NoRegionError`. On a real worker instance the region comes from IMDS instead, so this matters only for local runs.
-
 
 ### Web (frontend + REST API)
 

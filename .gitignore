@@ -40,10 +40,11 @@ worker/local_data/
 worker/*.ply
 worker/*.splat
 # The bind mount and photo source in RUNBOOK.md's "Running the pipeline", both
-# created at the repo root. Anchored, so web/app/api/v1/splats/[splatId]/photos/
-# stays tracked.
-/jobdir/
-/photos/
+# created in worker/. Path-anchored, so web/app/api/v1/splats/[splatId]/photos/
+# stays tracked. worker/.dockerignore repeats them to keep them out of the
+# build context.
+worker/jobdir/
+worker/photos/
 
 # Logs
 *.log
