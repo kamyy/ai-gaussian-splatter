@@ -36,7 +36,7 @@ DOMAIN_ZONE_NAME = "orky.net"
 APP_HOSTNAME = f"ai-gaussian-splatter.{DOMAIN_ZONE_NAME}"
 
 # Both named explicitly rather than left to CloudFormation's generated names,
-# so `aws ecs update-service --force-new-deployment` — which a Clerk key
+# so `aws ecs update-service --force-new-deployment` — which a Clerk secret key
 # rotation still needs, since that changes no template — can be written down
 # literally in RUNBOOK.md instead of looked up per environment.
 CLUSTER_NAME = "ai-gaussian-splatter"
@@ -49,7 +49,7 @@ KEEP_ALIVE_TIMEOUT_MS = "65000"
 # Clerk's server-side API key is created out of band before this stack exists
 # (RUNBOOK.md) and only read here. Naming it once lets the RUNBOOK's
 # create-secret command and the ARN check below agree by construction.
-CLERK_SECRET_NAME = "ai-gaussian-splatter/clerk-secret-key"
+CLERK_SECRET_KEY_NAME = "ai-gaussian-splatter/clerk-secret-key"
 
 
 class BackendStack(cdk.Stack):
@@ -83,7 +83,7 @@ class BackendStack(cdk.Stack):
         worker_subnet_id: str,
         app_public_url: str,
         hosted_zone_id: str,
-        clerk_secret_arn: str,
+        clerk_secret_key_arn: str,
         image_tag: str,
         **kwargs,
     ) -> None:
@@ -102,18 +102,18 @@ class BackendStack(cdk.Stack):
         # CloudFormation never validates an imported ARN, so a wrong one is
         # invisible until a task fails to start. Checked here instead. The
         # account and region are this stack's own, which is what makes a
-        # forgotten `-c clerkSecretArn=` fail: app.py's placeholder names the
+        # forgotten `-c clerkSecretKeyArn=` fail: app.py's placeholder names the
         # placeholder account and matches nothing real. The trailing six
         # characters are Secrets Manager's own suffix — ECS wants the complete
         # ARN, and a partial one pasted without it is the likeliest typo.
-        expected = rf"arn:aws:secretsmanager:{self.region}:{self.account}:secret:{CLERK_SECRET_NAME}-\w{{6}}"
-        if re.fullmatch(expected, clerk_secret_arn) is None:
+        expected = rf"arn:aws:secretsmanager:{self.region}:{self.account}:secret:{CLERK_SECRET_KEY_NAME}-\w{{6}}"
+        if re.fullmatch(expected, clerk_secret_key_arn) is None:
             raise ValueError(
-                f"clerkSecretArn must be the complete ARN of {CLERK_SECRET_NAME} in "
+                f"clerkSecretKeyArn must be the complete ARN of {CLERK_SECRET_KEY_NAME} in "
                 f"{self.account}/{self.region}, as returned by `aws secretsmanager create-secret` "
-                f"(see RUNBOOK.md); got {clerk_secret_arn!r}"
+                f"(see RUNBOOK.md); got {clerk_secret_key_arn!r}"
             )
-        clerk_secret = secretsmanager.Secret.from_secret_complete_arn(self, "ClerkSecretKey", clerk_secret_arn)
+        clerk_secret = secretsmanager.Secret.from_secret_complete_arn(self, "ClerkSecretKey", clerk_secret_key_arn)
 
         # The image tag has to identify one immutable build, which is why a
         # commit SHA is the only accepted shape. A moving tag like `latest`

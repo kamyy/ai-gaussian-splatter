@@ -1,8 +1,8 @@
 import aws_cdk as cdk
 import pytest
 
-from app import PLACEHOLDER_ACCOUNT, PLACEHOLDER_IMAGE_TAG, read_context
-from stacks.backend_stack import CLERK_SECRET_NAME
+from app import PLACEHOLDER_AWS_ACCOUNT_ID, PLACEHOLDER_IMAGE_TAG, read_context
+from stacks.backend_stack import CLERK_SECRET_KEY_NAME
 
 REAL_ACCOUNT = "999999999999"
 
@@ -13,7 +13,7 @@ DEPLOY_CONTEXT = {
     "alertEmail": "nobody@example.com",
     "appPublicUrl": "https://example.test",
     "hostedZoneId": "Z09876543210987654321",
-    "clerkSecretArn": f"arn:aws:secretsmanager:us-west-2:{REAL_ACCOUNT}:secret:{CLERK_SECRET_NAME}-AbCdEf",
+    "clerkSecretKeyArn": f"arn:aws:secretsmanager:us-west-2:{REAL_ACCOUNT}:secret:{CLERK_SECRET_KEY_NAME}-AbCdEf",
     "imageTag": "a1b2c3d",
 }
 
@@ -31,7 +31,7 @@ def test_every_context_key_is_read():
         "alert_email": "nobody@example.com",
         "app_public_url": "https://example.test",
         "hosted_zone_id": "Z09876543210987654321",
-        "clerk_secret_arn": DEPLOY_CONTEXT["clerkSecretArn"],
+        "clerk_secret_key_arn": DEPLOY_CONTEXT["clerkSecretKeyArn"],
         "image_tag": "a1b2c3d",
     }
 
@@ -40,11 +40,11 @@ def test_placeholders_fill_in_when_nothing_is_passed():
     """`cdk synth` has to work on a clean checkout with no credentials — CI
     runs it with no context at all — so every value needs a default.
     """
-    values = read_context(cdk.App(), PLACEHOLDER_ACCOUNT)
+    values = read_context(cdk.App(), PLACEHOLDER_AWS_ACCOUNT_ID)
 
     assert values["image_tag"] == PLACEHOLDER_IMAGE_TAG
     assert values["hosted_zone_id"] == "Z00000000000000000000"
-    assert PLACEHOLDER_ACCOUNT in values["clerk_secret_arn"]
+    assert PLACEHOLDER_AWS_ACCOUNT_ID in values["clerk_secret_key_arn"]
 
 
 def test_a_real_account_must_name_a_real_image():

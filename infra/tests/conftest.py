@@ -5,14 +5,15 @@ import aws_cdk as cdk
 import pytest
 
 from app import build_stacks
-from stacks.backend_stack import CLERK_SECRET_NAME
+from stacks.backend_stack import CLERK_SECRET_KEY_NAME
 
-ENV = cdk.Environment(account="123456789012", region="us-west-2")
+ACCOUNT = "123456789012"
+REGION = "us-west-2"
 
 # A complete secret ARN — the six trailing characters are Secrets Manager's own
-# suffix — for ENV's account and region, since BackendStack checks it against
-# both. Shared with the tests that assert on what the container receives.
-CLERK_SECRET_ARN = f"arn:aws:secretsmanager:{ENV.region}:{ENV.account}:secret:{CLERK_SECRET_NAME}-AbCdEf"
+# suffix — for ACCOUNT and REGION, since BackendStack checks it against both.
+# Shared with the tests that assert on what the container receives.
+CLERK_SECRET_KEY_ARN = f"arn:aws:secretsmanager:{REGION}:{ACCOUNT}:secret:{CLERK_SECRET_KEY_NAME}-AbCdEf"
 
 CDK_JSON = Path(__file__).resolve().parent.parent / "cdk.json"
 
@@ -35,13 +36,14 @@ def build_app_stacks(*, context: dict | None = None, **overrides) -> dict[str, c
     app = cdk.App(context={**json.loads(CDK_JSON.read_text())["context"], **(context or {})})
     return build_stacks(
         app,
-        ENV,
+        ACCOUNT,
+        REGION,
         **{
             "worker_ami_id": "ami-000000000000",
-            "alert_email": "kam.yin.yip@gmail.com",
+            "alert_email": "replace-with-your-email@example.com",
             "app_public_url": "https://ai-gaussian-splatter.orky.net",
             "hosted_zone_id": "Z00000000000000000000",
-            "clerk_secret_arn": CLERK_SECRET_ARN,
+            "clerk_secret_key_arn": CLERK_SECRET_KEY_ARN,
             "image_tag": "0f1e2d3",
             **overrides,
         },
