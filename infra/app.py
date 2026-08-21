@@ -28,6 +28,15 @@ def build_stacks(
     of hand-duplicating it — keeps the test suite's stack graph from
     silently drifting out of sync with what actually gets deployed.
     """
+    # Normalized here rather than at either use, because both consumers append
+    # to it and neither tolerates the trailing slash: worker/pipeline/status.py
+    # builds its callback URL with an f-string, so a slash gives it a
+    # double-slashed path nothing routes, and the buckets' CORS rules match the
+    # browser's Origin header exactly, so a slash rejects every upload and every
+    # splat fetch with the presigned URLs still valid. Both surface only as a
+    # console error or a swallowed callback, never as a failed deploy.
+    app_public_url = app_public_url.rstrip("/")
+
     env = cdk.Environment(account=account, region=region)
     network = NetworkStack(app, "NetworkStack", env=env)
 
@@ -42,13 +51,8 @@ def build_stacks(
         vpc=network.vpc,
         db_security_group=network.db_security_group,
         # The browser reaches both buckets directly via presigned URLs, so this
-        # is the origin their CORS rules admit. Normalized rather than passed
-        # through: app_public_url is a base URL that paths get appended to, so
-        # a trailing slash in it is harmless, while S3 matches the browser's
-        # Origin header exactly and would reject every upload and every splat
-        # fetch — with the presigned URL still valid, so the only symptom is a
-        # console error.
-        app_origin=app_public_url.rstrip("/"),
+        # is the origin their CORS rules admit.
+        app_origin=app_public_url,
     )
 
     worker_iam = WorkerIamStack(
@@ -106,10 +110,19 @@ def build_stacks(
 # doubles as the marker for "nobody supplied one".
 PLACEHOLDER_AWS_ACCOUNT_ID = "123456789012"
 
-# Stands in for a commit SHA so `cdk synth` works on a clean checkout. Refused
-# below against a real account, since deploying it would name a tag that does
-# not exist in ECR and every task would fail to pull.
+# The four values a real deploy must supply, standing in so `cdk synth` and
+# `cdk diff` work on a clean checkout with no credentials — CI runs them with
+# no context at all. read_context refuses all four against a real account,
+# because synth is the last point where the omission is free: past it they cost
+# a rolled-back deploy at best, and at worst a green one that mails no spend
+# alert and fails every job launch.
 PLACEHOLDER_IMAGE_TAG = "0000000"
+PLACEHOLDER_WORKER_AMI_ID = "ami-000000000000"
+PLACEHOLDER_HOSTED_ZONE_ID = "Z00000000000000000000"
+# Left visibly unedited rather than plausible: nothing downstream validates an
+# address, so a real-looking default would read in the SNS console as someone's
+# deliberate choice.
+PLACEHOLDER_ALERT_EMAIL = "replace-with-your-email@example.com"
 
 
 def read_context(app: cdk.App, account: str) -> dict[str, str]:
@@ -117,31 +130,56 @@ def read_context(app: cdk.App, account: str) -> dict[str, str]:
 
     Separate from __main__ so the context *keys* are testable. Nothing else
     reads them: a renamed key here would otherwise leave the suite green while
-    every real deploy silently synthesized against the placeholders below —
+    every real deploy silently synthesized against the placeholders above —
     the failure this app's guards exist to prevent.
     """
-    # Worker AMI/subnet are filled in once M5 (see ARCHITECTURE.md's build
-    # order) actually builds the worker image and picks a subnet — placeholders
-    # here are what let `cdk synth` succeed before those exist.
-    worker_ami_id = app.node.try_get_context("workerAmiId") or "ami-000000000000"
 
-    # Where BudgetsStack sends spend alerts. No stack validates it — any
-    # syntactically valid address deploys green — so the default is left
-    # visibly unedited rather than plausible: an unreplaced `replace-with-`
-    # address is recognisable in the SNS console, where a real-looking one
-    # would read as someone's deliberate choice. Passed as `-c alertEmail=`
-    # from ALERT_EMAIL, see RUNBOOK.md.
-    alert_email = app.node.try_get_context("alertEmail") or "replace-with-your-email@example.com"
+    def required(key: str, placeholder: str, consequence: str) -> str:
+        """One `-c` value, refused against a real account while it still holds
+        its placeholder. Uniform rather than per-key: the placeholders differ
+        only in what they break, never in whether synth and deploy accept them.
+        """
+        value = app.node.try_get_context(key) or placeholder
+        if value == placeholder and account != PLACEHOLDER_AWS_ACCOUNT_ID:
+            raise ValueError(f"a real deploy must pass -c {key}= — {consequence}")
+        return value
+
+    # The AMI each job's spot instance boots. WebStack only forwards it to the
+    # web task as WORKER_AMI_ID, so the first thing to test it is the
+    # RunInstances call in ec2Launcher.ts, a job at a time.
+    worker_ami_id = required(
+        "workerAmiId",
+        PLACEHOLDER_WORKER_AMI_ID,
+        "the placeholder AMI exists in no account, so every job launch fails",
+    )
+
+    # Where BudgetsStack sends spend alerts, as an SNS email subscription — see
+    # PLACEHOLDER_ALERT_EMAIL. Passed as `-c alertEmail=` from ALERT_EMAIL, see
+    # RUNBOOK.md.
+    alert_email = required(
+        "alertEmail",
+        PLACEHOLDER_ALERT_EMAIL,
+        "nobody confirms the placeholder's subscription, so every spend alert goes nowhere",
+    )
+
+    # The orky.net hosted zone, imported for the ALB's alias record and ACM's
+    # validation record — see AGENTS.md.
+    hosted_zone_id = required(
+        "hostedZoneId",
+        PLACEHOLDER_HOSTED_ZONE_ID,
+        "the placeholder zone does not exist and fails partway through the deploy",
+    )
 
     # Where the worker PATCHes job status back to. A stable custom domain, so
     # there is no chicken-and-egg with the ALB this app creates: the ALB is
-    # aliased to this name rather than the name being read off the ALB.
+    # aliased to this name rather than the name being read off the ALB. The
+    # default is that same hostname, so there is no placeholder to refuse. The
+    # scheme is checked instead: the ALB answers https only, and a worker whose
+    # callbacks all fail says nothing about it — status.py logs and swallows
+    # them by design, leaving the job to look stuck rather than broken.
     app_public_url = app.node.try_get_context("appPublicUrl") or f"https://{APP_HOSTNAME}"
-
-    # The orky.net hosted zone's ID. The placeholder default keeps `cdk synth`
-    # working with no credentials; a real deploy passes `-c hostedZoneId=Z...`
-    # — see AGENTS.md.
-    hosted_zone_id = app.node.try_get_context("hostedZoneId") or "Z00000000000000000000"
+    if not app_public_url.startswith("https://"):
+        raise ValueError(f"-c appPublicUrl= must be an https:// URL, got {app_public_url!r}")
 
     # The Clerk secret is created by hand before the first deploy and imported
     # by WebStack, so its ARN — suffix and all — has to be passed in. The
@@ -158,9 +196,11 @@ def read_context(app: cdk.App, account: str) -> dict[str, str]:
     # every release is its own task definition and the circuit breaker can roll
     # back to one that still names the image it was deployed with — see
     # web_stack.py. Rolling back by hand is this same flag with an older SHA.
-    image_tag = app.node.try_get_context("imageTag") or PLACEHOLDER_IMAGE_TAG
-    if image_tag == PLACEHOLDER_IMAGE_TAG and account != PLACEHOLDER_AWS_ACCOUNT_ID:
-        raise ValueError("a real deploy must pass -c imageTag=<sha> — the placeholder names no image in ECR")
+    image_tag = required(
+        "imageTag",
+        PLACEHOLDER_IMAGE_TAG,
+        "the placeholder tag names no image in ECR, so every task fails to pull",
+    )
 
     return {
         "worker_ami_id": worker_ami_id,

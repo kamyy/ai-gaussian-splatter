@@ -2,7 +2,7 @@
 
 ## Local development
 
-### Development AWS resources (two S3 buckets)
+### Development AWS resources
 
 The deployed stack's VPC, ALB, and Fargate service exist to serve production from the cloud whereas `pnpm dev` serves from localhost. `components/upload/PhotoDropzone.tsx` PUTs to a presigned S3 URL and the worker reads/writes both buckets via boto3, so real buckets are needed.
 
@@ -98,7 +98,7 @@ When a set registers poorly, `worker/jobdir/database.db` says why — guessing f
 
 #### Running the pipeline
 
-The pipeline runs standalone — nothing has to be listening at `APP_PUBLIC_URL`. `pipeline/status.py` logs and swallows callback failures by design, and `terminate_self()` no-ops when IMDS doesn't answer.
+The pipeline can run standalon — nothing has to be listening at `APP_PUBLIC_URL`. `pipeline/status.py` logs and swallows callback failures by design, and `terminate_self()` no-ops when IMDS doesn't answer.
 
 ```bash
 cd worker # Make sure you're in the right folder.
@@ -137,7 +137,7 @@ podman run --rm \
 # s3://ai-gaussian-splatter-dev-splats/splats/$SPLAT_ID/.
 ```
 
-Botocore's region setting reads `AWS_DEFAULT_REGION` only, never `AWS_REGION` — which is why `.env.example`'s SHARED section carries both names. With neither set `boto3.client("s3")` silently falls back to the global endpoint while `boto3.client("ec2")` raises `NoRegionError`. On a real worker instance the region comes from IMDS instead, so this matters only for local runs.
+Botocore's region setting reads `AWS_DEFAULT_REGION` only, never `AWS_REGION` — which is why `.env.example` keeps the two names apart, `AWS_DEFAULT_REGION` under WORKER and `AWS_REGION` under WEB, rather than treating one region as one shared variable. With neither set `boto3.client("s3")` silently falls back to the global endpoint while `boto3.client("ec2")` raises `NoRegionError`. On a real worker instance the region comes from IMDS instead, so this matters only for local runs.
 
 ### Web (frontend + REST API)
 
@@ -237,7 +237,7 @@ The database lives in a private subnet, so run this from somewhere inside the VP
 3. Confirm self-termination actually fired: the instance should not still be running after the job reaches a terminal state. **If it is, terminate it by hand** — the instance-runtime alarm meant to catch this is not in any stack yet (`AGENTS.md`, Known gaps), so nothing else will.
 4. `docker logs` on the instance (if still running) or CloudWatch Logs (once wired up) for the actual COLMAP/gsplat stack trace.
 
-## Deploying infrastructure on AWS
+## Deploying to production
 
  The exports listed below are required on every `pnpm cdk:*` invocation. `RegistryStack` itself  reads none of these values, but `cdk synth` always builds the whole app first, `WebStack` included, and that's where they're required. The commands interleaved between the exports are not: `create-secret`, `cdk:bootstrap`, and `cdk:deploy:registry` each run once for the life of the account, and each says so above itself.
 
@@ -246,10 +246,28 @@ cd infra # Make sure you're in the right folder.
 
 export AWS_ACCOUNT_ID=<your real account id> # Use a real AWS account id.
 
-# Where BudgetsStack sends spend alerts. Nothing validates this address, so a wrong one deploys 
-# green and the alerts never arrive. AWS emails a confirmation link on the first deploy — until 
-# it's clicked the subscription stays pending and sends nothing.
+# Where BudgetsStack sends spend alerts. Omitting it is refused at synth, but nothing can tell a 
+# wrong address from a right one, and a wrong one deploys green with the alerts never arriving. 
+# AWS emails a confirmation link on the first deploy — until it's clicked the subscription stays 
+# pending and sends nothing, so check for it.
 export ALERT_EMAIL=<your email>
+
+# Where the worker PATCHes job status back to, and what the ALB is aliased to. Keep it in step with 
+# APP_HOSTNAME in web_stack.py, which is what the certificate and the Route 53 record are built from — 
+# nothing cross-checks the two, so a mismatch sends every status callback at a host that won't answer.
+export APP_PUBLIC_URL=https://ai-gaussian-splatter.orky.net
+
+# The AMI each job's spot instance boots. ec2Launcher.ts's user data runs `aws ecr get-login-password` 
+# and `docker run --gpus all` with no provisioning of its own, so the image must already carry Docker, 
+# the NVIDIA driver and container toolkit, and the AWS CLI. AWS's Deep Learning Base GPU AMIs do; this 
+# lists them newest first:
+aws ec2 describe-images --region us-west-2 --owners amazon \
+  --filters "Name=name,Values=Deep Learning Base*GPU AMI*Ubuntu*" \
+            "Name=architecture,Values=x86_64" \
+            "Name=state,Values=available" \
+  --query 'reverse(sort_by(Images,&CreationDate))[:5].{id:ImageId,name:Name,created:CreationDate}' \
+  --output table
+export WORKER_AMI_ID=<ami-... from the table>
 
 # IMAGE_TAG is the pushed build SHA. Per-release, not moving — each deploy gets its own task definition, 
 # so the circuit breaker (and manual rollback) can point at an older SHA that still exists in the repo. 
@@ -276,8 +294,8 @@ export CLERK_SECRET_KEY_ARN=$(aws secretsmanager describe-secret \
   --query ARN \
   --output text)
 
-# The orky.net zone for the ALB's DNS record and ACM validation. Omitting it deploys against a 
-# placeholder and fails. The zone is imported only, so must be managed out-of-band.
+# The orky.net zone for the ALB's DNS record and ACM validation. Omitting it is refused at synth. 
+# The zone is imported only, so must be managed out-of-band.
 export HOSTED_ZONE_ID=$(aws route53 list-hosted-zones-by-name \
   --dns-name orky.net \
   --query "HostedZones[?Name=='orky.net.' && Config.PrivateZone==\`false\`].Id | [0]" \
@@ -297,6 +315,8 @@ pnpm cdk:deploy:registry \
   -c hostedZoneId=$HOSTED_ZONE_ID \
   -c clerkSecretKeyArn=$CLERK_SECRET_KEY_ARN \
   -c alertEmail=$ALERT_EMAIL \
+  -c appPublicUrl=$APP_PUBLIC_URL \
+  -c workerAmiId=$WORKER_AMI_ID \
   -c imageTag=$IMAGE_TAG
 
 ECR_TOKEN=$(aws ecr get-login-password --region us-west-2)
@@ -314,6 +334,8 @@ pnpm cdk:deploy:all \
   -c hostedZoneId=$HOSTED_ZONE_ID \
   -c clerkSecretKeyArn=$CLERK_SECRET_KEY_ARN \
   -c alertEmail=$ALERT_EMAIL \
+  -c appPublicUrl=$APP_PUBLIC_URL \
+  -c workerAmiId=$WORKER_AMI_ID \
   -c imageTag=$IMAGE_TAG
 ```
 
@@ -390,4 +412,4 @@ aws ecr describe-images --region us-west-2 --repository-name ai-gaussian-splatte
 
 The `WorkerIamStack`, `DataStack`, and `RegistryStack` must exist before `WebStack` (CDK resolves this automatically via cross-stack references in `app.py`). `BudgetsStack` deploys to `us-east-1` regardless of the app's primary region — billing metrics only exist there.
 
-`app.py`'s `workerAmiId` context value is a placeholder (`ami-000000000000`) until the worker image is actually built and pushed (plan M5/M10) — `pnpm cdk:synth`/`pnpm cdk:diff` work fine with the placeholder, but don't run `pnpm cdk:deploy:all` against `WebStack` with it still set, since job launches would fail.
+Against a real `AWS_ACCOUNT_ID`, `read_context` refuses every placeholder it defines — `workerAmiId`, `alertEmail`, `hostedZoneId`, `imageTag` — by name, so a forgotten `-c` flag fails at synth rather than deploying green and breaking a job launch or a spend alert later. `pnpm cdk:synth`/`pnpm cdk:diff` on a clean checkout still work with no flags and no credentials, because the placeholder account is what tells the two apart. Passing a real AMI is not on its own enough to make a job run: the worker still has no ECR repository or pull permissions (`AGENTS.md`, gap 6, M5).
