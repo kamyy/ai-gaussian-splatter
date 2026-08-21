@@ -1,7 +1,14 @@
 import aws_cdk as cdk
 import pytest
 
-from app import PLACEHOLDER_AWS_ACCOUNT_ID, PLACEHOLDER_IMAGE_TAG, read_context
+from app import (
+    PLACEHOLDER_ALERT_EMAIL,
+    PLACEHOLDER_AWS_ACCOUNT_ID,
+    PLACEHOLDER_HOSTED_ZONE_ID,
+    PLACEHOLDER_IMAGE_TAG,
+    PLACEHOLDER_WORKER_AMI_ID,
+    read_context,
+)
 from stacks.web_stack import CLERK_SECRET_KEY_NAME
 
 REAL_ACCOUNT = "999999999999"
@@ -15,6 +22,14 @@ DEPLOY_CONTEXT = {
     "hostedZoneId": "Z09876543210987654321",
     "clerkSecretKeyArn": f"arn:aws:secretsmanager:us-west-2:{REAL_ACCOUNT}:secret:{CLERK_SECRET_KEY_NAME}-AbCdEf",
     "imageTag": "a1b2c3d",
+}
+
+# Each guarded key against the placeholder read_context refuses for it.
+PLACEHOLDERS = {
+    "workerAmiId": PLACEHOLDER_WORKER_AMI_ID,
+    "alertEmail": PLACEHOLDER_ALERT_EMAIL,
+    "hostedZoneId": PLACEHOLDER_HOSTED_ZONE_ID,
+    "imageTag": PLACEHOLDER_IMAGE_TAG,
 }
 
 
@@ -42,15 +57,38 @@ def test_placeholders_fill_in_when_nothing_is_passed():
     """
     values = read_context(cdk.App(), PLACEHOLDER_AWS_ACCOUNT_ID)
 
+    assert values["worker_ami_id"] == PLACEHOLDER_WORKER_AMI_ID
+    assert values["alert_email"] == PLACEHOLDER_ALERT_EMAIL
+    assert values["hosted_zone_id"] == PLACEHOLDER_HOSTED_ZONE_ID
     assert values["image_tag"] == PLACEHOLDER_IMAGE_TAG
-    assert values["hosted_zone_id"] == "Z00000000000000000000"
     assert PLACEHOLDER_AWS_ACCOUNT_ID in values["clerk_secret_key_arn"]
 
 
-def test_a_real_account_must_name_a_real_image():
-    """The placeholder tag names nothing in ECR, so deploying it would leave
-    every task failing to pull. Caught here rather than at task start, since a
-    forgotten flag is otherwise indistinguishable from a deliberate one.
+@pytest.mark.parametrize("key", sorted(PLACEHOLDERS))
+def test_a_real_account_refuses_each_placeholder(key):
+    """One case per guarded key, each dropping only that flag: a single
+    no-context call would stop at whichever key is checked first and leave the
+    rest unguarded without failing anything.
+
+    Every placeholder synthesizes cleanly, and past synth they cost a
+    rolled-back deploy at best — at worst a green one whose spend alerts go
+    nowhere. The account is what separates the two: `cdk synth` on a clean
+    checkout is the same call with the placeholder account.
     """
-    with pytest.raises(ValueError, match="imageTag"):
-        read_context(cdk.App(), REAL_ACCOUNT)
+    context = {**DEPLOY_CONTEXT, key: PLACEHOLDERS[key]}
+
+    with pytest.raises(ValueError, match=key):
+        read_context(cdk.App(context=context), REAL_ACCOUNT)
+
+    read_context(cdk.App(context=context), PLACEHOLDER_AWS_ACCOUNT_ID)
+
+
+def test_app_public_url_must_be_https():
+    """The ALB answers https only, and a worker whose callbacks all fail is
+    silent about it — status.py swallows them — so the job looks stuck rather
+    than misconfigured. Cheaper to refuse the scheme here.
+    """
+    context = {**DEPLOY_CONTEXT, "appPublicUrl": "http://example.test"}
+
+    with pytest.raises(ValueError, match="appPublicUrl"):
+        read_context(cdk.App(context=context), REAL_ACCOUNT)

@@ -111,6 +111,24 @@ def test_database_credentials_projected_as_individual_secret_fields(wired_stacks
     assert environment.get("DATABASE_SSL_CA") == RDS_CA_BUNDLE_PATH
 
 
+def test_app_public_url_reaches_the_container_without_a_trailing_slash():
+    """The worker builds its callback URL by appending a path to this with an
+    f-string (worker/pipeline/status.py), so a trailing slash gives it
+    `//api/v1/...`, which nothing routes. status.py logs and swallows callback
+    failures by design, so the job would simply stop reporting. Built with its
+    own app rather than the shared fixture, since the point is a non-default
+    input.
+    """
+    stacks = build_app_stacks(app_public_url="https://ai-gaussian-splatter.orky.net/")
+    template = Template.from_stack(stacks["web"])
+
+    (task_definition_props,) = template.find_resources("AWS::ECS::TaskDefinition").values()
+    (container,) = task_definition_props["Properties"]["ContainerDefinitions"]
+
+    environment = {e["Name"]: e.get("Value") for e in container["Environment"]}
+    assert environment["APP_PUBLIC_URL"] == "https://ai-gaussian-splatter.orky.net"
+
+
 def test_clerk_secret_is_imported_never_created_by_this_stack(wired_stacks):
     """The Clerk key is created by hand before the first deploy (RUNBOOK.md),
     so this stack must own no secret at all — the RDS one belongs to DataStack.
