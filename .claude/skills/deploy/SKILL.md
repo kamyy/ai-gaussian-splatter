@@ -39,7 +39,7 @@ description: Deploy the AWS stacks or ship a new web image to ECS. Use whenever 
 
 ## After a deploy reports success
 
-**Migrations never run automatically** — not on boot, not from any stack. A fresh environment has no tables and every real route 500s. The target group reports healthy anyway, because `/api/v1/healthz` never touches the database, so a green deploy is not a working site. RUNBOOK § "Applying migrations to a deployed environment" has the procedure; it needs `DATABASE_SSL_CA` and must run from inside the VPC.
+**Migrations never run automatically** — not on boot, not from any stack. A fresh environment has no tables and every real route 500s. The target group reports healthy anyway, because `/api/v1/healthz` never touches the database, so a green deploy is not a working site. RUNBOOK § "Applying migrations to a deployed database" has the procedure; it needs `DATABASE_SSL_CA` and must run from inside the VPC.
 
 Confirm with a request that actually hits the database, not with healthz.
 
