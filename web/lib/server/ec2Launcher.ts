@@ -5,9 +5,8 @@ import { EC2Client, RunInstancesCommand } from "@aws-sdk/client-ec2";
 import { getEnv } from "./env";
 
 /**
- * Direct spot-instance-per-job launch — no SQS/Batch/Step Functions.
- * IAM instance profile is scoped externally (infra/stacks/worker_iam_stack.py)
- * to exactly: S3 read (uploads bucket), S3 write (splats bucket),
+ * Direct spot-instance-per-job launch — no SQS/Batch/Step Functions. IAM instance profile is scoped externally
+ * (infra/stacks/worker_iam_stack.py) to exactly: S3 read (uploads bucket), S3 read/write (splats bucket),
  * ec2:TerminateInstances on itself.
  */
 interface UserDataParams {
@@ -51,8 +50,8 @@ docker run --rm --gpus all \\
 }
 
 /**
- * A per-job token, not a static shared secret — scopes what a
- * compromised instance can mutate to the one job it was launched for.
+ * A per-job token, not a static shared secret — scopes what a compromised instance can mutate to the one job it was
+ * launched for.
  *
  * base64url of 32 random bytes, matching Python's secrets.token_urlsafe(32).
  */
@@ -92,14 +91,11 @@ export async function launchJob(params: {
       SubnetId: env.WORKER_SUBNET_ID,
       SecurityGroupIds: [env.WORKER_SECURITY_GROUP_ID],
       IamInstanceProfile: { Arn: env.WORKER_INSTANCE_PROFILE_ARN },
-      // The pipeline runs in a container on default bridge networking, which
-      // puts IMDS one hop further away than the host. EC2's default response
-      // hop limit of 1 therefore drops the token PUT that
-      // worker/pipeline/instance.py opens with, so it cannot read its own
-      // instance ID and skips self-termination — the instance then bills until
-      // someone notices. Raising the limit is the fix; requiring tokens is only
-      // safe alongside it, since it removes the IMDSv1 fallback the container
-      // would otherwise be relying on for credentials.
+      // The pipeline runs in a container on default bridge networking, which puts IMDS one hop further away than the
+      // host. EC2's default response hop limit of 1 therefore drops the token PUT that worker/pipeline/instance.py
+      // opens with, so it cannot read its own instance ID and skips self-termination — the instance then bills until
+      // someone notices. Raising the limit is the fix; requiring tokens is only safe alongside it, since it removes the
+      // IMDSv1 fallback the container would otherwise be relying on for credentials.
       MetadataOptions: {
         HttpTokens: "required",
         HttpPutResponseHopLimit: 2,
@@ -114,10 +110,9 @@ export async function launchJob(params: {
           ResourceType: "instance",
           Tags: [
             { Key: "Name", Value: `ai-gaussian-splatter-worker-${params.jobId}` },
-            // Must match infra/stacks/tags.py's WORKER_TAG_KEY/VALUE and
-            // worker_iam_stack.py's self-termination grant — that's a separate
-            // uv package so the constant can't be imported directly, and the
-            // two must stay in sync by hand.
+            // Must match infra/stacks/tags.py's WORKER_TAG_KEY/VALUE and worker_iam_stack.py's self-termination grant —
+            // that's a separate uv package so the constant can't be imported directly, and the two must stay in sync by
+            // hand.
             { Key: "Role", Value: "worker" },
             { Key: "JobId", Value: params.jobId },
           ],

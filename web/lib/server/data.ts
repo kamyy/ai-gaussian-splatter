@@ -10,11 +10,11 @@ import { isUuid } from "./httpError";
 import { presignSplatDownload } from "./s3";
 
 /**
- * Public, unauthenticated reads — what the gallery and share pages
- * render from, including generateMetadata's og:title/og:image.
+ * Public, unauthenticated reads — what the gallery and share pages render from, including generateMetadata's
+ * og:title/og:image.
  *
- * These live outside the Route Handlers so Server Components can call them
- * directly rather than having the server make an HTTP request to itself.
+ * These live outside the Route Handlers so Server Components can call them directly rather than having the server make
+ * an HTTP request to itself.
  */
 
 const THUMBNAIL_EXPIRY_SECONDS = 3600;
@@ -41,9 +41,8 @@ export async function listGallery(): Promise<GalleryItemRead[]> {
 }
 
 export async function getGalleryItem(itemId: string): Promise<GalleryItemRead | null> {
-  // Guard here rather than at each call site: these ids come from the URL, and
-  // an unparseable one would otherwise reach a `uuid` column and make Postgres
-  // raise 22P02 — a 500 for what is really just "no such row".
+  // Guard here rather than at each call site: these ids come from the URL, and an unparseable one would otherwise reach
+  // a `uuid` column and make Postgres raise 22P02 — a 500 for what is really just "no such row".
   if (!isUuid(itemId)) {
     return null;
   }
@@ -62,8 +61,8 @@ export async function getGalleryItem(itemId: string): Promise<GalleryItemRead | 
 }
 
 /**
- * Only exposes Complete + shareable splats — else
- * null, which callers surface as a 404, same as if it simply didn't exist.
+ * Only exposes Complete + shareable splats — else null, which callers surface as a 404, same as if it simply didn't
+ * exist.
  */
 export async function getPublicSplat(splatId: string): Promise<PublicSplatRead | null> {
   if (!isUuid(splatId)) {

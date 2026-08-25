@@ -3,10 +3,9 @@ import { jobs, splats } from "./db/schema";
 /**
  * Which columns responses may expose.
  *
- * Column maps passed to `.select()` rather than deleting keys afterwards, so the
- * omissions are enforced by the SQL — the excluded columns are never fetched at
- * all. Job matters most: `callbackToken` is the worker's bearer credential and
- * `ec2InstanceId` is internal — neither may reach a client.
+ * Column maps passed to `.select()` rather than deleting keys afterwards, so the omissions are enforced by the SQL —
+ * the excluded columns are never fetched at all. Job matters most: `callbackToken` is the worker's bearer credential
+ * and `ec2InstanceId` is internal — neither may reach a client.
  */
 
 export const splatReadColumns = {

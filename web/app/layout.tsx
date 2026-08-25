@@ -2,9 +2,8 @@ import "@mantine/core/styles.css";
 import "./globals.css";
 
 import { ClerkProvider } from "@clerk/nextjs";
-// AppShellMain (standalone) rather than AppShell.Main — see the note in
-// AGENTS.md about compound static properties not resolving through the bundler
-// in this @mantine/core version.
+// AppShellMain (standalone) rather than AppShell.Main — see the note in AGENTS.md about compound static properties not
+// resolving through the bundler in this @mantine/core version.
 import { AppShell, AppShellMain, ColorSchemeScript, MantineProvider, mantineHtmlProps } from "@mantine/core";
 import type { Metadata } from "next";
 

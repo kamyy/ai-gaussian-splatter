@@ -10,8 +10,7 @@ import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpErro
 import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
 import { jobReadColumns } from "@/lib/server/selects";
 
-// Populated from the ECR repo CDK stack output once infra is deployed
-// Placeholders for local/pre-deploy development.
+// Populated from the ECR repo CDK stack output once infra is deployed Placeholders for local/pre-deploy development.
 function workerImageUri(): string {
   return process.env.WORKER_IMAGE_URI ?? "REPLACE_WITH_ECR_IMAGE_URI";
 }
@@ -44,8 +43,8 @@ export const POST = withErrorHandling(
       throw new HttpError(400, `Need at least ${env.MIN_PHOTOS_PER_SPLAT} uploaded photos, have ${uploaded.n}`);
     }
 
-    // The hard backstop, checked last so per-user/IP limits already screened
-    // most abuse before this expensive step is even considered.
+    // The hard backstop, checked last so per-user/IP limits already screened most abuse before this expensive step is
+    // even considered.
     await checkAndIncrementGlobalDaily(env.GLOBAL_MAX_JOBS_PER_DAY);
 
     const callbackToken = generateCallbackToken();

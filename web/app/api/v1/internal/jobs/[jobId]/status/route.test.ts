@@ -8,9 +8,8 @@ import { jobReadColumns } from "@/lib/server/selects";
 import { PATCH } from "./route";
 
 /**
- * Requires a real Postgres (TEST_DATABASE_URL). Covers three invariants of
- * this route: the enum values are snake_case end to end, `updatedAt` moves
- * via `.$onUpdate()`, and the job/splat pair updates inside one transaction.
+ * Requires a real Postgres (TEST_DATABASE_URL). Covers three invariants of this route: the enum values are snake_case
+ * end to end, `updatedAt` moves via `.$onUpdate()`, and the job/splat pair updates inside one transaction.
  */
 const hasPostgres = Boolean(process.env.TEST_DATABASE_URL);
 

@@ -1,9 +1,8 @@
 #!/usr/bin/env node
-// Pre-commit guard: infra/cdk.context.json is checked in so `cdk synth`
-// works offline for the placeholder account (see CLAUDE.md). It should
-// never gain an entry for a real AWS account — that only happens locally
-// when AWS_ACCOUNT_ID is deliberately set to a real account for a manual
-// deploy, and that entry should be reverted before committing, not shipped.
+// Pre-commit guard: infra/cdk.context.json is checked in so `cdk synth` works offline for the placeholder account (see
+// CLAUDE.md). It should never gain an entry for a real AWS account — that only happens locally when AWS_ACCOUNT_ID is
+// deliberately set to a real account for a manual deploy, and that entry should be reverted before committing, not
+// shipped.
 import { execFileSync } from "node:child_process";
 
 const PLACEHOLDER_ACCOUNT = "123456789012";

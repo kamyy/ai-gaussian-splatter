@@ -5,8 +5,7 @@ import { Alert, Badge, Group, Progress, Stack, Text } from "@mantine/core";
 import { useJobStatus } from "@/lib/hooks";
 import type { JobStatus } from "@/lib/types";
 
-// Keys are the wire/database status values (snake_case); the values are what
-// the user actually reads.
+// Keys are the wire/database status values (snake_case); the values are what the user actually reads.
 const STATUS_LABELS: Record<JobStatus, string> = {
   queued: "Queued",
   launching: "Starting GPU worker…",
@@ -18,8 +17,7 @@ const STATUS_LABELS: Record<JobStatus, string> = {
   cancelled: "Cancelled",
 };
 
-// Rough ordinal progress for the UI bar — jobs.status doubles as the
-// progress indicator.
+// Rough ordinal progress for the UI bar — jobs.status doubles as the progress indicator.
 const STATUS_PROGRESS: Record<JobStatus, number> = {
   queued: 5,
   launching: 15,

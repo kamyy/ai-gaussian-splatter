@@ -57,9 +57,8 @@ export function PhotoDropzone({ splatId, onAllUploaded }: PhotoDropzoneProps) {
 
       onAllUploaded?.();
     } catch (err) {
-      // Most likely a 429 from the per-IP/per-user rate limit —
-      // surfaced via the banner rather than a generic error boundary, since
-      // it's an expected, actionable state ("slow down"), not a bug.
+      // Most likely a 429 from the per-IP/per-user rate limit — surfaced via the banner rather than a generic error
+      // boundary, since it's an expected, actionable state ("slow down"), not a bug.
       showBanner({
         message: err instanceof Error ? err.message : "Failed to start upload",
         variant: "error",

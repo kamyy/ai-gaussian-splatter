@@ -1,22 +1,18 @@
 import { expect, test } from "@playwright/test";
 
-// Public-path E2E: no auth needed, so no Clerk test-mode setup required —
-// this is the piece of the golden path reachable here.
+// Public-path E2E: no auth needed, so no Clerk test-mode setup required — this is the piece of the golden path
+// reachable here.
 //
-// The full authenticated golden path (sign in -> upload -> trigger -> poll
-// -> view) needs Clerk's `@clerk/testing` package with real Clerk test-mode
-// API keys to bypass interactive sign-in, which are not configured here.
+// The full authenticated golden path (sign in -> upload -> trigger -> poll -> view) needs Clerk's `@clerk/testing`
+// package with real Clerk test-mode API keys to bypass interactive sign-in, which are not configured here.
 
 const GALLERY_ITEM_ID = "11111111-1111-1111-1111-111111111111";
 
-// SKIPPED: a real gap, not a flake. app/gallery/page.tsx queries the database
-// directly during SSR, so with no data seeded the page renders empty — and
-// browser-level route mocking cannot reach a query made in Next's server
-// process.
+// SKIPPED: a real gap, not a flake. app/gallery/page.tsx queries the database directly during SSR, so with no data
+// seeded the page renders empty — and browser-level route mocking cannot reach a query made in Next's server process.
 //
-// Fix: seed the gallery row into a real test database and point the dev
-// server at it — a deferred harness redesign. Un-skip as part of that work;
-// don't fix this by asserting against an empty page.
+// Fix: seed the gallery row into a real test database and point the dev server at it — a deferred harness redesign.
+// Un-skip as part of that work; don't fix this by asserting against an empty page.
 test.skip("gallery page lists items and links to detail pages with real OG data", async ({ page }) => {
   await page.goto("/gallery");
 
@@ -27,8 +23,8 @@ test.skip("gallery page lists items and links to detail pages with real OG data"
   await expect(page).toHaveURL(new RegExp(`/gallery/${GALLERY_ITEM_ID}`));
   await expect(page.getByRole("heading", { name: "Ceramic mug" })).toBeVisible();
 
-  // Verifies the OG tags generateMetadata produces server-side — the whole
-  // reason this app server-renders at all (ARCHITECTURE.md, Frontend).
+  // Verifies the OG tags generateMetadata produces server-side — the whole reason this app server-renders at all
+  // (ARCHITECTURE.md, Frontend).
   const ogTitle = await page.locator('meta[property="og:title"]').getAttribute("content");
   expect(ogTitle).toBe("Ceramic mug");
 });

@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 
 /**
- * Thrown from anywhere in a handler's call stack and turned into a response by
- * `withErrorHandling`, so services can reject from deep inside rather than
- * threading error tuples back up.
+ * Thrown from anywhere in a handler's call stack and turned into a response by `withErrorHandling`, so services can
+ * reject from deep inside rather than threading error tuples back up.
  */
 export class HttpError extends Error {
   readonly status: number;
@@ -24,9 +23,8 @@ export function isUuid(value: string): boolean {
 /**
  * Guards a path parameter before it reaches the database.
  *
- * The id columns are `uuid`, so a malformed value makes Postgres raise
- * `22P02`, which surfaces as a 500. 404 rather than 422 because these are all
- * lookup-by-id routes that already collapse "not yours" into "not found" — an
+ * The id columns are `uuid`, so a malformed value makes Postgres raise `22P02`, which surfaces as a 500. 404 rather
+ * than 422 because these are all lookup-by-id routes that already collapse "not yours" into "not found" — an
  * unparseable id can't name a row, so it gets the same answer.
  */
 export function requireUuid(value: string, status = 404, message = "Not found"): string {

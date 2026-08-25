@@ -1,10 +1,8 @@
 from aws_cdk.assertions import Match, Template
 
-# Security-group-to-security-group rules are always emitted as standalone
-# AWS::EC2::SecurityGroupIngress resources; only CIDR peers are eligible to be
-# inlined onto the group itself. Both rules asserted below are SG-to-SG, so
-# they are counted here, while the ALB's own 0.0.0.0/0 rules are asserted as
-# inline properties further down.
+# Security-group-to-security-group rules are always emitted as standalone AWS::EC2::SecurityGroupIngress resources; only
+# CIDR peers are eligible to be inlined onto the group itself. Both rules asserted below are SG-to-SG, so they are
+# counted here, while the ALB's own 0.0.0.0/0 rules are asserted as inline properties further down.
 SECURITY_GROUP_INGRESS = "AWS::EC2::SecurityGroupIngress"
 
 
@@ -28,9 +26,8 @@ def test_web_security_group_has_exactly_one_ingress_rule_from_alb(wired_stacks):
     assert len(security_groups) == 1
     web_sg_logical_id, web_sg_props = next(iter(security_groups.items()))
 
-    # A CIDR peer added directly to this group (e.g. via add_ingress_rule)
-    # inlines onto the group's own SecurityGroupIngress property instead of
-    # synthesizing as a standalone resource, so the standalone-resource count
+    # A CIDR peer added directly to this group (e.g. via add_ingress_rule) inlines onto the group's own
+    # SecurityGroupIngress property instead of synthesizing as a standalone resource, so the standalone-resource count
     # below would not catch it — this rules that route out too.
     assert "SecurityGroupIngress" not in web_sg_props["Properties"]
 
@@ -87,8 +84,7 @@ def test_vpc_has_no_nat_gateway(wired_stacks):
     template.resource_count_is("AWS::EC2::NatGateway", 0)
     template.resource_count_is("AWS::EC2::EIP", 0)
 
-    # One per public subnet, both to the internet gateway. The isolated
-    # subnets have no default route at all.
+    # One per public subnet, both to the internet gateway. The isolated subnets have no default route at all.
     routes = template.find_resources("AWS::EC2::Route")
     assert len(routes) == 2
     for route_props in routes.values():
@@ -106,10 +102,8 @@ def test_db_security_group_has_exactly_one_ingress_rule_from_web(wired_stacks):
     assert len(security_groups) == 1
     (db_sg_props,) = security_groups.values()
 
-    # Same rationale as the web SG check above: a CIDR peer added directly
-    # to this group would inline onto its own properties instead of
-    # synthesizing as a standalone resource, so the count below alone
-    # wouldn't catch it.
+    # Same rationale as the web SG check above: a CIDR peer added directly to this group would inline onto its own
+    # properties instead of synthesizing as a standalone resource, so the count below alone wouldn't catch it.
     assert "SecurityGroupIngress" not in db_sg_props["Properties"]
 
     # The web-from-ALB rule and this one; see SECURITY_GROUP_INGRESS above.
@@ -136,9 +130,8 @@ def test_alb_security_group_is_the_only_one_open_to_the_internet(wired_stacks):
 
     open_ports_by_group = {
         logical_id: sorted(
-            # An all-traffic rule synthesizes as IpProtocol "-1" with no
-            # FromPort at all. It must register as exposure rather than raise
-            # a KeyError, so it stands in as -1 and fails the check below.
+            # An all-traffic rule synthesizes as IpProtocol "-1" with no FromPort at all. It must register as exposure
+            # rather than raise a KeyError, so it stands in as -1 and fails the check below.
             rule.get("FromPort", -1)
             for rule in (props["Properties"].get("SecurityGroupIngress") or [])
             # Both families, so an IPv6 rule can't slip past an IPv4-only check.

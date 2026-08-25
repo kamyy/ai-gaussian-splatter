@@ -12,9 +12,8 @@ import { checkAndIncrementIp, checkAndIncrementUser } from "@/lib/server/rateLim
 import { presignPhotoUpload } from "@/lib/server/s3";
 import type { PhotoPresignItem } from "@/lib/types";
 
-// Rate limiting happens here: it gates *before* any upload
-// happens (per-IP + per-user), separate from the global daily cap which only
-// gates the expensive job-launch step (../process).
+// Rate limiting happens here: it gates *before* any upload happens (per-IP + per-user), separate from the global daily
+// cap which only gates the expensive job-launch step (../process).
 const presignSchema = z.array(z.object({ filename: z.string().min(1), contentType: z.string().min(1) })).min(1);
 
 export const POST = withErrorHandling(
@@ -38,8 +37,7 @@ export const POST = withErrorHandling(
       throw new HttpError(422, "Invalid request body");
     }
 
-    // Both checks before any S3 URL is issued — the actual multi-account
-    // defense (per-IP) plus the per-user quota.
+    // Both checks before any S3 URL is issued — the actual multi-account defense (per-IP) plus the per-user quota.
     await checkAndIncrementIp(getClientIp(request), env.RATE_LIMIT_IP_PER_HOUR);
     await checkAndIncrementUser(user.id, env.RATE_LIMIT_USER_PER_DAY);
 
@@ -61,9 +59,8 @@ export const POST = withErrorHandling(
       items.push({ photoId, presignedPutUrl: url, s3Key: key });
     }
 
-    // One insert, not one per photo: a mid-loop failure would otherwise leave a
-    // partial batch of pending rows behind, with the caller holding no ids to
-    // retry against and the rate-limit increment already spent.
+    // One insert, not one per photo: a mid-loop failure would otherwise leave a partial batch of pending rows behind,
+    // with the caller holding no ids to retry against and the rate-limit increment already spent.
     await getDb().insert(photos).values(rows);
 
     return NextResponse.json({ photos: items });

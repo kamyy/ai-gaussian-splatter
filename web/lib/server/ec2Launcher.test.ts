@@ -4,8 +4,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { generateCallbackToken, launchJob } from "./ec2Launcher";
 
-// aws-sdk-client-mock is a call stub with no simulated EC2 state, so these
-// assert on the arguments RunInstances received rather than on state after.
+// aws-sdk-client-mock is a call stub with no simulated EC2 state, so these assert on the arguments RunInstances
+// received rather than on state after.
 const ec2Mock = mockClient(EC2Client);
 
 afterEach(() => {
@@ -55,8 +55,8 @@ describe("launchJob", () => {
     const tags = runInstancesInput().TagSpecifications?.[0].Tags ?? [];
     const byKey = Object.fromEntries(tags.map(t => [t.Key, t.Value]));
 
-    // Role=worker is what infra/stacks/worker_iam_stack.py's self-termination
-    // grant keys off — if this drifts, the worker can no longer terminate itself.
+    // Role=worker is what infra/stacks/worker_iam_stack.py's self-termination grant keys off — if this drifts, the
+    // worker can no longer terminate itself.
     expect(byKey.Role).toBe("worker");
     expect(byKey.JobId).toBe("job-123");
     expect(byKey.Name).toBe("ai-gaussian-splatter-worker-job-123");
@@ -76,11 +76,9 @@ describe("launchJob", () => {
     ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
     await launchJob(params);
 
-    // The pipeline runs in a container, so IMDS is a hop further than the host.
-    // At EC2's default limit of 1, the token PUT in worker/pipeline/instance.py
-    // never gets a reply, terminate_self() no-ops, and the GPU instance bills
-    // until stopped by hand — logging only an INFO line that reads exactly like
-    // a legitimate local run.
+    // The pipeline runs in a container, so IMDS is a hop further than the host. At EC2's default limit of 1, the token
+    // PUT in worker/pipeline/instance.py never gets a reply, terminate_self() no-ops, and the GPU instance bills until
+    // stopped by hand — logging only an INFO line that reads exactly like a legitimate local run.
     const metadata = runInstancesInput().MetadataOptions;
     expect(metadata?.HttpPutResponseHopLimit).toBe(2);
     // Only safe with the hop limit above: it drops the IMDSv1 fallback.
