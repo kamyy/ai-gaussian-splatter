@@ -10,8 +10,8 @@ vi.mock("@clerk/nextjs", () => ({
   useAuth: () => ({ getToken: async () => "test-token" }),
 }));
 
-// The viewer pulls in three.js, R3F and gaussian-splats-3d, none of which have
-// a WebGL context under jsdom. Only its presence is under test here.
+// The viewer pulls in three.js, R3F and gaussian-splats-3d, none of which have a WebGL context under jsdom. Only its
+// presence is under test here.
 vi.mock("@/components/viewer/SplatViewer", () => ({
   SplatViewer: ({ splatUrl }: { splatUrl: string }) => <div data-testid="splat-viewer">{splatUrl}</div>,
   SplatViewerLoading: () => <div data-testid="splat-loading" />,
@@ -71,9 +71,8 @@ function setup(options: {
   useSWRMock.mockReturnValue({ data: options.splatFile, error: options.splatFileError });
 }
 
-// The page reads `params` with React's `use()`, so it suspends on first render.
-// RTL's own `act` scope is synchronous and cannot flush that — the render has
-// to happen inside an awaited `act`.
+// The page reads `params` with React's `use()`, so it suspends on first render. RTL's own `act` scope is synchronous
+// and cannot flush that — the render has to happen inside an awaited `act`.
 async function renderPage() {
   await act(async () => {
     render(
@@ -92,8 +91,8 @@ describe("SplatDetailPage", () => {
   });
 
   it("refetches the splat when the job ends, so the viewer can appear", async () => {
-    // The worker's callback moves the job and splat rows together, but only the
-    // job is polled — without this refetch the page would sit on the poller.
+    // The worker's callback moves the job and splat rows together, but only the job is polled — without this refetch
+    // the page would sit on the poller.
     setup({ splatStatus: "processing", job: { ...baseJob, status: "complete" } });
     await renderPage();
 
@@ -108,8 +107,8 @@ describe("SplatDetailPage", () => {
   });
 
   it("keeps rendering a cached splat when a revalidation fails", async () => {
-    // A transient failure of the completion refetch must not replace the whole
-    // page — `data` still holds the last good splat.
+    // A transient failure of the completion refetch must not replace the whole page — `data` still holds the last good
+    // splat.
     setup({ splatStatus: "complete", splatError: new Error("503"), splatFile: { url: "https://s3/splat.ply" } });
     await renderPage();
 

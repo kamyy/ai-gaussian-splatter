@@ -10,10 +10,9 @@ from pathlib import Path
 
 import numpy as np
 
-# model_id -> (name, num_params). Only the common models COLMAP's
-# feature_extractor actually produces are handled; params beyond
-# focal length + principal point (e.g. radial distortion) are read but
-# not applied — a known MVP simplification (see train.py docstring).
+# model_id -> (name, num_params). Only the common models COLMAP's feature_extractor actually produces are handled;
+# params beyond focal length + principal point (e.g. radial distortion) are read but not applied — a known MVP
+# simplification (see train.py docstring).
 _CAMERA_MODELS = {
     0: ("SIMPLE_PINHOLE", 3),
     1: ("PINHOLE", 4),

@@ -16,11 +16,10 @@ export default function SplatDetailPage({ params }: { params: Promise<{ id: stri
   const { getToken } = useAuth();
   const { data: splat, isLoading, mutate: refetchSplat } = useSplat(id);
 
-  // Only the job is polled, but the worker's callback moves the job row and
-  // the splat row in one transaction — so a job that has ended means this
-  // splat is stale. Without the refetch the page keeps rendering the poller
-  // and never mounts the viewer until something else revalidates (focus,
-  // reload). Same SWR key as JobStatusPoller's, so this shares its request.
+  // Only the job is polled, but the worker's callback moves the job row and the splat row in one transaction — so a job
+  // that has ended means this splat is stale. Without the refetch the page keeps rendering the poller and never mounts
+  // the viewer until something else revalidates (focus, reload). Same SWR key as JobStatusPoller's, so this shares its
+  // request.
   const { data: job } = useJobStatus(id);
   useEffect(() => {
     if (job && JOB_ENDED_STATUSES.includes(job.status)) {
@@ -42,9 +41,8 @@ export default function SplatDetailPage({ params }: { params: Promise<{ id: stri
   if (isLoading) {
     return <Skeleton height={300} />;
   }
-  // Deliberately not `error || !splat`: a failed revalidation leaves the last
-  // good splat in `data`, and replacing the whole page with an error is worse
-  // than showing it. SWR retries on its own.
+  // Deliberately not `error || !splat`: a failed revalidation leaves the last good splat in `data`, and replacing the
+  // whole page with an error is worse than showing it. SWR retries on its own.
   if (!splat) {
     return <Alert color="red">Splat not found.</Alert>;
   }

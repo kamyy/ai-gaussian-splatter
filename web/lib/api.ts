@@ -1,12 +1,11 @@
 // Typed REST client for the Route Handlers in app/api/v1/.
 //
-// Authenticated endpoints take a Clerk session token, obtained client-side via
-// useAuth().getToken() and passed in by callers (lib/hooks.ts).
+// Authenticated endpoints take a Clerk session token, obtained client-side via useAuth().getToken() and passed in by
+// callers (lib/hooks.ts).
 //
-// Requests are same-origin now that the API lives in this app, so there is no
-// base URL to configure — NEXT_PUBLIC_API_BASE_URL is gone. Server-side callers
-// should skip this client entirely and use lib/server/data.ts directly rather
-// than have the server make an HTTP request to itself.
+// Requests are same-origin now that the API lives in this app, so there is no base URL to configure —
+// NEXT_PUBLIC_API_BASE_URL is gone. Server-side callers should skip this client entirely and use lib/server/data.ts
+// directly rather than have the server make an HTTP request to itself.
 
 import type { JobRead, PhotoPresignItem, SplatRead } from "./types";
 
@@ -87,8 +86,7 @@ export function getSplatUrl(token: string, splatId: string) {
   return apiFetch<{ url: string }>(`/api/v1/splats/${splatId}/download`, { token });
 }
 
-// --- Direct-to-S3 upload (not through apiFetch — raw PUT with the file body,
-// not JSON) ---
+// --- Direct-to-S3 upload (not through apiFetch — raw PUT with the file body, not JSON) ---
 
 export async function uploadToS3(presignedUrl: string, file: File): Promise<void> {
   const response = await fetch(presignedUrl, {

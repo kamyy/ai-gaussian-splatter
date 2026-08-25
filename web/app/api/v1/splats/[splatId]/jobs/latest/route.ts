@@ -13,9 +13,8 @@ export const GET = withErrorHandling(
     const { splatId } = await ctx.params;
     requireUuid(splatId, 404, "No jobs for this splat");
 
-    // Ownership is enforced through the parent splat, hence the join. The
-    // explicit column map keeps the result flat despite it, and keeps
-    // callbackToken/ec2InstanceId out of the SQL entirely.
+    // Ownership is enforced through the parent splat, hence the join. The explicit column map keeps the result flat
+    // despite it, and keeps callbackToken/ec2InstanceId out of the SQL entirely.
     const [job] = await getDb()
       .select(jobReadColumns)
       .from(jobs)

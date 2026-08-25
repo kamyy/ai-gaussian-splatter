@@ -83,11 +83,9 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
         ]
     )
 
-    # `mapper` writes one sub-model per connected component (0, 1, 2...) when
-    # the photo set doesn't fully connect. Only model 0 is used, and the other
-    # components' images are therefore never counted as registered below — so a
-    # capture that fragments shows up as a low registered ratio, which is what
-    # run_job.py rejects it on.
+    # `mapper` writes one sub-model per connected component (0, 1, 2...) when the photo set doesn't fully connect. Only
+    # model 0 is used, and the other components' images are therefore never counted as registered below — so a capture
+    # that fragments shows up as a low registered ratio, which is what run_job.py rejects it on.
     model_dir = sparse_dir / "0"
     if not model_dir.exists():
         raise RuntimeError(
@@ -106,10 +104,9 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
 
 def _count_registered_images(model_dir: Path) -> int:
     result = _run(["colmap", "model_analyzer", "--path", str(model_dir)], capture=True)
-    # COLMAP reports through glog, which writes to stderr and never to stdout,
-    # so the count is not where a plain `colmap ... | grep` would look for it.
-    # Both streams are searched rather than stderr alone, so the parse does not
-    # break again if a future version prints it directly.
+    # COLMAP reports through glog, which writes to stderr and never to stdout, so the count is not where a plain `colmap
+    # ... | grep` would look for it. Both streams are searched rather than stderr alone, so the parse does not break
+    # again if a future version prints it directly.
     output = f"{result.stdout}\n{result.stderr}"
     match = re.search(r"Registered images:\s*(\d+)", output)
     if not match:

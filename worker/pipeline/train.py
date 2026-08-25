@@ -61,10 +61,9 @@ def train(sfm_sparse_dir: Path, photos_dir: Path, settings: Settings) -> Trained
 
     iterations = 20 if settings.fast_test_mode else settings.training_iterations
 
-    # Schedules are fractions of the run, not fixed step counts: at the default
-    # 10k these work out to the usual densify-every-1000 / log-every-500 /
-    # stop-densifying-500-before-the-end, while a 20-iteration fast-test run
-    # still exercises _densify_and_prune instead of never reaching it.
+    # Schedules are fractions of the run, not fixed step counts: at the default 10k these work out to the usual
+    # densify-every-1000 / log-every-500 / stop-densifying-500-before-the-end, while a 20-iteration fast-test run still
+    # exercises _densify_and_prune instead of never reaching it.
     densify_every = max(1, iterations // 10)
     densify_until = iterations - max(1, iterations // 20)
     log_every = max(1, iterations // 20)
@@ -151,9 +150,8 @@ def _init_gaussians(sparse: SparseModel) -> GaussianModel:
 
     means = torch.tensor(sparse.points_xyz, dtype=torch.float32, device=DEVICE, requires_grad=True)
 
-    # Initial scale: a small fraction of the scene's bounding-box diagonal,
-    # uniform across points — the densification loop refines this over
-    # training rather than relying on a precise per-point KNN estimate.
+    # Initial scale: a small fraction of the scene's bounding-box diagonal, uniform across points — the densification
+    # loop refines this over training rather than relying on a precise per-point KNN estimate.
     extent = float(np.linalg.norm(sparse.points_xyz.max(axis=0) - sparse.points_xyz.min(axis=0)))
     init_scale = max(extent * 0.01, 1e-4)
     scales = torch.full((n, 3), np.log(init_scale), dtype=torch.float32, device=DEVICE, requires_grad=True)
@@ -186,8 +184,8 @@ def _build_optimizer(model: GaussianModel) -> torch.optim.Optimizer:
 def _render(model: GaussianModel, viewmat: torch.Tensor, K: torch.Tensor, width: int, height: int):
     """Returns (rendered_image, alpha, meta) for the single camera passed in
     — gsplat.rasterization is batched over cameras, so we slice batch index 0
-    out of each of its three return values rather than returning the raw
-    batched tuple.
+    out of the image and alpha before returning them; meta is returned as-is
+    since neither caller currently uses it.
     """
     import gsplat  # imported lazily so the rest of the module is importable/testable without CUDA/gsplat installed
 

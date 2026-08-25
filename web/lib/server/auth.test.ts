@@ -7,9 +7,8 @@ import { closeDb, getDb } from "./db";
 import { jobs, splats, users } from "./db/schema";
 
 /**
- * @clerk/nextjs verifies JWTs, and testing Clerk's own code isn't this
- * suite's job. What's worth testing is the app-specific logic: the lazy
- * shadow-row upsert and the worker's per-job token check.
+ * @clerk/nextjs verifies JWTs, and testing Clerk's own code isn't this suite's job. What's worth testing is the
+ * app-specific logic: the lazy shadow-row upsert and the worker's per-job token check.
  */
 vi.mock("@clerk/nextjs/server", () => ({ auth: vi.fn() }));
 
@@ -19,8 +18,8 @@ function fakeRequest(headers: Record<string, string>): NextRequest {
 
 describe("getClientIp", () => {
   it("uses the last hop of X-Forwarded-For", () => {
-    // The ALB appends the address it actually saw, so that is the trustworthy
-    // entry — see the note in auth.ts about a second proxy invalidating this.
+    // The ALB appends the address it actually saw, so that is the trustworthy entry — see the note in auth.ts about a
+    // second proxy invalidating this.
     const req = fakeRequest({ "X-Forwarded-For": "203.0.113.5, 70.41.3.18, 150.172.238.178" });
     expect(getClientIp(req)).toBe("150.172.238.178");
   });
@@ -52,8 +51,7 @@ async function userCount(): Promise<number> {
 
 describe.skipIf(!hasPostgres)("database-backed auth helpers", () => {
   beforeEach(async () => {
-    // Ordered to respect the foreign keys: jobs and photos hang off splats,
-    // splats off users.
+    // Ordered to respect the foreign keys: jobs and photos hang off splats, splats off users.
     await getDb().delete(jobs);
     await getDb().delete(splats);
     await getDb().delete(users);
@@ -116,8 +114,7 @@ describe.skipIf(!hasPostgres)("database-backed auth helpers", () => {
     });
 
     it("rejects a valid token for a different job", async () => {
-      // The token is scoped to one job, so a compromised instance can't
-      // mutate anyone else's.
+      // The token is scoped to one job, so a compromised instance can't mutate anyone else's.
       await seedJob("tok-a");
       const other = await seedJob("tok-b");
       await expect(

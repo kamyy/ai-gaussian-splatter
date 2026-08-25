@@ -13,13 +13,11 @@ class Settings(BaseSettings):
     uploads_bucket: str
     splats_bucket: str
 
-    # Single-object-against-plain-background scenes converge well below the
-    # paper's 30k default.
+    # Single-object-against-plain-background scenes converge well below the paper's 30k default.
     training_iterations: int = 10_000
 
-    # "Fast test mode" — tiny photo set, 20 iterations, for a cheap on-demand
-    # smoke test of the plumbing without full-quality training cost. train.py
-    # scales its densify/log schedules to the iteration count, so the short run
+    # "Fast test mode" — tiny photo set, 20 iterations, for a cheap on-demand smoke test of the plumbing without
+    # full-quality training cost. train.py scales its densify/log schedules to the iteration count, so the short run
     # covers the same code paths as a full one.
     fast_test_mode: bool = False
 

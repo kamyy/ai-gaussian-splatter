@@ -14,9 +14,8 @@ from plyfile import PlyData, PlyElement
 from .config import Settings
 from .train import TrainedScene, render_view
 
-# Inverse-sigmoid DC-term convention used by the standard 3DGS .ply format
-# (INRIA reference exporter), which @mkkellogg/GaussianSplats3D and most
-# other splat viewers expect: color = SH_C0 * f_dc + 0.5.
+# Inverse-sigmoid DC-term convention used by the standard 3DGS .ply format (INRIA reference exporter), which
+# @mkkellogg/GaussianSplats3D and most other splat viewers expect: color = SH_C0 * f_dc + 0.5.
 _SH_C0 = 0.28209479177387814
 
 

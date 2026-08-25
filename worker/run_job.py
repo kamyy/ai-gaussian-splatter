@@ -33,9 +33,8 @@ def main() -> int:
             sfm_result.registered_ratio * 100,
         )
         if sfm_result.registered_ratio < 0.5:
-            # A low registered ratio is a capture-quality problem,
-            # not a pipeline bug — fail clearly rather than training on a
-            # broken reconstruction.
+            # A low registered ratio is a capture-quality problem, not a pipeline bug — fail clearly rather than
+            # training on a broken reconstruction.
             raise RuntimeError(
                 f"Only {sfm_result.registered_ratio:.0%} of photos registered — "
                 "capture likely has insufficient overlap between angles"
@@ -57,8 +56,8 @@ def main() -> int:
         return 1
 
     finally:
-        # Attempted on every path out of the try, success or failure — nothing
-        # outside the instance will terminate it if this is missed.
+        # Attempted on every path out of the try, success or failure — nothing outside the instance will terminate it if
+        # this is missed.
         terminate_self()
 
 

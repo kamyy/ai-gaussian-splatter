@@ -111,8 +111,7 @@ def test_database_is_in_isolated_subnets(wired_stacks):
 
     subnet_refs = subnet_group_props["Properties"]["SubnetIds"]
     assert len(subnet_refs) == 2
-    # Cross-stack, so each arrives as an Fn::ImportValue naming the exporting
-    # stack's logical ID.
+    # Cross-stack, so each arrives as an Fn::ImportValue naming the exporting stack's logical ID.
     for subnet_ref in subnet_refs:
         assert any(logical_id in str(subnet_ref) for logical_id in isolated_subnet_ids)
 

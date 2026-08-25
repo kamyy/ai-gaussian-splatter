@@ -4,15 +4,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useJobStatus, useSplat, useSplats } from "./hooks";
 import { JOB_ENDED_STATUSES, type JobRead, type JobStatus } from "./types";
 
-// Clerk resolves getToken() to null once it has loaded without a session, so
-// the token is mutable here rather than a fixed string.
+// Clerk resolves getToken() to null once it has loaded without a session, so the token is mutable here rather than a
+// fixed string.
 const { auth } = vi.hoisted(() => ({ auth: { token: "test-token" as string | null } }));
 vi.mock("@clerk/nextjs", () => ({
   useAuth: () => ({ getToken: async () => auth.token }),
 }));
 
-// Mocked so a fetcher that skipped the token guard fails the test rather than
-// reaching fetch() and rejecting on jsdom's absent network for the wrong reason.
+// Mocked so a fetcher that skipped the token guard fails the test rather than reaching fetch() and rejecting on jsdom's
+// absent network for the wrong reason.
 const { getLatestJobMock, getSplatMock, listSplatsMock } = vi.hoisted(() => ({
   getLatestJobMock: vi.fn<(token: string, ...rest: string[]) => Promise<unknown>>(),
   getSplatMock: vi.fn<(token: string, ...rest: string[]) => Promise<unknown>>(),
@@ -28,8 +28,8 @@ interface JobPollConfig {
   refreshInterval: (latest: JobRead | undefined) => number;
 }
 
-// SWR is stubbed so the config it receives can be inspected directly — that
-// config is the contract under test, not anything SWR does with it.
+// SWR is stubbed so the config it receives can be inspected directly — that config is the contract under test, not
+// anything SWR does with it.
 const { useSWRMock } = vi.hoisted(() => ({
   useSWRMock: vi.fn<(key: unknown, fetcher: unknown, config: JobPollConfig) => { data: undefined }>(),
 }));
@@ -61,9 +61,8 @@ describe("useJobStatus", () => {
   });
 
   it("reuses one refreshInterval function across renders", () => {
-    // SWR keys its polling effect on this function's identity. A fresh closure
-    // per render tears down the pending timeout and restarts the interval, so
-    // a page re-rendering faster than the interval would never poll at all.
+    // SWR keys its polling effect on this function's identity. A fresh closure per render tears down the pending
+    // timeout and restarts the interval, so a page re-rendering faster than the interval would never poll at all.
     const { rerender } = renderHook(() => useJobStatus("splat-1"));
     rerender();
     rerender();
@@ -88,8 +87,7 @@ describe("useJobStatus", () => {
   });
 
   it("polls faster as the job approaches completion", () => {
-    // Never speeds up then slows down again — a later phase polling slower
-    // than an earlier one would only add latency.
+    // Never speeds up then slows down again — a later phase polling slower than an earlier one would only add latency.
     renderHook(() => useJobStatus("splat-1"));
     const { refreshInterval } = capturedConfig();
 
@@ -106,8 +104,7 @@ describe("useJobStatus", () => {
     renderHook(() => useJobStatus("splat-1"));
     const { refreshInterval } = capturedConfig();
 
-    // Derived, so a status added to JOB_ENDED_STATUSES without a zero
-    // interval fails here.
+    // Derived, so a status added to JOB_ENDED_STATUSES without a zero interval fails here.
     for (const status of JOB_ENDED_STATUSES as readonly JobStatus[]) {
       expect(refreshInterval({ ...baseJob, status })).toBe(0);
     }
@@ -115,8 +112,8 @@ describe("useJobStatus", () => {
 });
 
 describe("session token guard", () => {
-  // render is widened to unknown because the three hooks return differently
-  // typed SWR responses, and only the call is under test here.
+  // render is widened to unknown because the three hooks return differently typed SWR responses, and only the call is
+  // under test here.
   const hooks: { name: string; render: () => unknown; api: typeof listSplatsMock }[] = [
     { name: "useSplats", render: () => useSplats(), api: listSplatsMock },
     { name: "useSplat", render: () => useSplat("splat-1"), api: getSplatMock },
@@ -134,8 +131,8 @@ describe("session token guard", () => {
   });
 
   it.each(hooks)("$name rejects without calling the API when the session has ended", async ({ render, api }) => {
-    // Rejecting is what puts SWR in its error state; resolving to an empty
-    // result instead would render as a signed-in user with no data.
+    // Rejecting is what puts SWR in its error state; resolving to an empty result instead would render as a signed-in
+    // user with no data.
     auth.token = null;
     renderHook(render);
 

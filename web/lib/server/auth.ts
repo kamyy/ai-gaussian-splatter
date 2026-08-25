@@ -18,11 +18,9 @@ export async function requireClerkUserId(): Promise<string> {
 /**
  * Local shadow row for the Clerk user, created lazily on first request.
  *
- * One `INSERT ... ON CONFLICT`, so two concurrent first-requests from the same
- * user can't race to create the same row. The no-op `set` is deliberate:
- * `onConflictDoNothing()` returns zero rows from `.returning()`, so an existing
- * user would come back `undefined` — the update has to touch something for
- * Postgres to hand the row back.
+ * One `INSERT ... ON CONFLICT`, so two concurrent first-requests from the same user can't race to create the same row.
+ * The no-op `set` is deliberate: `onConflictDoNothing()` returns zero rows from `.returning()`, so an existing user
+ * would come back `undefined` — the update has to touch something for Postgres to hand the row back.
  */
 export async function getOrCreateUser(clerkUserId: string): Promise<User> {
   const [user] = await getDb()
@@ -39,16 +37,13 @@ export async function requireUser(): Promise<User> {
 }
 
 /**
- * The client IP the per-IP rate limit is keyed on, from the LAST
- * hop of `X-Forwarded-For`. The ALB appends the address it actually saw
- * rather than replacing the header, so a spoofed `X-Forwarded-For: 1.2.3.4`
- * arrives as `1.2.3.4, <real client>` — trusting the first entry would let a
- * caller mint a fresh rate-limit bucket per request just by varying it. This
- * assumes exactly one trusted proxy; putting anything in front of the ALB
- * moves the trustworthy position and breaks it (ARCHITECTURE.md).
+ * The client IP the per-IP rate limit is keyed on, from the LAST hop of `X-Forwarded-For`. The ALB appends the address
+ * it actually saw rather than replacing the header, so a spoofed `X-Forwarded-For: 1.2.3.4` arrives as `1.2.3.4, <real
+ * client>` — trusting the first entry would let a caller mint a fresh rate-limit bucket per request just by varying it.
+ * This assumes exactly one trusted proxy; putting anything in front of the ALB moves the trustworthy position and
+ * breaks it (ARCHITECTURE.md).
  *
- * `NextRequest` has no socket address to fall back to: unproxied local
- * requests all share the "unknown" bucket.
+ * `NextRequest` has no socket address to fall back to: unproxied local requests all share the "unknown" bucket.
  */
 export function getClientIp(request: NextRequest): string {
   const forwardedFor = request.headers.get("X-Forwarded-For");
@@ -65,10 +60,8 @@ export function getClientIp(request: NextRequest): string {
 }
 
 /**
- * Auth for the worker->this-app status callback: a per-job random
- * token compared against the job's own `callbackToken` column, not a Clerk
- * session — so a compromised instance can only mutate the one job it was
- * launched for.
+ * Auth for the worker->this-app status callback: a per-job random token compared against the job's own `callbackToken`
+ * column, not a Clerk session — so a compromised instance can only mutate the one job it was launched for.
  */
 export async function getJobForCallbackToken(jobId: string, request: NextRequest): Promise<Job> {
   const authHeader = request.headers.get("Authorization") ?? "";
@@ -77,8 +70,8 @@ export async function getJobForCallbackToken(jobId: string, request: NextRequest
   }
   const token = authHeader.slice("Bearer ".length).trim();
 
-  // 401 rather than 404 for a malformed id, so this can't be used to probe
-  // which job ids exist — same reason an unknown job id is 401 below.
+  // 401 rather than 404 for a malformed id, so this can't be used to probe which job ids exist — same reason an unknown
+  // job id is 401 below.
   requireUuid(jobId, 401, "Invalid job token");
 
   const [job] = await getDb().select().from(jobs).where(eq(jobs.id, jobId)).limit(1);

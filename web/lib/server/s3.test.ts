@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { photoS3Key, presignPhotoUpload, presignSplatDownload } from "./s3";
 
-// No AWS stubbing here: getSignedUrl signs locally and issues no request, so
-// these run offline against fake credentials.
+// No AWS stubbing here: getSignedUrl signs locally and issues no request, so these run offline against fake
+// credentials.
 
 describe("photoS3Key", () => {
   it("formats the key as splats/<splatId>/photos/<photoId><ext>", () => {
