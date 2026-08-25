@@ -1,8 +1,7 @@
-"""Worker entrypoint. Reads job config from env vars,
-runs COLMAP -> gsplat training -> export, reports status back to the
-web app at each phase, and self-terminates the EC2 instance from the finally
-block below — on success and on failure alike — so a job never runs up spend
-past its own end.
+"""Worker entrypoint. Reads job config from env vars, runs COLMAP -> gsplat
+training -> export, and reports status back to the web app at each phase.
+Self-terminates the EC2 instance from the finally block below, on success
+and on failure alike, so a job never runs up spend past its own end.
 """
 
 import logging
@@ -33,7 +32,7 @@ def main() -> int:
             sfm_result.registered_ratio * 100,
         )
         if sfm_result.registered_ratio < 0.5:
-            # A low registered ratio is a capture-quality problem, not a pipeline bug — fail clearly rather than
+            # A low registered ratio is a capture-quality problem, not a pipeline bug. Fail clearly rather than
             # training on a broken reconstruction.
             raise RuntimeError(
                 f"Only {sfm_result.registered_ratio:.0%} of photos registered — "
@@ -56,8 +55,8 @@ def main() -> int:
         return 1
 
     finally:
-        # Attempted on every path out of the try, success or failure — nothing outside the instance will terminate it if
-        # this is missed.
+        # Attempted on every path out of the try, success or failure. Nothing outside the instance will terminate it
+        # if this is missed.
         terminate_self()
 
 

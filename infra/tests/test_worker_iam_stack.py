@@ -5,7 +5,7 @@ from tests.conftest import build_app_stacks
 
 def test_terminate_instances_scoped_to_worker_tag(wired_stacks):
     """The Role=worker tag condition is a cross-stack contract shared with
-    web_stack.py's RunInstances grant — both must stay in sync.
+    web_stack.py's RunInstances grant. Both must stay in sync.
     """
     template = Template.from_stack(wired_stacks["worker_iam"])
 
@@ -33,7 +33,7 @@ def test_terminate_instances_scoped_to_worker_tag(wired_stacks):
 def test_spot_service_linked_role_is_declared(wired_stacks):
     """EC2 creates AWSServiceRoleForEC2Spot on its own only for a request made
     in the console. ec2Launcher.ts asks through the API, where the role has to
-    already exist — so the stack has to bring it.
+    already exist. So the stack has to bring it.
     """
     template = Template.from_stack(wired_stacks["worker_iam"])
     template.has_resource_properties(
@@ -44,7 +44,7 @@ def test_spot_service_linked_role_is_declared(wired_stacks):
 
 def test_spot_service_linked_role_survives_a_stack_delete(wired_stacks):
     """The role is one account-wide singleton shared with every other Spot
-    workload — CloudFormation deleting it would break all of them.
+    workload. CloudFormation deleting it would break all of them.
     """
     template = Template.from_stack(wired_stacks["worker_iam"])
     (resource,) = template.find_resources("AWS::IAM::ServiceLinkedRole").values()

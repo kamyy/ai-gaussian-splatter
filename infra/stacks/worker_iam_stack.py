@@ -33,10 +33,10 @@ class WorkerIamStack(cdk.Stack):
         uploads_bucket.grant_read(self.role)
         splats_bucket.grant_read_write(self.role)
 
-        # Self-termination only — scoped so the worker can kill itself at the end of its job (run_job.py's finally
-        # block) but nothing else running in the account. EC2 doesn't support resource-level restriction to "the calling
-        # instance" directly, so this is scoped by the same worker-tag convention used in web_stack.py's RunInstances
-        # grant (see stacks/tags.py — the shared source of truth for that tag).
+        # This is self-termination only, scoped so the worker can kill itself at the end of its job (run_job.py's
+        # finally block) but nothing else running in the account. EC2 doesn't support resource-level restriction to
+        # "the calling instance" directly, so this is scoped by the same worker-tag convention used in web_stack.py's
+        # RunInstances grant (see stacks/tags.py — the shared source of truth for that tag).
         self.role.add_to_policy(
             iam.PolicyStatement(
                 actions=["ec2:TerminateInstances"],
@@ -49,9 +49,9 @@ class WorkerIamStack(cdk.Stack):
         # it to already exist for one made through the API, which is how ec2Launcher.ts asks (spot InstanceMarketOptions
         # on RunInstances). Declared rather than left to a runbook step, since the failure lands on the first real job.
         #
-        # The role is one account-wide singleton shared with every other Spot workload, so creating it fails outright in
-        # an account that already has one — hence the opt-out — and deleting it would break those other workloads, hence
-        # RETAIN. This stack borrows the role; it never owns it. See RUNBOOK.md for which case an account is in.
+        # The role is one account-wide singleton shared with every other Spot workload. Creating it fails outright in an
+        # account that already has one, hence the opt-out. Deleting it would break those other workloads, hence RETAIN.
+        # This stack borrows the role; it never owns it. See RUNBOOK.md for which case an account is in.
         if self.node.try_get_context("createSpotServiceLinkedRole") != "false":
             spot_role = iam.CfnServiceLinkedRole(
                 self,

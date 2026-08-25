@@ -2,7 +2,7 @@
 over speed for a small object-centric photo set.
 
 Requires the `colmap` CLI on PATH (installed via the worker Dockerfile / baked
-AMI) — it is not a pip package, hence subprocess rather than pycolmap.
+AMI). It is not a pip package, hence subprocess rather than pycolmap.
 """
 
 import logging
@@ -33,7 +33,7 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
 
     A good object-centric capture registers close to every photo, so a low
     registered_ratio signals a capture-quality problem rather than a pipeline
-    bug — the caller should surface it instead of silently training on a
+    bug. The caller should surface it instead of silently training on a
     broken reconstruction.
     """
     database_path = workdir / "database.db"
@@ -84,7 +84,7 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
     )
 
     # `mapper` writes one sub-model per connected component (0, 1, 2...) when the photo set doesn't fully connect. Only
-    # model 0 is used, and the other components' images are therefore never counted as registered below — so a capture
+    # model 0 is used, and the other components' images are therefore never counted as registered below. So a capture
     # that fragments shows up as a low registered ratio, which is what run_job.py rejects it on.
     model_dir = sparse_dir / "0"
     if not model_dir.exists():

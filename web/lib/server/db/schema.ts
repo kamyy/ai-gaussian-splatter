@@ -17,10 +17,10 @@ import { JOB_STATUSES, PHOTO_UPLOAD_STATUSES, SPLAT_STATUSES } from "@/lib/types
  * Data model.
  *
  * PascalCase-free by design: table, column, and enum names are all snake_case in Postgres, with each column stating its
- * database name explicitly rather than relying on drizzle's `casing` option — so a migration and a runtime query can
+ * database name explicitly rather than relying on drizzle's `casing` option. So a migration and a runtime query can
  * never silently disagree on a name.
  *
- * The table export is `splats`, not `objects`, to avoid shadowing JS's `Object` — the same naming is used throughout
+ * The table export is `splats`, not `objects`, to avoid shadowing JS's `Object`. The same naming is used throughout
  * the app, including REST paths and hooks.
  *
  * Enum labels come from lib/types.ts, so the client-side unions and the Postgres labels are one list.

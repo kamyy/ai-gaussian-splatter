@@ -42,6 +42,6 @@ def test_report_status_swallows_network_errors(settings):
         side_effect=httpx.ConnectError("connection refused")
     )
 
-    # Must not raise — a failed status update should never crash the pipeline (see status.py docstring and run_job.py's
+    # Must not raise. A failed status update should never crash the pipeline (see status.py docstring and run_job.py's
     # finally block).
     report_status(settings, "failed", error_message="boom")

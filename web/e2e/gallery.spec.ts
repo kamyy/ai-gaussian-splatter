@@ -9,7 +9,7 @@ import { expect, test } from "@playwright/test";
 const GALLERY_ITEM_ID = "11111111-1111-1111-1111-111111111111";
 
 // SKIPPED: a real gap, not a flake. app/gallery/page.tsx queries the database directly during SSR, so with no data
-// seeded the page renders empty — and browser-level route mocking cannot reach a query made in Next's server process.
+// seeded the page renders empty. And browser-level route mocking cannot reach a query made in Next's server process.
 //
 // Fix: seed the gallery row into a real test database and point the dev server at it — a deferred harness redesign.
 // Un-skip as part of that work; don't fix this by asserting against an empty page.

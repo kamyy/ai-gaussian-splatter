@@ -32,7 +32,7 @@ class BudgetsStack(cdk.Stack):
         limit = monthly_budget_limit_usd if monthly_budget_limit_usd is not None else 75
 
         # A customer-managed key, not the alias/aws/sns default: the default's policy can't be edited, and it doesn't
-        # let CloudWatch call kms:GenerateDataKey — the alarm below would then fail its action with "CloudWatch Alarms
+        # let CloudWatch call kms:GenerateDataKey. The alarm below would then fail its action with "CloudWatch Alarms
         # does not have authorization to access the SNS topic encryption key" and silently never notify. Costs $1/month,
         # which is the price of encrypting the one channel that reports how much this account is spending.
         alert_key = kms.Key(
@@ -82,7 +82,7 @@ class BudgetsStack(cdk.Stack):
             ],
         )
 
-        # Billing metrics only publish to us-east-1 — this stack must be deployed there regardless of where the rest of
+        # Billing metrics only publish to us-east-1. This stack must be deployed there regardless of where the rest of
         # the app runs (enforced in app.py).
         billing_alarm = cloudwatch.Alarm(
             self,

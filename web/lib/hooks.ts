@@ -1,8 +1,8 @@
 "use client";
 
-// SWR hooks — owns all server-derived data (splats list, job status via refreshInterval, gallery data). SWR rather than
-// React Query because it is lighter, and job-status polling is the one piece of async complexity here worth a fetching
-// library over a hand-rolled setInterval/useEffect.
+// SWR hooks — owns all server-derived data (splats list, job status via refreshInterval, gallery data). SWR rather
+// than React Query because it is lighter. Job-status polling is the one piece of async complexity here worth a
+// fetching library over a hand-rolled setInterval/useEffect.
 
 import { useAuth } from "@clerk/nextjs";
 import type { GetToken } from "@clerk/nextjs/types";
@@ -23,7 +23,7 @@ const JOB_POLL_INTERVAL_MS: Record<JobStatus, number> = {
   cancelled: 0,
 };
 
-// Keep this at module scope — don't put it anywhere it could be recreated on a re-render, otherwise SWR sees a new
+// Keep this at module scope. Don't put it anywhere it could be recreated on a re-render, otherwise SWR sees a new
 // identity and restarts the countdown.
 function jobPollInterval(latestData: JobRead | undefined) {
   if (latestData) {
@@ -36,7 +36,7 @@ function guardedFetch<T>(getToken: GetToken, fetcher: (token: string) => Promise
   return async () => {
     const token = await getToken();
     if (!token) {
-      // SWR only treats a thrown fetcher as an error — returning would surface as a successful load.
+      // SWR only treats a thrown fetcher as an error. Returning would surface as a successful load.
       throw new Error("Not signed in");
     }
     return fetcher(token);

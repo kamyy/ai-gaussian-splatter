@@ -12,7 +12,7 @@ import { JOB_STATUSES, type SplatStatus } from "@/lib/types";
  * The worker -> app status callback.
  *
  * The one endpoint whose *field names* are snake_case: worker/pipeline/status.py PATCHes a literal snake_case body. The
- * status values need no translation — they are the Postgres enum labels verbatim, so `JOB_STATUSES` validates the
+ * status values need no translation. They are the Postgres enum labels verbatim, so `JOB_STATUSES` validates the
  * incoming value and it goes straight to the column. Changing either the field names or the status list means changing
  * worker/ in lockstep.
  *
@@ -52,7 +52,7 @@ export const PATCH = withErrorHandling(
       jobData.ec2InstanceId = body.ec2_instance_id;
     }
 
-    // Stage timestamps are only ever set once — a retried or duplicated callback must not overwrite the original start
+    // Stage timestamps are only ever set once. A retried or duplicated callback must not overwrite the original start
     // time.
     const now = new Date();
     if (status === "colmap_running" && job.colmapStartedAt === null) {

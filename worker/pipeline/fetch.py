@@ -9,7 +9,7 @@ from .config import Settings
 
 def fetch_photos(settings: Settings) -> Path:
     """Download splats/{splat_id}/photos/* into local_workdir/photos and return
-    that directory. Raises if no photos are found — the caller (run_job.py)
+    that directory. Raises if no photos are found. The caller (run_job.py)
     treats that as a job failure, not a silent no-op.
     """
     s3 = boto3.client("s3")

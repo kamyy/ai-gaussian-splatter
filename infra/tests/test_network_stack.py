@@ -9,13 +9,13 @@ SECURITY_GROUP_INGRESS = "AWS::EC2::SecurityGroupIngress"
 def test_web_security_group_has_exactly_one_ingress_rule_from_alb(wired_stacks):
     """The web tasks must be reachable only from the load balancer. They
     run in public subnets with a public IP, so this group is the whole of what
-    stands between them and the internet — a second rule here is a route
+    stands between them and the internet. A second rule here is a route
     around the ALB.
 
     The rule itself is generated, not hand-written: the load-balanced Fargate
     pattern registers the target group as a connectable and CDK derives the
     rule from the container port. What this asserts is that exactly one such
-    rule exists — a second would be a route around the load balancer.
+    rule exists. A second would be a route around the load balancer.
     """
     template = Template.from_stack(wired_stacks["network"])
 
@@ -28,7 +28,7 @@ def test_web_security_group_has_exactly_one_ingress_rule_from_alb(wired_stacks):
 
     # A CIDR peer added directly to this group (e.g. via add_ingress_rule) inlines onto the group's own
     # SecurityGroupIngress property instead of synthesizing as a standalone resource, so the standalone-resource count
-    # below would not catch it — this rules that route out too.
+    # below would not catch it. This rules that route out too.
     assert "SecurityGroupIngress" not in web_sg_props["Properties"]
 
     ingress_rules = template.find_resources(SECURITY_GROUP_INGRESS)
@@ -44,7 +44,7 @@ def test_web_security_group_has_exactly_one_ingress_rule_from_alb(wired_stacks):
     assert rule["Properties"]["FromPort"] == 8000
     assert rule["Properties"]["ToPort"] == 8000
     assert rule["Properties"]["Description"] == "Load balancer to target"
-    # An SG source, not a CIDR — nothing outside the ALB may reach the tasks.
+    # An SG source, not a CIDR. Nothing outside the ALB may reach the tasks.
     assert "SourceSecurityGroupId" in rule["Properties"]
     assert "CidrIp" not in rule["Properties"]
 
@@ -52,8 +52,8 @@ def test_web_security_group_has_exactly_one_ingress_rule_from_alb(wired_stacks):
 def test_public_subnets_assign_public_ips_on_launch(wired_stacks):
     """The GPU worker gets its only route out from this attribute:
     ec2Launcher.ts calls RunInstances with a plain SubnetId and no
-    AssociatePublicIpAddress, so the address comes from the subnet default —
-    and with no NAT gateway there is no second path. If this ever turns off,
+    AssociatePublicIpAddress, so the address comes from the subnet default.
+    With no NAT gateway there is no second path. If this ever turns off,
     workers boot unable to reach ECR, S3, or the status callback, and the job
     hangs until the runtime alarm kills it.
     """
@@ -76,7 +76,7 @@ def test_vpc_has_no_nat_gateway(wired_stacks):
     The default routes are asserted alongside the resource counts because they
     are what a returning NAT gateway would actually be wired into. Note this
     does not catch the subnet type drifting back to PRIVATE_WITH_EGRESS on its
-    own — CDK pairs that with nat_gateways=0 without complaint, synthesizing
+    own. CDK pairs that with nat_gateways=0 without complaint, synthesizing
     subnets that are isolated in everything but name.
     """
     template = Template.from_stack(wired_stacks["network"])
