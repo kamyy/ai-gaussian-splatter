@@ -1,13 +1,6 @@
 // Env for the server-side (lib/server/**) test project.
-//
-// AWS credentials are dummies on purpose: presigning is local crypto, and every
-// other AWS call is stubbed, so no test should reach a real endpoint.
-// TEST_DATABASE_URL wins outright rather than only filling a gap: these fixtures
-// TRUNCATE and deleteMany() against whatever it points at, so a developer with
-// a dev database's parts exported would otherwise have it wiped. resolveDatabaseUrl()
-// only reads the split DATABASE_HOST/PORT/NAME/USER/PASSWORD vars (see
-// databaseUrl.ts), so a TEST_DATABASE_URL override is parsed into those parts
-// rather than assigned to DATABASE_URL directly.
+
+// If TEST_DATABASE_URL is set, override DATABASE_* to prevent reading or writing to a dev database.
 if (process.env.TEST_DATABASE_URL) {
   const url = new URL(process.env.TEST_DATABASE_URL);
   process.env.DATABASE_HOST = url.hostname;
@@ -17,6 +10,9 @@ if (process.env.TEST_DATABASE_URL) {
   process.env.DATABASE_PASSWORD = decodeURIComponent(url.password);
 }
 
+// Defaults for whatever TEST_DATABASE_URL didn't already set above. AWS credentials are dummies on purpose. S3
+// presigning is a local HMAC-SHA256 computation with no network call to AWS, and every other AWS call is stubbed, so
+// no test should reach a real endpoint.
 const defaults: Record<string, string> = {
   DATABASE_HOST: "localhost",
   DATABASE_PORT: "5432",
