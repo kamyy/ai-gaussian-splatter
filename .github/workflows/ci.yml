@@ -41,43 +41,25 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy pipeline
-      # No GPU/CUDA toolkit in CI runners — this is exactly the CI-cheap
-      # tier (fetch/export/status callbacks, mocked S3/HTTP), not the real
-      # COLMAP+gsplat pipeline. See worker/pipeline/train.py's docstring.
+      # No GPU/CUDA toolkit in CI runners — this is exactly the CI-cheap tier (fetch/export/status callbacks, mocked
+      # S3/HTTP), not the real COLMAP+gsplat pipeline. See worker/pipeline/train.py's docstring.
       - run: uv run pytest -v
 
   web:
     runs-on: ubuntu-latest
-    # The database-backed tests need a real database — the ON CONFLICT upserts
-    # can't be faithfully faked.
-    services:
-      postgres:
-        image: postgres:18
-        env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: test
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     defaults:
       run:
         working-directory: web
     env:
-      # Structurally valid dummy key (base64 of "example.clerk.accounts.dev$").
-      # It has to parse — clerkMiddleware() rejects a malformed one outright.
+      # Structurally valid dummy key (base64 of "example.clerk.accounts.dev$"). It has to parse — clerkMiddleware()
+      # rejects a malformed one outright.
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk
       CLERK_SECRET_KEY: sk_test_fake_for_ci
-      # A pk_test_* key makes the SDK treat this as a development instance, and
-      # only the printed disclosure notice is CI-aware — collection itself is
-      # not. Without this, CI runs report telemetry.
+      # A pk_test_* key makes the SDK treat this as a development instance, and only the printed disclosure notice is
+      # CI-aware — collection itself is not. Without this, CI runs report telemetry.
       NEXT_PUBLIC_CLERK_TELEMETRY_DISABLED: "1"
-      # Inlined at build time, so `next build` here needs them to match what a
-      # real image ships — otherwise the built bundle points at Clerk's hosted
-      # Account Portal rather than the app's own sign-in page.
+      # Inlined at build time, so `next build` here needs them to match what a real image ships — otherwise the built
+      # bundle points at Clerk's hosted Account Portal rather than the app's own sign-in page.
       NEXT_PUBLIC_CLERK_SIGN_IN_URL: /sign-in
       NEXT_PUBLIC_CLERK_SIGN_UP_URL: /sign-up
       NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: /dashboard
@@ -104,6 +86,21 @@ jobs:
       APP_PUBLIC_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v7
+      # A manual `podman run` rather than the `services:` block the postgres:18 container used before: the migrator-
+      # image test below runs its own podman container that needs to address Postgres by name, and a GitHub Actions
+      # `services:` container (Docker-managed) isn't reachable that way from a sibling podman container. A dedicated
+      # user-defined podman network sidesteps that rather than relying on `--network host`, which does not behave as
+      # true host networking under rootless podman here — verified directly against this runner setup.
+      - name: Start Postgres
+        run: |
+          podman network create ci-net
+          podman run -d --name ci-postgres --network ci-net -p 5432:5432 \
+            -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=test \
+            postgres:18
+          for _ in $(seq 1 30); do
+            podman exec ci-postgres pg_isready -U test && break
+            sleep 1
+          done
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: web/package.json
@@ -113,28 +110,40 @@ jobs:
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      # pnpm typecheck runs `next typegen` before `tsc --noEmit` — required on
-      # a clean checkout, since CI has never run `next dev`/`next build` to
-      # generate the App Router route types tsc needs. See AGENTS.md.
+      # pnpm typecheck runs `next typegen` before `tsc --noEmit` — required on a clean checkout, since CI has never run
+      # `next dev`/`next build` to generate the App Router route types tsc needs. See AGENTS.md.
       - run: pnpm typecheck
-      # A schema edit with no matching migration is otherwise invisible: the
-      # types come straight from schema.ts, so tsc stays green while the
-      # database drifts, and it surfaces as a runtime SQL error. db:generate
-      # is a no-op when the schema matches the snapshot in web/drizzle/meta/,
-      # so anything new on disk here means the migration was never generated.
+      # A schema edit with no matching migration is otherwise invisible: the types come straight from schema.ts, so tsc
+      # stays green while the database drifts, and it surfaces as a runtime SQL error. db:generate is a no-op when the
+      # schema matches the snapshot in web/drizzle/meta/, so anything new on disk here means the migration was never
+      # generated.
       - name: Check migrations are up to date with the schema
         run: |
           pnpm db:generate
-          # --porcelain, not `git diff`: a new migration arrives as untracked
-          # files, which git diff does not report.
+          # --porcelain, not `git diff`: a new migration arrives as untracked files, which git diff does not report.
           if [ -n "$(git status --porcelain -- drizzle)" ]; then
             echo "::error::web/lib/server/db/schema.ts changed without a migration. Run 'pnpm db:generate' and commit web/drizzle/."
             git status --porcelain -- drizzle
             exit 1
           fi
-      # Applies migrations to the service container; the server test project's
-      # globalSetup also does this, so this step mainly fails fast on a bad
-      # migration before the suite starts.
+      # Builds and runs the actual deployable migration artifact (web/Dockerfile's `migrator` stage) against this job's
+      # real Postgres, rather than only testing the underlying `drizzle-kit migrate` script — the config-level CDK tests
+      # in infra/tests/test_web_stack.py assert the task definition is wired correctly, but not that the image itself
+      # applies a migration.
+      - name: Build and run the migrator image against the CI database
+        working-directory: web
+        run: |
+          podman build --target migrator -t migrator:ci .
+          # --network ci-net, addressing Postgres by container name: see the "Start Postgres" step for why --network
+          # host isn't used. No DATABASE_SSL_CA: the migrator image doesn't bake TLS on (web/Dockerfile), and this
+          # database doesn't offer it — only RDS's rds.force_ssl requires TLS.
+          podman run --rm --network ci-net \
+            -e DATABASE_HOST=ci-postgres -e DATABASE_PORT=5432 -e DATABASE_NAME=test \
+            -e DATABASE_USER=test -e DATABASE_PASSWORD=test \
+            migrator:ci
+      # Re-applies migrations directly (not via the container); a no-op given the step above already applied them —
+      # drizzle-kit tracks applied migrations — so this mainly fails fast on a bad migration outside the container path
+      # too. The server test project's globalSetup also does this, once more, for the same reason.
       - run: pnpm db:migrate
       - run: pnpm test
       - run: pnpm build
