@@ -1,4 +1,7 @@
 pnpm run guard:cdk-context
 pnpm run format-staged
-pnpm run lint
-pnpm run typecheck
+pnpm biome:ci
+pnpm run scripts:check
+pnpm run web:check
+pnpm run worker:check
+pnpm run infra:check

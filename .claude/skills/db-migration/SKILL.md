@@ -52,9 +52,11 @@ Needs the local Postgres running (`podman ps` should show `splat-pg`) and the `D
 **5. Verify.**
 
 ```bash
-pnpm typecheck
+(cd .. && pnpm run web:check)
 TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ai_gaussian_splatter_test pnpm test
 ```
+
+`web:check` is a repo-root script (the one exception to "all commands run from `web/`" above) — it's the piece that actually matters for a schema edit; `worker`/`infra`'s checks have nothing to do with `schema.ts`.
 
 The database-backed tests skip silently without `TEST_DATABASE_URL`, so a run that "passes" without it has not exercised the new schema at all. `ai_gaussian_splatter_test` is a separate database on the same `splat-pg` instance, not the dev one — see RUNBOOK.md's "Full test suite" for the one-time `createdb`.
 

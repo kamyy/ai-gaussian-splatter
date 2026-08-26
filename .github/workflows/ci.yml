@@ -29,19 +29,21 @@ jobs:
 
   worker:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: worker
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v9.0.0
-      - run: uv sync --group dev
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-      - run: uv run mypy pipeline
-      # No GPU/CUDA toolkit in CI runners — this is exactly the CI-cheap tier (fetch/export/status callbacks, mocked
-      # S3/HTTP), not the real COLMAP+gsplat pipeline. See worker/pipeline/train.py's docstring.
-      - run: uv run pytest -v
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: package.json
+      - working-directory: worker
+        run: uv sync --group dev
+      # worker:check (root package.json) is pure shell (cd worker && uv run ...) — no worker node_modules to install,
+      # just the pnpm CLI above to parse and run the script.
+      - run: pnpm run worker:check
+      - working-directory: worker
+        # No GPU/CUDA toolkit in CI runners — this is exactly the CI-cheap tier (fetch/export/status callbacks, mocked
+        # S3/HTTP), not the real COLMAP+gsplat pipeline. See worker/pipeline/train.py's docstring.
+        run: uv run pytest -v
 
   web:
     runs-on: ubuntu-latest
@@ -107,9 +109,13 @@ jobs:
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      # pnpm typecheck runs `next typegen` before `tsc --noEmit` — required on a clean checkout, since CI has never run
-      # `next dev`/`next build` to generate the App Router route types tsc needs. See AGENTS.md.
-      - run: pnpm typecheck
+      # web:check also runs `next typegen` before `tsc --noEmit`, required on a clean checkout since CI has never run
+      # `next dev`/`next build` to generate the App Router route types tsc needs (see AGENTS.md). It's a root package.json
+      # script, so this step overrides the job's default working-directory (web) back to the checkout root; the script
+      # itself `cd`s into web for everything it runs, including the `biome lint .` it runs first.
+      - name: Check (lint + typecheck)
+        working-directory: ${{ github.workspace }}
+        run: pnpm run web:check
       # A schema edit with no matching migration is otherwise invisible: the types come straight from schema.ts, so tsc
       # stays green while the database drifts, and it surfaces as a runtime SQL error. db:generate is a no-op when the
       # schema matches the snapshot in web/drizzle/meta/, so anything new on disk here means the migration was never
@@ -150,33 +156,33 @@ jobs:
 
   infra:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: infra
     steps:
       - uses: actions/checkout@v7
-      # Python checks run first and need only uv — no Node/pnpm setup cost if one of them fails. Node's only needed for
-      # the `cdk` CLI (npm-distributed regardless of app language — there's no pip-installable substitute), so it's set
-      # up last, right before the one step that actually needs it.
+      # Python checks run first and need only uv — no Node/pnpm setup cost if one of them fails. pnpm/action-setup
+      # below only installs the pnpm CLI binary (needed to run infra:check, a root package.json script), not Node or
+      # any dependency — actions/setup-node + the real `pnpm install` stay deferred until right before cdk synth, the
+      # one step that actually needs them.
       - uses: astral-sh/setup-uv@v9.0.0
-      - run: uv sync --group dev
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-      - run: uv run mypy app.py stacks
-      - run: uv run pytest -v
+      - working-directory: infra
+        run: uv sync --group dev
       - uses: pnpm/action-setup@v6
         with:
-          package_json_file: infra/package.json
+          package_json_file: package.json
+      - run: pnpm run infra:check
+      - working-directory: infra
+        run: uv run pytest -v
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
           cache-dependency-path: infra/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
+      - working-directory: infra
+        run: pnpm install --frozen-lockfile
       # AWS_ACCOUNT_ID is deliberately left unset here: app.py falls back to the placeholder account, and this job has
       # no AWS credentials configured (it runs on every pull_request, including forks) — validates templates only, never
       # a real deploy.
       - name: cdk synth
+        working-directory: infra
         run: pnpm cdk:synth
 
   # Builds, migrates, and deploys on every push to main. See ARCHITECTURE.md "Deployment" for why it's two cdk deploy

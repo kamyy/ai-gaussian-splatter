@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Auto-formats/lints staged files and re-stages the result — the pre-commit auto-fix step for both JS/TS (via Biome)
 // and Python (via ruff format), so a developer doesn't have to remember to run either by hand before committing. CI
-// enforces the same thing as a hard check (scripts/lint.js's `biome lint .` and `ruff format --check`), since there's
-// no "re-stage and continue" concept there.
+// enforces the same thing as a hard check (`biome:ci` and `worker:check`/`infra:check`'s `ruff format --check`), since
+// there's no "re-stage and continue" concept there.
 //
 // Re-stages only files the formatters actually changed, by comparing working tree content hashes before and after: `git
 // add <every originally staged file>` would also re-stage any other unstaged edit already sitting in that file's

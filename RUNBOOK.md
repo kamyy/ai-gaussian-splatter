@@ -157,11 +157,16 @@ After editing `web/lib/server/db/schema.ts`, run `pnpm db:generate` to emit a mi
 ## Full test suite
 
 ```bash
-# Each line runs in a subshell, so it starts from the repo root. A bare cd would leave the shell in web/ and the next
-# two lines would fail to find their folder.
-(cd web && pnpm typecheck && pnpm biome:ci && pnpm test && pnpm test:e2e)
-(cd worker && uv run ruff check . && uv run mypy pipeline && uv run pytest -v)
-(cd infra && uv run ruff check . && uv run mypy app.py stacks && uv run pytest -v && pnpm cdk:synth)
+pnpm biome:ci
+pnpm run scripts:check
+pnpm run web:check
+pnpm run worker:check
+pnpm run infra:check
+# Each line below runs in a subshell, so it starts from the repo root. A bare cd would leave the shell in web/ and the
+# next line would fail to find its folder.
+(cd web && pnpm test && pnpm test:e2e)
+(cd worker && uv run pytest -v)
+(cd infra && uv run pytest -v && pnpm cdk:synth)
 ```
 
 The `server` Vitest project's Postgres-dependent tests (rate limiting, `getOrCreateUser`, the worker callback token) skip unless `TEST_DATABASE_URL` is set — CI wires this up itself (`.github/workflows/ci.yml`'s `web` job).
