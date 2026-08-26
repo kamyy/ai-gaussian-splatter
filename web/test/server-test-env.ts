@@ -17,7 +17,7 @@ const defaults: Record<string, string> = {
   DATABASE_HOST: "localhost",
   DATABASE_PORT: "5432",
   DATABASE_NAME: "test",
-  DATABASE_USER: "test",
+  DATABASE_USER: "postgres",
   DATABASE_PASSWORD: "postgres",
   UPLOADS_BUCKET: "test-uploads",
   SPLATS_BUCKET: "test-splats",

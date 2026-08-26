@@ -62,11 +62,11 @@ jobs:
       NEXT_PUBLIC_CLERK_SIGN_UP_URL: /sign-up
       NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: /dashboard
       NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: /dashboard
-      TEST_DATABASE_URL: postgresql://test:postgres@localhost:5432/test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test
       DATABASE_HOST: localhost
       DATABASE_PORT: "5432"
       DATABASE_NAME: test
-      DATABASE_USER: test
+      DATABASE_USER: postgres
       DATABASE_PASSWORD: postgres
       # getEnv() validates all of these on first use, and getDb() calls it — so any DB-touching page throws without
       # them, including under the dev server Playwright starts. Dummy values: presigning is local crypto and nothing in
@@ -92,10 +92,10 @@ jobs:
         run: |
           podman network create ci-net
           podman run -d --name ci-postgres --network ci-net -p 5432:5432 \
-            -e POSTGRES_USER=test -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=test \
+            -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=test \
             postgres:18
           for _ in $(seq 1 30); do
-            podman exec ci-postgres pg_isready -U test && break
+            podman exec ci-postgres pg_isready -U postgres && break
             sleep 1
           done
       - uses: pnpm/action-setup@v6
@@ -136,7 +136,7 @@ jobs:
           # database doesn't offer it — only RDS's rds.force_ssl requires TLS.
           podman run --rm --network ci-net \
             -e DATABASE_HOST=ci-postgres -e DATABASE_PORT=5432 -e DATABASE_NAME=test \
-            -e DATABASE_USER=test -e DATABASE_PASSWORD=postgres \
+            -e DATABASE_USER=postgres -e DATABASE_PASSWORD=postgres \
             migrator:ci
       # Re-applies migrations directly (not via the container); a no-op given the step above already applied them —
       # drizzle-kit tracks applied migrations — so this mainly fails fast on a bad migration outside the container path
