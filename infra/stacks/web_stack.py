@@ -177,8 +177,8 @@ class WebStack(cdk.Stack):
             "DATABASE_PASSWORD": ecs.Secret.from_secrets_manager(db_secret, field="password"),
         }
 
-        # Runs `pnpm run db:migrate` (web/Dockerfile's `migrator` stage) as a one-off ecs:RunTask, ahead of the
-        # service's own rollout — see RUNBOOK.md and AGENTS.md for why migrations can't run at container boot.
+        # Runs `node scripts/db-migrate.cjs` (web/Dockerfile's `migrator` stage) as a one-off ecs:RunTask, ahead of
+        # the service's own rollout — see RUNBOOK.md and AGENTS.md for why migrations can't run at container boot.
         # execution_role is reused as-is: it already has ECR pull (repo-wide, any tag) and DB-secret read, which is
         # everything this container needs to start. migration_task_role gets a fixed name (this is a brand-new resource,
         # no deployed-resource-rename cost) for the same RUNBOOK-literalness reason CLUSTER_NAME/SERVICE_NAME are fixed.
