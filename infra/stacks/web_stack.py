@@ -18,38 +18,52 @@ from constructs import Construct
 from stacks.data_stack import DATABASE_NAME
 from stacks.tags import WORKER_TAG_KEY, WORKER_TAG_VALUE
 
-# Where web/Dockerfile's `ADD` puts Amazon's RDS global CA bundle. Must match
-# that line — the image supplies the file, this stack turns it on.
+# Where web/Dockerfile's `ADD` puts Amazon's RDS global CA bundle. Must match that line. The image supplies the file,
+# this stack turns it on.
 RDS_CA_BUNDLE_PATH = "/app/certs/rds-global-bundle.pem"
 
-# Single source of truth for the Next.js container's listen port — used by
-# both the task definition and the target group's health check below, so they
-# can't drift out of sync with each other. The ALB-to-tasks ingress rule
-# derives from it too, but is generated rather than written down. The copies
-# that do have to be changed by hand are web/Dockerfile's PORT and the port
-# asserted in infra/tests/test_network_stack.py.
+# Single source of truth for the Next.js container's listen port — used by both the task definition and the target
+# group's health check below, so they can't drift out of sync with each other. The ALB-to-tasks ingress rule derives
+# from it too, but is generated rather than written down. The copies that do have to be changed by hand are
+# web/Dockerfile's PORT and the port asserted in infra/tests/test_network_stack.py.
 CONTAINER_PORT = 8000
 
-# The public hostname. The Route 53 zone is registered in this account; only
-# its ID varies by environment, so that alone is passed in.
 DOMAIN_ZONE_NAME = "orky.net"
 APP_HOSTNAME = f"ai-gaussian-splatter.{DOMAIN_ZONE_NAME}"
 
-# Both named explicitly rather than left to CloudFormation's generated names,
-# so `aws ecs update-service --force-new-deployment` — which a Clerk secret key
-# rotation still needs, since that changes no template — can be written down
-# literally in RUNBOOK.md instead of looked up per environment.
+# Both named explicitly rather than left to CloudFormation's generated names, so `aws ecs update-service
+# --force-new-deployment` — which a Clerk secret key rotation still needs, since that changes no template — can be
+# written down literally in RUNBOOK.md instead of looked up per environment.
 CLUSTER_NAME = "ai-gaussian-splatter"
 SERVICE_NAME = "ai-gaussian-splatter-web"
 
-# Must stay above the ALB's own idle timeout (60s, left at the CDK default
-# below) or the ALB serves intermittent 502s — see AGENTS.md.
+# Named explicitly for the same reason CLUSTER_NAME/SERVICE_NAME are: RUNBOOK.md and ci.yml's deploy job name it
+# literally (`aws ecs run-task --task-definition ai-gaussian-splatter-migrate`) rather than looking it up.
+MIGRATION_TASK_FAMILY = "ai-gaussian-splatter-migrate"
+
+# Must stay above the ALB's own idle timeout (60s, left at the CDK default below) or the ALB serves intermittent 502s —
+# see AGENTS.md.
 KEEP_ALIVE_TIMEOUT_MS = "65000"
 
-# Clerk's server-side API key is created out of band before this stack exists
-# (RUNBOOK.md) and only read here. Naming it once lets the RUNBOOK's
-# create-secret command and the ARN check below agree by construction.
+# Clerk's server-side API key is created out of band before this stack exists (RUNBOOK.md) and only read here. Naming it
+# once lets the RUNBOOK's create-secret command and the ARN check below agree by construction.
 CLERK_SECRET_KEY_NAME = "ai-gaussian-splatter/clerk-secret-key"
+
+
+def _require_commit_sha(value: str, flag_name: str) -> None:
+    """Shared by `webImageTag` and `migrateImageTag`: both must name one
+    immutable build, which is why a commit SHA is the only accepted shape. A
+    moving tag like `latest` would leave every task definition naming the
+    same string, so the deployment circuit breaker's rollback would restart
+    the previous deployment against it and Fargate would re-pull the image
+    that just failed. RegistryStack additionally refuses to let a pushed tag
+    be repointed.
+    """
+    if re.fullmatch(r"[0-9a-f]{7,40}", value) is None:
+        raise ValueError(
+            f"{flag_name} must be a commit SHA identifying one immutable build, "
+            f"not a moving tag (see RUNBOOK.md); got {value!r}"
+        )
 
 
 class WebStack(cdk.Stack):
@@ -84,29 +98,28 @@ class WebStack(cdk.Stack):
         app_public_url: str,
         hosted_zone_id: str,
         clerk_secret_key_arn: str,
-        image_tag: str,
+        web_image_tag: str,
+        migrate_image_tag: str,
         **kwargs,
     ) -> None:
         super().__init__(scope, id, **kwargs)
 
-        # Clerk's server-side API key, imported rather than created: it holds a
-        # third party's credential, so it is set once by hand and this stack
-        # only reads it. Creating it here instead would fill it with a random
-        # value on the first deploy and force a second rollout to replace that
-        # with the real key, since ECS resolves secrets at task start.
+        # Clerk's server-side API key, imported rather than created: it holds a third party's credential, so it is
+        # set once by hand before the first deploy and this stack only reads it — see ARCHITECTURE.md.
         #
-        # Its public counterpart, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, is
-        # deliberately absent: it is a `docker build --build-arg` in
-        # web/Dockerfile, not a runtime env var — see AGENTS.md.
+        # Its public counterpart, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, is deliberately absent: it is a `docker build
+        # --build-arg` in web/Dockerfile, not a runtime env var — see AGENTS.md.
         #
-        # CloudFormation never validates an imported ARN, so a wrong one is
-        # invisible until a task fails to start. Checked here instead. The
-        # account and region are this stack's own, which is what makes a
-        # forgotten `-c clerkSecretKeyArn=` fail: app.py's placeholder names the
-        # placeholder account and matches nothing real. The trailing six
-        # characters are Secrets Manager's own suffix — ECS wants the complete
-        # ARN, and a partial one pasted without it is the likeliest typo.
-        expected = rf"arn:aws:secretsmanager:{self.region}:{self.account}:secret:{CLERK_SECRET_KEY_NAME}-\w{{6}}"
+        # CloudFormation never validates an imported ARN, so a wrong one is invisible until a task fails to start.
+        # Checked here instead. The account and region are this stack's own, which is what makes a forgotten `-c
+        # clerkSecretKeyArn=` fail: app.py's placeholder names the placeholder account and matches nothing real. The
+        # trailing six characters are Secrets Manager's own suffix. ECS wants the complete ARN. A partial one pasted
+        # without it is the likeliest typo. The suffix class is alphanumeric like from_secret_complete_arn's own, so
+        # every rejected ARN fails with the message below rather than with CDK's.
+        expected = (
+            rf"arn:aws:secretsmanager:{self.region}:{self.account}:secret:{CLERK_SECRET_KEY_NAME}"
+            r"-[A-Za-z0-9]{6}"
+        )
         if re.fullmatch(expected, clerk_secret_key_arn) is None:
             raise ValueError(
                 f"clerkSecretKeyArn must be the complete ARN of {CLERK_SECRET_KEY_NAME} in "
@@ -115,34 +128,19 @@ class WebStack(cdk.Stack):
             )
         clerk_secret = secretsmanager.Secret.from_secret_complete_arn(self, "ClerkSecretKey", clerk_secret_key_arn)
 
-        # The image tag has to identify one immutable build, which is why a
-        # commit SHA is the only accepted shape. A moving tag like `latest`
-        # would leave every task definition naming the same string, so the
-        # deployment circuit breaker's rollback would restart the previous
-        # deployment against it and Fargate would re-pull the image that just
-        # failed — the rollback restores the configuration faithfully, but the
-        # configuration would not identify an image. RegistryStack additionally
-        # refuses to let a pushed tag be repointed.
-        if re.fullmatch(r"[0-9a-f]{7,40}", image_tag) is None:
-            raise ValueError(
-                f"imageTag must be a commit SHA identifying one immutable build, "
-                f"not a moving tag (see RUNBOOK.md); got {image_tag!r}"
-            )
+        _require_commit_sha(web_image_tag, "webImageTag")
+        _require_commit_sha(migrate_image_tag, "migrateImageTag")
 
-        # Pulls the container image and writes logs — also the role ECS uses
-        # to fetch the DB secret's value before handing it to the container as
-        # an env var, so the DB secret grant belongs here, not on the task
+        # This role pulls the container image and writes logs. It's also the role ECS uses to fetch the DB secret's
+        # value before handing it to the container as an env var, so the DB secret grant belongs here, not on the task
         # role.
         #
-        # Deliberately not using the AmazonECSTaskExecutionRolePolicy managed
-        # policy: besides the two logs actions below (unavoidably
-        # account-wide, since ECS doesn't know the log group ahead of time),
-        # it also grants the image-pull actions (BatchCheckLayerAvailability,
-        # GetDownloadUrlForLayer, BatchGetImage) at Resource: "*" — read
-        # access to every ECR repo in the account. Reconstructed below
-        # instead: the two logs actions explicitly, plus `grant_pull`, which
-        # scopes the real pull actions to this one repository (see its inline
-        # comment for the one action that stays account-wide).
+        # Deliberately not using the AmazonECSTaskExecutionRolePolicy managed policy: besides the two logs actions below
+        # (unavoidably account-wide, since ECS doesn't know the log group ahead of time), it also grants the image-pull
+        # actions (BatchCheckLayerAvailability, GetDownloadUrlForLayer, BatchGetImage) at Resource: "*" — read access to
+        # every ECR repo in the account. Reconstructed below instead: the two logs actions explicitly, plus
+        # `grant_pull`, which scopes the real pull actions to this one repository (see its inline comment for the one
+        # action that stays account-wide).
         execution_role = iam.Role(
             self,
             "ExecutionRole",
@@ -155,17 +153,66 @@ class WebStack(cdk.Stack):
             )
         )
         repository.grant_pull(execution_role)  # also grants ecr:GetAuthorizationToken (Resource: "*", unavoidably)
-        # database.secret is always populated — credentials come from
-        # from_generated_secret in data_stack.py — so this is safe to assert
-        # once and reuse, rather than encoding the same invariant two
-        # different ways.
+        # database.secret is always populated — credentials come from from_generated_secret in data_stack.py — so this
+        # is safe to assert once and reuse, rather than encoding the same invariant two different ways.
         assert database.secret is not None
         db_secret = database.secret
         db_secret.grant_read(execution_role)
         clerk_secret.grant_read(execution_role)
 
-        # The running application code's own permissions — S3 rw on both
-        # buckets, ec2:RunInstances/TerminateInstances scoped by tag.
+        # Shared by both containers that talk to Postgres — the web service below and the migration task right after it.
+        # Defined once so a future change (a renamed secret field, a moved CA path) can't be applied to one and silently
+        # missed on the other.
+        db_environment = {
+            "DATABASE_HOST": database.db_instance_endpoint_address,
+            "DATABASE_PORT": database.db_instance_endpoint_port,
+            "DATABASE_NAME": DATABASE_NAME,
+            # Turns on TLS verification against RDS with the CA bundle web/Dockerfile bakes into the image (see
+            # AGENTS.md). An env var rather than a hardcoded path so a locally-run container can still talk to a plain
+            # Postgres.
+            "DATABASE_SSL_CA": RDS_CA_BUNDLE_PATH,
+        }
+        db_secrets = {
+            "DATABASE_USER": ecs.Secret.from_secrets_manager(db_secret, field="username"),
+            "DATABASE_PASSWORD": ecs.Secret.from_secrets_manager(db_secret, field="password"),
+        }
+
+        # Runs `pnpm run db:migrate` (web/Dockerfile's `migrator` stage) as a one-off ecs:RunTask, ahead of the
+        # service's own rollout — see RUNBOOK.md and AGENTS.md for why migrations can't run at container boot.
+        # execution_role is reused as-is: it already has ECR pull (repo-wide, any tag) and DB-secret read, which is
+        # everything this container needs to start. migration_task_role gets a fixed name (this is a brand-new resource,
+        # no deployed-resource-rename cost) for the same RUNBOOK-literalness reason CLUSTER_NAME/SERVICE_NAME are fixed.
+        # It needs no grants at all: the container only opens a TCP connection to RDS, no AWS API calls.
+        migration_task_role = iam.Role(
+            self,
+            "MigrationTaskRole",
+            role_name="ai-gaussian-splatter-migrate-task",
+            assumed_by=iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
+        )
+        migration_task_definition = ecs.FargateTaskDefinition(
+            self,
+            "MigrationTaskDefinition",
+            family=MIGRATION_TASK_FAMILY,
+            cpu=256,
+            memory_limit_mib=512,
+            execution_role=execution_role,
+            task_role=migration_task_role,
+        )
+        migration_task_definition.add_container(
+            "migrate",
+            # -migrate is the migrator image's tag convention (web/Dockerfile, ci.yml) — same repository as the -web
+            # image, different build target.
+            image=ecs.ContainerImage.from_ecr_repository(repository, tag=f"{migrate_image_tag}-migrate"),
+            logging=ecs.LogDriver.aws_logs(
+                stream_prefix="migrate",
+                log_retention=logs.RetentionDays.ONE_MONTH,
+            ),
+            environment=db_environment,
+            secrets=db_secrets,
+        )
+
+        # The running application code's own permissions — S3 rw on both buckets, ec2:RunInstances/TerminateInstances
+        # scoped by tag.
         task_role = iam.Role(
             self,
             "TaskRole",
@@ -173,13 +220,11 @@ class WebStack(cdk.Stack):
         )
         uploads_bucket.grant_read_write(task_role)
         splats_bucket.grant_read_write(task_role)
-        # RunInstances is authorized against every resource the request touches,
-        # each one separately. Only the instance carries the worker tag
-        # (ec2Launcher.ts tags ResourceType "instance"), so aws:RequestTag is
-        # absent from the request context for the rest — a single statement
-        # conditioned on that key would evaluate false for them and deny the
-        # whole call. Hence the split: the tag constrains what can be launched,
-        # this statement only names what it is launched from and into.
+        # RunInstances is authorized against every resource the request touches, each one separately. Only the instance
+        # carries the worker tag (ec2Launcher.ts tags ResourceType "instance"), so aws:RequestTag is absent from the
+        # request context for the rest. A single statement conditioned on that key would evaluate false for them and
+        # deny the whole call. Hence the split: the tag constrains what can be launched, this statement only names what
+        # it is launched from and into.
         task_role.add_to_policy(
             iam.PolicyStatement(
                 actions=["ec2:RunInstances"],
@@ -191,10 +236,9 @@ class WebStack(cdk.Stack):
                     self.format_arn(service="ec2", resource="network-interface", resource_name="*"),
                     self.format_arn(service="ec2", resource="volume", resource_name="*"),
                     self.format_arn(service="ec2", resource="key-pair", resource_name="*"),
-                    # Only evaluated at all if the spot request itself is
-                    # tagged on create, which ec2Launcher.ts does not do — but
-                    # adding one tag specification for it would otherwise start
-                    # failing every launch with nothing to point at.
+                    # Only evaluated at all if the spot request itself is tagged on create, which ec2Launcher.ts does
+                    # not do. But adding one tag specification for it would otherwise start failing every launch with
+                    # nothing to point at.
                     self.format_arn(service="ec2", resource="spot-instances-request", resource_name="*"),
                 ],
             )
@@ -206,11 +250,9 @@ class WebStack(cdk.Stack):
                 conditions={"StringEquals": {f"aws:RequestTag/{WORKER_TAG_KEY}": WORKER_TAG_VALUE}},
             )
         )
-        # A request carrying TagSpecifications is authorized a second time
-        # against ec2:CreateTags, separately from RunInstances — without this
-        # the launch fails even though the statements above allow it. The
-        # ec2:CreateAction condition keeps it from becoming a general
-        # tag-anything grant: it only applies to tags applied at launch.
+        # A request carrying TagSpecifications is authorized a second time against ec2:CreateTags, separately from
+        # RunInstances. Without this the launch fails even though the statements above allow it. The ec2:CreateAction
+        # condition keeps it from becoming a general tag-anything grant: it only applies to tags applied at launch.
         task_role.add_to_policy(
             iam.PolicyStatement(
                 actions=["ec2:CreateTags"],
@@ -225,10 +267,8 @@ class WebStack(cdk.Stack):
                 conditions={"StringEquals": {f"ec2:ResourceTag/{WORKER_TAG_KEY}": WORKER_TAG_VALUE}},
             )
         )
-        # PassRole is authorized against the role being passed, not the
-        # instance profile ARN that wraps it — RunInstances with
-        # IamInstanceProfile evaluates iam:PassRole against the underlying
-        # role's ARN.
+        # PassRole is authorized against the role being passed, not the instance profile ARN that wraps it.
+        # RunInstances with IamInstanceProfile evaluates iam:PassRole against the underlying role's ARN.
         task_role.add_to_policy(
             iam.PolicyStatement(
                 actions=["iam:PassRole"],
@@ -236,8 +276,7 @@ class WebStack(cdk.Stack):
             )
         )
 
-        # Imported, never managed: this stack only adds records to the zone.
-        # Never from_lookup() — see AGENTS.md.
+        # Imported, never managed: this stack only adds records to the zone. Never from_lookup() — see AGENTS.md.
         hosted_zone = route53.HostedZone.from_hosted_zone_attributes(
             self,
             "HostedZone",
@@ -245,8 +284,8 @@ class WebStack(cdk.Stack):
             zone_name=DOMAIN_ZONE_NAME,
         )
 
-        # Declared inline so the certificate lands in the ALB's own region,
-        # which is the only region an ALB can reference — see AGENTS.md.
+        # Declared inline so the certificate lands in the ALB's own region, which is the only region an ALB can
+        # reference — see AGENTS.md.
         certificate = acm.Certificate(
             self,
             "Certificate",
@@ -254,9 +293,8 @@ class WebStack(cdk.Stack):
             validation=acm.CertificateValidation.from_dns(hosted_zone),
         )
 
-        # Built manually rather than via the CDK pattern, so its security
-        # group can be the one NetworkStack owns — see AGENTS.md for why the
-        # pattern's own group would cause a DependencyCycle.
+        # Built manually rather than via the CDK pattern, so its security group can be the one NetworkStack owns — see
+        # AGENTS.md for why the pattern's own group would cause a DependencyCycle.
         self.load_balancer = elbv2.ApplicationLoadBalancer(
             self,
             "LoadBalancer",
@@ -264,27 +302,25 @@ class WebStack(cdk.Stack):
             internet_facing=True,
             security_group=alb_security_group,
             vpc_subnets=ec2.SubnetSelection(subnets=vpc.public_subnets),
-            # Headers that don't parse are dropped rather than passed to the
-            # app, so request smuggling can't be assembled out of them.
+            # Headers that don't parse are dropped rather than passed to the app, so request smuggling can't be
+            # assembled out of them.
             drop_invalid_header_fields=True,
         )
-        # The only record of who called: the app logs its own handlers, not the
-        # requests the ALB rejected or redirected before reaching them.
+        # The only record of who called: the app logs its own handlers, not the requests the ALB rejected or redirected
+        # before reaching them.
         self.load_balancer.log_access_logs(access_logs_bucket)
 
-        # Fargate capacity providers must be enabled on the cluster before the
-        # service below can name FARGATE_SPOT in a strategy.
+        # Fargate capacity providers must be enabled on the cluster before the service below can name FARGATE_SPOT in a
+        # strategy.
         cluster = ecs.Cluster(
             self,
             "Cluster",
             vpc=vpc,
             cluster_name=CLUSTER_NAME,
             enable_fargate_capacity_providers=True,
-            # Exec sessions otherwise default to logging through the container's
-            # awslogs driver, which needs four logs actions on the task role
-            # that CDK does not add — the session works and silently records
-            # nothing. Nothing here needs an audit trail of debugging sessions,
-            # so turn the logging off rather than widen the task role.
+            # Exec sessions otherwise default to logging through the container's awslogs driver, which needs four logs
+            # actions on the task role that CDK does not add. The session works and silently records nothing. Nothing
+            # here needs an audit trail of debugging sessions, so turn the logging off rather than widen the task role.
             execute_command_configuration=ecs.ExecuteCommandConfiguration(
                 logging=ecs.ExecuteCommandLogging.NONE,
             ),
@@ -300,64 +336,55 @@ class WebStack(cdk.Stack):
             domain_zone=hosted_zone,
             protocol=elbv2.ApplicationProtocol.HTTPS,
             redirect_http=True,
-            # Must stay set explicitly — an unset ssl_policy is not this
-            # value, it is the weak 2016-08 default. See AGENTS.md.
+            # Must stay set explicitly. An unset ssl_policy is not this value, it is the weak 2016-08 default. See
+            # AGENTS.md.
             ssl_policy=elbv2.SslPolicy.RECOMMENDED_TLS,
             cpu=256,  # 0.25 vCPU
             memory_limit_mib=512,
-            # ~70% off on-demand Fargate, accepting two exposures that come
-            # with it: a reclaim stops the task about two minutes after its
-            # notice, and at desired_count 1 there is no other task in the
-            # target group, so the site 503s until a replacement passes health
-            # checks; and a Spot capacity shortage in the region leaves ECS
-            # unable to place a task at all. min_healthy_percent below governs
-            # deployments only and does not cover either case. No on-demand
-            # `base` because a base of 1 against a single-task service would
-            # put every task on on-demand and save nothing.
+            # ~70% off on-demand Fargate, accepting two exposures that come with it. A reclaim stops the task about two
+            # minutes after its notice, and at desired_count 1 there is no other task in the target group, so the site
+            # 503s until a replacement passes health checks. A Spot capacity shortage in the region separately leaves
+            # ECS unable to place a task at all. min_healthy_percent below governs deployments only and does not cover
+            # either case. No on-demand `base` because a base of 1 against a single-task service would put every task on
+            # on-demand and save nothing.
             capacity_provider_strategies=[
                 ecs.CapacityProviderStrategy(capacity_provider="FARGATE_SPOT", weight=1),
             ],
-            # Mutually exclusive with `vpc`: the pattern creates a cluster of
-            # its own when given a VPC, and that one gets a generated name.
+            # Mutually exclusive with `vpc`: the pattern creates a cluster of its own when given a VPC, and that one
+            # gets a generated name.
             cluster=cluster,
-            # Public subnets with a public IP, so outbound calls to S3 and the
-            # EC2 API reach the internet gateway directly instead of needing a
-            # NAT gateway. Without assign_public_ip the tasks cannot pull from
-            # ECR at all and the deployment hangs until the circuit breaker
-            # trips. web_security_group is what keeps them unreachable.
+            # Public subnets with a public IP, so outbound calls to S3 and the EC2 API reach the internet gateway
+            # directly instead of needing a NAT gateway. Without assign_public_ip the tasks cannot pull from ECR at all
+            # and the deployment hangs until the circuit breaker trips. web_security_group is what keeps them
+            # unreachable.
             task_subnets=ec2.SubnetSelection(subnets=vpc.public_subnets),
             assign_public_ip=True,
             security_groups=[web_security_group],
-            # A cold Next.js server start can outrun the default 60s, and a
-            # task killed inside the grace period never gets far enough to say
-            # why. /api/v1/healthz answers from the app alone — it does not
-            # touch the database, so a passing health check says nothing about
-            # RDS connectivity.
+            # A cold Next.js server start can outrun the default 60s. A task killed inside the grace period never
+            # gets far enough to say why. /api/v1/healthz answers from the app alone. It does not touch the database,
+            # so a passing health check says nothing about RDS connectivity.
             health_check_grace_period=cdk.Duration.seconds(300),
-            # Without this, a deployment whose tasks never reach a steady state
-            # (an image that isn't in ECR yet, a container that crashes on
-            # boot) is not reported as failed until ECS's own timeout expires,
-            # which takes hours. Roll back instead.
+            # Without this, a deployment whose tasks never reach a steady state (an image that isn't in ECR yet, a
+            # container that crashes on boot) is not reported as failed until ECS's own timeout expires, which takes
+            # hours. Roll back instead.
             circuit_breaker=ecs.DeploymentCircuitBreaker(rollback=True),
-            # `aws ecs execute-command` into a running task. The alternative
-            # when a deploy misbehaves is reading CloudWatch and guessing;
-            # CDK adds the ssmmessages actions to the task role itself.
+            # `aws ecs execute-command` into a running task. The alternative when a deploy misbehaves is reading
+            # CloudWatch and guessing; CDK adds the ssmmessages actions to the task role itself.
             enable_execute_command=True,
-            # The default 50% floors to zero healthy tasks at desired_count 1,
-            # letting ECS stop the only running task before its replacement
-            # passes health checks — a window of 503s on every deploy.
+            # The default 50% floors to zero healthy tasks at desired_count 1, letting ECS stop the only running task
+            # before its replacement passes health checks — a window of 503s on every deploy.
             min_healthy_percent=100,
             task_image_options=ecs_patterns.ApplicationLoadBalancedTaskImageOptions(
-                # from_ecr_repository rather than from_registry: it reads the
-                # repository's ARN to scope the execution role's pull grant,
-                # instead of treating the URI as an opaque public image name.
-                image=ecs.ContainerImage.from_ecr_repository(repository, tag=image_tag),
+                # from_ecr_repository rather than from_registry: it reads the repository's ARN to scope the execution
+                # role's pull grant, instead of treating the URI as an opaque public image name. -web is the web image's
+                # tag convention (web/Dockerfile, ci.yml); the migration task's -migrate image lives in the same
+                # repository, so no second ECR repository is needed.
+                image=ecs.ContainerImage.from_ecr_repository(repository, tag=f"{web_image_tag}-web"),
                 container_port=CONTAINER_PORT,
                 execution_role=execution_role,
                 task_role=task_role,
-                # Passed explicitly only for the retention: the log group the
-                # pattern creates on its own keeps every line forever. The
-                # group itself is still retained on stack delete.
+                # Passed explicitly only for the retention: the log group the pattern creates on its own keeps every
+                # line forever. The group itself is still retained on stack delete.
                 log_driver=ecs.LogDriver.aws_logs(
                     stream_prefix="web",
                     log_retention=logs.RetentionDays.ONE_MONTH,
@@ -369,43 +396,29 @@ class WebStack(cdk.Stack):
                     "WORKER_SUBNET_ID": worker_subnet_id,
                     "WORKER_SECURITY_GROUP_ID": worker_security_group_id,
                     "WORKER_INSTANCE_PROFILE_ARN": worker_instance_profile_arn,
-                    # Where the GPU worker PATCHes job status back to. Passed in
-                    # rather than read off the load balancer, so it stays the
-                    # stable custom domain the ALB is aliased to.
+                    # Where the GPU worker PATCHes job status back to. Passed in rather than read off the load balancer,
+                    # so it stays the stable custom domain the ALB is aliased to.
                     "APP_PUBLIC_URL": app_public_url,
-                    # The non-secret half of the connection, passed as parts
-                    # rather than an assembled URL — web/lib/server/databaseUrl.ts
-                    # builds the URL from these plus the two secrets below. See
-                    # AGENTS.md for why ECS can't assemble it here.
-                    "DATABASE_HOST": database.db_instance_endpoint_address,
-                    "DATABASE_PORT": database.db_instance_endpoint_port,
-                    "DATABASE_NAME": DATABASE_NAME,
-                    # Turns on TLS verification against RDS with the CA bundle
-                    # web/Dockerfile bakes into the image (see AGENTS.md). An
-                    # env var rather than a hardcoded path so a locally-run
-                    # container can still talk to a plain Postgres.
-                    "DATABASE_SSL_CA": RDS_CA_BUNDLE_PATH,
-                    # Read by Next's standalone server.js to override Node's
-                    # 5s idle-socket close, which the ALB outlives — see
-                    # AGENTS.md.
+                    # The non-secret half of the connection, passed as parts rather than an assembled URL.
+                    # web/lib/server/databaseUrl.ts builds the URL from these plus the two secrets below. See AGENTS.md
+                    # for why ECS can't assemble it here.
+                    **db_environment,
+                    # Read by Next's standalone server.js to override Node's 5s idle-socket close, which the ALB
+                    # outlives — see AGENTS.md.
                     "KEEP_ALIVE_TIMEOUT": KEEP_ALIVE_TIMEOUT_MS,
                 },
-                # Only the credentials go through Secrets Manager; the endpoint
-                # and database name above aren't secret and stay readable in
-                # the console.
+                # Only the credentials go through Secrets Manager; the endpoint and database name above aren't secret
+                # and stay readable in the console.
                 secrets={
-                    "DATABASE_USER": ecs.Secret.from_secrets_manager(db_secret, field="username"),
-                    "DATABASE_PASSWORD": ecs.Secret.from_secrets_manager(db_secret, field="password"),
+                    **db_secrets,
                     "CLERK_SECRET_KEY": ecs.Secret.from_secrets_manager(clerk_secret),
                 },
             ),
         )
-        # Otherwise the first deploy is a race. enable_fargate_capacity_providers
-        # emits a ClusterCapacityProviderAssociations resource, and both it and
-        # the service only Ref the cluster — nothing orders them — so
-        # CloudFormation may create the service first, and CreateService naming
-        # a capacity provider the cluster has no association for yet fails.
-        # The associations resource is a child of the Cluster construct, so
+        # Otherwise the first deploy is a race. enable_fargate_capacity_providers emits a
+        # ClusterCapacityProviderAssociations resource, and both it and the service only Ref the cluster — nothing
+        # orders them — so CloudFormation may create the service first, and CreateService naming a capacity provider the
+        # cluster has no association for yet fails. The associations resource is a child of the Cluster construct, so
         # depending on the construct is what covers it.
         self.service.service.node.add_dependency(cluster)
 
@@ -413,9 +426,8 @@ class WebStack(cdk.Stack):
             path="/api/v1/healthz",
             port=str(CONTAINER_PORT),
         )
-        # The default 300s is a floor on how long every deployment takes to
-        # retire a task. Nothing here holds a long-lived request, so draining
-        # is only about letting in-flight ones finish.
+        # The default 300s is a floor on how long every deployment takes to retire a task. Nothing here holds a
+        # long-lived request, so draining is only about letting in-flight ones finish.
         self.service.target_group.set_attribute("deregistration_delay.timeout_seconds", "30")
 
         # Without this the service sits at a fixed single task.
