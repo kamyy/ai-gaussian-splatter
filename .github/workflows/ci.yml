@@ -1,10 +1,9 @@
 name: CI
 
-# Plan §8: unit/component tests run on every PR here. Playwright runs too,
-# but its one spec is skipped pending a seeded test database, so it currently
-# asserts nothing. Real-pipeline integration tests (COLMAP + gsplat on a real
-# GPU) are deliberately NOT run here — they cost real time/money and stay
-# manual/milestone-gated, per the plan's testing strategy.
+# Plan §8: unit/component tests run on every PR here. Playwright runs too, but its one spec is skipped pending a seeded
+# test database, so it currently asserts nothing. Real-pipeline integration tests (COLMAP + gsplat on a real GPU) are
+# deliberately NOT run here — they cost real time/money and stay manual/milestone-gated, per the plan's testing
+# strategy.
 on:
   pull_request:
   push:
@@ -24,9 +23,8 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      # Single Biome invocation from repo root covers both scripts/*.js
-      # and web/ in one pass — Biome doesn't need web's own
-      # node_modules to lint/format files, only its own binary.
+      # Single Biome invocation from repo root covers both scripts/*.js and web/ in one pass — Biome doesn't need web's
+      # own node_modules to lint/format files, only its own binary.
       - run: pnpm biome:ci
 
   worker:
@@ -70,10 +68,9 @@ jobs:
       DATABASE_NAME: test
       DATABASE_USER: test
       DATABASE_PASSWORD: test
-      # getEnv() validates all of these on first use, and getDb() calls it —
-      # so any DB-touching page throws without them, including under the dev
-      # server Playwright starts. Dummy values: presigning is local crypto and
-      # nothing in CI reaches AWS.
+      # getEnv() validates all of these on first use, and getDb() calls it — so any DB-touching page throws without
+      # them, including under the dev server Playwright starts. Dummy values: presigning is local crypto and nothing in
+      # CI reaches AWS.
       UPLOADS_BUCKET: test-uploads
       SPLATS_BUCKET: test-splats
       AWS_REGION: us-west-2
@@ -158,11 +155,9 @@ jobs:
         working-directory: infra
     steps:
       - uses: actions/checkout@v7
-      # Python checks run first and need only uv — no Node/pnpm setup cost
-      # if one of them fails. Node's only needed for the `cdk` CLI
-      # (npm-distributed regardless of app language — there's no
-      # pip-installable substitute), so it's set up last, right before the
-      # one step that actually needs it.
+      # Python checks run first and need only uv — no Node/pnpm setup cost if one of them fails. Node's only needed for
+      # the `cdk` CLI (npm-distributed regardless of app language — there's no pip-installable substitute), so it's set
+      # up last, right before the one step that actually needs it.
       - uses: astral-sh/setup-uv@v9.0.0
       - run: uv sync --group dev
       - run: uv run ruff check .
