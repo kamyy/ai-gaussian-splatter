@@ -1,96 +1,108 @@
-# The Next.js app — pages plus the REST API (Route Handlers) — for ECS
-# Fargate. Node version tracks the repo's .nvmrc (24.x, current Active LTS).
+# The Next.js app — pages plus the REST API (Route Handlers) — for ECS Fargate. Node version tracks the repo's .nvmrc.
+
+# Four stages, two of them shipped. `--target` builds only what that target depends on, not every stage above it:
 #
-# Built and run locally under podman (~213 MB) against a real Postgres 18:
-# healthz, the gallery/public read endpoints, the worker status callback, and
-# SSR pages including generateMetadata's Open Graph tags all served correctly.
-# Still unproven on real AWS infrastructure — ECS task wiring, the RDS secret
-# shape, and image pull are untested.
+#   deps ──FROM──> builder ──COPY──> web        (shipped)
+#   deps ──FROM──> migrator                     (shipped)
+#
+# `web` is itself FROM node:24-alpine and takes only build output from `builder`, so targeting it never builds
+# `migrator` at all. Order below is presentation only.
+
+# ======================================================================================================================
+# deps — installs node_modules; the base for both builder and migrator
+# ======================================================================================================================
 FROM node:24-alpine AS deps
-
 RUN corepack enable
-WORKDIR /app
 
-COPY package.json pnpm-lock.yaml ./
-# No codegen step to accommodate: Drizzle's schema is ordinary TypeScript, so
-# nothing has to be generated into node_modules before the build.
+WORKDIR /app
+COPY package.json pnpm-lock.yaml .
 RUN pnpm install --frozen-lockfile
 
 
-FROM node:24-alpine AS builder
+# ======================================================================================================================
+# builder — compiles the Next.js app. Only .next/standalone and .next/static are copied out of it.
+# ======================================================================================================================
+FROM deps AS builder
 
-RUN corepack enable
 WORKDIR /app
-
-COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Next.js inlines NEXT_PUBLIC_* into the client bundle at build time, so the
-# Clerk publishable key has to be present *here* — passing it as a container
-# environment variable at runtime has no effect on the browser bundle.
-# It is not a secret (it is public by design); CLERK_SECRET_KEY is the one that
-# must stay out of the image, and that one is injected at runtime from Secrets
-# Manager (see infra/stacks/web_stack.py).
+# Next's standalone output excludes public/, so the web stage copies it separately — and COPY --from of a missing path
+# is a hard build failure. mkdir keeps that copy valid whether or not the app has a public/ directory.
+RUN mkdir -p public
+
+# NEXT_PUBLIC_* values are read by `pnpm run build`, so everything in this block must be set before it.
 ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 
-# Baked in rather than passed as a build-arg: it is the same value for every
-# image, and `.dockerignore` excludes `.env`, so a local image built with a
-# pk_test_* key would otherwise ship a browser bundle with telemetry on.
+# Always disabled, in every image.
 ENV NEXT_PUBLIC_CLERK_TELEMETRY_DISABLED=1
 
-# Same build-time inlining rule as the publishable key above, but these are
-# fixed route paths rather than per-environment values, so they're baked in
-# rather than passed as build-args. Omitting them sends users to Clerk's
-# hosted Account Portal instead of the app's own sign-in page.
+# Omitting these sends users to Clerk's hosted Account Portal (AGENTS.md).
 ENV NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
 ENV NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
 ENV NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=/dashboard
 ENV NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/dashboard
 
-RUN pnpm exec next build
+RUN pnpm run build
 
 
-FROM node:24-alpine AS runner
+# ======================================================================================================================
+# migrator — SHIPPED. ECS task that applies db migrations, run between the two cdk deploys in ci.yml.
+# ======================================================================================================================
+# FROM deps because that stage already has drizzle-orm + pg; no compiled Next app is needed (ARCHITECTURE.md).
+FROM deps AS migrator
 
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Matches infra/stacks/web_stack.py's CONTAINER_PORT, which the load
-# balancer's target group also health-checks on.
+# A migration run needs only the .sql files in drizzle/ (plus meta/_journal.json, which orders them), the script that
+# applies them, and the one module it imports for the connection URL. drizzle.config.ts is not used here — it configures
+# the drizzle-kit CLI, which only `db:generate` and `db:studio` still run.
+COPY drizzle ./drizzle
+COPY lib/server/databaseUrl.ts ./lib/server/databaseUrl.ts
+COPY scripts/db-migrate.cjs ./scripts/db-migrate.cjs
+
+# RDS certs chain to Amazon's own CA, absent from Node's trust store. This path must stay in step with
+# RDS_CA_BUNDLE_PATH (infra/stacks/web_stack.py), which sets DATABASE_SSL_CA to it in the task definition.
+# --checksum pins the download; if AWS updates the bundle the build fails, printing the new digest to paste in here.
+#
+# Deliberately NOT paired with `ENV DATABASE_SSL_CA=...` here: that would make every run of this image demand TLS,
+# breaking a local container pointed at a plain Postgres with "The server does not support SSL connections". Using the
+# bundle is a deployment decision, so infra/stacks/web_stack.py sets DATABASE_SSL_CA. Keep the two paths in step if this
+# one ever moves.
+ADD --checksum=sha256:e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3 \
+  https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
+  /app/certs/rds-global-bundle.pem
+
+# No USER, unlike web: corepack's pnpm cache lives in /root (0700), so any other user re-downloads pnpm every start.
+CMD ["pnpm", "run", "db:migrate"]
+
+
+# ======================================================================================================================
+# web — SHIPPED. The long-running service ECS Fargate serves.
+# ======================================================================================================================
+FROM node:24-alpine AS web
+
+WORKDIR /app
+ENV NODE_ENV=production
+
+# Matches infra/stacks/web_stack.py's CONTAINER_PORT, which the load balancer's target group also health-checks on.
 ENV PORT=8000
 ENV HOSTNAME=0.0.0.0
 EXPOSE 8000
 
-RUN addgroup -g 1001 -S nodejs && adduser -u 1001 -S nextjs -G nodejs
+RUN addgroup -g 1001 -S app && adduser -u 1001 -S app -G app
 
-# RDS for PostgreSQL 15+ defaults to rds.force_ssl=1, so the connection must be
-# TLS — and RDS server certificates chain to Amazon's own RDS root CAs, which
-# are not in Node's bundled trust store. Without this bundle the only way to
-# connect is to stop verifying the server, so it ships in the image and
-# lib/server/databaseUrl.ts verifies against it. The global bundle covers every
-# region's CA.
-#
-# Deliberately NOT paired with `ENV DATABASE_SSL_CA=...` here: that would make
-# every run of this image demand TLS, breaking a local container pointed at a
-# plain Postgres with "The server does not support SSL connections". Using the
-# bundle is a deployment decision, so infra/stacks/web_stack.py sets
-# DATABASE_SSL_CA to this path. Keep the two in step if it ever moves.
-ADD --chown=nextjs:nodejs \
+# As in migrator: Amazon's RDS CA bundle, at a path in step with RDS_CA_BUNDLE_PATH (infra/stacks/web_stack.py). Not
+# paired with an unconditional ENV DATABASE_SSL_CA here — see migrator's stage above for why.
+ADD --chown=app:app --checksum=sha256:e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3 \
   https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
   /app/certs/rds-global-bundle.pem
 
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-# No `COPY /app/public` — this package has no public/ directory, and COPY of a
-# missing path is a hard build failure. Add it back alongside creating one.
+COPY --from=builder --chown=app:app /app/.next/standalone ./
+COPY --from=builder --chown=app:app /app/.next/static ./.next/static
+COPY --from=builder --chown=app:app /app/public ./public
 
-USER nextjs
-
-# Migrations are NOT run here. `drizzle-kit migrate` belongs to the deploy
-# pipeline, not container startup: the service runs up to 3 tasks, and booting
-# tasks would race to apply the same migration with nothing serialising them —
-# drizzle-kit takes no advisory lock. Keeping DDL out of the container also
-# means the running app never needs DDL rights on the database. See
-# RUNBOOK.md.
+USER app
 CMD ["node", "server.js"]

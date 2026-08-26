@@ -6,9 +6,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "node scripts/db-migrate.cjs",
     "db:studio": "drizzle-kit studio",
     "typecheck": "next typegen && tsc --noEmit",
     "biome:check": "biome check --write .",
@@ -26,6 +25,7 @@
     "@mantine/form": "^9.5.1",
     "@mantine/hooks": "^9.5.1",
     "@mkkellogg/gaussian-splats-3d": "^0.4.7",
+    "@next/env": "16.3.0",
     "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.7.0",
     "drizzle-orm": "^0.45.2",
