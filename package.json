@@ -7,9 +7,11 @@
     "prepare": "husky",
     "guard:cdk-context": "node scripts/check-cdk-context-account.js",
     "format-staged": "node scripts/format-staged.js",
-    "lint": "node scripts/lint.js",
-    "typecheck": "node scripts/typecheck.js",
-    "biome:ci": "biome ci ."
+    "biome:ci": "biome ci .",
+    "scripts:check": "cd scripts && biome lint .",
+    "web:check": "cd web && pnpm exec biome lint . && pnpm exec next typegen && pnpm exec tsc --noEmit",
+    "worker:check": "cd worker && uv run ruff check . && uv run ruff format --check . && uv run mypy pipeline",
+    "infra:check": "cd infra && uv run ruff check . && uv run ruff format --check . && uv run mypy app.py stacks"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.10",

@@ -46,7 +46,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 - **Prefer `function` declarations over arrow functions**, except closures assigned to a local (`const handleClick = () => {...}`) or inline arguments (`.map(x => ...)`, `useEffect(() => {...})`). Top-level: `export function foo() {}`, not `export const foo = () => {}`.
 - **`if`/`for`/`while`/`do` bodies always use a `{ }` block** — never `if (x) return;`. Biome `style/useBlockStatements` (enabled in `biome.json`; not in `recommended`).
-- **`next typegen` before `tsc --noEmit` on a clean checkout.** Route Handlers use `RouteContext<"/path">`; Next writes those helpers into gitignored `web/.next/types/` during `next dev`/`build`. Without them: `TS2304: Cannot find name 'RouteContext'`. CI and `scripts/typecheck.js` run `typegen` first.
+- **`next typegen` before `tsc --noEmit` on a clean checkout.** Route Handlers use `RouteContext<"/path">`; Next writes those helpers into gitignored `web/.next/types/` during `next dev`/`build`. Without them: `TS2304: Cannot find name 'RouteContext'`. CI and the root `web:check` script run `typegen` first.
 - **`web/` uses TypeScript `^7.0.2` (no JS Compiler API).** Next's typecheck needs `useTypeScriptCli` (default on as of Next `16.3.0`). Without it Next can't load `typescript`, including `web/next.config.ts`. `infra/` has no TypeScript dependency.
 - **There is deliberately no `start` script — `next start` is unsupported under `output: "standalone"`.** Next says so and then serves anyway, so a re-added `pnpm start` looks like it works. `next build` emits `.next/standalone/server.js` (the container's `CMD`), which omits `.next/static`, so running it by hand serves pages with no CSS or JS unless that directory is copied in as `web/Dockerfile` does. Run the container instead (`RUNBOOK.md`).
 - **Server Components reading request-time data need `export const dynamic = "force-dynamic"`**, or `next build` statically prerenders them. They call `web/lib/server/data.ts` directly — not this app's HTTP API.
@@ -146,14 +146,18 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 ```bash
 pnpm biome:ci
-(cd web && pnpm typecheck && pnpm test && pnpm test:e2e)
-(cd worker && uv run ruff check . && uv run ruff format --check . && uv run mypy pipeline && uv run pytest -v)
-(cd infra && uv run ruff check . && uv run ruff format --check . && uv run mypy app.py stacks && uv run pytest -v && pnpm cdk:synth)
+pnpm run scripts:check
+pnpm run web:check
+pnpm run worker:check
+pnpm run infra:check
+(cd web && pnpm test && pnpm test:e2e)
+(cd worker && uv run pytest -v)
+(cd infra && uv run pytest -v && pnpm cdk:synth)
 ```
 
 Postgres-dependent web tests need `TEST_DATABASE_URL` (see `RUNBOOK.md`). Run the relevant subset after changes.
 
-`pnpm biome:ci` from repo root matches CI's `lint-format` job (covers `scripts/*.js` too); running it from `web/` instead uses `web/package.json`'s own script and only covers `web/`. The `web` job runs `typegen`/`tsc`/migrate/vitest/`next build`/playwright only.
+`pnpm biome:ci` is a single workspace-wide command (root's `biome.json` covers `scripts/*.js`, `web/**`, and `infra/`'s own config files in one pass), used by CI's `lint-format` job and by the pre-commit hook. `web:check`/`worker:check`/`infra:check` are root package.json scripts, one per package, each combining that package's lint and typecheck into a single `cd <pkg> && ...` command — the same scripts CI's `web`/`worker`/`infra` jobs call. The pre-commit hook runs `biome:ci` plus these three (`scripts:check` included), so `web`'s and `scripts/`'s Biome checks run twice there — harmless, and worth it since `biome:ci` is what actually reaches `infra/`'s and root's own config files, which none of the per-package scripts cover.
 
 ## State / what's next
 
