@@ -24,7 +24,7 @@ export function isUuid(value: string): boolean {
  * Guards a path parameter before it reaches the database.
  *
  * The id columns are `uuid`, so a malformed value makes Postgres raise `22P02`, which surfaces as a 500. 404 rather
- * than 422 because these are all lookup-by-id routes that already collapse "not yours" into "not found" — an
+ * than 422 because these are all lookup-by-id routes that already collapse "not yours" into "not found." An
  * unparseable id can't name a row, so it gets the same answer.
  */
 export function requireUuid(value: string, status = 404, message = "Not found"): string {

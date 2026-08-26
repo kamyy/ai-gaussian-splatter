@@ -16,7 +16,7 @@ export default function SplatDetailPage({ params }: { params: Promise<{ id: stri
   const { getToken } = useAuth();
   const { data: splat, isLoading, mutate: refetchSplat } = useSplat(id);
 
-  // Only the job is polled, but the worker's callback moves the job row and the splat row in one transaction — so a job
+  // Only the job is polled, but the worker's callback moves the job row and the splat row in one transaction. So a job
   // that has ended means this splat is stale. Without the refetch the page keeps rendering the poller and never mounts
   // the viewer until something else revalidates (focus, reload). Same SWR key as JobStatusPoller's, so this shares its
   // request.

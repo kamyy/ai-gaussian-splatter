@@ -20,7 +20,7 @@ export async function requireClerkUserId(): Promise<string> {
  *
  * One `INSERT ... ON CONFLICT`, so two concurrent first-requests from the same user can't race to create the same row.
  * The no-op `set` is deliberate: `onConflictDoNothing()` returns zero rows from `.returning()`, so an existing user
- * would come back `undefined` — the update has to touch something for Postgres to hand the row back.
+ * would come back `undefined`. The update has to touch something for Postgres to hand the row back.
  */
 export async function getOrCreateUser(clerkUserId: string): Promise<User> {
   const [user] = await getDb()
@@ -39,7 +39,7 @@ export async function requireUser(): Promise<User> {
 /**
  * The client IP the per-IP rate limit is keyed on, from the LAST hop of `X-Forwarded-For`. The ALB appends the address
  * it actually saw rather than replacing the header, so a spoofed `X-Forwarded-For: 1.2.3.4` arrives as `1.2.3.4, <real
- * client>` — trusting the first entry would let a caller mint a fresh rate-limit bucket per request just by varying it.
+ * client>`. Trusting the first entry would let a caller mint a fresh rate-limit bucket per request just by varying it.
  * This assumes exactly one trusted proxy; putting anything in front of the ALB moves the trustworthy position and
  * breaks it (ARCHITECTURE.md).
  *

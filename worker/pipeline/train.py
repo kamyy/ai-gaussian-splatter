@@ -1,7 +1,7 @@
 """3D Gaussian Splatting training via gsplat, at a reduced iteration count for
 object-centric captures.
 
-The training loop below has never executed on a GPU — the structure follows
+The training loop below has never executed on a GPU. The structure follows
 the standard 3DGS algorithm and gsplat's `rasterization()` signature, but no
 CUDA kernel here has ever run. Nothing in it is proven; see AGENTS.md.
 
@@ -182,9 +182,9 @@ def _build_optimizer(model: GaussianModel) -> torch.optim.Optimizer:
 
 
 def _render(model: GaussianModel, viewmat: torch.Tensor, K: torch.Tensor, width: int, height: int):
-    """Returns (rendered_image, alpha, meta) for the single camera passed in
-    — gsplat.rasterization is batched over cameras, so we slice batch index 0
-    out of the image and alpha before returning them; meta is returned as-is
+    """Returns (rendered_image, alpha, meta) for the single camera passed in.
+    gsplat.rasterization is batched over cameras, so we slice batch index 0
+    out of the image and alpha before returning them. Meta is returned as-is,
     since neither caller currently uses it.
     """
     import gsplat  # imported lazily so the rest of the module is importable/testable without CUDA/gsplat installed

@@ -3,7 +3,7 @@
 // Authenticated endpoints take a Clerk session token, obtained client-side via useAuth().getToken() and passed in by
 // callers (lib/hooks.ts).
 //
-// Requests are same-origin now that the API lives in this app, so there is no base URL to configure —
+// Requests are same-origin now that the API lives in this app, so there is no base URL to configure.
 // NEXT_PUBLIC_API_BASE_URL is gone. Server-side callers should skip this client entirely and use lib/server/data.ts
 // directly rather than have the server make an HTTP request to itself.
 

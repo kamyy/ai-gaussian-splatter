@@ -43,7 +43,7 @@ def test_splats_bucket_has_no_lifecycle_rule(wired_stacks):
 
 def test_splats_bucket_allows_cross_origin_reads(wired_stacks):
     """The viewer fetches the .ply from S3 in the browser, so without a GET
-    rule every splat fails to load — and nothing in the TypeScript suite would
+    rule every splat fails to load. Nothing in the TypeScript suite would
     catch it, since the presigned URL itself is valid.
     """
     template = Template.from_stack(wired_stacks["data"])

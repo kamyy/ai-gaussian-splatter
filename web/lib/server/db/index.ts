@@ -22,7 +22,7 @@ export function getDb(): NodePgDatabase<typeof schema> {
     const pool = new Pool({ connectionString: getEnv().DATABASE_URL, ssl: databaseSsl() });
 
     // Without this, a single dead idle connection takes down the process. `pg` re-emits errors from idle pooled clients
-    // on the Pool itself, and an unhandled "error" event on an EventEmitter is an uncaught exception — so an RDS
+    // on the Pool itself, and an unhandled "error" event on an EventEmitter is an uncaught exception. So an RDS
     // failover, a maintenance reboot, or any server-side idle reap would kill the whole task and drop every in-flight
     // request instead of the pool quietly discarding one client.
     pool.on("error", error => {
@@ -36,7 +36,7 @@ export function getDb(): NodePgDatabase<typeof schema> {
 }
 
 /**
- * Tests must call this in `afterAll` — an open pg Pool keeps the event loop alive, and Vitest hangs at the end of the
+ * Tests must call this in `afterAll`. An open pg Pool keeps the event loop alive, and Vitest hangs at the end of the
  * run rather than exiting.
  */
 export async function closeDb(): Promise<void> {

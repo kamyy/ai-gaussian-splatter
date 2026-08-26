@@ -2,11 +2,10 @@ import { z } from "zod";
 
 import { resolveDatabaseUrl } from "./databaseUrl";
 
-/** Server-side configuration. Clerk needs no JWKS settings — its SDK verifies sessions from CLERK_SECRET_KEY. */
+/** Server-side configuration. Clerk needs no JWKS settings. Its SDK verifies sessions from CLERK_SECRET_KEY. */
 const envSchema = z.object({
-  // Assembled by resolveDatabaseUrl() before parsing, from the
-  // DATABASE_HOST/NAME/USER/PASSWORD parts ECS projects out of the RDS
-  // secret. See databaseUrl.ts.
+  // Assembled by resolveDatabaseUrl() before parsing, from the DATABASE_HOST/NAME/USER/PASSWORD parts ECS projects out
+  // of the RDS secret. See databaseUrl.ts.
   DATABASE_URL: z.string().min(1, "set DATABASE_HOST, DATABASE_NAME, DATABASE_USER and DATABASE_PASSWORD"),
 
   UPLOADS_BUCKET: z.string().min(1),
@@ -19,8 +18,7 @@ const envSchema = z.object({
   WORKER_SECURITY_GROUP_ID: z.string().min(1),
   WORKER_INSTANCE_PROFILE_ARN: z.string().min(1),
 
-  // Rate limiting — deliberately simple config knobs, not
-  // architecture; tune based on real usage once deployed.
+  // Rate limiting — deliberately simple config knobs, not architecture; tune based on real usage once deployed.
   RATE_LIMIT_IP_PER_HOUR: z.coerce.number().int().positive().default(5),
   RATE_LIMIT_USER_PER_DAY: z.coerce.number().int().positive().default(3),
   GLOBAL_MAX_JOBS_PER_DAY: z.coerce.number().int().positive().default(20),
@@ -35,9 +33,8 @@ export type Env = z.infer<typeof envSchema>;
 let cached: Env | null = null;
 
 /**
- * Parsed once on first use, not at module load — mirrors config.py's lazy
- * `get_settings()`. Module-load parsing would run during `next build`, where
- * these vars legitimately aren't set.
+ * Parsed once on first use, not at module load — mirrors config.py's lazy `get_settings()`. Module-load parsing would
+ * run during `next build`, where these vars legitimately aren't set.
  */
 export function getEnv(): Env {
   if (cached === null) {

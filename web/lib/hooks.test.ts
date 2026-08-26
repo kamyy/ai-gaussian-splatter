@@ -28,7 +28,7 @@ interface JobPollConfig {
   refreshInterval: (latest: JobRead | undefined) => number;
 }
 
-// SWR is stubbed so the config it receives can be inspected directly — that config is the contract under test, not
+// SWR is stubbed so the config it receives can be inspected directly. That config is the contract under test, not
 // anything SWR does with it.
 const { useSWRMock } = vi.hoisted(() => ({
   useSWRMock: vi.fn<(key: unknown, fetcher: unknown, config: JobPollConfig) => { data: undefined }>(),

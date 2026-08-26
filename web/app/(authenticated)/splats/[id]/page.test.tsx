@@ -72,7 +72,7 @@ function setup(options: {
 }
 
 // The page reads `params` with React's `use()`, so it suspends on first render. RTL's own `act` scope is synchronous
-// and cannot flush that — the render has to happen inside an awaited `act`.
+// and cannot flush that. The render has to happen inside an awaited `act`.
 async function renderPage() {
   await act(async () => {
     render(
@@ -91,7 +91,7 @@ describe("SplatDetailPage", () => {
   });
 
   it("refetches the splat when the job ends, so the viewer can appear", async () => {
-    // The worker's callback moves the job and splat rows together, but only the job is polled — without this refetch
+    // The worker's callback moves the job and splat rows together, but only the job is polled. Without this refetch
     // the page would sit on the poller.
     setup({ splatStatus: "processing", job: { ...baseJob, status: "complete" } });
     await renderPage();
@@ -107,7 +107,7 @@ describe("SplatDetailPage", () => {
   });
 
   it("keeps rendering a cached splat when a revalidation fails", async () => {
-    // A transient failure of the completion refetch must not replace the whole page — `data` still holds the last good
+    // A transient failure of the completion refetch must not replace the whole page. `data` still holds the last good
     // splat.
     setup({ splatStatus: "complete", splatError: new Error("503"), splatFile: { url: "https://s3/splat.ply" } });
     await renderPage();

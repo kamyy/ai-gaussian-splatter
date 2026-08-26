@@ -14,7 +14,7 @@ class NetworkStack(cdk.Stack):
         super().__init__(scope, id, **kwargs)
 
         # Explicit AZs rather than max_azs, which needs an account/region lookup (a real AWS call) to enumerate
-        # available AZs — this way `cdk synth` works without live credentials. Still just 2 AZs, same as intended.
+        # available AZs. This way `cdk synth` works without live credentials. Still just 2 AZs, same as intended.
         #
         # nat_gateways=0: everything needing outbound internet (the web tasks, the GPU workers) runs in the public
         # subnets with a public IP and egresses through the internet gateway instead — ARCHITECTURE.md has the cost
@@ -40,9 +40,9 @@ class NetworkStack(cdk.Stack):
         # CloudFormation's GroupDescription disallows several common punctuation characters (e.g. ">", em dash "—") —
         # plain ASCII only below.
         #
-        # Declared here, not in WebStack, so both ends of the auto-generated ALB-to-tasks ingress rule live in one stack
-        # — declaring this group in WebStack instead fails `cdk synth` with a DependencyCycle (see AGENTS.md). This is
-        # also why web_stack.py builds its ALB manually rather than via the CDK pattern — the pattern would create its
+        # Declared here, not in WebStack, so both ends of the auto-generated ALB-to-tasks ingress rule live in one
+        # stack. Declaring this group in WebStack instead fails `cdk synth` with a DependencyCycle (see AGENTS.md). This
+        # is also why web_stack.py builds its ALB manually rather than via the CDK pattern. The pattern would create its
         # own security group instead of using this one.
         self.alb_security_group = ec2.SecurityGroup(
             self,
@@ -53,14 +53,14 @@ class NetworkStack(cdk.Stack):
         )
         # The app's only route in from the internet, and the only rule in this file that names a public CIDR. Written
         # out rather than left to the ecs-patterns construct, which stops adding it once the service is handed explicit
-        # security groups (feature flag aws-ecs-patterns:secGroupsDisablesImplicitOpenListener) — the symptom is an ALB
+        # security groups (feature flag aws-ecs-patterns:secGroupsDisablesImplicitOpenListener). The symptom is an ALB
         # that provisions cleanly and refuses every connection. Port 80 is the redirect listener; it never reaches a
         # task.
         self.alb_security_group.add_ingress_rule(ec2.Peer.any_ipv4(), ec2.Port.tcp(443), "HTTPS from anyone")
         self.alb_security_group.add_ingress_rule(ec2.Peer.any_ipv4(), ec2.Port.tcp(80), "HTTP from anyone, redirected")
 
         # Receives the generated ALB-to-tasks rule described above, and gives the web tasks a stable identity that
-        # db_security_group's own ingress rule can name as a source — security-group references check ENI membership,
+        # db_security_group's own ingress rule can name as a source. Security-group references check ENI membership,
         # not the referenced group's own rules.
         self.web_security_group = ec2.SecurityGroup(
             self,

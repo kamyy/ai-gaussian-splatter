@@ -6,10 +6,9 @@ import { describe, expect, it } from "vitest";
 import { databaseSsl, resolveDatabaseUrl } from "./databaseUrl";
 
 /**
- * The production path here is untestable against real AWS, so these pin the
- * contract instead: ECS projects the RDS secret's fields into
- * DATABASE_USER/DATABASE_PASSWORD (see the matching assertion in
- * infra/tests/test_web_stack.py) and this assembles the URL from them.
+ * The production path here is untestable against real AWS, so these pin the contract instead: ECS projects the RDS
+ * secret's fields into DATABASE_USER/DATABASE_PASSWORD (see the matching assertion in infra/tests/test_web_stack.py)
+ * and this assembles the URL from them.
  */
 describe("resolveDatabaseUrl", () => {
   it("assembles the URL from the parts ECS supplies", () => {
@@ -35,8 +34,8 @@ describe("resolveDatabaseUrl", () => {
   });
 
   it("percent-encodes credentials so a generated password can't corrupt the URL", () => {
-    // RDS excludes `"@/\` but nothing stops `:` `?` `#` `%` appearing, any of
-    // which would silently truncate the URL if interpolated raw.
+    // RDS excludes `"@/\` but nothing stops `:` `?` `#` `%` appearing, any of which would silently truncate the URL if
+    // interpolated raw.
     const url = resolveDatabaseUrl({
       DATABASE_HOST: "h",
       DATABASE_NAME: "n",
@@ -60,10 +59,9 @@ describe("databaseSsl", () => {
   });
 
   it("loads the CA bundle and leaves verification on", () => {
-    // rejectUnauthorized must stay at its default of true. Setting it false
-    // would connect to anything presenting a certificate, which is what
-    // shipping the bundle exists to avoid — verified against a TLS-only
-    // Postgres with a private CA: a wrong bundle is rejected.
+    // rejectUnauthorized must stay at its default of true. Setting it false would connect to anything presenting a
+    // certificate, which is what shipping the bundle exists to avoid — verified against a TLS-only Postgres with a
+    // private CA: a wrong bundle is rejected.
     const dir = mkdtempSync(join(tmpdir(), "ca-"));
     const path = join(dir, "bundle.pem");
     writeFileSync(path, "-----BEGIN CERTIFICATE-----\nnot-a-real-cert\n-----END CERTIFICATE-----\n");

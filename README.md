@@ -2,7 +2,7 @@
 
 Upload multi-angle photos of a physical object, get back a real-time, interactive 3D Gaussian Splat you can view in the browser and share.
 
-Quality depends on angular coverage and overlap, not raw count — aim for **~50 well-spaced** views (every side, a couple of heights, neighboring shots overlapping) rather than many near-duplicates. Capture tips: [`RUNBOOK.md`](RUNBOOK.md#capture).
+Quality depends on angular coverage and overlap, not raw count. Aim for **~50 well-spaced** views (every side, a couple of heights, neighboring shots overlapping) rather than many near-duplicates. Capture tips: [`RUNBOOK.md`](RUNBOOK.md#capture).
 
 See [`ARCHITECTURE.md`](ARCHITECTURE.md) for how it's built and why, and [`RUNBOOK.md`](RUNBOOK.md) for local development and operational tasks.
 

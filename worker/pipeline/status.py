@@ -43,7 +43,7 @@ def report_status(
         )
         response.raise_for_status()
     except httpx.HTTPError as exc:
-        # Warning, not exception(): the traceback of a swallowed error reads like a crash in the job log, and the web
-        # app being unreachable is expected during a local pipeline run. %r, not %s: httpx's timeout errors carry an
+        # Warning, not exception(): the traceback of a swallowed error reads like a crash in the job log. The web app
+        # being unreachable is also expected during a local pipeline run. %r, not %s: httpx's timeout errors carry an
         # empty message, so %s would log the failure with nothing identifying it after the colon.
         logger.warning("Failed to report status %r for job %s: %r", status, settings.job_id, exc)

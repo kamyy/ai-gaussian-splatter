@@ -56,12 +56,12 @@ class DataStack(cdk.Stack):
             database_name=DATABASE_NAME,
             removal_policy=cdk.RemovalPolicy.SNAPSHOT,
             deletion_protection=False,
-            # RDS windows are fixed UTC and don't shift for DST — 10:00 UTC is 3am Pacific during PDT, drifting to 2am
+            # RDS windows are fixed UTC and don't shift for DST. 10:00 UTC is 3am Pacific during PDT, drifting to 2am
             # Pacific during PST.
             preferred_maintenance_window="sun:10:00-sun:10:30",
         )
 
-        # Uploads are ephemeral (source photos, not the deliverable) — expire after 90 days to bound storage cost;
+        # Uploads are ephemeral (source photos, not the deliverable). They expire after 90 days to bound storage cost;
         # splats are the actual output and kept indefinitely (no lifecycle rule).
         self.uploads_bucket = s3.Bucket(
             self,
@@ -101,10 +101,10 @@ class DataStack(cdk.Stack):
             removal_policy=cdk.RemovalPolicy.RETAIN,
         )
 
-        # ALB access logs, written by the ELB service rather than by the app — so no CORS rule. 90 days is how far back
-        # an abuse investigation is likely to reach; the ALB is otherwise the one hop that keeps no record of who
-        # called. RETAIN like the buckets above, which needs no auto_delete_objects custom resource; the lifecycle rule
-        # is what bounds the cost of keeping it.
+        # ALB access logs are written by the ELB service rather than by the app, so no CORS rule is needed. The ALB is
+        # otherwise the one hop that keeps no record of who called. 90 days is how far back an abuse investigation is
+        # likely to reach. RETAIN like the buckets above, which needs no auto_delete_objects custom resource. The
+        # lifecycle rule is what bounds the cost of keeping it.
         self.access_logs_bucket = s3.Bucket(
             self,
             "AccessLogsBucket",
