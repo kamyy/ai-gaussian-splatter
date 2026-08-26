@@ -9,7 +9,6 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/db-migrate.cjs",
     "db:studio": "drizzle-kit studio",
-    "biome:check": "biome check --write .",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test"
