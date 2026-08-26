@@ -22,14 +22,14 @@ def test_repository_is_not_in_the_stack_that_pulls_from_it(wired_stacks):
 
 
 def test_repository_survives_stack_deletion(wired_stacks):
-    """The images are the deployable artifact — tearing down the stack must
+    """The images are the deployable artifact. Tearing down the stack must
     not discard them.
     """
     template = Template.from_stack(wired_stacks["registry"])
 
     (repository,) = template.find_resources("AWS::ECR::Repository").values()
     assert repository["DeletionPolicy"] == "Retain"
-    assert repository["Properties"]["RepositoryName"] == "ai-gaussian-splatter-web"
+    assert repository["Properties"]["RepositoryName"] == "ai-gaussian-splatter"
 
 
 def test_pushed_tags_can_never_be_repointed(wired_stacks):
@@ -46,14 +46,29 @@ def test_pushed_tags_can_never_be_repointed(wired_stacks):
 
 
 def test_a_bounded_number_of_releases_is_kept(wired_stacks):
-    """Each deploy pushes its own tag, so without a cap they accumulate for the
-    life of the account. The retained ones are the rollback window: any of them
-    can be redeployed by passing its tag back to -c imageTag=.
+    """Each deploy pushes two tags now ($SHA-web and $SHA-migrate, see
+    web/Dockerfile), so without a cap they accumulate for the life of the
+    account.
+
+    A rule per suffix rather than one over both, since each release pushes
+    one of each and a single cap would therefore keep half as many releases.
+    Both budgets are the same because a rollback to $SHA re-points
+    MigrationTaskDefinition at $SHA-migrate as well (registry_stack.py).
+    Matching is by suffix, which needs tagPatternList. Prefix matching cannot
+    express it.
     """
     template = Template.from_stack(wired_stacks["registry"])
     (props,) = template.find_resources("AWS::ECR::Repository").values()
 
     policy = json.loads(props["Properties"]["LifecyclePolicy"]["LifecyclePolicyText"])
-    (rule,) = policy["rules"]
-    assert rule["action"] == {"type": "expire"}
-    assert rule["selection"]["countNumber"] == RELEASES_KEPT
+    rules = {rule["selection"]["tagPatternList"][0]: rule for rule in policy["rules"]}
+
+    assert set(rules) == {"*-web", "*-migrate"}
+    for rule in rules.values():
+        assert rule["action"] == {"type": "expire"}
+        assert rule["selection"]["tagStatus"] == "tagged"
+
+    # Both suffixes to the same depth: an expired image of either kind is a CannotPullContainerError on the next task
+    # placement that names its SHA.
+    assert rules["*-web"]["selection"]["countNumber"] == RELEASES_KEPT
+    assert rules["*-migrate"]["selection"]["countNumber"] == RELEASES_KEPT

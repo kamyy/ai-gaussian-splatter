@@ -1,26 +1,30 @@
-# Without this, the `COPY . .` in the builder stage overwrites the deps stage's
-# cleanly-installed node_modules with the host's — which may hold packages built
-# for a different platform — and bakes local .env files into an image layer.
+# Without this, the `COPY . .` in the builder stage overwrites the deps stage's cleanly-installed
+# node_modules with the host's — which may hold packages built for a different platform — and bakes
+# local .env files into an image layer.
 node_modules
 .next
 .env
 .env.*
+# Local CA/certs (RDS bundle is ADDed in the Dockerfile, not copied from the host).
+*.pem
 
-# Tool state written into the working tree. `.clerk/.tmp/keyless.json` holds a
-# Clerk development secret key, which `COPY . .` would put in a builder layer.
-# It does not reach the final image — the runner stage copies only
-# .next/standalone and .next/static — but it has no business in the build.
+# Tool state written into the working tree. `.clerk/.tmp/keyless.json` holds a Clerk development secret
+# key, which `COPY . .` would put in a builder layer. The final image never sees it (web copies only
+# build output), but it still has no business in the build context.
 .clerk
 .cursor
+.vercel
 
 e2e
 test
 test-results
 playwright-report
-# `**/` is required: a bare `*.test.ts` matches root-level paths only, which
-# leaves nested tests in the context while `test/` — holding the setup file
-# their matcher types come from — is excluded, and `next build` type-checks
-# them and fails.
+coverage
+playwright.config.ts
+vitest.config.mts
+# `**/` is required: a bare `*.test.ts` matches root-level paths only, which leaves nested tests in
+# the context while `test/` — holding the setup file their matcher types come from — is excluded, and
+# `next build` type-checks them and fails.
 **/*.test.ts
 **/*.test.tsx
 

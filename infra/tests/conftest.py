@@ -10,9 +10,8 @@ from stacks.web_stack import CLERK_SECRET_KEY_NAME
 ACCOUNT = "123456789012"
 REGION = "us-west-2"
 
-# A complete secret ARN — the six trailing characters are Secrets Manager's own
-# suffix — for ACCOUNT and REGION, since WebStack checks it against both.
-# Shared with the tests that assert on what the container receives.
+# A complete secret ARN — the six trailing characters are Secrets Manager's own suffix — for ACCOUNT and REGION, since
+# WebStack checks it against both. Shared with the tests that assert on what the container receives.
 CLERK_SECRET_KEY_ARN = f"arn:aws:secretsmanager:{REGION}:{ACCOUNT}:secret:{CLERK_SECRET_KEY_NAME}-AbCdEf"
 
 CDK_JSON = Path(__file__).resolve().parent.parent / "cdk.json"
@@ -44,7 +43,8 @@ def build_app_stacks(*, context: dict | None = None, **overrides) -> dict[str, c
             "app_public_url": "https://ai-gaussian-splatter.orky.net",
             "hosted_zone_id": "Z00000000000000000000",
             "clerk_secret_key_arn": CLERK_SECRET_KEY_ARN,
-            "image_tag": "0f1e2d3",
+            "web_image_tag": "0f1e2d3",
+            "migrate_image_tag": "0f1e2d3",
             **overrides,
         },
     )
@@ -52,7 +52,7 @@ def build_app_stacks(*, context: dict | None = None, **overrides) -> dict[str, c
 
 @pytest.fixture(scope="session")
 def wired_stacks():
-    """Session-scoped since no test mutates the stacks — all of them only read
+    """Session-scoped since no test mutates the stacks. All of them only read
     via Template.from_stack(...).
     """
     return build_app_stacks()

@@ -1,10 +1,9 @@
 name: CI
 
-# Plan §8: unit/component tests run on every PR here. Playwright runs too,
-# but its one spec is skipped pending a seeded test database, so it currently
-# asserts nothing. Real-pipeline integration tests (COLMAP + gsplat on a real
-# GPU) are deliberately NOT run here — they cost real time/money and stay
-# manual/milestone-gated, per the plan's testing strategy.
+# Plan §8: unit/component tests run on every PR here. Playwright runs too, but its one spec is skipped pending a seeded
+# test database, so it currently asserts nothing. Real-pipeline integration tests (COLMAP + gsplat on a real GPU) are
+# deliberately NOT run here — they cost real time/money and stay manual/milestone-gated, per the plan's testing
+# strategy.
 on:
   pull_request:
   push:
@@ -24,9 +23,8 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      # Single Biome invocation from repo root covers both scripts/*.js
-      # and web/ in one pass — Biome doesn't need web's own
-      # node_modules to lint/format files, only its own binary.
+      # Single Biome invocation from repo root covers both scripts/*.js and web/ in one pass — Biome doesn't need web's
+      # own node_modules to lint/format files, only its own binary.
       - run: pnpm biome:ci
 
   worker:
@@ -41,57 +39,38 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy pipeline
-      # No GPU/CUDA toolkit in CI runners — this is exactly the CI-cheap
-      # tier (fetch/export/status callbacks, mocked S3/HTTP), not the real
-      # COLMAP+gsplat pipeline. See worker/pipeline/train.py's docstring.
+      # No GPU/CUDA toolkit in CI runners — this is exactly the CI-cheap tier (fetch/export/status callbacks, mocked
+      # S3/HTTP), not the real COLMAP+gsplat pipeline. See worker/pipeline/train.py's docstring.
       - run: uv run pytest -v
 
   web:
     runs-on: ubuntu-latest
-    # The database-backed tests need a real database — the ON CONFLICT upserts
-    # can't be faithfully faked.
-    services:
-      postgres:
-        image: postgres:18
-        env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: test
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     defaults:
       run:
         working-directory: web
     env:
-      # Structurally valid dummy key (base64 of "example.clerk.accounts.dev$").
-      # It has to parse — clerkMiddleware() rejects a malformed one outright.
+      # Structurally valid dummy key (base64 of "example.clerk.accounts.dev$"). It has to parse — clerkMiddleware()
+      # rejects a malformed one outright.
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk
       CLERK_SECRET_KEY: sk_test_fake_for_ci
-      # A pk_test_* key makes the SDK treat this as a development instance, and
-      # only the printed disclosure notice is CI-aware — collection itself is
-      # not. Without this, CI runs report telemetry.
+      # A pk_test_* key makes the SDK treat this as a development instance, and only the printed disclosure notice is
+      # CI-aware — collection itself is not. Without this, CI runs report telemetry.
       NEXT_PUBLIC_CLERK_TELEMETRY_DISABLED: "1"
-      # Inlined at build time, so `next build` here needs them to match what a
-      # real image ships — otherwise the built bundle points at Clerk's hosted
-      # Account Portal rather than the app's own sign-in page.
+      # Inlined at build time, so `next build` here needs them to match what a real image ships — otherwise the built
+      # bundle points at Clerk's hosted Account Portal rather than the app's own sign-in page.
       NEXT_PUBLIC_CLERK_SIGN_IN_URL: /sign-in
       NEXT_PUBLIC_CLERK_SIGN_UP_URL: /sign-up
       NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: /dashboard
       NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: /dashboard
-      TEST_DATABASE_URL: postgresql://test:test@localhost:5432/test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test
       DATABASE_HOST: localhost
       DATABASE_PORT: "5432"
       DATABASE_NAME: test
-      DATABASE_USER: test
-      DATABASE_PASSWORD: test
-      # getEnv() validates all of these on first use, and getDb() calls it —
-      # so any DB-touching page throws without them, including under the dev
-      # server Playwright starts. Dummy values: presigning is local crypto and
-      # nothing in CI reaches AWS.
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      # getEnv() validates all of these on first use, and getDb() calls it — so any DB-touching page throws without
+      # them, including under the dev server Playwright starts. Dummy values: presigning is local crypto and nothing in
+      # CI reaches AWS.
       UPLOADS_BUCKET: test-uploads
       SPLATS_BUCKET: test-splats
       AWS_REGION: us-west-2
@@ -104,6 +83,21 @@ jobs:
       APP_PUBLIC_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v7
+      # A manual `podman run` rather than the `services:` block the postgres:18 container used before: the migrator-
+      # image test below runs its own podman container that needs to address Postgres by name, and a GitHub Actions
+      # `services:` container (Docker-managed) isn't reachable that way from a sibling podman container. A dedicated
+      # user-defined podman network sidesteps that rather than relying on `--network host`, which does not behave as
+      # true host networking under rootless podman here — verified directly against this runner setup.
+      - name: Start Postgres
+        run: |
+          podman network create ci-net
+          podman run -d --name ci-postgres --network ci-net -p 5432:5432 \
+            -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=test \
+            postgres:18
+          for _ in $(seq 1 30); do
+            podman exec ci-postgres pg_isready -U postgres && break
+            sleep 1
+          done
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: web/package.json
@@ -113,28 +107,40 @@ jobs:
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      # pnpm typecheck runs `next typegen` before `tsc --noEmit` — required on
-      # a clean checkout, since CI has never run `next dev`/`next build` to
-      # generate the App Router route types tsc needs. See AGENTS.md.
+      # pnpm typecheck runs `next typegen` before `tsc --noEmit` — required on a clean checkout, since CI has never run
+      # `next dev`/`next build` to generate the App Router route types tsc needs. See AGENTS.md.
       - run: pnpm typecheck
-      # A schema edit with no matching migration is otherwise invisible: the
-      # types come straight from schema.ts, so tsc stays green while the
-      # database drifts, and it surfaces as a runtime SQL error. db:generate
-      # is a no-op when the schema matches the snapshot in web/drizzle/meta/,
-      # so anything new on disk here means the migration was never generated.
+      # A schema edit with no matching migration is otherwise invisible: the types come straight from schema.ts, so tsc
+      # stays green while the database drifts, and it surfaces as a runtime SQL error. db:generate is a no-op when the
+      # schema matches the snapshot in web/drizzle/meta/, so anything new on disk here means the migration was never
+      # generated.
       - name: Check migrations are up to date with the schema
         run: |
           pnpm db:generate
-          # --porcelain, not `git diff`: a new migration arrives as untracked
-          # files, which git diff does not report.
+          # --porcelain, not `git diff`: a new migration arrives as untracked files, which git diff does not report.
           if [ -n "$(git status --porcelain -- drizzle)" ]; then
             echo "::error::web/lib/server/db/schema.ts changed without a migration. Run 'pnpm db:generate' and commit web/drizzle/."
             git status --porcelain -- drizzle
             exit 1
           fi
-      # Applies migrations to the service container; the server test project's
-      # globalSetup also does this, so this step mainly fails fast on a bad
-      # migration before the suite starts.
+      # Builds and runs the actual deployable migration artifact (web/Dockerfile's `migrator` stage) against this job's
+      # real Postgres, rather than only testing the underlying `drizzle-kit migrate` script — the config-level CDK tests
+      # in infra/tests/test_web_stack.py assert the task definition is wired correctly, but not that the image itself
+      # applies a migration.
+      - name: Build and run the migrator image against the CI database
+        working-directory: web
+        run: |
+          podman build --target migrator -t migrator:ci .
+          # --network ci-net, addressing Postgres by container name: see the "Start Postgres" step for why --network
+          # host isn't used. No DATABASE_SSL_CA: the migrator image doesn't bake TLS on (web/Dockerfile), and this
+          # database doesn't offer it — only RDS's rds.force_ssl requires TLS.
+          podman run --rm --network ci-net \
+            -e DATABASE_HOST=ci-postgres -e DATABASE_PORT=5432 -e DATABASE_NAME=test \
+            -e DATABASE_USER=postgres -e DATABASE_PASSWORD=postgres \
+            migrator:ci
+      # Re-applies migrations directly (not via the container); a no-op given the step above already applied them —
+      # drizzle-kit tracks applied migrations — so this mainly fails fast on a bad migration outside the container path
+      # too. The server test project's globalSetup also does this, once more, for the same reason.
       - run: pnpm db:migrate
       - run: pnpm test
       - run: pnpm build
@@ -149,11 +155,9 @@ jobs:
         working-directory: infra
     steps:
       - uses: actions/checkout@v7
-      # Python checks run first and need only uv — no Node/pnpm setup cost
-      # if one of them fails. Node's only needed for the `cdk` CLI
-      # (npm-distributed regardless of app language — there's no
-      # pip-installable substitute), so it's set up last, right before the
-      # one step that actually needs it.
+      # Python checks run first and need only uv — no Node/pnpm setup cost if one of them fails. Node's only needed for
+      # the `cdk` CLI (npm-distributed regardless of app language — there's no pip-installable substitute), so it's set
+      # up last, right before the one step that actually needs it.
       - uses: astral-sh/setup-uv@v9.0.0
       - run: uv sync --group dev
       - run: uv run ruff check .
@@ -169,9 +173,196 @@ jobs:
           cache: pnpm
           cache-dependency-path: infra/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      # AWS_ACCOUNT_ID is deliberately left unset here: app.py falls
-      # back to the placeholder account, and this job has no AWS
-      # credentials configured (it runs on every pull_request, including
-      # forks) — validates templates only, never a real deploy.
+      # AWS_ACCOUNT_ID is deliberately left unset here: app.py falls back to the placeholder account, and this job has
+      # no AWS credentials configured (it runs on every pull_request, including forks) — validates templates only, never
+      # a real deploy.
       - name: cdk synth
         run: pnpm cdk:synth
+
+  # Builds, migrates, and deploys on every push to main. See ARCHITECTURE.md "Deployment" for why it's two cdk deploy
+  # calls around the migration rather than one, and RUNBOOK.md for the one-time OIDC role setup this job's AWS
+  # credentials depend on.
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [lint-format, worker, web, infra]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # One at a time, queued rather than cancelled: two pushes close together would otherwise run overlapping deploy
+    # sequences against the same ECS service and CloudFormation stacks — racing `cdk deploy` calls
+    # (OperationInProgressException) at best, or a service rollout starting before its own migration-then-rollout
+    # sequence actually finished at worst. cancel-in-progress: false so an in-flight migrate-then-deploy always runs to
+    # completion rather than being cut off mid-way.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_REGION: us-west-2
+      AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+      CLUSTER_NAME: ai-gaussian-splatter
+      SERVICE_NAME: ai-gaussian-splatter-web
+      MIGRATION_TASK_FAMILY: ai-gaussian-splatter-migrate
+      ECR_REPO: ai-gaussian-splatter
+      HOSTED_ZONE_ID: ${{ vars.HOSTED_ZONE_ID }}
+      CLERK_SECRET_KEY_ARN: ${{ vars.CLERK_SECRET_KEY_ARN }}
+      ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
+      APP_PUBLIC_URL: ${{ vars.APP_PUBLIC_URL }}
+      WORKER_AMI_ID: ${{ vars.WORKER_AMI_ID }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # First step, before anything is built or deployed: this value is compiled into the browser bundle
+      # (web/Dockerfile), so an unset variable produces an image whose every route 500s on clerkMiddleware() rejecting
+      # the empty key — surfacing only as a circuit-breaker rollback minutes into the second cdk deploy below. The `pk_`
+      # test also catches a secret key pasted into this variable, which would bake sk_* into client-side JS.
+      - name: Check CLERK_PUBLISHABLE_KEY is a publishable key
+        env:
+          CLERK_PUBLISHABLE_KEY: ${{ vars.CLERK_PUBLISHABLE_KEY }}
+        run: |
+          case "$CLERK_PUBLISHABLE_KEY" in
+            pk_*) ;;
+            *) echo "::error::repository variable CLERK_PUBLISHABLE_KEY must be set to a pk_* key (RUNBOOK.md)"; exit 1 ;;
+          esac
+
+      # AWS_ACCOUNT_ID is interpolated into the next step's role ARN and read later by infra/app.py. An undefined
+      # repository variable renders as "", which fails the assume-role on a malformed ARN that names nothing. Checked
+      # here so the error names the variable.
+      - name: Check AWS_ACCOUNT_ID is an account id
+        run: |
+          if [[ ! $AWS_ACCOUNT_ID =~ ^[0-9]{12}$ ]]; then
+            echo "::error::repository variable AWS_ACCOUNT_ID must be a 12-digit account id (RUNBOOK.md)"
+            exit 1
+          fi
+
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-gaussian-splatter-ci-deploy
+          aws-region: us-west-2
+
+      # Discovers what's live before touching anything, so the migration-only deploy below (which must leave the service
+      # alone) has a real value to pin it to, and so this job needs no separate lookup of the service's network
+      # placement for `ecs run-task` below.
+      - name: Resolve tags and current placement
+        run: |
+          echo "NEW_TAG=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+          REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+          echo "REGISTRY=$REGISTRY" >> "$GITHUB_ENV"
+          SERVICE_JSON=$(aws ecs describe-services --cluster "$CLUSTER_NAME" --services "$SERVICE_NAME")
+          OLD_TASK_DEF=$(jq -r '.services[0].deployments[] | select(.status=="PRIMARY") | .taskDefinition' <<<"$SERVICE_JSON")
+          # image is tagged "<sha>-web" (WebStack appends the role suffix); webImageTag takes a bare commit SHA, so
+          # strip it back off.
+          OLD_TAG=$(aws ecs describe-task-definition --task-definition "$OLD_TASK_DEF" \
+            --query 'taskDefinition.containerDefinitions[0].image' --output text | awk -F: '{print $NF}')
+          echo "OLD_TAG=${OLD_TAG%-web}" >> "$GITHUB_ENV"
+          jq '.services[0].networkConfiguration' <<<"$SERVICE_JSON" > network-config.json
+          # Shared by both cdk:deploy:all calls below so the two invocations can't silently diverge on a flag added to
+          # one and not the other.
+          echo "CDK_COMMON_CONTEXT=-c hostedZoneId=$HOSTED_ZONE_ID -c clerkSecretKeyArn=$CLERK_SECRET_KEY_ARN -c alertEmail=$ALERT_EMAIL -c appPublicUrl=$APP_PUBLIC_URL -c workerAmiId=$WORKER_AMI_ID -c createSpotServiceLinkedRole=false" >> "$GITHUB_ENV"
+
+      # Each tag is skipped if it is already in the repository: the repository is IMMUTABLE
+      # (infra/stacks/registry_stack.py), so re-running this job after a failure in any step below would otherwise abort
+      # here with ImageTagAlreadyExists — podman builds aren't bit-reproducible, so rebuilding the same commit produces
+      # a different digest. Skipping makes the whole job re-runnable. `batch-get-image` rather than `describe-images`
+      # because the CI role already grants it (RUNBOOK.md).
+      - name: Build and push images
+        working-directory: web
+        env:
+          CLERK_PUBLISHABLE_KEY: ${{ vars.CLERK_PUBLISHABLE_KEY }}
+        run: |
+          aws ecr get-login-password --region "$AWS_REGION" | podman login --username AWS --password-stdin "$REGISTRY"
+          # Only an unambiguous "found" skips the build — an error or empty reply falls through and builds, so a wrong
+          # answer costs a rebuild rather than deploying a tag that was never pushed.
+          pushed() {
+            [ "$(aws ecr batch-get-image --repository-name "$ECR_REPO" \
+              --image-ids imageTag="$1" --query 'length(images)' --output text 2>/dev/null || true)" = "1" ]
+          }
+          build_and_push() {
+            target=$1; tag_suffix=$2; shift 2
+            if pushed "${NEW_TAG}-${tag_suffix}"; then
+              echo "$ECR_REPO:${NEW_TAG}-${tag_suffix} already pushed — skipping build"
+            else
+              podman build --target "$target" -t "$REGISTRY/$ECR_REPO:${NEW_TAG}-${tag_suffix}" "$@" .
+              podman push "$REGISTRY/$ECR_REPO:${NEW_TAG}-${tag_suffix}"
+            fi
+          }
+          build_and_push web web --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="$CLERK_PUBLISHABLE_KEY"
+          build_and_push migrator migrate
+
+      # The two builds above are separate podman invocations, so one can be skipped or fail to push without the other
+      # noticing. `cdk deploy` then registers a task definition naming an image that is not there, and nothing pulls
+      # the -migrate tag until `ecs run-task` does. Checked here, while the deploys below have not run yet.
+      - name: Verify both of this commit's images are in the repository
+        run: |
+          FOUND=$(aws ecr batch-get-image --repository-name "$ECR_REPO" \
+            --image-ids imageTag="$NEW_TAG-web" imageTag="$NEW_TAG-migrate" \
+            --query 'length(images)' --output text)
+          if [[ $FOUND != 2 ]]; then
+            echo "::error::expected $ECR_REPO:$NEW_TAG-web and :$NEW_TAG-migrate in ECR, found $FOUND of 2"
+            exit 1
+          fi
+
+      # uv, not just Node/pnpm: cdk.json's app is `uv run python app.py`, so every `cdk deploy` below spawns it. Node is
+      # for the CDK CLI itself. No `--group dev` — this job synthesizes and deploys, it doesn't run ruff/mypy/pytest.
+      - uses: astral-sh/setup-uv@v9.0.0
+      - working-directory: infra
+        run: uv sync
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: infra/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: infra/pnpm-lock.yaml
+      - working-directory: infra
+        run: pnpm install --frozen-lockfile
+
+      # Registers the migration task against NEW_TAG while pinning the service's own image to OLD_TAG — CloudFormation
+      # sees no diff for the service, so no rollout starts. This is the whole trick: it's the only way to get a runnable
+      # migration task definition for the new image without also moving the service forward before the migration exists.
+      # --require-approval never: this stack's diff touches IAM (the migration task role), and `cdk deploy` otherwise
+      # prompts, which hangs a non-interactive job.
+      #
+      # createSpotServiceLinkedRole=false on both deploys: by the time CI ever runs, AWSServiceRoleForEC2Spot exists —
+      # either it pre-dated this project, or the manual first deploy (RUNBOOK.md) created it — and creating that
+      # account-wide singleton twice fails the stack. It is declared RETAIN, so dropping it from the template leaves the
+      # real role in place for ec2Launcher.ts's Spot requests.
+      - name: cdk deploy — migration task only (service stays on OLD_TAG)
+        working-directory: infra
+        run: |
+          pnpm cdk:deploy:all --require-approval never $CDK_COMMON_CONTEXT \
+            -c webImageTag=$OLD_TAG -c migrateImageTag=$NEW_TAG
+
+      - name: Run migration
+        run: |
+          TASK_ARN=$(aws ecs run-task --cluster "$CLUSTER_NAME" \
+            --task-definition "$MIGRATION_TASK_FAMILY" --launch-type FARGATE \
+            --network-configuration file://network-config.json \
+            --query 'tasks[0].taskArn' --output text)
+          aws ecs wait tasks-stopped --cluster "$CLUSTER_NAME" --tasks "$TASK_ARN"
+          EXIT_CODE=$(aws ecs describe-tasks --cluster "$CLUSTER_NAME" --tasks "$TASK_ARN" \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "::error::migration task exited $EXIT_CODE — service left on $OLD_TAG, not rolled out"
+            exit 1
+          fi
+
+      # Only reached if the migration above exited 0. Now both tags match, so this diff includes the service's image
+      # change — CloudFormation rolls it out, and DeploymentCircuitBreaker(rollback=True) still protects exactly as it
+      # does for a manual deploy.
+      - name: cdk deploy — roll the service forward to NEW_TAG
+        working-directory: infra
+        run: |
+          pnpm cdk:deploy:all --require-approval never $CDK_COMMON_CONTEXT \
+            -c webImageTag=$NEW_TAG -c migrateImageTag=$NEW_TAG
+
+      # /api/v1/healthz never touches the database (RUNBOOK.md), so it can't tell a working deploy from one that will
+      # 500 on every real request.
+      - name: Smoke test (a real DB-backed route, not /healthz)
+        run: |
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' "$APP_PUBLIC_URL/api/v1/gallery")
+          if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 300 ]; then
+            echo "::error::GET /api/v1/gallery returned $STATUS after deploying $NEW_TAG"
+            exit 1
+          fi

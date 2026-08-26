@@ -9,6 +9,7 @@ from stacks.web_stack import (
     CLUSTER_NAME,
     CONTAINER_PORT,
     KEEP_ALIVE_TIMEOUT_MS,
+    MIGRATION_TASK_FAMILY,
     RDS_CA_BUNDLE_PATH,
     SERVICE_NAME,
 )
@@ -17,9 +18,26 @@ from tests.conftest import CLERK_SECRET_KEY_ARN, build_app_stacks
 ECR_PULL_ACTIONS = {"ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage"}
 
 
+def _web_container(template: Template) -> dict:
+    """The web service's own container, as distinct from
+    MigrationTaskDefinition's. WebStack synthesizes two
+    AWS::ECS::TaskDefinition resources, and ecs_patterns.
+    ApplicationLoadBalancedFargateService names its container "web" by
+    default (the migration one is explicitly named "migrate" in web_stack.py).
+    """
+    containers = [
+        c
+        for props in template.find_resources("AWS::ECS::TaskDefinition").values()
+        for c in props["Properties"]["ContainerDefinitions"]
+        if c["Name"] == "web"
+    ]
+    (container,) = containers
+    return container
+
+
 def test_execution_role_ecr_pull_scoped_to_repo_not_account_wide(wired_stacks):
     """Regression test: the ECR image-pull actions must never appear with
-    Resource: "*" — that was the AmazonECSTaskExecutionRolePolicy managed
+    Resource: "*". That was the AmazonECSTaskExecutionRolePolicy managed
     policy's over-widening (read access to every repo in the account),
     fixed by reconstructing the execution role's policy manually.
     """
@@ -41,7 +59,7 @@ def test_execution_role_ecr_pull_scoped_to_repo_not_account_wide(wired_stacks):
 
 def test_pass_role_targets_worker_role_not_instance_profile(wired_stacks):
     """Regression test: iam:PassRole must target the worker IAM role's ARN,
-    not the instance profile's ARN — IAM authorizes PassRole for
+    not the instance profile's ARN. IAM authorizes PassRole for
     RunInstances-with-IamInstanceProfile against the role's ARN. Using the
     instance profile ARN was the original bug (AccessDenied on every worker
     launch).
@@ -64,7 +82,7 @@ def test_pass_role_targets_worker_role_not_instance_profile(wired_stacks):
 
 def test_health_check_targets_the_container_port(wired_stacks):
     """The health check must hit the app's own port and its real health
-    endpoint. Both are set explicitly in web_stack.py — the target group's
+    endpoint. Both are set explicitly in web_stack.py. The target group's
     defaults are "/" on the traffic port, which would report a task healthy
     off the Next.js root page without ever exercising /api/v1/healthz.
     """
@@ -88,10 +106,7 @@ def test_database_credentials_projected_as_individual_secret_fields(wired_stacks
     URL — see that file.
     """
     template = Template.from_stack(wired_stacks["web"])
-
-    task_definitions = template.find_resources("AWS::ECS::TaskDefinition")
-    (task_definition_props,) = task_definitions.values()
-    (container,) = task_definition_props["Properties"]["ContainerDefinitions"]
+    container = _web_container(template)
 
     secrets = {s["Name"]: s["ValueFrom"] for s in container["Secrets"]}
     assert "DATABASE_URL" not in secrets, "the RDS secret is a JSON blob and must not be passed as DATABASE_URL"
@@ -105,9 +120,8 @@ def test_database_credentials_projected_as_individual_secret_fields(wired_stacks
     environment = {e["Name"]: e.get("Value") for e in container["Environment"]}
     assert {"DATABASE_HOST", "DATABASE_PORT", "DATABASE_NAME"} <= environment.keys()
 
-    # RDS requires TLS (rds.force_ssl=1 by default on Postgres 15+) and its
-    # certificates chain to Amazon roots that Node does not trust, so the app
-    # must be pointed at the CA bundle web/Dockerfile bakes into the image.
+    # RDS requires TLS (rds.force_ssl=1 by default on Postgres 15+) and its certificates chain to Amazon roots that Node
+    # does not trust, so the app must be pointed at the CA bundle web/Dockerfile bakes into the image.
     assert environment.get("DATABASE_SSL_CA") == RDS_CA_BUNDLE_PATH
 
 
@@ -121,9 +135,7 @@ def test_app_public_url_reaches_the_container_without_a_trailing_slash():
     """
     stacks = build_app_stacks(app_public_url="https://ai-gaussian-splatter.orky.net/")
     template = Template.from_stack(stacks["web"])
-
-    (task_definition_props,) = template.find_resources("AWS::ECS::TaskDefinition").values()
-    (container,) = task_definition_props["Properties"]["ContainerDefinitions"]
+    container = _web_container(template)
 
     environment = {e["Name"]: e.get("Value") for e in container["Environment"]}
     assert environment["APP_PUBLIC_URL"] == "https://ai-gaussian-splatter.orky.net"
@@ -131,7 +143,7 @@ def test_app_public_url_reaches_the_container_without_a_trailing_slash():
 
 def test_clerk_secret_is_imported_never_created_by_this_stack(wired_stacks):
     """The Clerk key is created by hand before the first deploy (RUNBOOK.md),
-    so this stack must own no secret at all — the RDS one belongs to DataStack.
+    so this stack must own no secret at all. The RDS one belongs to DataStack.
     Creating it here again would break both ends: CloudFormation cannot create
     a secret whose name is already taken, so the deploy would fail outright,
     and on a fresh account it would instead come up holding a random value that
@@ -149,10 +161,7 @@ def test_clerk_secret_reaches_the_container_by_complete_arn(wired_stacks):
     fails at task start, so the suffix is pinned here.
     """
     template = Template.from_stack(wired_stacks["web"])
-
-    task_definitions = template.find_resources("AWS::ECS::TaskDefinition")
-    (task_definition_props,) = task_definitions.values()
-    (container,) = task_definition_props["Properties"]["ContainerDefinitions"]
+    container = _web_container(template)
 
     secrets = {s["Name"]: s["ValueFrom"] for s in container["Secrets"]}
     assert secrets.get("CLERK_SECRET_KEY") == CLERK_SECRET_KEY_ARN
@@ -204,18 +213,16 @@ def test_the_service_names_one_immutable_build(wired_stacks):
     """The task definition must name a per-release tag. With a moving tag every
     release shares one task definition, so the circuit breaker's rollback
     restarts the previous deployment against that same string and Fargate
-    re-pulls the image that just failed — the rollback restores the
+    re-pulls the image that just failed. The rollback restores the
     configuration faithfully, but the configuration identifies no image.
     """
     template = Template.from_stack(wired_stacks["web"])
-
-    task_definitions = template.find_resources("AWS::ECS::TaskDefinition")
-    (task_definition_props,) = task_definitions.values()
-    (container,) = task_definition_props["Properties"]["ContainerDefinitions"]
+    container = _web_container(template)
 
     # An Fn::Join of the repository URI and the tag; the tag is the last piece.
     tag = str(container["Image"]).rsplit(":", 1)[-1].strip("'\"} ]")
-    assert re.fullmatch(r"[0-9a-f]{7,40}", tag), f"expected a commit SHA, got {tag!r}"
+    assert tag.endswith("-web"), f"expected a *-web tag, got {tag!r}"
+    assert re.fullmatch(r"[0-9a-f]{7,40}", tag.removesuffix("-web")), f"expected a commit SHA, got {tag!r}"
 
 
 @pytest.mark.parametrize(
@@ -226,27 +233,99 @@ def test_the_service_names_one_immutable_build(wired_stacks):
         pytest.param("", id="empty"),
     ],
 )
-def test_a_moving_image_tag_fails_at_synth(bad_tag):
+def test_a_moving_web_image_tag_fails_at_synth(bad_tag):
     """Rejected structurally rather than by convention: a moving tag is the one
     input that quietly disarms rollback, and nothing downstream would complain.
     """
-    with pytest.raises(ValueError, match="imageTag"):
-        build_app_stacks(image_tag=bad_tag)
+    with pytest.raises(ValueError, match="webImageTag"):
+        build_app_stacks(web_image_tag=bad_tag)
+
+
+@pytest.mark.parametrize(
+    "bad_tag",
+    [
+        pytest.param("latest", id="the-moving-tag-this-exists-to-prevent"),
+        pytest.param("v1.2.3", id="a-release-name"),
+        pytest.param("", id="empty"),
+    ],
+)
+def test_a_moving_migrate_image_tag_fails_at_synth(bad_tag):
+    """Mirrors test_a_moving_web_image_tag_fails_at_synth. migrateImageTag is
+    validated with the same _require_commit_sha helper.
+    """
+    with pytest.raises(ValueError, match="migrateImageTag"):
+        build_app_stacks(migrate_image_tag=bad_tag)
+
+
+def _migrate_container(template: Template) -> dict:
+    """The migration task's own container, as distinct from the web
+    service's — see _web_container above.
+    """
+    containers = [
+        c
+        for props in template.find_resources("AWS::ECS::TaskDefinition").values()
+        for c in props["Properties"]["ContainerDefinitions"]
+        if c["Name"] == "migrate"
+    ]
+    (container,) = containers
+    return container
+
+
+def test_migration_task_definition_family_and_image_tag(wired_stacks):
+    """The migration task must run the *-migrate image built alongside the web
+    image (web/Dockerfile's `migrator` stage) — never the web image itself,
+    which has no drizzle-kit or migrations on board.
+    """
+    template = Template.from_stack(wired_stacks["web"])
+
+    template.has_resource_properties("AWS::ECS::TaskDefinition", {"Family": MIGRATION_TASK_FAMILY})
+
+    container = _migrate_container(template)
+    tag = str(container["Image"]).rsplit(":", 1)[-1].strip("'\"} ]")
+    assert tag.endswith("-migrate"), f"expected a *-migrate tag, got {tag!r}"
+
+
+def test_migration_task_shares_the_web_services_database_wiring(wired_stacks):
+    """Regression test mirroring test_database_credentials_projected_as_individual_secret_fields.
+    The migration container needs the identical DB connection shape (same
+    host/port/name env vars, same secret-field selectors, same CA bundle path)
+    since it resolves its connection through the same databaseUrl.ts code.
+    """
+    template = Template.from_stack(wired_stacks["web"])
+    container = _migrate_container(template)
+
+    secrets = {s["Name"]: s["ValueFrom"] for s in container["Secrets"]}
+    assert {"DATABASE_USER", "DATABASE_PASSWORD"} <= secrets.keys()
+    for name, json_key in (("DATABASE_USER", "username"), ("DATABASE_PASSWORD", "password")):
+        assert f":{json_key}::" in str(secrets[name])
+
+    environment = {e["Name"]: e.get("Value") for e in container["Environment"]}
+    assert {"DATABASE_HOST", "DATABASE_PORT", "DATABASE_NAME"} <= environment.keys()
+    assert environment.get("DATABASE_SSL_CA") == RDS_CA_BUNDLE_PATH
+
+
+def test_migration_task_role_has_no_grants(wired_stacks):
+    """Regression guard on the claim in web_stack.py's comment: the migration
+    container only opens a TCP connection to RDS, no AWS API calls, so
+    MigrationTaskRole should carry no inline policy at all.
+    """
+    template = Template.from_stack(wired_stacks["web"])
+
+    policies = template.find_resources("AWS::IAM::Policy")
+    migration_role_policies = [props for name, props in policies.items() if "MigrationTaskRole" in name]
+    assert migration_role_policies == []
 
 
 def test_keep_alive_timeout_exceeds_the_albs_idle_timeout(wired_stacks):
     """Regression test: without this env var, Node's standalone server closes
     idle keep-alive sockets after its 5s default, well under the ALB's 60s
-    idle timeout — the ALB can then hand a request to a socket the app already
+    idle timeout. The ALB can then hand a request to a socket the app already
     closed, a 502 with no application-level log to explain it. Silent to drop
     or mistype, so it's pinned here rather than left to only show up as
     intermittent production 502s.
     """
     template = Template.from_stack(wired_stacks["web"])
-
-    task_definitions = template.find_resources("AWS::ECS::TaskDefinition")
-    (task_definition_props,) = task_definitions.values()
-    (container,) = task_definition_props["Properties"]["ContainerDefinitions"]
+    container = _web_container(template)
     environment = {e["Name"]: e.get("Value") for e in container["Environment"]}
 
     assert environment.get("KEEP_ALIVE_TIMEOUT") == KEEP_ALIVE_TIMEOUT_MS
@@ -254,7 +333,7 @@ def test_keep_alive_timeout_exceeds_the_albs_idle_timeout(wired_stacks):
 
 def test_tasks_run_in_public_subnets_with_a_public_ip(wired_stacks):
     """The tasks egress through the internet gateway rather than a NAT
-    gateway, which requires both a public subnet and a public IP — without the
+    gateway, which requires both a public subnet and a public IP. Without the
     IP they cannot even pull their own image from ECR. What keeps them
     unreachable is web_security_group, asserted in test_network_stack.py.
     """
@@ -274,7 +353,7 @@ def test_tasks_run_in_public_subnets_with_a_public_ip(wired_stacks):
 
 def test_service_runs_on_fargate_spot(wired_stacks):
     """~70% of the task's compute cost. A strategy naming only FARGATE_SPOT
-    also has to leave LaunchType unset — ECS rejects a service that specifies
+    also has to leave LaunchType unset. ECS rejects a service that specifies
     both.
     """
     template = Template.from_stack(wired_stacks["web"])
@@ -290,7 +369,7 @@ def test_service_runs_on_fargate_spot(wired_stacks):
 
 def test_service_waits_for_the_capacity_provider_association(wired_stacks):
     """CreateService fails if it names FARGATE_SPOT before the cluster has an
-    association for it, and both resources merely Ref the cluster — so without
+    association for it, and both resources merely Ref the cluster. So without
     an explicit dependency CloudFormation is free to order them the wrong way
     and the first deploy fails intermittently.
     """
@@ -388,8 +467,8 @@ def test_traffic_is_https_with_http_redirected(wired_stacks):
     assert len(by_port[443]["Certificates"]) == 1
     assert by_port[443]["DefaultActions"][0]["Type"] == "forward"
 
-    # Must be set explicitly: an unset policy is not "the sensible default"
-    # here, it is ELBSecurityPolicy-2016-08, which still allows TLS 1.0/1.1.
+    # Must be set explicitly: an unset policy is not "the sensible default" here, it is ELBSecurityPolicy-2016-08, which
+    # still allows TLS 1.0/1.1.
     assert by_port[443]["SslPolicy"] == "ELBSecurityPolicy-TLS13-1-2-2021-06"
 
     assert by_port[80]["DefaultActions"][0]["Type"] == "redirect"
@@ -449,7 +528,7 @@ def test_run_instances_tag_condition_only_applies_to_the_instance(wired_stacks):
     """Regression test: RunInstances is authorized against every resource the
     request touches, and only the instance is tagged. A single statement
     carrying the aws:RequestTag condition denies the AMI, subnet, and security
-    group — every launch fails with UnauthorizedOperation.
+    group. Every launch fails with UnauthorizedOperation.
     """
     statements = [s for s in _task_role_statements(wired_stacks) if s["Action"] == "ec2:RunInstances"]
     assert len(statements) == 2
@@ -460,8 +539,8 @@ def test_run_instances_tag_condition_only_applies_to_the_instance(wired_stacks):
     assert conditioned["Condition"] == {"StringEquals": {"aws:RequestTag/Role": "worker"}}
     assert "instance/*" in str(conditioned["Resource"])
 
-    # The resource types the request names but never tags. Left off, IAM has
-    # no Allow for them and denies the whole call.
+    # The resource types the request names but never tags. Left off, IAM has no Allow for them and denies the whole
+    # call.
     for resource_type in ("image", "subnet", "security-group", "network-interface", "volume"):
         assert f"{resource_type}/*" in str(unconditioned["Resource"])
     assert "instance/*" not in str(unconditioned["Resource"])
