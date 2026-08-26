@@ -9,6 +9,9 @@ __pycache__/
 
 # Node
 node_modules/
+# Only appears when pnpm cannot write to its usual ~/.local/share/pnpm location and relocates the store into the
+# workspace, which sandboxed agent and container runs do.
+.pnpm-store/
 .next/
 out/
 dist/
