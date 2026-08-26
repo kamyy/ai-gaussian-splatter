@@ -18,7 +18,7 @@ const defaults: Record<string, string> = {
   DATABASE_PORT: "5432",
   DATABASE_NAME: "test",
   DATABASE_USER: "test",
-  DATABASE_PASSWORD: "test",
+  DATABASE_PASSWORD: "postgres",
   UPLOADS_BUCKET: "test-uploads",
   SPLATS_BUCKET: "test-splats",
   AWS_REGION: "us-west-2",
