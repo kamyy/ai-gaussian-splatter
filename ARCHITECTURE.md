@@ -25,7 +25,7 @@ Not Lambda or Fargate (no GPU). Not hand-rolled ECS orchestration — bin-packin
 
 ## API design
 
-REST (`web/app/api/v1/`), not GraphQL — 12 flat endpoints. Postgres (RDS) for `users`,`objects`,`photos`,`jobs`, rate-limit counters — relational, low traffic, atomic `INSERT ... ON CONFLICT`.
+REST (`web/app/api/v1/`), not GraphQL — 12 flat endpoints. Postgres (RDS) for `users`, `splats`, `photos`, `jobs`, `gallery_items`, and rate-limit/job counters — relational, low traffic, atomic `INSERT ... ON CONFLICT`.
 
 Auth: Clerk (`@clerk/nextjs`), not Cognito (clunkier setup) or Auth0.
 
@@ -87,7 +87,7 @@ Infra: **AWS CDK (Python)** — shares `worker/`'s `uv`/`ruff`/`mypy` tooling. T
 
 CI (`.github/workflows/ci.yml`'s `deploy` job) builds, migrates, and rolls out the web service on every push to `main` — no manual approval gate, since there is no live traffic yet to protect and this is the first real deploy (M9). GPU worker deployment stays manual (`AGENTS.md`, gap 5 — no ECR pull permissions yet).
 
-Migrations run as a one-off Fargate task from a **separate `migrator` image** (`web/Dockerfile`), not bundled into the `web` runtime image or run at container boot: the service runs up to 3 tasks with no advisory lock between them, so boot-time migration would race, and the migration SQL plus the script that applies it have no reason to bloat the lean `web` standalone build that actually serves traffic.
+Migrations run as a one-off Fargate task from a **separate `migrator` image** (`web/Dockerfile`), not bundled into the `web` runtime image or run at container boot: the service runs up to 3 tasks with no advisory lock between them, so boot-time migration would race, and the migration SQL plus the script that applies it have no reason to bloat the lean `web` standalone build that actually serves traffic. `migrator`'s `node_modules` is copied from a `deps-prod` stage (`deps` with `pnpm prune --prod` applied, plus its now-unreferenced pnpm store deleted) rather than from `deps` directly, since the migration script needs only `@next/env`, `drizzle-orm`, and `pg` — regular dependencies, never the devDependencies (`typescript`, `drizzle-kit`, `vitest`, `@playwright/test`, ...) that `deps` carries for `builder`'s build.
 
 ### Migration ordering
 

@@ -34,7 +34,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 - **`web/proxy.ts` only loads from `web/`'s root, beside `app/`** — not the repo root, not inside `app/`. Next reads it from nowhere else and says nothing when it's misplaced; the symptom is every authenticated route 500ing with "clerkMiddleware() was not run". Confirm `ƒ Proxy (Middleware)` appears in `next build`'s route table.
 - **The matcher skips static files by file extension (`.js`, `.png`, …), not by "the path contains a dot".** A page like `/splats/my.splat.v2` still needs `clerkMiddleware()` to run.
-- **API routes check auth themselves.** Each authenticated handler calls `requireUser()` or `requireClerkUserId()` (`web/lib/server/auth.ts`). Public routes (gallery, healthz, the worker's token callback) simply don't call those.
+- **API routes check auth themselves.** Each authenticated handler calls `requireUser()` or `requireClerkUserId()` (`web/lib/server/auth.ts`). Public routes (gallery, `public/splats/[splatId]`, healthz, the worker's token callback) simply don't call those.
 - **`auth.protect()` in `web/app/(authenticated)/layout.tsx` only redirects unsigned visitors to sign-in.** The API is protected by `requireUser()` / `requireClerkUserId()` in each handler, not by this layout. Next reuses layouts when navigating between sibling routes (`/dashboard` → `/splats/new`), so `auth.protect()` will not re-run. If a page starts rendering protected data on the server, that page needs its own `auth.protect()`.
 - **This Clerk SDK has no `<SignedIn>` / `<SignedOut>`.** Use `<Show when="signed-in">` (`web/components/layout/SiteHeader.tsx`). Pass `fallback` for the signed-out UI. While Clerk is still loading the session, `<Show>` renders nothing — not the fallback.
 - **Set `NEXT_PUBLIC_CLERK_SIGN_IN_URL` and `NEXT_PUBLIC_CLERK_SIGN_UP_URL` at build time**, or Clerk sends users to its hosted Account Portal instead of this app. The paths never change, so `web/Dockerfile` bakes them in as `ENV`. Both pages need an optional catch-all (`web/app/sign-in/[[...sign-in]]/page.tsx`) because Clerk puts verification and SSO steps on sub-paths; a plain `page.tsx` 404s mid-sign-in.
@@ -61,7 +61,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 ## CI & repo tooling
 
 - **Renaming/removing a CI job blocks merges until branch protection is updated too.** Required checks name jobs (`worker`, `web`, `infra`); a missing context leaves PRs unmergeable — `enforce_admins` is on, so `--admin` does not override either. Rules live in GitHub Settings → Branches, not `.github/workflows/ci.yml`. List: `gh api repos/kamyy/ai-gaussian-splatter/branches/main/protection`.
-- **Biome does not format Markdown, YAML, or Dockerfiles** (`@biomejs/biome@2.5.6`). Keep those consistent by hand. `biome.json` sets `lineWidth: 120`. When hand-wrapping comments in the files Biome skips, including comments inside a Markdown fenced code block, treat 120 as the fill target: greedily pack each line with words up to that width before wrapping to the next, the same way a `fmt`/text-fill pass would, not an early wrap at whatever width feels readable. One measure holds repo-wide. Markdown *prose* is the exception: no max width, since GitHub reflows paragraphs and fixed wraps only add diff noise. One line per paragraph/list item.
+- **Biome does not format Markdown, YAML, or Dockerfiles** (`@biomejs/biome@2.5.10`, pinned in both root and `web/`). Keep those consistent by hand. `biome.json` sets `lineWidth: 120`. When hand-wrapping comments in the files Biome skips, including comments inside a Markdown fenced code block, treat 120 as the fill target: greedily pack each line with words up to that width before wrapping to the next, the same way a `fmt`/text-fill pass would, not an early wrap at whatever width feels readable. One measure holds repo-wide. Markdown *prose* is the exception: no max width, since GitHub reflows paragraphs and fixed wraps only add diff noise. One line per paragraph/list item.
 - **Never put `--` before a `cdk:*` script's flags.** pnpm forwards them — the script sees `["--", "-c", "foo=bar"]` — and then cdk's own parser discards everything after the separator, so the app synthesizes against `infra/app.py`'s placeholder context instead. It surfaces only because those placeholders are refused against a real account — `read_context` for its own four, `WebStack` for `clerkSecretKeyArn` — and the error names a flag you know you passed.
 - **Node is pinned in root `.nvmrc` (`24.18.0`); CI jobs use `node-version-file`.** Run `nvm use` from repo root. Nothing executes `.ts` via Node directly (Next/Vitest/Playwright transform; root `scripts/*` are `.js`).
 
@@ -145,14 +145,15 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 ## Testing
 
 ```bash
-(cd web && pnpm typecheck && pnpm biome:ci && pnpm test && pnpm test:e2e)
-(cd worker && uv run ruff check . && uv run mypy pipeline && uv run pytest -v)
-(cd infra && uv run ruff check . && uv run mypy app.py stacks && uv run pytest -v && pnpm cdk:synth)
+pnpm biome:ci
+(cd web && pnpm typecheck && pnpm test && pnpm test:e2e)
+(cd worker && uv run ruff check . && uv run ruff format --check . && uv run mypy pipeline && uv run pytest -v)
+(cd infra && uv run ruff check . && uv run ruff format --check . && uv run mypy app.py stacks && uv run pytest -v && pnpm cdk:synth)
 ```
 
 Postgres-dependent web tests need `TEST_DATABASE_URL` (see `RUNBOOK.md`). Run the relevant subset after changes.
 
-`pnpm biome:ci` above matches CI's root `lint-format` job (covers `scripts/*.js` too). The `web` job runs `typegen`/`tsc`/migrate/vitest/`next build`/playwright only.
+`pnpm biome:ci` from repo root matches CI's `lint-format` job (covers `scripts/*.js` too); running it from `web/` instead uses `web/package.json`'s own script and only covers `web/`. The `web` job runs `typegen`/`tsc`/migrate/vitest/`next build`/playwright only.
 
 ## State / what's next
 
@@ -164,7 +165,7 @@ Known gaps, priority order:
 2. **`web/Dockerfile` never run on AWS** — local podman only; ECS/ECR path unproven.
 3. **Training rasterizes at full photo resolution.** `_load_views` (`worker/pipeline/train.py`) resizes each photo to its COLMAP camera's `width`/`height`, which are the *original* dimensions — COLMAP downsamples for feature detection only and keeps intrinsics in original pixels — so that resize is a no-op and a 12 MP phone photo trains at 12 MP against the reference implementation's ~1600px longest edge. Two consequences: training dominates job wall clock, and every ground-truth image sits in VRAM at full size (~5.9 GB for 40 × 12 MP), so a large enough set OOMs the A10G. Fix is a longest-edge cap in `_load_views` scaling `fx`/`fy`/`cx`/`cy` and `width`/`height` by the same factor, or `K` no longer matches the pixels.
 4. **No maximum photo count or upload size.** `MIN_PHOTOS_PER_SPLAT` has no counterpart and the presign body schema (`web/app/api/v1/splats/[splatId]/photos/presign/route.ts`) is `.min(1)` only. COLMAP's exhaustive matching is O(n²) pairs and the instance runs until `worker/run_job.py` returns, so an oversized upload is unbounded GPU spend. The global daily cap in `process` bounds job count, not job cost (`ARCHITECTURE.md`).
-5. **Worker can't pull its image.** One ECR repo (web only); `WorkerIamStack` has no ECR pull perms (`ecr:GetAuthorizationToken`, `BatchGetImage`, `GetDownloadUrlForLayer`). `web/lib/server/ec2Launcher.ts` user-data runs `aws ecr get-login-password` then `docker pull`, so login fails and the instance keeps billing (see gap 6). `WORKER_IMAGE_URI`/`ECR_REGISTRY` still default to `REPLACE_WITH_ECR_IMAGE_URI`/`REPLACE_WITH_ECR_REGISTRY`. M5.
+5. **Worker can't pull its image.** One ECR repo (web only); `WorkerIamStack` has no ECR pull perms (`ecr:GetAuthorizationToken`, `BatchGetImage`, `GetDownloadUrlForLayer`). `web/lib/server/ec2Launcher.ts` user-data runs `aws ecr get-login-password` then `docker run --rm --gpus all` (which pulls the image itself), so login fails and the instance keeps billing (see gap 6). `WORKER_IMAGE_URI`/`ECR_REGISTRY` still default to `REPLACE_WITH_ECR_IMAGE_URI`/`REPLACE_WITH_ECR_REGISTRY`. M5.
 6. **No fallback for a worker that never reports.** Self-terminate is in `worker/run_job.py`'s `finally`; no CloudWatch runtime alarm yet — only `BudgetsStack` email.
 7. **A well-formed but wrong `alertEmail` still deploys green.** `read_context` refuses every placeholder against a real account and `WebStack` checks the Clerk ARN's account/region, so a *forgotten* `-c` flag now fails at synth — but a mistyped address is syntactically fine, and its SNS subscription just sits in `PendingConfirmation` until someone clicks the link AWS mailed. Nothing checks that it ever left that state, so the first sign is a budget alert that never arrives. `aws sns list-subscriptions-by-topic` after a first deploy is the manual check.
 8. **`_densify_and_prune` discards optimizer state.** `worker/pipeline/train.py` rebuilds the Adam optimizer after each densification round, dropping its moment estimates every `iterations // 10` steps. Suspect this before raising the iteration count if 10k under-converges — raising it is the expensive fix.
