@@ -1,3 +1,14 @@
 {
-  "biome.enabled": true
+  // Overrides the workspace-level default back to enabled specifically for this folder (path "."): the Biome VS
+  // Code extension's single LSP session here already covers the whole repo tree.
+  "biome.enabled": true,
+  // Also inherits ai-gaussian-splatter.code-workspace's shared settings. This one can't move there — shared settings
+  // apply recursively across every folder, so a bare name would hide same-named subfolders everywhere, not just
+  // here.
+  "files.exclude": {
+    "web": true,
+    "worker": true,
+    "infra": true,
+    "scripts": true
+  }
 }

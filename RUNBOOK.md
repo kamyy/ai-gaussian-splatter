@@ -188,18 +188,14 @@ Substitutes for `pnpm dev` to exercise the `splat-web` container that production
 ```bash
 cd web # Make sure you're in the right folder
 
-# The Clerk publishable key is a --build-arg because it's inlined into the browser bundle at build time.
-# pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk is usable but fake. Substitute for a real Clerk publishable key to
-# exercise Clerk authentication.
-podman build --target web \
-  --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk \
-  -t splat-web:test .
+# The Clerk publishable key is a --build-arg because it's inlined into the browser bundle at build time. Every route,
+# not just authenticated ones, 500s unless this is a real key.
+podman build --target web --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=<pk_test_...> -t splat-web:test .
 
 # .env supplies several important variables to the container. DATABASE_HOST, APP_PUBLIC_URL stay on the command line to
 # override variables in .env. host.containers.internal is Podman's built-in alias for the host, which is where
 # splat-pg (above) publishes its port — no shared network needed to reach it.
-podman run -d --name splat-web -p 8000:8000 \
-  --env-file .env \
+podman run -d --name splat-web -p 8000:8000 --env-file .env \
   -e DATABASE_HOST=host.containers.internal \
   -e APP_PUBLIC_URL=http://localhost:8000 \
   splat-web:test
@@ -207,39 +203,13 @@ podman run -d --name splat-web -p 8000:8000 \
 curl -s http://localhost:8000/api/v1/healthz   # should be {"status":"ok"}
 ```
 
-## Applying migrations to a deployed database
+## Fixing a bad migration
 
-**CI now applies migrations automatically on every push to `main`.** The `deploy` job in `.github/workflows/ci.yml` runs the `migrator` image (`web/Dockerfile`) as a one-off ECS task before rolling the service forward, using a real AWS deploy, not the bastion-less procedure below. What follows is for out-of-band fixes only — a migration needed outside a normal deploy, or a broken automated run to retry by hand.
+**CI applies migrations automatically on every push to `main`.** The `deploy` job in `.github/workflows/ci.yml` runs the `migrator` image (`web/Dockerfile`) as a one-off ECS task before rolling the service forward. There is no supported way to reach the database by hand instead: `DataStack`'s RDS instance sits in an isolated subnet with no NAT gateway (`infra/stacks/network_stack.py`), reachable only from `web_security_group` on port 5432, and no bastion exists in this infra. The CD migration task works because CDK registers it with the web service's own network configuration; a human's laptop, or any other host, has no path to reproduce that.
 
-The container image deliberately does not run migrations on boot (the service runs up to 3 tasks, which would race. The migrator takes no advisory lock). Run it as a deploy step instead:
+So fix a bad migration the same way you'd fix any other bug: write a corrective migration following the expand/contract discipline in `AGENTS.md` (edit `web/lib/server/db/schema.ts`, `pnpm db:generate`, review the emitted SQL in `web/drizzle/`), commit it, and land it through a normal PR to `main`. CD builds the new `migrator` image, applies it, and rolls the service forward exactly like every other release.
 
-`web/drizzle.config.ts` resolves its connection the same way the running app does (`web/lib/server/databaseUrl.ts`), from the `DATABASE_HOST`/`PORT`/`NAME`/`USER`/`PASSWORD` parts. Read those straight out of the RDS secret, plus `DATABASE_SSL_CA`:
-
-```bash
-cd web # Make sure you're in the right folder
-
-secret=$(aws secretsmanager get-secret-value \
-  --secret-id <rds-secret-arn> \
-  --query SecretString \
-  --output text)
-
-# Used to create URL to postgres DB in pnpm db:migrate
-export DATABASE_HOST=$(jq -r .host <<< "$secret")
-export DATABASE_PORT=$(jq -r .port <<< "$secret")
-export DATABASE_NAME=$(jq -r .dbname <<< "$secret")
-export DATABASE_USER=$(jq -r .username <<< "$secret")
-export DATABASE_PASSWORD=$(jq -r .password <<< "$secret")
-
-# RDS's CA bundle so that the TLS connection can be verified in pnpm db:migrate.
-curl -fsSo /tmp/rds-global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
-export DATABASE_SSL_CA=/tmp/rds-global-bundle.pem
-
-pnpm db:migrate
-```
-
-`DATABASE_SSL_CA` is what makes this work against RDS at all: without it `databaseSsl()` returns undefined, `pnpm db:migrate` (`web/scripts/db-migrate.cjs`) opens an unencrypted connection, and `rds.force_ssl = 1` refuses it. The bundle is the same one `web/Dockerfile` bakes into the image. The running task gets the path from `infra/stacks/web_stack.py`, but a shell running migrations has to fetch its own copy. Exported variables win over `web/.env`, which dotenv never overwrites, so a local `.env` can't redirect this at your production database.
-
-The database lives in a private subnet, so run this from somewhere inside the VPC, not a laptop. Prefer a bastion that can reach the RDS endpoint directly: a port-forward makes the client connect to `localhost`, which fails certificate hostname verification. The fix for *that* is disabling verification, which defeats the point of supplying the CA.
+If the `deploy` job's migration step fails for an infra reason rather than a bad migration (a transient AWS error, a placement failure), retry the whole job rather than reaching for manual AWS commands — it's designed to be idempotent end to end (each image build step already skips if that commit's tag is already pushed): `gh run rerun <run-id> --failed-jobs`.
 
 ## Debugging a failed job
 
@@ -250,7 +220,7 @@ The database lives in a private subnet, so run this from somewhere inside the VP
 
 ## Deploying to production
 
-**A routine push to `main` needs none of this by hand.** The `deploy` job in `.github/workflows/ci.yml` builds, migrates, and rolls the service out automatically (see "Applying migrations to a deployed database" below and "GitHub Actions OIDC role for CI deploys"). What follows is the manual flow: still the only path for a fresh account's first deploy, for infra-only changes where a human wants to run `cdk diff` first, or for a rollback.
+**A routine push to `main` needs none of this by hand.** The `deploy` job in `.github/workflows/ci.yml` builds, migrates, and rolls the service out automatically (see "Fixing a bad migration" above and "GitHub Actions OIDC role for CI deploys" below). What follows is the manual flow: still the only path for a fresh account's first deploy, for infra-only changes where a human wants to run `cdk diff` first, or for a rollback.
 
  The variables set below are required on every `pnpm cdk:*` invocation. `RegistryStack` itself  reads none of these values, but `pnpm cdk:*` always builds the whole app first, `WebStack` included, and that's where they're required. Only `AWS_ACCOUNT_ID` needs `export`. `infra/app.py` reads it straight from its environment; the rest are only ever expanded into `-c key=value` flags by this same shell, so a plain assignment reaches them just as well.
 
@@ -382,7 +352,7 @@ CI's `deploy` job always passes that flag: by the time it runs, the role exists 
 
 Turn on billing alerts, or `BudgetsStack`'s CloudWatch alarm never fires. `AWS/Billing EstimatedCharges` publishes no data at all until the account preference is set, and there is no API or CloudFormation resource for it — Billing console → Billing preferences → **Receive AWS Free Tier alerts and billing alerts**, in `us-east-1`. The AWS Budget half of that stack works regardless; only the alarm depends on this.
 
-**Applying migrations is not part of** `pnpm cdk:deploy:all` and must be done before the site works, even though the target group reports healthy without it — `/api/v1/healthz` never touches the database. See "Applying migrations to a deployed database" above; without it the database has no tables and every real request 500s. (CI's `deploy` job handles this automatically for a routine push to `main` — this only matters for the manual flow above.)
+**Applying migrations is not part of** `pnpm cdk:deploy:all` and must be done before the site works, even though the target group reports healthy without it — `/api/v1/healthz` never touches the database. There is no supported out-of-band way to apply one, by design (see "Fixing a bad migration" above) — including on a fresh account. So on a fresh account, the site stays broken after this first deploy until CD applies the first migration: finish "GitHub Actions OIDC role for CI deploys" below, then push any commit to `main`. That `deploy` job run builds the migrator image, applies it, and rolls the service forward, exactly like every release after it.
 
 ### GitHub Actions OIDC role for CI deploys
 
