@@ -378,6 +378,13 @@ aws iam create-open-id-connect-provider \
 # No --thumbprint-list: IAM validates GitHub's TLS cert against its own trusted root CA library first, since GitHub's
 # OIDC endpoint chains to a public CA, and only falls back to thumbprint matching when it doesn't.
 
+Get the owner and repo IDs with:
+
+```bash
+gh api repos/<owner>/<repo> --jq '{ownerId: .owner.id, repoId: .id}'
+```
+
+```bash
 cat > trust-policy.json <<EOF
 {
   "Version": "2012-10-17",
@@ -388,7 +395,7 @@ cat > trust-policy.json <<EOF
     "Condition": {
       "StringEquals": {
         "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-        "token.actions.githubusercontent.com:sub": "repo:<owner>/<repo>:ref:refs/heads/main"
+        "token.actions.githubusercontent.com:sub": "repo:<owner>@<ownerId>/<repo>@<repoId>:ref:refs/heads/main"
       }
     }
   }]
