@@ -369,6 +369,9 @@ One-time, and only possible **after** [First-time account setup](#first-time-acc
 ### Creating the OIDC provider and CI role
 
 ```bash
+# IAM allows only one OIDC provider per URL per account. Skip this call if `aws iam list-open-id-connect-providers`
+# already lists token.actions.githubusercontent.com — another app in this account created it already, and a repeat
+# call fails with EntityAlreadyExists. Reuse that provider; only this app's role and its trust policy are new.
 aws iam create-open-id-connect-provider \
   --url https://token.actions.githubusercontent.com \
   --client-id-list sts.amazonaws.com
@@ -397,14 +400,10 @@ aws iam create-role --role-name ai-gaussian-splatter-ci-deploy \
 
 ### Granting deploy permissions
 
-`ExecutionRole`'s name is CloudFormation-generated (unlike `MigrationTaskRole`'s fixed one below), and so is CDK's logical ID for it — a hash suffix like `ExecutionRole605A040B`, not the bare construct ID — so this matches by prefix instead of guessing the hash. Look it up once, then attach the policy:
+`ExecutionRole`'s name is fixed (`ai-gaussian-splatter-execution`), like `MigrationTaskRole`'s below, so its ARN can be built directly instead of looked up:
 
 ```bash
-EXECUTION_ROLE_ARN=$(aws cloudformation describe-stack-resources \
-  --stack-name WebStack \
-  --query "StackResources[?starts_with(LogicalResourceId, 'ExecutionRole')].PhysicalResourceId | [0]" \
-  --output text)
-EXECUTION_ROLE_ARN="arn:aws:iam::$AWS_ACCOUNT_ID:role/$EXECUTION_ROLE_ARN"
+EXECUTION_ROLE_ARN="arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-gaussian-splatter-execution"
 
 cat > ci-deploy-policy.json <<EOF
 {
