@@ -203,45 +203,35 @@ podman run -d --name splat-web -p 8000:8000 --env-file .env \
 curl -s http://localhost:8000/api/v1/healthz   # should be {"status":"ok"}
 ```
 
-## Fixing a bad migration
-
-**CI applies migrations automatically on every push to `main`.** The `deploy` job in `.github/workflows/ci.yml` runs the `migrator` image (`web/Dockerfile`) as a one-off ECS task before rolling the service forward. There is no supported way to reach the database by hand instead: `DataStack`'s RDS instance sits in an isolated subnet with no NAT gateway (`infra/stacks/network_stack.py`), reachable only from `web_security_group` on port 5432, and no bastion exists in this infra. The CD migration task works because CDK registers it with the web service's own network configuration; a human's laptop, or any other host, has no path to reproduce that.
-
-So fix a bad migration the same way you'd fix any other bug: write a corrective migration following the expand/contract discipline in `AGENTS.md` (edit `web/lib/server/db/schema.ts`, `pnpm db:generate`, review the emitted SQL in `web/drizzle/`), commit it, and land it through a normal PR to `main`. CD builds the new `migrator` image, applies it, and rolls the service forward exactly like every other release.
-
-If the `deploy` job's migration step fails for an infra reason rather than a bad migration (a transient AWS error, a placement failure), retry the whole job rather than reaching for manual AWS commands — it's designed to be idempotent end to end (each image build step already skips if that commit's tag is already pushed): `gh run rerun <run-id> --failed-jobs`.
-
-## Debugging a failed job
-
-1. Check `jobs.status` and `jobs.error_message` for the splat (`GET /api/v1/splats/{id}/jobs/latest`).
-2. If `status` is stuck (no update in ~20 min) rather than `failed`: the instance likely died without reporting — check the EC2 console for the tagged instance (`Role=worker`, `JobId=<job_id>`) and its system log.
-3. Confirm self-termination actually fired: the instance should not still be running after the job reaches a terminal state. **If it is, terminate it by hand.** The instance-runtime alarm meant to catch this is not in any stack yet (`AGENTS.md`, Known gaps), so nothing else will.
-4. `docker logs` on the instance (if still running) or CloudWatch Logs (once wired up) for the actual COLMAP/gsplat stack trace.
-
 ## Deploying to production
 
-**A routine push to `main` needs none of this by hand.** The `deploy` job in `.github/workflows/ci.yml` builds, migrates, and rolls the service out automatically (see "Fixing a bad migration" above and "GitHub Actions OIDC role for CI deploys" below). What follows is the manual flow: still the only path for a fresh account's first deploy, for infra-only changes where a human wants to run `cdk diff` first, or for a rollback.
+**This whole section is one-time setup, not something repeated per release.** It walks a fresh account to the point where `.github/workflows/ci.yml`'s `deploy` job can take over every future deploy: push to `main`, and CD builds, migrates, and rolls the service out on its own (see ["Fixing a bad migration"](#fixing-a-bad-migration) and ["Configuring continuous deployment"](#configuring-continuous-deployment) below). After that, a human runs `cdk` by hand again only for two rare exceptions: a rollback, or previewing an infra change with `cdk diff` before it applies — both reuse the same context values and commands below.
 
- The variables set below are required on every `pnpm cdk:*` invocation. `RegistryStack` itself  reads none of these values, but `pnpm cdk:*` always builds the whole app first, `WebStack` included, and that's where they're required. Only `AWS_ACCOUNT_ID` needs `export`. `infra/app.py` reads it straight from its environment; the rest are only ever expanded into `-c key=value` flags by this same shell, so a plain assignment reaches them just as well.
+Start by finishing **[First-time account setup](#first-time-account-setup)** before `pnpm cdk:deploy:all`. Those steps create the Clerk secret, create `AWSServiceRoleForEC2Spot` if it doesn't already exist, turn on billing alerts, bootstrap both regions, and stand up the ECR repository. Skip the secret and tasks fail at start: `WebStack` imports it rather than creating it. Skip the Spot role and the failure doesn't surface until the first real worker job tries to launch a Spot instance. Skip bootstrap and the first stack fails before creating anything. Skip the registry (or the push into it) and Fargate has nothing to pull; the circuit breaker rolls the stack back. ["Configuring continuous deployment"](#configuring-continuous-deployment) is also one-time, but it needs `WebStack` to already exist, so it waits until after the first `cdk:deploy:all`.
+
+### Resolving context values
+
+Every `pnpm cdk:*` invocation below — bootstrap, registry, and the full deploy — needs the same six values. Resolve them once per shell session and reuse them for everything that follows. `RegistryStack` itself reads none of them, but `pnpm cdk:*` always builds the whole app first, `WebStack` included, and that's where they're required. Only `AWS_ACCOUNT_ID` needs `export`. `infra/app.py` reads it straight from its environment; the rest are only ever expanded into `-c key=value` flags by this same shell, so a plain assignment works just as well. 
 
 ```bash
-cd infra # Make sure you're in the right folder.
-
 export AWS_ACCOUNT_ID=<your real account id> # Use a real AWS account id.
+```
 
-# Where BudgetsStack sends spend alerts. Omitting it breaks pnpm cdk:*, but nothing can tell a wrong address from a
-# right one, and a wrong one deploys green with the alerts never arriving. AWS emails a confirmation link on the first
-# deploy. Until it's clicked the subscription stays pending and sends nothing, so check for it.
+`ALERT_EMAIL` is where `BudgetsStack` sends spend alerts. Omitting it breaks `pnpm cdk:*`, but nothing can tell a wrong address from a right one, and a wrong one deploys green with the alerts never arriving. AWS emails a confirmation link on the first deploy; until it's clicked the subscription stays pending and sends nothing, so check for it.
+
+```bash
 ALERT_EMAIL=<your email>
+```
 
-# Where the worker PATCHes job status back to, and what the ALB is aliased to. Keep it in step with APP_HOSTNAME in
-# web_stack.py, which is what the certificate and the Route 53 record are built from — nothing cross-checks the two, so
-# a mismatch sends every status callback at a host that won't answer.
+`APP_PUBLIC_URL` is where the worker PATCHes job status back to, and what the ALB is aliased to. Keep it in step with `APP_HOSTNAME` in `web_stack.py`, which is what the certificate and the Route 53 record are built from — nothing cross-checks the two, so a mismatch sends every status callback at a host that won't answer.
+
+```bash
 APP_PUBLIC_URL=https://ai-gaussian-splatter.orky.net
+```
 
-# The AMI each job's spot instance boots. ec2Launcher.ts's user data runs aws ecr get-login-password and docker run
-# --gpus all with no provisioning of its own, so the image must already carry Docker, the NVIDIA driver and container
-# toolkit, and the AWS CLI. AWS's Deep Learning Base GPU AMIs do; this lists them newest first:
+`WORKER_AMI_ID` is the AMI each job's spot instance boots. `ec2Launcher.ts`'s user data runs `aws ecr get-login-password` and `docker run --gpus all` with no provisioning of its own, so the image must already carry Docker, the NVIDIA driver and container toolkit, and the AWS CLI. AWS's Deep Learning Base GPU AMIs do; this lists them newest first:
+
+```bash
 aws ec2 describe-images --region us-west-2 --owners amazon \
   --filters "Name=name,Values=Deep Learning Base*GPU AMI*Ubuntu*" \
             "Name=architecture,Values=x86_64" \
@@ -249,48 +239,66 @@ aws ec2 describe-images --region us-west-2 --owners amazon \
   --query 'reverse(sort_by(Images,&CreationDate))[:5].{id:ImageId,name:Name,created:CreationDate}' \
   --output table
 WORKER_AMI_ID=<ami-... from the table>
+```
 
-# WEB_IMAGE_TAG is the pushed build SHA. Per-release, not moving — each deploy gets its own task definition, so the
-# circuit breaker (and manual rollback) can point at an older SHA that still exists in the repo. WebStack requires a
-# SHA; the ECR repo refuses to repoint an existing tag. migrateImageTag (the migration task's own image) is deliberately
-# not passed below. It defaults to webImageTag, which is exactly what a manual "build once, deploy once" flow wants.
-# ci.yml's deploy job is the one caller that ever diverges the two on purpose.
+`WEB_IMAGE_TAG` is the pushed build SHA. Per-release, not moving — each deploy gets its own task definition, so the circuit breaker (and manual rollback) can point at an older SHA that still exists in the repo. `WebStack` requires a SHA; the ECR repo refuses to repoint an existing tag. `migrateImageTag` (the migration task's own image) is deliberately not passed below. It defaults to `webImageTag`, which is exactly what a manual "build once, deploy once" flow wants. `ci.yml`'s `deploy` job is the one caller that ever diverges the two on purpose.
+
+```bash
 WEB_IMAGE_TAG=$(git rev-parse --short HEAD)
+```
 
-# One time only; Copy the real Clerk sk_live_... secret key from Clerk's dashboard to AWS Secrets Manager. On any later
-# run this returns ResourceExistsException. That is the secret already being there, not a failed deploy. Skip to the
-# describe-secret below; to change the value use "Rotating the Clerk key".
-printf '%s' 'sk_live_...' > clerk-secret-key.txt   # printf, prevents any newline becoming part of the key.
-aws secretsmanager create-secret \
-  --region us-west-2 \
-  --name ai-gaussian-splatter/clerk-secret-key \
-  --description "clerk-secret-key" \
-  --secret-string file://clerk-secret-key.txt \
-  --query ARN --output text
-rm clerk-secret-key.txt
+`CLERK_SECRET_KEY_ARN` includes Secrets Manager's six-character suffix. `WebStack` reads the secret and validates the ARN's account/region on every `pnpm cdk:*` invocation. This `describe-secret` call needs the Clerk secret to already exist, so only run this after creating the secret in ["First-time account setup"](#first-time-account-setup).
 
-# CLERK_SECRET_KEY_ARN includes Secrets Manager's six-character suffix. WebStack reads the secret and validates the
-# ARN's account/region on every pnpm cdk:* invocation.
+```bash
 CLERK_SECRET_KEY_ARN=$(aws secretsmanager describe-secret \
   --region us-west-2 \
   --secret-id ai-gaussian-splatter/clerk-secret-key \
   --query ARN \
   --output text)
+```
 
-# The orky.net zone for the ALB's DNS record and ACM validation. Omitting it breaks pnpm cdk:*. The zone is imported
-# only, not created. It must already exist. CDK adds the app's A-alias and ACM's validation CNAME to it; nothing else
-# in the zone is this app's concern.
+`HOSTED_ZONE_ID` is the orky.net zone for the ALB's DNS record and ACM validation. Omitting it breaks `pnpm cdk:*`. The zone is imported only, not created — it must already exist. CDK adds the app's A-alias and ACM's validation CNAME to it; nothing else in the zone is this app's concern.
+
+```bash
 HOSTED_ZONE_ID=$(aws route53 list-hosted-zones-by-name \
   --dns-name orky.net \
   --query "HostedZones[?Name=='orky.net.' && Config.PrivateZone==\`false\`].Id | [0]" \
   --output text | cut -d/ -f3)
+```
 
-# A fresh account needs pnpm cdk:bootstrap once per region before any deploy. It creates a CDKToolkit stack that CDK
-# uploads templates/assets to. Every template carries a BootstrapVersion SSM lookup, so without it the first stack fails
-# before creating anything. BudgetsStack lives in us-east-1; the rest live in us-west-2.
-#
-# cdk.json's app command runs app.py for every CLI invocation, bootstrap included, so it still needs all six -c flags
-# below even though bootstrap deploys no stack of its own. cdk bootstrap takes multiple environment targets in one call.
+### First-time account setup
+
+One-time per account. Complete all this before the first `pnpm cdk:deploy:all`.
+
+Clerk secret is imported, not created by any stack. See `describe-secret` in ["Resolving context values"](#resolving-context-values) to retrieve the ARN for the value; to change the value use ["Rotating the Clerk key"](#rotating-the-clerk-key).
+
+```bash
+aws secretsmanager create-secret \
+  --region us-west-2 \
+  --name ai-gaussian-splatter/clerk-secret-key \
+  --description "clerk-secret-key" \
+  --secret-string <sk_live_...> \
+  --query ARN --output text
+```
+
+`AWSServiceRoleForEC2Spot` is also not created by any stack. It's one account-wide role shared by every other Spot workload in the account. It has to exist before `ec2Launcher.ts`'s first `RunInstances` call. This app cannot auto-create it. Trying to create it a second time fails outright, hence the guard before  creating it:
+
+```bash
+aws iam get-role --role-name AWSServiceRoleForEC2Spot >/dev/null 2>&1 || \
+  aws iam create-service-linked-role --aws-service-name spot.amazonaws.com
+```
+
+Turn on billing alerts, or `BudgetsStack`'s CloudWatch alarm never fires. `AWS/Billing EstimatedCharges` publishes no data at all until the account preference is set, and there is no API or CloudFormation resource for it — Billing console → Billing preferences → **Receive AWS Free Tier alerts and billing alerts**, in `us-east-1`. The AWS Budget half of that stack works regardless; only the alarm depends on this.
+
+Now resolve the six context values in ["Resolving context values"](#resolving-context-values) above, in the same shell.
+
+A fresh account needs `pnpm cdk:bootstrap` once per region before any deploy. It creates a CDKToolkit stack that CDK uploads templates/assets to. Every template carries a BootstrapVersion SSM lookup, so without it the first stack fails before creating anything. `BudgetsStack` lives in `us-east-1`; the rest live in `us-west-2`.
+
+Bootstrap still needs all six `-c` flags below even though bootstrap deploys no stack of its own. `pnpm cdk bootstrap` can take multiple environment targets in one call.
+
+```bash
+cd infra # Make sure you're in the right folder.
+
 pnpm cdk:bootstrap aws://$AWS_ACCOUNT_ID/us-east-1 aws://$AWS_ACCOUNT_ID/us-west-2 \
   -c hostedZoneId=$HOSTED_ZONE_ID \
   -c clerkSecretKeyArn=$CLERK_SECRET_KEY_ARN \
@@ -298,10 +306,11 @@ pnpm cdk:bootstrap aws://$AWS_ACCOUNT_ID/us-east-1 aws://$AWS_ACCOUNT_ID/us-west
   -c appPublicUrl=$APP_PUBLIC_URL \
   -c workerAmiId=$WORKER_AMI_ID \
   -c webImageTag=$WEB_IMAGE_TAG
+```
 
-# One time only, on a fresh account: WebStack pins the web service to an image tag, but a brand-new ECR repo starts
-# empty, so pnpm cdk:deploy:all would fail trying to pull an image that was never pushed. Deploy RegistryStack by itself
-# first. The image gets pushed into it below (podman push), then cdk:deploy:all can run on every change.
+Deploy `RegistryStack` by itself first. Then push both images under ["Going live"](#going-live). This order matters: `pnpm cdk:deploy:all` deploys everything, including `WebStack`. `WebStack` pins the web service to a specific image tag, so running it before the registry exists and the web image is pushed leaves nothing to pull. Once both steps are done, `cdk:deploy:all` can run.
+
+```bash
 pnpm cdk:deploy:registry \
   -c hostedZoneId=$HOSTED_ZONE_ID \
   -c clerkSecretKeyArn=$CLERK_SECRET_KEY_ARN \
@@ -309,6 +318,14 @@ pnpm cdk:deploy:registry \
   -c appPublicUrl=$APP_PUBLIC_URL \
   -c workerAmiId=$WORKER_AMI_ID \
   -c webImageTag=$WEB_IMAGE_TAG
+```
+
+### Going live
+
+This is the step that actually ships code — push both images and bring `WebStack` up, completing the one-time setup. It's also the exact command reused for the two rare exceptions after CD is live: a rollback (an older `WEB_IMAGE_TAG`) or a `cdk diff` preview (swap `cdk:deploy:all` for `cdk:diff`).
+
+```bash
+cd infra # Make sure you're in the right folder.
 
 ECR_TOKEN=$(aws ecr get-login-password --region us-west-2)
 REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com
@@ -318,13 +335,14 @@ REPO=$REGISTRY/ai-gaussian-splatter
 # (infra/stacks/web_stack.py). Push it too, or a manual `aws ecs run-task` against that family has nothing to pull.
 # CI's deploy job builds and pushes both the same way (ci.yml).
 podman login --username AWS --password-stdin $REGISTRY <<< "$ECR_TOKEN"
+
 podman build --target web -t $REPO:$WEB_IMAGE_TAG-web \
   --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=<pk_live_...> ../web
 podman push $REPO:$WEB_IMAGE_TAG-web
+
 podman build --target migrator -t $REPO:$WEB_IMAGE_TAG-migrate ../web
 podman push $REPO:$WEB_IMAGE_TAG-migrate
 
-# Deploy on any change
 pnpm cdk:deploy:all \
   -c hostedZoneId=$HOSTED_ZONE_ID \
   -c clerkSecretKeyArn=$CLERK_SECRET_KEY_ARN \
@@ -334,29 +352,21 @@ pnpm cdk:deploy:all \
   -c webImageTag=$WEB_IMAGE_TAG
 ```
 
- The first deploy waits on ACM DNS validation, which can take several minutes; ACM writes the validation record into the zone itself.
+The first deploy waits on ACM DNS validation, which can take several minutes; ACM writes the validation record into the zone itself.
 
 `min_healthy_percent=100` will keep any old task serving until the new one passes health checks. If the new image fails those checks, the circuit breaker rolls back to the previous task definition, which names its own still-present tag, so ECS re-pulls the build that was working. Rolling back by hand is the same `cdk:deploy:all` call using an older `WEB_IMAGE_TAG`.
 
 Only the last few releases are kept (`RELEASES_KEPT` in `infra/stacks/registry_stack.py`); older tags are expired and can no longer be rolled back to.
 
-`AWSServiceRoleForEC2Spot` is one account-wide role shared by every Spot workload, and `WorkerIamStack` creates it. Check first, because creating a second one fails the whole stack:
+**`pnpm cdk:deploy:all` never applies migrations.** The database has no tables yet, but the target group reports healthy anyway — `/api/v1/healthz` never touches the database. There's no supported out-of-band way to apply one by hand either (see ["Fixing a bad migration"](#fixing-a-bad-migration) below).
 
-```bash
-aws iam get-role --role-name AWSServiceRoleForEC2Spot >/dev/null 2>&1 && echo "already exists"
-```
+So the site stays broken after this first deploy until CD applies the first migration. Finish ["Configuring continuous deployment"](#configuring-continuous-deployment) below, then push any commit to `main` — that push is what actually runs the first migration. That `deploy` job run builds the migrator image, applies it, and rolls the service forward, exactly like every release after it.
 
-If it exists, add `-c createSpotServiceLinkedRole=false` to every `pnpm cdk:deploy:registry`/`pnpm cdk:deploy:all`/`pnpm cdk:diff` invocation and the stack will leave it alone. (Don't delete the role to make the default path work. That breaks Spot for everything else in the account.)
+## Configuring continuous deployment
 
-CI's `deploy` job always passes that flag: by the time it runs, the role exists either way. If the manual deploy above created it, CI's first run drops it from the template. The role itself is `RETAIN` and stays, so Spot keeps working.
+One-time, and only possible **after** [First-time account setup](#first-time-account-setup). Policy below names `MigrationTaskRole` and `ExecutionRole` neither of which exist before the first `pnpm cdk:deploy:all`. The `ai-gaussian-splatter-ci-deploy` role created below cannot be CDK-managed otherwise it would lead to a chicken-egg situation.
 
-Turn on billing alerts, or `BudgetsStack`'s CloudWatch alarm never fires. `AWS/Billing EstimatedCharges` publishes no data at all until the account preference is set, and there is no API or CloudFormation resource for it — Billing console → Billing preferences → **Receive AWS Free Tier alerts and billing alerts**, in `us-east-1`. The AWS Budget half of that stack works regardless; only the alarm depends on this.
-
-**Applying migrations is not part of** `pnpm cdk:deploy:all` and must be done before the site works, even though the target group reports healthy without it — `/api/v1/healthz` never touches the database. There is no supported out-of-band way to apply one, by design (see "Fixing a bad migration" above) — including on a fresh account. So on a fresh account, the site stays broken after this first deploy until CD applies the first migration: finish "GitHub Actions OIDC role for CI deploys" below, then push any commit to `main`. That `deploy` job run builds the migrator image, applies it, and rolls the service forward, exactly like every release after it.
-
-### GitHub Actions OIDC role for CI deploys
-
-One-time, and only possible **after** the manual bootstrap sequence above has run at least once — the policy below names `MigrationTaskRole`'s fixed ARN and `ExecutionRole`'s CloudFormation-generated one, neither of which exists before the first `WebStack` deploy.
+### Creating the OIDC provider and CI role
 
 ```bash
 aws iam create-open-id-connect-provider \
@@ -383,10 +393,13 @@ cat > trust-policy.json <<EOF
 EOF
 aws iam create-role --role-name ai-gaussian-splatter-ci-deploy \
   --assume-role-policy-document file://trust-policy.json
+```
 
-# ExecutionRole's name is CloudFormation-generated (unlike MigrationTaskRole's fixed one below), and so is CDK's logical
-# ID for it — a hash suffix like `ExecutionRole605A040B`, not the bare construct ID — so this matches by prefix instead
-# of guessing the hash. Look it up once:
+### Granting deploy permissions
+
+`ExecutionRole`'s name is CloudFormation-generated (unlike `MigrationTaskRole`'s fixed one below), and so is CDK's logical ID for it — a hash suffix like `ExecutionRole605A040B`, not the bare construct ID — so this matches by prefix instead of guessing the hash. Look it up once, then attach the policy:
+
+```bash
 EXECUTION_ROLE_ARN=$(aws cloudformation describe-stack-resources \
   --stack-name WebStack \
   --query "StackResources[?starts_with(LogicalResourceId, 'ExecutionRole')].PhysicalResourceId | [0]" \
@@ -426,19 +439,31 @@ aws iam put-role-policy --role-name ai-gaussian-splatter-ci-deploy \
 
 `sts:AssumeRole` on the CDK bootstrap roles needs no trust-policy change on their end — they already trust any principal in the same account (`Principal: {"AWS": <account>}`), gated only by the assuming principal's own identity policy, which is exactly what the statement above grants. The trailing `-*` covers both `us-west-2` (everything but `BudgetsStack`) and `us-east-1` (`BudgetsStack` only, billing metrics only exist there). `pnpm cdk:deploy:all` deploys both in one invocation, so both regions' bootstrap roles are needed even though the app's primary region is `us-west-2`. `ecs:DescribeTaskDefinition` has no resource-level permissions to scope to, hence `Resource: "*"`. `ecs:RunTask`'s task-definition ARN uses the wildcard-revision form (`:*`), not a pinned revision. A pinned one would break on every new migration image push, since each push registers a new revision.
 
-Then set these as GitHub repository variables (Settings → Secrets and variables → Actions → Variables) — `.github/workflows/ci.yml`'s `deploy` job reads them as `vars.*`: `AWS_ACCOUNT_ID`, `HOSTED_ZONE_ID`, `CLERK_SECRET_KEY_ARN`, `ALERT_EMAIL`, `APP_PUBLIC_URL`, `WORKER_AMI_ID`, `CLERK_PUBLISHABLE_KEY` (the `pk_live_...` key, not the secret one). Live re-resolution (`aws route53 list-hosted-zones-by-name`, etc.) was deliberately skipped for these in CI — one production environment, rarely-changing values, and a `vars.*` edit is itself a reviewable, logged event, unlike giving the CI role extra read permissions just to re-derive them every run.
+### Setting GitHub repository variables
 
-### Rotating the Clerk key
+Set these as GitHub repository variables (Settings → Secrets and variables → Actions → Variables). `.github/workflows/ci.yml`'s `deploy` job reads them as `vars.*`:
+
+- `AWS_ACCOUNT_ID`
+- `HOSTED_ZONE_ID`
+- `CLERK_SECRET_KEY_ARN`
+- `ALERT_EMAIL`
+- `APP_PUBLIC_URL`
+- `WORKER_AMI_ID`
+- `CLERK_PUBLISHABLE_KEY` (the `pk_live_...` key, not the secret one)
+
+Live re-resolution (`aws route53 list-hosted-zones-by-name`, etc.) was deliberately skipped for these in CI — one production environment, rarely-changing values, and a `vars.*` edit is itself a reviewable, logged event, unlike giving the CI role extra read permissions just to re-derive them every run.
+
+**Setup is done — CD owns every deploy from here.** Push to `main` and `ci.yml`'s `deploy` job builds, migrates, and rolls the service forward on its own. Come back to ["Going live"](#going-live) only for the two exceptions: a rollback, or previewing an infra change with `cdk diff` first.
+
+## Rotating the Clerk key
 
 Changing `CLERK_SECRET_KEY` later is a write plus a rollout, because ECS only resolves secrets at task start.
 
 ```bash
-printf '%s' 'sk_live_...' > clerk-secret-key.txt
 aws secretsmanager put-secret-value \
   --region us-west-2 \
   --secret-id ai-gaussian-splatter/clerk-secret-key \
-  --secret-string file://clerk-secret-key.txt
-rm clerk-secret-key.txt
+  --secret-string <sk_live_...>
 
 # Nothing has changed image wise so force a new deployment to use that fresh Clerk secret key.
 aws ecs update-service --region us-west-2 \
@@ -449,7 +474,7 @@ aws ecs update-service --region us-west-2 \
 
 This is the one rollout that is not a deploy, which is why `CLUSTER_NAME`/`SERVICE_NAME` are fixed in `infra/stacks/web_stack.py` rather than left to CloudFormation. The command can be written out here instead of looked up.
 
-### Which release is deployed
+## Which release is deployed
 
 The tag names the commit, so this answers "what code is live" without correlating push times by hand. Ask the service what it intends to run:
 
@@ -484,3 +509,18 @@ aws ecr describe-images --region us-west-2 --repository-name ai-gaussian-splatte
 The `WorkerIamStack`, `DataStack`, and `RegistryStack` must exist before `WebStack` (CDK resolves this automatically via cross-stack references in `infra/app.py`). `BudgetsStack` deploys to `us-east-1` regardless of the app's primary region. Billing metrics only exist there.
 
 Against a real `AWS_ACCOUNT_ID`, `read_context` refuses every placeholder it defines — `workerAmiId`, `alertEmail`, `hostedZoneId`, `webImageTag` — by name, so a forgotten `-c` flag fails at synth rather than deploying green and breaking a job launch or a spend alert later. `pnpm cdk:synth`/`pnpm cdk:diff` on a clean checkout still work with no flags and no credentials, because the placeholder account is what tells the two apart. `migrateImageTag` is the one flag with no placeholder to refuse. It silently defaults to `webImageTag` when omitted, which is what every command above relies on. Passing a real AMI is not on its own enough to make a job run: the worker still has no ECR repository or pull permissions (`AGENTS.md`, gap 5, M5).
+
+## Fixing a bad migration
+
+**CI applies migrations automatically on every push to `main`.** The `deploy` job in `.github/workflows/ci.yml` runs the `migrator` image (`web/Dockerfile`) as a one-off ECS task before rolling the service forward. There is no supported way to reach the database by hand instead: `DataStack`'s RDS instance sits in an isolated subnet with no NAT gateway (`infra/stacks/network_stack.py`), reachable only from `web_security_group` on port 5432, and no bastion exists in this infra. The CD migration task works because CDK registers it with the web service's own network configuration; a human's laptop, or any other host, has no path to reproduce that.
+
+So fix a bad migration the same way you'd fix any other bug: write a corrective migration following the expand/contract discipline in `AGENTS.md` (edit `web/lib/server/db/schema.ts`, `pnpm db:generate`, review the emitted SQL in `web/drizzle/`), commit it, and land it through a normal PR to `main`. CD builds the new `migrator` image, applies it, and rolls the service forward exactly like every other release.
+
+If the `deploy` job's migration step fails for an infra reason rather than a bad migration (a transient AWS error, a placement failure), retry the whole job rather than reaching for manual AWS commands — it's designed to be idempotent end to end (each image build step already skips if that commit's tag is already pushed): `gh run rerun <run-id> --failed-jobs`.
+
+## Debugging a failed job
+
+1. Check `jobs.status` and `jobs.error_message` for the splat (`GET /api/v1/splats/{id}/jobs/latest`).
+2. If `status` is stuck (no update in ~20 min) rather than `failed`: the instance likely died without reporting — check the EC2 console for the tagged instance (`Role=worker`, `JobId=<job_id>`) and its system log.
+3. Confirm self-termination actually fired: the instance should not still be running after the job reaches a terminal state. **If it is, terminate it by hand.** The instance-runtime alarm meant to catch this is not in any stack yet (`AGENTS.md`, Known gaps), so nothing else will.
+4. `docker logs` on the instance (if still running) or CloudWatch Logs (once wired up) for the actual COLMAP/gsplat stack trace.

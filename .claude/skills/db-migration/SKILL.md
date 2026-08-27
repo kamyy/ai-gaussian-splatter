@@ -58,10 +58,10 @@ TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ai_gaussian_spla
 
 `web:check` is a repo-root script (the one exception to "all commands run from `web/`" above) — it's the piece that actually matters for a schema edit; `worker`/`infra`'s checks have nothing to do with `schema.ts`.
 
-The database-backed tests skip silently without `TEST_DATABASE_URL`, so a run that "passes" without it has not exercised the new schema at all. `ai_gaussian_splatter_test` is a separate database on the same `splat-pg` instance, not the dev one — see RUNBOOK.md's "Full test suite" for the one-time `createdb`.
+The database-backed tests skip silently without `TEST_DATABASE_URL`, so a run that "passes" without it has not exercised the new schema at all. `ai_gaussian_splatter_test` is a separate database on the same `splat-pg` instance, not the dev one — see [RUNBOOK.md § "Full test suite"](../../../RUNBOOK.md#full-test-suite) for the one-time `createdb`.
 
 **6. Commit `schema.ts` and the whole `web/drizzle/` tree together**, `meta/` snapshots included. CI re-runs `db:generate` and fails if it produces anything, so a schema change committed without its migration blocks the PR. `web/drizzle/` is excluded from Biome, so the generated SQL is not reformatted.
 
 ## Applying to a deployed database
 
-CI applies this automatically on every push to `main` (`ci.yml`'s `deploy` job runs `web/Dockerfile`'s `migrator` image as a one-off ECS task before rolling the service forward) — not covered here. The image deliberately does not migrate on boot, since up to three tasks would race with nothing serialising them. `RUNBOOK.md` has the manual, out-of-band procedure, including the `DATABASE_SSL_CA` export it needs against RDS.
+CI applies this automatically on every push to `main` (`ci.yml`'s `deploy` job runs `web/Dockerfile`'s `migrator` image as a one-off ECS task before rolling the service forward) — not covered here. The image deliberately does not migrate on boot, since up to three tasks would race with nothing serialising them. There is no manual, out-of-band way to apply one instead: RDS sits in an isolated subnet with no NAT gateway and no bastion. A bad migration is fixed like any other bug, with a corrective migration through a normal PR — see [RUNBOOK.md § "Fixing a bad migration"](../../../RUNBOOK.md#fixing-a-bad-migration).
