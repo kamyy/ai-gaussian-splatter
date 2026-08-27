@@ -264,7 +264,7 @@ jobs:
           jq '.services[0].networkConfiguration' <<<"$SERVICE_JSON" > network-config.json
           # Shared by both cdk:deploy:all calls below so the two invocations can't silently diverge on a flag added to
           # one and not the other.
-          echo "CDK_COMMON_CONTEXT=-c hostedZoneId=$HOSTED_ZONE_ID -c clerkSecretKeyArn=$CLERK_SECRET_KEY_ARN -c alertEmail=$ALERT_EMAIL -c appPublicUrl=$APP_PUBLIC_URL -c workerAmiId=$WORKER_AMI_ID -c createSpotServiceLinkedRole=false" >> "$GITHUB_ENV"
+          echo "CDK_COMMON_CONTEXT=-c hostedZoneId=$HOSTED_ZONE_ID -c clerkSecretKeyArn=$CLERK_SECRET_KEY_ARN -c alertEmail=$ALERT_EMAIL -c appPublicUrl=$APP_PUBLIC_URL -c workerAmiId=$WORKER_AMI_ID" >> "$GITHUB_ENV"
 
       # Each tag is skipped if it is already in the repository: the repository is IMMUTABLE
       # (infra/stacks/registry_stack.py), so re-running this job after a failure in any step below would otherwise abort
@@ -329,11 +329,6 @@ jobs:
       # migration task definition for the new image without also moving the service forward before the migration exists.
       # --require-approval never: this stack's diff touches IAM (the migration task role), and `cdk deploy` otherwise
       # prompts, which hangs a non-interactive job.
-      #
-      # createSpotServiceLinkedRole=false on both deploys: by the time CI ever runs, AWSServiceRoleForEC2Spot exists —
-      # either it pre-dated this project, or the manual first deploy (RUNBOOK.md) created it — and creating that
-      # account-wide singleton twice fails the stack. It is declared RETAIN, so dropping it from the template leaves the
-      # real role in place for ec2Launcher.ts's Spot requests.
       - name: cdk deploy — migration task only (service stays on OLD_TAG)
         working-directory: infra
         run: |

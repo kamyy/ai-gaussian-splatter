@@ -16,6 +16,8 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
 
 **Reference files by their full package-relative path, not a bare filename** — `web/proxy.ts`, not `proxy.ts`. Do this every time the file is named, even right next to an earlier mention that already gave the full path; don't rely on the reader having seen that earlier sentence.
 
+**When prose names another section — in the same doc or a different one — link it, don't just quote or bold the name.** Use `[Section name](#section-name)` for a same-file reference and `[Section name](OTHER.md#section-name)` across files, with the anchor GitHub/VS Code derive from the heading (lowercase, spaces to hyphens, punctuation stripped). A plain quoted or bolded name silently goes stale the moment the target heading is renamed; a broken link is easier to spot in review.
+
 ## Structure
 
 Monorepo, three independent packages:
