@@ -144,6 +144,7 @@ class WebStack(cdk.Stack):
         execution_role = iam.Role(
             self,
             "ExecutionRole",
+            role_name="ai-gaussian-splatter-execution",
             assumed_by=iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
         )
         execution_role.add_to_policy(
@@ -180,9 +181,9 @@ class WebStack(cdk.Stack):
         # Runs `node scripts/db-migrate.cjs` (web/Dockerfile's `migrator` stage) as a one-off ecs:RunTask, ahead of
         # the service's own rollout — see RUNBOOK.md and AGENTS.md for why migrations can't run at container boot.
         # execution_role is reused as-is: it already has ECR pull (repo-wide, any tag) and DB-secret read, which is
-        # everything this container needs to start. migration_task_role gets a fixed name (this is a brand-new resource,
-        # no deployed-resource-rename cost) for the same RUNBOOK-literalness reason CLUSTER_NAME/SERVICE_NAME are fixed.
-        # It needs no grants at all: the container only opens a TCP connection to RDS, no AWS API calls.
+        # everything this container needs to start. migration_task_role gets its own fixed name, for the same
+        # RUNBOOK-literalness reason CLUSTER_NAME/SERVICE_NAME/execution_role's role_name are fixed. It needs no
+        # grants at all: the container only opens a TCP connection to RDS, no AWS API calls.
         migration_task_role = iam.Role(
             self,
             "MigrationTaskRole",
