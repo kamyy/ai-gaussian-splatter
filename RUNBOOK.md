@@ -270,7 +270,7 @@ HOSTED_ZONE_ID=$(aws route53 list-hosted-zones-by-name \
 
 One-time per account. Complete all this before the first `pnpm cdk:deploy:all`.
 
-Clerk secret is imported, not created by any stack. See `describe-secret` in ["Resolving context values"](#resolving-context-values) to retrieve the ARN for the value; to change the value use ["Rotating the Clerk key"](#rotating-the-clerk-key).
+Clerk secret is imported, not created by any stack. See `describe-secret` in ["Resolving context values"](#resolving-context-values) to retrieve the ARN for the value. To change the value later, update it directly in Secrets Manager, then force a new ECS deployment (`aws ecs update-service --force-new-deployment`) since ECS only resolves secrets at task start.
 
 ```bash
 aws secretsmanager create-secret \
@@ -460,61 +460,6 @@ Set these as GitHub repository variables (Settings → Secrets and variables →
 Live re-resolution (`aws route53 list-hosted-zones-by-name`, etc.) was deliberately skipped for these in CI — one production environment, rarely-changing values, and a `vars.*` edit is itself a reviewable, logged event, unlike giving the CI role extra read permissions just to re-derive them every run.
 
 **Setup is done — CD owns every deploy from here.** Push to `main` and `ci.yml`'s `deploy` job builds, migrates, and rolls the service forward on its own. Come back to ["Going live"](#going-live) only for the two exceptions: a rollback, or previewing an infra change with `cdk diff` first.
-
-## Rotating the Clerk key
-
-Changing `CLERK_SECRET_KEY` later is a write plus a rollout, because ECS only resolves secrets at task start.
-
-```bash
-aws secretsmanager put-secret-value \
-  --region us-west-2 \
-  --secret-id ai-gaussian-splatter/clerk-secret-key \
-  --secret-string <sk_live_...>
-
-# Nothing has changed image wise so force a new deployment to use that fresh Clerk secret key.
-aws ecs update-service --region us-west-2 \
-  --cluster ai-gaussian-splatter --service ai-gaussian-splatter-web \
-  --force-new-deployment
-
-```
-
-This is the one rollout that is not a deploy, which is why `CLUSTER_NAME`/`SERVICE_NAME` are fixed in `infra/stacks/web_stack.py` rather than left to CloudFormation. The command can be written out here instead of looked up.
-
-## Which release is deployed
-
-The tag names the commit, so this answers "what code is live" without correlating push times by hand. Ask the service what it intends to run:
-
-```bash
-aws ecs describe-services --region us-west-2 \
-  --cluster ai-gaussian-splatter --services ai-gaussian-splatter-web \
-  --query 'services[0].deployments[?status==`PRIMARY`].taskDefinition' --output text
-aws ecs describe-task-definition --region us-west-2 --task-definition <arn-from-above> \
-  --query 'taskDefinition.containerDefinitions[0].image' --output text
-```
-
-Read `deployments[?status=='PRIMARY']` rather than `services[0].taskDefinition`: mid-deploy there are two, the one rolling out and the one draining, and only this distinguishes them.
-
-For what the running tasks actually pulled, digest included — the ground truth if a task looks out of step with the service:
-
-```bash
-aws ecs describe-tasks --region us-west-2 --cluster ai-gaussian-splatter \
-  --tasks $(aws ecs list-tasks --region us-west-2 --cluster ai-gaussian-splatter \
-              --service-name ai-gaussian-splatter-web --query 'taskArns' --output text) \
-  --query 'tasks[].containers[].{image:image,digest:imageDigest}'
-```
-
-Then `git log -1 <sha>` for what is in production and `git diff <sha>..HEAD` for what is not, where `<sha>` is the tag with its `-web`/`-migrate` suffix removed. The tag can only ever resolve to the image it was pushed with, so the mapping cannot drift.
-
-To see which releases are still available to roll back to, newest first:
-
-```bash
-aws ecr describe-images --region us-west-2 --repository-name ai-gaussian-splatter \
-  --query 'reverse(sort_by(imageDetails,&imagePushedAt))[].{tag:imageTags[0],pushed:imagePushedAt}' --output table
-```
-
-The `WorkerIamStack`, `DataStack`, and `RegistryStack` must exist before `WebStack` (CDK resolves this automatically via cross-stack references in `infra/app.py`). `BudgetsStack` deploys to `us-east-1` regardless of the app's primary region. Billing metrics only exist there.
-
-Against a real `AWS_ACCOUNT_ID`, `read_context` refuses every placeholder it defines — `workerAmiId`, `alertEmail`, `hostedZoneId`, `webImageTag` — by name, so a forgotten `-c` flag fails at synth rather than deploying green and breaking a job launch or a spend alert later. `pnpm cdk:synth`/`pnpm cdk:diff` on a clean checkout still work with no flags and no credentials, because the placeholder account is what tells the two apart. `migrateImageTag` is the one flag with no placeholder to refuse. It silently defaults to `webImageTag` when omitted, which is what every command above relies on. Passing a real AMI is not on its own enough to make a job run: the worker still has no ECR repository or pull permissions (`AGENTS.md`, gap 5, M5).
 
 ## Fixing a bad migration
 
