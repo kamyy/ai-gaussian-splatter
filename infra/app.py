@@ -37,16 +37,22 @@ def build_stacks(
     # swallowed callback, never as a failed deploy.
     app_public_url = app_public_url.rstrip("/")
 
+    # Applied at the app level so it lands on every stack and every taggable resource inside them. Without it, Resource
+    # Groups & Tag Editor and Cost Explorer have no way to isolate this app's resources from another app's in the same
+    # account.
+    cdk.Tags.of(app).add("Project", "ai-gaussian-splatter")
+
     env = cdk.Environment(account=account, region=region)
-    network = NetworkStack(app, "NetworkStack", env=env)
+    network = NetworkStack(app, "NetworkStack", stack_name="ai-gaussian-splatter-network", env=env)
 
     # Deploys before WebStack and holds the image its service pulls, so the image can be pushed in between. See
     # RegistryStack's own docstring.
-    registry = RegistryStack(app, "RegistryStack", env=env)
+    registry = RegistryStack(app, "RegistryStack", stack_name="ai-gaussian-splatter-registry", env=env)
 
     data = DataStack(
         app,
         "DataStack",
+        stack_name="ai-gaussian-splatter-data",
         env=env,
         vpc=network.vpc,
         db_security_group=network.db_security_group,
@@ -57,6 +63,7 @@ def build_stacks(
     worker_iam = WorkerIamStack(
         app,
         "WorkerIamStack",
+        stack_name="ai-gaussian-splatter-worker-iam",
         env=env,
         uploads_bucket=data.uploads_bucket,
         splats_bucket=data.splats_bucket,
@@ -65,6 +72,7 @@ def build_stacks(
     web = WebStack(
         app,
         "WebStack",
+        stack_name="ai-gaussian-splatter-web",
         env=env,
         vpc=network.vpc,
         web_security_group=network.web_security_group,
@@ -92,6 +100,7 @@ def build_stacks(
     budgets = BudgetsStack(
         app,
         "BudgetsStack",
+        stack_name="ai-gaussian-splatter-budgets",
         env=cdk.Environment(account=account, region="us-east-1"),
         alert_email=alert_email,
     )
