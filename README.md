@@ -26,6 +26,8 @@ Built with the help of [Claude Code](https://claude.com/product/claude-code) and
 
 ## Quick start
 
+Developed and tested on Fedora Linux — that's why [`RUNBOOK.md`](RUNBOOK.md) talks about Podman and SELinux rather than Docker.
+
 `pnpm dev` needs a local Postgres and a filled-in `.env` first — see [`RUNBOOK.md`](RUNBOOK.md#web-frontend--rest-api).
 
 ```bash
