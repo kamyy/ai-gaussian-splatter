@@ -290,6 +290,8 @@ aws iam get-role --role-name AWSServiceRoleForEC2Spot >/dev/null 2>&1 || \
 
 Turn on billing alerts, or `BudgetsStack`'s CloudWatch alarm never fires. `AWS/Billing EstimatedCharges` publishes no data at all until the account preference is set, and there is no API or CloudFormation resource for it — Billing console → Billing preferences → **Receive AWS Free Tier alerts and billing alerts**, in `us-east-1`. The AWS Budget half of that stack works regardless; only the alarm depends on this.
 
+That console checkbox only wires up the alarm; it isn't where spend itself is visible. To see current estimated month-to-date spend, Billing console → **Billing Home** shows it on the landing page; **Cost Explorer** breaks it down by service. To check `BudgetsStack`'s own budget instead of hunting the console, `aws budgets describe-budgets --account-id $AWS_ACCOUNT_ID --region us-east-1` returns its `CalculatedSpend` — the Budgets API is `us-east-1`-only regardless of the resources it's tracking, same as the stack itself.
+
 Now resolve the six context values in ["Resolving context values"](#resolving-context-values) above, in the same shell.
 
 A fresh account needs `pnpm cdk:bootstrap` once per region before any deploy. It creates a CDKToolkit stack that CDK uploads templates/assets to. Every template carries a BootstrapVersion SSM lookup, so without it the first stack fails before creating anything. `BudgetsStack` lives in `us-east-1`; the rest live in `us-west-2`.
