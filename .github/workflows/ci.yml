@@ -8,6 +8,11 @@ on:
   pull_request:
   push:
     branches: [main]
+    # A push to main whose commits touch only docs skips the whole workflow, including deploy — PR checks already
+    # validated the commits, so re-running lint/build/deploy here would be pure waste.
+    paths-ignore:
+      - '**/*.md'
+      - 'LICENSE'
 
 jobs:
   lint-format:
