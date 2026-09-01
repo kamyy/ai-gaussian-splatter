@@ -96,7 +96,7 @@ def build_stacks(
         migrate_image_tag=migrate_image_tag,
     )
 
-    # Pinned to us-east-1 — see budgets_stack.py.
+    # Pinned to us-east-1 — see infra/stacks/budgets_stack.py.
     budgets = BudgetsStack(
         app,
         "BudgetsStack",
@@ -173,7 +173,7 @@ def read_context(app: cdk.App, account: str) -> dict[str, str]:
         return value
 
     # The AMI each job's spot instance boots. WebStack only forwards it to the web task as WORKER_AMI_ID, so the first
-    # thing to test it is the RunInstances call in ec2Launcher.ts, a job at a time.
+    # thing to test it is the RunInstances call in web/lib/server/ec2Launcher.ts, a job at a time.
     worker_ami_id = required(
         "workerAmiId",
         PLACEHOLDER_WORKER_AMI_ID,
@@ -198,8 +198,8 @@ def read_context(app: cdk.App, account: str) -> dict[str, str]:
     # Where the worker PATCHes job status back to. A stable custom domain, so there is no chicken-and-egg with the ALB
     # this app creates: the ALB is aliased to this name rather than the name being read off the ALB. The default is that
     # same hostname, so there is no placeholder to refuse. The scheme is checked instead: the ALB answers https only.
-    # A worker whose callbacks all fail says nothing about it either way. status.py logs and swallows them by design,
-    # leaving the job to look stuck rather than broken.
+    # A worker whose callbacks all fail says nothing about it either way. worker/pipeline/status.py logs and swallows
+    # them by design, leaving the job to look stuck rather than broken.
     app_public_url = app.node.try_get_context("appPublicUrl") or f"https://{APP_HOSTNAME}"
     if not app_public_url.startswith("https://"):
         raise ValueError(f"-c appPublicUrl= must be an https:// URL, got {app_public_url!r}")
@@ -214,8 +214,8 @@ def read_context(app: cdk.App, account: str) -> dict[str, str]:
     )
 
     # Which build the service runs. A commit SHA rather than a moving tag, so every release is its own task definition
-    # and the circuit breaker can roll back to one that still names the image it was deployed with — see web_stack.py.
-    # Rolling back by hand is this same flag with an older SHA.
+    # and the circuit breaker can roll back to one that still names the image it was deployed with — see
+    # infra/stacks/web_stack.py. Rolling back by hand is this same flag with an older SHA.
     web_image_tag = required(
         "webImageTag",
         PLACEHOLDER_WEB_IMAGE_TAG,
@@ -224,9 +224,9 @@ def read_context(app: cdk.App, account: str) -> dict[str, str]:
 
     # Which build the migration task runs. Not a required() flag like web_image_tag: it has a safe default (mirror the
     # service's own tag), so a bare `-c webImageTag=` with no `-c migrateImageTag=` keeps working unchanged. That is
-    # every existing manual RUNBOOK invocation. ci.yml's deploy job diverges the two on purpose: it registers the
-    # migration task against the *new* build while the service stays on the currently-live one, runs the migration, and
-    # only then redeploys with both equal — see RUNBOOK.md.
+    # every existing manual RUNBOOK invocation. .github/workflows/ci.yml's deploy job diverges the two on purpose: it
+    # registers the migration task against the *new* build while the service stays on the currently-live one, runs the
+    # migration, and only then redeploys with both equal — see RUNBOOK.md.
     migrate_image_tag = app.node.try_get_context("migrateImageTag") or web_image_tag
 
     return {

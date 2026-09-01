@@ -13,7 +13,7 @@ reduced-iteration, object-centric MVP rather than by oversight:
   low-opacity points on a fixed schedule) rather than the paper's full
   clone/split heuristic.
 - Camera radial distortion from COLMAP is not undistorted before training
-  (see colmap_model.py) — acceptable for SIMPLE_RADIAL's typically small
+  (see worker/pipeline/colmap_model.py) — acceptable for SIMPLE_RADIAL's typically small
   phone-camera distortion at this quality bar, not for wide-angle lenses.
 """
 
@@ -45,7 +45,7 @@ class GaussianModel:
 @dataclass
 class TrainedScene:
     model: GaussianModel
-    canonical_viewmat: torch.Tensor  # (4, 4) — a representative pose, for export.py's thumbnail
+    canonical_viewmat: torch.Tensor  # (4, 4) — a representative pose, for worker/pipeline/export.py's thumbnail
     canonical_K: torch.Tensor  # (3, 3)
     canonical_width: int
     canonical_height: int
@@ -102,7 +102,7 @@ def train(sfm_sparse_dir: Path, photos_dir: Path, settings: Settings) -> Trained
 
 
 def render_view(model: GaussianModel, viewmat: torch.Tensor, K: torch.Tensor, width: int, height: int) -> torch.Tensor:
-    """Public entrypoint for export.py's thumbnail render — reuses the same
+    """Public entrypoint for worker/pipeline/export.py's thumbnail render — reuses the same
     rasterization call as training, just without gradient tracking.
     """
     with torch.no_grad():

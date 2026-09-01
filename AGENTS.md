@@ -8,7 +8,7 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
 
 **Docs and code comments describe current behavior only** — not prior libraries, old version numbers, or "this used to fail with X." Use `git log` for this instead.
 
-**Be concise — fact plus the non-obvious reason.** Shortest accurate statement; no walkthrough of alternatives or restating the same point from multiple angles.
+**Be human readable — fact plus the non-obvious reason.** Shortest accurate statement; no walkthrough of alternatives or restating the same point from multiple angles.
 
 **Write comments as real sentences, not em-dash-fused fragments.** Each independent clause gets its own sentence with a period; don't join two of them with ` — ` where a period would do. An em dash is fine for a single aside inside one sentence, not as a substitute for ending it.
 

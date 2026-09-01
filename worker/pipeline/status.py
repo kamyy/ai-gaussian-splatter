@@ -21,7 +21,7 @@ def report_status(
     """PATCH the job's status back to the web app. Best-effort: logs and swallows
     network errors rather than raising, since a failed status update should never
     prevent the pipeline from continuing (or from reaching the finally block that
-    terminates the instance) — see run_job.py.
+    terminates the instance) — see worker/run_job.py.
     """
     payload: dict[str, str] = {"status": status}
     if error_message is not None:

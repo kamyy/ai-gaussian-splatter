@@ -105,7 +105,7 @@ export const jobs = pgTable(
 
 /**
  * Fixed-window counters backing per-IP/per-user rate limiting. Incremented via `INSERT … ON CONFLICT … DO UPDATE …
- * RETURNING` in lib/server/rateLimit.ts — the unique index below is that statement's conflict target, so it is
+ * RETURNING` in web/lib/server/rateLimit.ts — the unique index below is that statement's conflict target, so it is
  * load-bearing, not just an optimisation.
  */
 export const rateLimitCounters = pgTable(

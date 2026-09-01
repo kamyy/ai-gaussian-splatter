@@ -3,7 +3,7 @@ import { defineConfig } from "drizzle-kit";
 import { databaseSsl, resolveDatabaseUrl } from "./lib/server/databaseUrl";
 
 // Used by the drizzle-kit CLI only (generate/migrate/studio). The runtime gets its connection separately, from the pg
-// Pool in lib/server/db/index.ts. Both resolve the URL the same way, so applying migrations against a deployed
+// Pool in web/lib/server/db/index.ts. Both resolve the URL the same way, so applying migrations against a deployed
 // database works with the same variables the running task already has.
 //
 // `casing` is deliberately not set: every column in schema.ts carries its database name explicitly, so there is no

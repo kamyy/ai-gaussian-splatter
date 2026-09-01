@@ -51,8 +51,8 @@ def test_web_security_group_has_exactly_one_ingress_rule_from_alb(wired_stacks):
 
 def test_public_subnets_assign_public_ips_on_launch(wired_stacks):
     """The GPU worker gets its only route out from this attribute:
-    ec2Launcher.ts calls RunInstances with a plain SubnetId and no
-    AssociatePublicIpAddress, so the address comes from the subnet default.
+    web/lib/server/ec2Launcher.ts calls RunInstances with a plain SubnetId and
+    no AssociatePublicIpAddress, so the address comes from the subnet default.
     With no NAT gateway there is no second path. If this ever turns off,
     workers boot unable to reach ECR, S3, or the status callback, and the job
     hangs until the runtime alarm kills it.

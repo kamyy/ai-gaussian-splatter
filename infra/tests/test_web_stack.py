@@ -23,7 +23,8 @@ def _web_container(template: Template) -> dict:
     MigrationTaskDefinition's. WebStack synthesizes two
     AWS::ECS::TaskDefinition resources, and ecs_patterns.
     ApplicationLoadBalancedFargateService names its container "web" by
-    default (the migration one is explicitly named "migrate" in web_stack.py).
+    default (the migration one is explicitly named "migrate" in
+    infra/stacks/web_stack.py).
     """
     containers = [
         c
@@ -82,9 +83,9 @@ def test_pass_role_targets_worker_role_not_instance_profile(wired_stacks):
 
 def test_health_check_targets_the_container_port(wired_stacks):
     """The health check must hit the app's own port and its real health
-    endpoint. Both are set explicitly in web_stack.py. The target group's
-    defaults are "/" on the traffic port, which would report a task healthy
-    off the Next.js root page without ever exercising /api/v1/healthz.
+    endpoint. Both are set explicitly in infra/stacks/web_stack.py. The target
+    group's defaults are "/" on the traffic port, which would report a task
+    healthy off the Next.js root page without ever exercising /api/v1/healthz.
     """
     template = Template.from_stack(wired_stacks["web"])
 
@@ -128,10 +129,10 @@ def test_database_credentials_projected_as_individual_secret_fields(wired_stacks
 def test_app_public_url_reaches_the_container_without_a_trailing_slash():
     """The worker builds its callback URL by appending a path to this with an
     f-string (worker/pipeline/status.py), so a trailing slash gives it
-    `//api/v1/...`, which nothing routes. status.py logs and swallows callback
-    failures by design, so the job would simply stop reporting. Built with its
-    own app rather than the shared fixture, since the point is a non-default
-    input.
+    `//api/v1/...`, which nothing routes. worker/pipeline/status.py logs and
+    swallows callback failures by design, so the job would simply stop
+    reporting. Built with its own app rather than the shared fixture, since
+    the point is a non-default input.
     """
     stacks = build_app_stacks(app_public_url="https://ai-gaussian-splatter.orky.net/")
     template = Template.from_stack(stacks["web"])
@@ -203,7 +204,7 @@ def test_a_wrong_clerk_secret_arn_fails_at_synth(bad_arn):
     deploys clean and only shows up as a task that will not start. The check in
     WebStack is what turns them into a synth-time error instead — including
     the case that matters most, a real deploy that forgot `-c clerkSecretKeyArn=`
-    and is still carrying app.py's placeholder-account default.
+    and is still carrying infra/app.py's placeholder-account default.
     """
     with pytest.raises(ValueError, match="clerkSecretKeyArn"):
         build_app_stacks(clerk_secret_key_arn=bad_arn)
@@ -289,7 +290,8 @@ def test_migration_task_shares_the_web_services_database_wiring(wired_stacks):
     """Regression test mirroring test_database_credentials_projected_as_individual_secret_fields.
     The migration container needs the identical DB connection shape (same
     host/port/name env vars, same secret-field selectors, same CA bundle path)
-    since it resolves its connection through the same databaseUrl.ts code.
+    since it resolves its connection through the same web/lib/server/databaseUrl.ts
+    code.
     """
     template = Template.from_stack(wired_stacks["web"])
     container = _migrate_container(template)
@@ -305,9 +307,9 @@ def test_migration_task_shares_the_web_services_database_wiring(wired_stacks):
 
 
 def test_migration_task_role_has_no_grants(wired_stacks):
-    """Regression guard on the claim in web_stack.py's comment: the migration
-    container only opens a TCP connection to RDS, no AWS API calls, so
-    MigrationTaskRole should carry no inline policy at all.
+    """Regression guard on the claim in infra/stacks/web_stack.py's comment:
+    the migration container only opens a TCP connection to RDS, no AWS API
+    calls, so MigrationTaskRole should carry no inline policy at all.
     """
     template = Template.from_stack(wired_stacks["web"])
 
@@ -335,7 +337,7 @@ def test_tasks_run_in_public_subnets_with_a_public_ip(wired_stacks):
     """The tasks egress through the internet gateway rather than a NAT
     gateway, which requires both a public subnet and a public IP. Without the
     IP they cannot even pull their own image from ECR. What keeps them
-    unreachable is web_security_group, asserted in test_network_stack.py.
+    unreachable is web_security_group, asserted in infra/tests/test_network_stack.py.
     """
     template = Template.from_stack(wired_stacks["web"])
 

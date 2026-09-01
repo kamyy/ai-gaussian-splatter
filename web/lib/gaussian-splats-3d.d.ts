@@ -1,5 +1,5 @@
 // @mkkellogg/gaussian-splats-3d ships no type declarations. This covers only
-// the DropInViewer surface actually used by components/viewer/SplatViewer.tsx
+// the DropInViewer surface actually used by web/components/viewer/SplatViewer.tsx
 // (README: "DropInViewer class encapsulates Viewer and can be added to a
 // Three.js scene like any other renderable").
 declare module "@mkkellogg/gaussian-splats-3d" {

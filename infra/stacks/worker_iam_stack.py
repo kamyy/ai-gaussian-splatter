@@ -33,10 +33,11 @@ class WorkerIamStack(cdk.Stack):
         uploads_bucket.grant_read(self.role)
         splats_bucket.grant_read_write(self.role)
 
-        # This is self-termination only, scoped so the worker can kill itself at the end of its job (run_job.py's
-        # finally block) but nothing else running in the account. EC2 doesn't support resource-level restriction to
-        # "the calling instance" directly, so this is scoped by the same worker-tag convention used in web_stack.py's
-        # RunInstances grant (see stacks/tags.py — the shared source of truth for that tag).
+        # This is self-termination only, scoped so the worker can kill itself at the end of its job
+        # (worker/run_job.py's finally block) but nothing else running in the account. EC2 doesn't support
+        # resource-level restriction to "the calling instance" directly, so this is scoped by the same worker-tag
+        # convention used in infra/stacks/web_stack.py's RunInstances grant (see infra/stacks/tags.py — the shared
+        # source of truth for that tag).
         self.role.add_to_policy(
             iam.PolicyStatement(
                 actions=["ec2:TerminateInstances"],
@@ -48,8 +49,9 @@ class WorkerIamStack(cdk.Stack):
         # AWSServiceRoleForEC2Spot is imported, not created here: it's one account-wide singleton shared with every
         # other Spot workload, so creating it fails outright in an account that already has one, and CloudFormation
         # deleting it on this stack's behalf would break those other workloads. This stack borrows the role; it never
-        # owns it. It has to exist before ec2Launcher.ts's first RunInstances call, since EC2 only auto-creates it for
-        # a Spot request made in the console, not one made through the API. See RUNBOOK.md for the one-time setup.
+        # owns it. It has to exist before web/lib/server/ec2Launcher.ts's first RunInstances call, since EC2 only
+        # auto-creates it for a Spot request made in the console, not one made through the API. See RUNBOOK.md for the
+        # one-time setup.
         self.instance_profile = iam.InstanceProfile(
             self,
             "WorkerInstanceProfile",

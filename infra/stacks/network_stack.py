@@ -37,13 +37,13 @@ class NetworkStack(cdk.Stack):
             },
         )
 
-        # CloudFormation's GroupDescription disallows several common punctuation characters (e.g. ">", em dash "—") —
-        # plain ASCII only below.
+        # CloudFormation's GroupDescription disallows several common punctuation characters (e.g. ">", em dash "—").
+        # Plain ASCII only below.
         #
         # Declared here, not in WebStack, so both ends of the auto-generated ALB-to-tasks ingress rule live in one
         # stack. Declaring this group in WebStack instead fails `cdk synth` with a DependencyCycle (see AGENTS.md). This
-        # is also why web_stack.py builds its ALB manually rather than via the CDK pattern. The pattern would create its
-        # own security group instead of using this one.
+        # is also why infra/stacks/web_stack.py builds its ALB manually rather than via the CDK pattern. The pattern
+        # would create its own security group instead of using this one.
         self.alb_security_group = ec2.SecurityGroup(
             self,
             "AlbSecurityGroup",

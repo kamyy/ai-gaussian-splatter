@@ -1,9 +1,9 @@
-// Wire types for the REST API in app/api/v1/, and the authoritative status value lists.
+// Wire types for the REST API in web/app/api/v1/, and the authoritative status value lists.
 //
-// The status tuples live here rather than in the schema because client components must not import from lib/server/
-// (that would pull the database client and AWS SDK into the browser bundle). The dependency runs the safe direction
-// instead: lib/server/db/schema.ts imports these tuples and hands them to pgEnum, so the Postgres enum labels and the
-// TypeScript unions cannot drift apart.
+// The status tuples live here rather than in the schema because client components must not import from
+// web/lib/server/ (that would pull the database client and AWS SDK into the browser bundle). The dependency runs the
+// safe direction instead: web/lib/server/db/schema.ts imports these tuples and hands them to pgEnum, so the Postgres
+// enum labels and the TypeScript unions cannot drift apart.
 //
 // Values are snake_case because they are simultaneously the Postgres enum labels, so there is exactly one spelling from
 // the database through to the JSON responses. Field *names* stay camelCase; only these values are snake_case.

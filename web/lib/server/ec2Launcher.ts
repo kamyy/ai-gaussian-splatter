@@ -94,7 +94,7 @@ export async function launchJob(params: {
       // The pipeline runs in a container on default bridge networking, which puts IMDS one hop further away than the
       // host. EC2's default response hop limit of 1 therefore drops the token PUT that worker/pipeline/instance.py
       // opens with, so it cannot read its own instance ID and skips self-termination. The instance then bills until
-      // someone notices. Raising the limit is the fix; requiring tokens is only safe alongside it, since it removes the
+      // someone notices. Raising the limit is the fix. Requiring tokens is only safe alongside it, since it removes the
       // IMDSv1 fallback the container would otherwise be relying on for credentials.
       MetadataOptions: {
         HttpTokens: "required",
