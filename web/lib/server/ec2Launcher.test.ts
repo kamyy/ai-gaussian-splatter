@@ -1,8 +1,14 @@
 import { EC2Client, RunInstancesCommand } from "@aws-sdk/client-ec2";
 import { mockClient } from "aws-sdk-client-mock";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { generateCallbackToken, launchJob } from "./ec2Launcher";
+const spawnMock = vi.hoisted(() =>
+  vi.fn((_command: string, _args: string[], _options: Record<string, unknown>) => ({ unref: vi.fn() })),
+);
+vi.mock("node:child_process", () => ({ spawn: spawnMock }));
+vi.mock("node:fs", () => ({ mkdirSync: vi.fn(), openSync: vi.fn(() => 0) }));
+
+import { generateCallbackToken, launchJob, launchJobLocal } from "./ec2Launcher";
 
 // aws-sdk-client-mock is a call stub with no simulated EC2 state, so these assert on the arguments RunInstances
 // received rather than on state after.
@@ -100,5 +106,38 @@ describe("launchJob", () => {
   it("throws if EC2 returns no instance", async () => {
     ec2Mock.on(RunInstancesCommand).resolves({ Instances: [] });
     await expect(launchJob(params)).rejects.toThrow("no instance ID");
+  });
+});
+
+describe("launchJobLocal", () => {
+  const params = { jobId: "job-123", splatId: "splat-456", callbackToken: "tok-abc" };
+
+  afterEach(() => {
+    spawnMock.mockClear();
+  });
+
+  it("runs the local worker image via podman, detached", () => {
+    launchJobLocal(params);
+
+    expect(spawnMock).toHaveBeenCalledTimes(1);
+    const [command, args, options] = spawnMock.mock.calls[0];
+    expect(command).toBe("podman");
+    expect(args).toContain("splat-worker:dev");
+    expect(args).toEqual(expect.arrayContaining(["-e", "JOB_ID=job-123"]));
+    expect(args).toEqual(expect.arrayContaining(["-e", "SPLAT_ID=splat-456"]));
+    expect(args).toEqual(expect.arrayContaining(["-e", "CALLBACK_TOKEN=tok-abc"]));
+    // Podman's alias for the host running `next dev` — see the APP_PUBLIC_URL comment in web/lib/server/ec2Launcher.ts.
+    expect(args).toEqual(expect.arrayContaining(["-e", "APP_PUBLIC_URL=http://host.containers.internal:3000"]));
+    expect(options).toMatchObject({ detached: true });
+  });
+
+  it("throws if AWS credentials aren't set", () => {
+    const savedKey = process.env.AWS_ACCESS_KEY_ID;
+    delete process.env.AWS_ACCESS_KEY_ID;
+    try {
+      expect(() => launchJobLocal(params)).toThrow("AWS_ACCESS_KEY_ID");
+    } finally {
+      process.env.AWS_ACCESS_KEY_ID = savedKey;
+    }
   });
 });

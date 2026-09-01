@@ -120,6 +120,26 @@ podman run --rm \
   splat-worker:dev
 ```
 
+### Triggering the worker from pnpm dev
+
+Set `WORKER_LOCAL_LAUNCH=true` in `web/.env` to make the web app's Process button run the worker on your own GPU
+instead of launching a real EC2 spot instance. `web/lib/server/ec2Launcher.ts`'s `launchJobLocal()` then does what the
+[Running the pipeline](#running-the-pipeline) command above does by hand: it shells out to `podman run` against the
+`splat-worker:dev` image, with output landing in `worker/jobdir/<jobId>/worker.log` for the same
+[registration debugging](#capture) the manual flow uses. Requires the same one-time
+[GPU passthrough setup](#one-time-gpu-passthrough-setup) and an image already built via `podman build` above — this
+path never builds it for you.
+
+```bash
+cd worker && podman build -t splat-worker:dev . # once, and again after any worker code change
+cd ../web && pnpm dev
+```
+
+Upload photos and click Process in the browser as normal — the job goes through the same DB rows, callback token, and
+`/api/v1/internal/jobs/[jobId]/status` route a real EC2 run would use, so its status updates in the dashboard live.
+Leave `WORKER_LOCAL_LAUNCH` unset (or `false`) to go back to launching a real spot instance; `WORKER_AMI_ID` and the
+rest of that block stay unused either way.
+
 ## Web (frontend + REST API)
 
 The REST API is served via route handlers in `web/app/api/v1/`, backed by Postgres via Drizzle.
