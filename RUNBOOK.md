@@ -214,13 +214,13 @@ Start by finishing **[First-time account setup](#first-time-account-setup)** bef
 Every `pnpm cdk:*` invocation below — bootstrap, registry, and the full deploy — needs the same six values. Resolve them once per shell session and reuse them for everything that follows. `RegistryStack` itself reads none of them, but `pnpm cdk:*` always builds the whole app first, `WebStack` included, and that's where they're required. Only `AWS_ACCOUNT_ID` needs `export`. `infra/app.py` reads it straight from its environment; the rest are only ever expanded into `-c key=value` flags by this same shell, so a plain assignment works just as well. 
 
 ```bash
-export AWS_ACCOUNT_ID=<your real account id> # Use a real AWS account id.
+export AWS_ACCOUNT_ID=replace-with-your-account-id # Use a real AWS account id.
 ```
 
 `ALERT_EMAIL` is where `BudgetsStack` sends spend alerts. Omitting it breaks `pnpm cdk:*`, but nothing can tell a wrong address from a right one, and a wrong one deploys green with the alerts never arriving. AWS emails a confirmation link on the first deploy; until it's clicked the subscription stays pending and sends nothing, so check for it.
 
 ```bash
-ALERT_EMAIL=<your email>
+ALERT_EMAIL=replace-with-your-email
 ```
 
 `APP_PUBLIC_URL` is where the worker PATCHes job status back to, and what the ALB is aliased to. Keep it in step with `APP_HOSTNAME` in `web_stack.py`, which is what the certificate and the Route 53 record are built from — nothing cross-checks the two, so a mismatch sends every status callback at a host that won't answer.
@@ -362,7 +362,7 @@ Only the last few releases are kept (`RELEASES_KEPT` in `infra/stacks/registry_s
 
 **`pnpm cdk:deploy:all` never applies migrations.** The database has no tables yet, but the target group reports healthy anyway — `/api/v1/healthz` never touches the database. There's no supported out-of-band way to apply one by hand either (see ["Fixing a bad migration"](#fixing-a-bad-migration) below).
 
-So the site stays broken after this first deploy until CD applies the first migration. Finish ["Configuring continuous deployment"](#configuring-continuous-deployment) below, then push any commit to `main` — that push is what actually runs the first migration. That `deploy` job run builds the migrator image, applies it, and rolls the service forward, exactly like every release after it.
+So the site stays broken after this first deploy until CD applies the first migration. Finish ["Configuring continuous deployment"](#configuring-continuous-deployment) below, then push a commit touching at least one non-Markdown file to `main`. `.github/workflows/ci.yml`'s `paths-ignore` skips the whole workflow, deploy included, for a commit that only touches `.md` files. That push is what actually runs the first migration. That `deploy` job run builds the migrator image, applies it, and rolls the service forward, exactly like every release after it.
 
 ## Configuring continuous deployment
 
@@ -380,13 +380,11 @@ aws iam create-open-id-connect-provider \
 # No --thumbprint-list: IAM validates GitHub's TLS cert against its own trusted root CA library first, since GitHub's
 # OIDC endpoint chains to a public CA, and only falls back to thumbprint matching when it doesn't.
 
-Get the owner and repo IDs with:
+# {owner}/{repo} are gh's own placeholders, resolved from this checkout's origin remote — nothing to substitute by
+# hand, and unlike <owner>/<repo> they're not shell redirection operators if this line is pasted as-is.
+REPO_INFO=$(gh api repos/{owner}/{repo} --jq '[.owner.login, .name, .owner.id, .id] | @tsv')
+read -r OWNER REPO OWNER_ID REPO_ID <<< "$REPO_INFO"
 
-```bash
-gh api repos/<owner>/<repo> --jq '{ownerId: .owner.id, repoId: .id}'
-```
-
-```bash
 cat > trust-policy.json <<EOF
 {
   "Version": "2012-10-17",
@@ -397,12 +395,13 @@ cat > trust-policy.json <<EOF
     "Condition": {
       "StringEquals": {
         "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-        "token.actions.githubusercontent.com:sub": "repo:<owner>@<ownerId>/<repo>@<repoId>:ref:refs/heads/main"
+        "token.actions.githubusercontent.com:sub": "repo:$OWNER@$OWNER_ID/$REPO@$REPO_ID:ref:refs/heads/main"
       }
     }
   }]
 }
 EOF
+
 aws iam create-role --role-name ai-gaussian-splatter-ci-deploy \
   --assume-role-policy-document file://trust-policy.json
 ```
