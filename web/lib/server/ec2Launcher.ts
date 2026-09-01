@@ -1,4 +1,7 @@
+import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { mkdirSync, openSync } from "node:fs";
+import path from "node:path";
 
 import { EC2Client, RunInstancesCommand } from "@aws-sdk/client-ec2";
 
@@ -127,4 +130,63 @@ export async function launchJob(params: {
     throw new Error("RunInstances returned no instance ID");
   }
   return instanceId;
+}
+
+/**
+ * Local-dev substitute for launchJob(): runs the worker image on the caller's own GPU via Podman instead of
+ * launching a real EC2 spot instance. Gated behind WORKER_LOCAL_LAUNCH in process/route.ts and never reachable in
+ * production, where the ECS task has neither a podman binary nor a GPU.
+ *
+ * Fire-and-forget like the EC2 launch it replaces: the worker reports its own progress back over
+ * APP_PUBLIC_URL/CALLBACK_TOKEN (worker/pipeline/status.py), so this function doesn't wait on the container.
+ */
+export function launchJobLocal(params: { jobId: string; splatId: string; callbackToken: string }): void {
+  const env = getEnv();
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+  if (accessKeyId === undefined || secretAccessKey === undefined) {
+    throw new Error("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set to launch the worker locally");
+  }
+
+  // repo-root/worker/jobdir/<jobId>, matching the manual run in RUNBOOK.md so a local automated run is still
+  // debuggable the same way: colmap/database.db, result.ply, and this container's own stdout/stderr all land here.
+  const jobDir = path.resolve(process.cwd(), "..", "worker", "jobdir", params.jobId);
+  mkdirSync(jobDir, { recursive: true });
+  const log = openSync(path.join(jobDir, "worker.log"), "a");
+
+  const child = spawn(
+    "podman",
+    [
+      "run",
+      "--rm",
+      "--security-opt=label=disable",
+      "--device",
+      "nvidia.com/gpu=all",
+      "-e",
+      `JOB_ID=${params.jobId}`,
+      "-e",
+      `SPLAT_ID=${params.splatId}`,
+      "-e",
+      `CALLBACK_TOKEN=${params.callbackToken}`,
+      // Inside the container "localhost" is the container itself, not the host running `next dev` — this is Podman's
+      // alias for the host, matching worker/.env's APP_PUBLIC_URL per .env.example.
+      "-e",
+      "APP_PUBLIC_URL=http://host.containers.internal:3000",
+      "-e",
+      `UPLOADS_BUCKET=${env.UPLOADS_BUCKET}`,
+      "-e",
+      `SPLATS_BUCKET=${env.SPLATS_BUCKET}`,
+      "-e",
+      `AWS_ACCESS_KEY_ID=${accessKeyId}`,
+      "-e",
+      `AWS_SECRET_ACCESS_KEY=${secretAccessKey}`,
+      "-e",
+      `AWS_DEFAULT_REGION=${env.AWS_REGION}`,
+      "-v",
+      `${jobDir}:/tmp/job`,
+      "splat-worker:dev",
+    ],
+    { detached: true, stdio: ["ignore", log, log] },
+  );
+  child.unref();
 }

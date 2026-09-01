@@ -4,7 +4,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { jobs, photos, splats } from "@/lib/server/db/schema";
-import { generateCallbackToken, launchJob } from "@/lib/server/ec2Launcher";
+import { generateCallbackToken, launchJob, launchJobLocal } from "@/lib/server/ec2Launcher";
 import { getEnv } from "@/lib/server/env";
 import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
@@ -17,6 +17,12 @@ function workerImageUri(): string {
 
 function ecrRegistry(): string {
   return process.env.ECR_REGISTRY ?? "REPLACE_WITH_ECR_REGISTRY";
+}
+
+// Runs the worker against the caller's own GPU via Podman instead of launching a real EC2 spot instance. See
+// launchJobLocal() in web/lib/server/ec2Launcher.ts and "Triggering the worker from pnpm dev" in RUNBOOK.md.
+function localLaunchEnabled(): boolean {
+  return process.env.WORKER_LOCAL_LAUNCH === "true";
 }
 
 export const POST = withErrorHandling(
@@ -54,13 +60,19 @@ export const POST = withErrorHandling(
       .returning({ id: jobs.id });
     await getDb().update(splats).set({ status: "processing" }).where(eq(splats.id, splatId));
 
-    const instanceId = await launchJob({
-      jobId: created.id,
-      splatId,
-      callbackToken,
-      workerImageUri: workerImageUri(),
-      ecrRegistry: ecrRegistry(),
-    });
+    let instanceId: string | null;
+    if (localLaunchEnabled()) {
+      launchJobLocal({ jobId: created.id, splatId, callbackToken });
+      instanceId = null;
+    } else {
+      instanceId = await launchJob({
+        jobId: created.id,
+        splatId,
+        callbackToken,
+        workerImageUri: workerImageUri(),
+        ecrRegistry: ecrRegistry(),
+      });
+    }
 
     const [job] = await getDb()
       .update(jobs)
