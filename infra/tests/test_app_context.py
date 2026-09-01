@@ -74,8 +74,8 @@ def test_migrate_image_tag_defaults_to_the_web_image_tag():
     """migrateImageTag has no placeholder to refuse, unlike the four keys in
     PLACEHOLDERS above. It has a safe default (mirror webImageTag), so every
     existing manual RUNBOOK invocation that never mentions it keeps working
-    unchanged. ci.yml's deploy job is the one caller that ever diverges the
-    two on purpose (RUNBOOK.md).
+    unchanged. .github/workflows/ci.yml's deploy job is the one caller that
+    ever diverges the two on purpose (RUNBOOK.md).
     """
     values = read_context(cdk.App(context=DEPLOY_CONTEXT), REAL_ACCOUNT)
     assert values["migrate_image_tag"] == DEPLOY_CONTEXT["webImageTag"]
@@ -144,8 +144,8 @@ def test_a_malformed_account_is_refused(monkeypatch, value):
 
 def test_app_public_url_must_be_https():
     """The ALB answers https only, and a worker whose callbacks all fail is
-    silent about it — status.py swallows them — so the job looks stuck rather
-    than misconfigured. Cheaper to refuse the scheme here.
+    silent about it — worker/pipeline/status.py swallows them — so the job
+    looks stuck rather than misconfigured. Cheaper to refuse the scheme here.
     """
     context = {**DEPLOY_CONTEXT, "appPublicUrl": "http://example.test"}
 

@@ -1,6 +1,6 @@
 """EC2 instance self-termination via the instance metadata service (IMDSv2).
 
-Called from run_job.py's finally block, so it runs on success and on a failed
+Called from worker/run_job.py's finally block, so it runs on success and on a failed
 job alike. It is the only thing stopping a worker from billing indefinitely:
 nothing outside the instance terminates it, so a process killed outright, or a
 termination call that fails, leaves the instance running until someone notices.

@@ -53,7 +53,7 @@ def test_a_bounded_number_of_releases_is_kept(wired_stacks):
     A rule per suffix rather than one over both, since each release pushes
     one of each and a single cap would therefore keep half as many releases.
     Both budgets are the same because a rollback to $SHA re-points
-    MigrationTaskDefinition at $SHA-migrate as well (registry_stack.py).
+    MigrationTaskDefinition at $SHA-migrate as well (infra/stacks/registry_stack.py).
     Matching is by suffix, which needs tagPatternList. Prefix matching cannot
     express it.
     """

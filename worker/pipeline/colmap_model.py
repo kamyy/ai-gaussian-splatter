@@ -1,7 +1,7 @@
 """Parser for COLMAP's binary sparse reconstruction format (cameras.bin,
 images.bin, points3D.bin) — layout per COLMAP's own read_write_model.py
 reference. Used to feed camera poses + the initial point cloud into
-train.py without needing pycolmap as a dependency.
+worker/pipeline/train.py without needing pycolmap as a dependency.
 """
 
 import struct
@@ -12,7 +12,7 @@ import numpy as np
 
 # model_id -> (name, num_params). Only the common models COLMAP's feature_extractor actually produces are handled;
 # params beyond focal length + principal point (e.g. radial distortion) are read but not applied — a known MVP
-# simplification (see train.py docstring).
+# simplification (see worker/pipeline/train.py's docstring).
 _CAMERA_MODELS = {
     0: ("SIMPLE_PINHOLE", 3),
     1: ("PINHOLE", 4),

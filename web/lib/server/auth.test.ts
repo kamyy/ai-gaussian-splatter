@@ -18,8 +18,8 @@ function fakeRequest(headers: Record<string, string>): NextRequest {
 
 describe("getClientIp", () => {
   it("uses the last hop of X-Forwarded-For", () => {
-    // The ALB appends the address it actually saw, so that is the trustworthy entry — see the note in auth.ts about a
-    // second proxy invalidating this.
+    // The ALB appends the address it actually saw, so that is the trustworthy entry — see the note in
+    // web/lib/server/auth.ts about a second proxy invalidating this.
     const req = fakeRequest({ "X-Forwarded-For": "203.0.113.5, 70.41.3.18, 150.172.238.178" });
     expect(getClientIp(req)).toBe("150.172.238.178");
   });

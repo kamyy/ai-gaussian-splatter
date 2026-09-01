@@ -1,11 +1,11 @@
-// Typed REST client for the Route Handlers in app/api/v1/.
+// Typed REST client for the Route Handlers in web/app/api/v1/.
 //
 // Authenticated endpoints take a Clerk session token, obtained client-side via useAuth().getToken() and passed in by
-// callers (lib/hooks.ts).
+// callers (web/lib/hooks.ts).
 //
 // Requests are same-origin now that the API lives in this app, so there is no base URL to configure.
-// NEXT_PUBLIC_API_BASE_URL is gone. Server-side callers should skip this client entirely and use lib/server/data.ts
-// directly rather than have the server make an HTTP request to itself.
+// NEXT_PUBLIC_API_BASE_URL is gone. Server-side callers should skip this client entirely and use
+// web/lib/server/data.ts directly rather than have the server make an HTTP request to itself.
 
 import type { JobRead, PhotoPresignItem, SplatRead } from "./types";
 

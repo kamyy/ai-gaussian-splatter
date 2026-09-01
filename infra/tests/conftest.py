@@ -18,9 +18,9 @@ CDK_JSON = Path(__file__).resolve().parent.parent / "cdk.json"
 
 
 def build_app_stacks(*, context: dict | None = None, **overrides) -> dict[str, cdk.Stack]:
-    """Wires all 6 stacks together via app.py's own build_stacks(), so
+    """Wires all 6 stacks together via infra/app.py's own build_stacks(), so
     cross-stack props are real CDK tokens and the test suite's stack graph
-    can't drift out of sync with what app.py actually deploys.
+    can't drift out of sync with what infra/app.py actually deploys.
 
     cdk.json's context is loaded by hand because only the CDK CLI passes it to
     the app (as CDK_CONTEXT_JSON); a bare cdk.App() sees none of it. Without

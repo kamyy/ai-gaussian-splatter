@@ -1,7 +1,7 @@
 """Structure-from-Motion via COLMAP: exhaustive matching, favouring accuracy
 over speed for a small object-centric photo set.
 
-Requires the `colmap` CLI on PATH (installed via the worker Dockerfile / baked
+Requires the `colmap` CLI on PATH (installed via `worker/Dockerfile` / baked
 AMI). It is not a pip package, hence subprocess rather than pycolmap.
 """
 
@@ -85,7 +85,7 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
 
     # `mapper` writes one sub-model per connected component (0, 1, 2...) when the photo set doesn't fully connect. Only
     # model 0 is used, and the other components' images are therefore never counted as registered below. So a capture
-    # that fragments shows up as a low registered ratio, which is what run_job.py rejects it on.
+    # that fragments shows up as a low registered ratio, which is what worker/run_job.py rejects it on.
     model_dir = sparse_dir / "0"
     if not model_dir.exists():
         raise RuntimeError(

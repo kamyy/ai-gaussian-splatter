@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { SplatViewer } from "@/components/viewer/SplatViewer";
 import { getGalleryItem } from "@/lib/server/data";
 
-// See app/gallery/page.tsx — same reasoning.
+// See web/app/gallery/page.tsx — same reasoning.
 export const dynamic = "force-dynamic";
 
 interface Props {

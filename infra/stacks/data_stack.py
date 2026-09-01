@@ -4,8 +4,8 @@ from aws_cdk import aws_rds as rds
 from aws_cdk import aws_s3 as s3
 from constructs import Construct
 
-# Imported by web_stack.py to build the container's DATABASE_NAME. The RDS L2 construct doesn't expose the initial
-# database name as an attribute, so without this the literal would have to be repeated in both stacks.
+# Imported by infra/stacks/web_stack.py to build the container's DATABASE_NAME. The RDS L2 construct doesn't expose
+# the initial database name as an attribute, so without this the literal would have to be repeated in both stacks.
 DATABASE_NAME = "ai_gaussian_splatter"
 
 # Without an explicit secret_name, from_generated_secret() below leaves CloudFormation to pick one with an
@@ -26,8 +26,8 @@ class DataStack(cdk.Stack):
     talks to S3 directly on both legs (presigned PUT on upload, presigned GET
     in the viewer), so "*" would let any page a visitor lands on read a shared
     or leaked splat URL cross-origin. The origin is passed in because the
-    hostname constant lives in web_stack, which already imports from this
-    module.
+    hostname constant lives in infra/stacks/web_stack.py, which already
+    imports from this module.
     """
 
     def __init__(
@@ -91,8 +91,8 @@ class DataStack(cdk.Stack):
         )
 
         # CORS is needed here for the same reason as on uploads, in the other direction: the viewer fetches the .ply
-        # straight from S3 in the browser (components/viewer/SplatViewer.tsx passes the presigned URL to DropInViewer),
-        # so it is a cross-origin GET that S3 rejects without a matching rule.
+        # straight from S3 in the browser (web/components/viewer/SplatViewer.tsx passes the presigned URL to
+        # DropInViewer), so it is a cross-origin GET that S3 rejects without a matching rule.
         self.splats_bucket = s3.Bucket(
             self,
             "SplatsBucket",

@@ -10,7 +10,7 @@ import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpErro
 import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
 import { jobReadColumns } from "@/lib/server/selects";
 
-// Populated from the ECR repo CDK stack output once infra is deployed Placeholders for local/pre-deploy development.
+// Populated from the ECR repo CDK stack output once infra is deployed. Placeholders for local/pre-deploy development.
 function workerImageUri(): string {
   return process.env.WORKER_IMAGE_URI ?? "REPLACE_WITH_ECR_IMAGE_URI";
 }

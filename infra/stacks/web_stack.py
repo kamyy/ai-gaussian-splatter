@@ -37,8 +37,9 @@ APP_HOSTNAME = f"ai-gaussian-splatter.{DOMAIN_ZONE_NAME}"
 CLUSTER_NAME = "ai-gaussian-splatter"
 SERVICE_NAME = "ai-gaussian-splatter-web"
 
-# Named explicitly for the same reason CLUSTER_NAME/SERVICE_NAME are: RUNBOOK.md and ci.yml's deploy job name it
-# literally (`aws ecs run-task --task-definition ai-gaussian-splatter-migrate`) rather than looking it up.
+# Named explicitly for the same reason CLUSTER_NAME/SERVICE_NAME are: RUNBOOK.md and .github/workflows/ci.yml's
+# deploy job name it literally (`aws ecs run-task --task-definition ai-gaussian-splatter-migrate`) rather than
+# looking it up.
 MIGRATION_TASK_FAMILY = "ai-gaussian-splatter-migrate"
 
 # Must stay above the ALB's own idle timeout (60s, left at the CDK default below) or the ALB serves intermittent 502s —
@@ -72,8 +73,8 @@ class WebStack(cdk.Stack):
 
     The tasks share the public subnets with the ALB and carry a public IP, so
     their calls to S3 and the EC2 API egress through the internet gateway
-    rather than a NAT gateway (see network_stack.py for the cost reasoning).
-    Nothing can open a connection to them regardless: web_security_group
+    rather than a NAT gateway (see infra/stacks/network_stack.py for the cost
+    reasoning). Nothing can open a connection to them regardless: web_security_group
     admits only alb_security_group. TLS terminates at the ALB with an ACM
     certificate for APP_HOSTNAME, and plain HTTP is redirected to HTTPS.
     """
@@ -112,10 +113,10 @@ class WebStack(cdk.Stack):
         #
         # CloudFormation never validates an imported ARN, so a wrong one is invisible until a task fails to start.
         # Checked here instead. The account and region are this stack's own, which is what makes a forgotten `-c
-        # clerkSecretKeyArn=` fail: app.py's placeholder names the placeholder account and matches nothing real. The
-        # trailing six characters are Secrets Manager's own suffix. ECS wants the complete ARN. A partial one pasted
-        # without it is the likeliest typo. The suffix class is alphanumeric like from_secret_complete_arn's own, so
-        # every rejected ARN fails with the message below rather than with CDK's.
+        # clerkSecretKeyArn=` fail: infra/app.py's placeholder names the placeholder account and matches nothing
+        # real. The trailing six characters are Secrets Manager's own suffix. ECS wants the complete ARN. A partial
+        # one pasted without it is the likeliest typo. The suffix class is alphanumeric like
+        # from_secret_complete_arn's own, so every rejected ARN fails with the message below rather than with CDK's.
         expected = (
             rf"arn:aws:secretsmanager:{self.region}:{self.account}:secret:{CLERK_SECRET_KEY_NAME}"
             r"-[A-Za-z0-9]{6}"
@@ -154,8 +155,9 @@ class WebStack(cdk.Stack):
             )
         )
         repository.grant_pull(execution_role)  # also grants ecr:GetAuthorizationToken (Resource: "*", unavoidably)
-        # database.secret is always populated — credentials come from from_generated_secret in data_stack.py — so this
-        # is safe to assert once and reuse, rather than encoding the same invariant two different ways.
+        # database.secret is always populated — credentials come from from_generated_secret in
+        # infra/stacks/data_stack.py — so this is safe to assert once and reuse, rather than encoding the same
+        # invariant two different ways.
         assert database.secret is not None
         db_secret = database.secret
         db_secret.grant_read(execution_role)
@@ -178,7 +180,7 @@ class WebStack(cdk.Stack):
             "DATABASE_PASSWORD": ecs.Secret.from_secrets_manager(db_secret, field="password"),
         }
 
-        # Runs `node scripts/db-migrate.cjs` (web/Dockerfile's `migrator` stage) as a one-off ecs:RunTask, ahead of
+        # Runs `node web/scripts/db-migrate.cjs` (web/Dockerfile's `migrator` stage) as a one-off ecs:RunTask, ahead of
         # the service's own rollout — see RUNBOOK.md and AGENTS.md for why migrations can't run at container boot.
         # execution_role is reused as-is: it already has ECR pull (repo-wide, any tag) and DB-secret read, which is
         # everything this container needs to start. migration_task_role gets its own fixed name, for the same
@@ -201,8 +203,8 @@ class WebStack(cdk.Stack):
         )
         migration_task_definition.add_container(
             "migrate",
-            # -migrate is the migrator image's tag convention (web/Dockerfile, ci.yml) — same repository as the -web
-            # image, different build target.
+            # -migrate is the migrator image's tag convention (web/Dockerfile, .github/workflows/ci.yml) — same
+            # repository as the -web image, different build target.
             image=ecs.ContainerImage.from_ecr_repository(repository, tag=f"{migrate_image_tag}-migrate"),
             logging=ecs.LogDriver.aws_logs(
                 stream_prefix="migrate",
@@ -222,10 +224,10 @@ class WebStack(cdk.Stack):
         uploads_bucket.grant_read_write(task_role)
         splats_bucket.grant_read_write(task_role)
         # RunInstances is authorized against every resource the request touches, each one separately. Only the instance
-        # carries the worker tag (ec2Launcher.ts tags ResourceType "instance"), so aws:RequestTag is absent from the
-        # request context for the rest. A single statement conditioned on that key would evaluate false for them and
-        # deny the whole call. Hence the split: the tag constrains what can be launched, this statement only names what
-        # it is launched from and into.
+        # carries the worker tag (web/lib/server/ec2Launcher.ts tags ResourceType "instance"), so aws:RequestTag is
+        # absent from the request context for the rest. A single statement conditioned on that key would evaluate
+        # false for them and deny the whole call. Hence the split: the tag constrains what can be launched, this
+        # statement only names what it is launched from and into.
         task_role.add_to_policy(
             iam.PolicyStatement(
                 actions=["ec2:RunInstances"],
@@ -237,9 +239,9 @@ class WebStack(cdk.Stack):
                     self.format_arn(service="ec2", resource="network-interface", resource_name="*"),
                     self.format_arn(service="ec2", resource="volume", resource_name="*"),
                     self.format_arn(service="ec2", resource="key-pair", resource_name="*"),
-                    # Only evaluated at all if the spot request itself is tagged on create, which ec2Launcher.ts does
-                    # not do. But adding one tag specification for it would otherwise start failing every launch with
-                    # nothing to point at.
+                    # Only evaluated at all if the spot request itself is tagged on create, which
+                    # web/lib/server/ec2Launcher.ts does not do. But adding one tag specification for it would
+                    # otherwise start failing every launch with nothing to point at.
                     self.format_arn(service="ec2", resource="spot-instances-request", resource_name="*"),
                 ],
             )
@@ -378,8 +380,8 @@ class WebStack(cdk.Stack):
             task_image_options=ecs_patterns.ApplicationLoadBalancedTaskImageOptions(
                 # from_ecr_repository rather than from_registry: it reads the repository's ARN to scope the execution
                 # role's pull grant, instead of treating the URI as an opaque public image name. -web is the web image's
-                # tag convention (web/Dockerfile, ci.yml); the migration task's -migrate image lives in the same
-                # repository, so no second ECR repository is needed.
+                # tag convention (web/Dockerfile, .github/workflows/ci.yml); the migration task's -migrate image lives
+                # in the same repository, so no second ECR repository is needed.
                 image=ecs.ContainerImage.from_ecr_repository(repository, tag=f"{web_image_tag}-web"),
                 container_port=CONTAINER_PORT,
                 execution_role=execution_role,
