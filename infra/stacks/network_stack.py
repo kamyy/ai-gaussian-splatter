@@ -6,7 +6,7 @@ from constructs import Construct
 class NetworkStack(cdk.Stack):
     """VPC, subnets, and security groups. Deliberately minimal — one
     VPC with public + isolated subnets across 2 AZs, no NAT gateway or
-    multi-AZ complexity, since this is a low-traffic portfolio project, not a
+    multi-AZ complexity, since this is a low-traffic demo project, not a
     production-scale service.
     """
 
