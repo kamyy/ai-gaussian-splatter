@@ -40,9 +40,20 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
     sparse_dir = workdir / "sparse"
     sparse_dir.mkdir(parents=True, exist_ok=True)
 
-    num_images_input = sum(1 for p in photos_dir.iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png"})
-    if num_images_input == 0:
+    image_paths = [p for p in photos_dir.iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png"}]
+    if not image_paths:
         raise RuntimeError(f"No photos found in {photos_dir}")
+    num_images_input = len(image_paths)
+
+    # COLMAP scans --image_path itself rather than taking an explicit file list. A stray non-image file left in
+    # photos_dir (a phone's video sidecar, a thumbnail) therefore gets read as an image too. --ImageReader.single_camera
+    # then locks every photo's intrinsics to whichever file COLMAP reads first, so a wrong-sized stray file poisons
+    # every real photo with CAMERA_SINGLE_DIM_ERROR and the reconstruction fails outright. Symlinking only the
+    # accepted suffixes into their own directory keeps COLMAP from ever seeing anything else.
+    images_dir = workdir / "images"
+    images_dir.mkdir(exist_ok=True)
+    for p in image_paths:
+        (images_dir / p.name).symlink_to(p)
 
     _run(
         [
@@ -51,7 +62,7 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
             "--database_path",
             str(database_path),
             "--image_path",
-            str(photos_dir),
+            str(images_dir),
             "--ImageReader.single_camera",
             "1",
             "--FeatureExtraction.use_gpu",
@@ -77,7 +88,7 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
             "--database_path",
             str(database_path),
             "--image_path",
-            str(photos_dir),
+            str(images_dir),
             "--output_path",
             str(sparse_dir),
         ]

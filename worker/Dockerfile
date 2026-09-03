@@ -74,6 +74,14 @@ COPY --from=colmap /usr/local/lib/libonnxruntime.so* /usr/local/lib/
 # no CUDA_HOME, so this makes the lookup explicit rather than dependent on that fallback.
 ENV CUDA_HOME=/usr/local/cuda
 
+# worker/pipeline/train.py's densify_and_prune reallocates all five Gaussian-model tensors at a new size on every
+# call, so their old blocks return to PyTorch's caching allocator at a size nothing new needs. Over several
+# densification rounds within one training run, that fragments the cache into pieces too small individually to
+# satisfy a later allocation even when their sum is enough. expandable_segments lets the allocator grow one segment
+# instead of hunting for a contiguous block, which is what PyTorch's own CUDA OOM message recommends when "reserved
+# but unallocated" memory is large.
+ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
 # uv comes from its own published image rather than pip: Ubuntu 24.04 marks the system Python as externally managed (PEP
 # 668), so `pip install` into it fails without --break-system-packages. No system Python is needed at all this way — uv
 # fetches the interpreter pyproject.toml asks for.

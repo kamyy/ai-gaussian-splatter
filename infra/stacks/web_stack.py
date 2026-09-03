@@ -67,6 +67,18 @@ def _require_commit_sha(value: str, flag_name: str) -> None:
         )
 
 
+def _make_log_group(scope: Construct, id: str) -> logs.LogGroup:
+    """An explicit LogGroup, not log_retention=, because log_retention's own log group creation path hardcodes
+    RemovalPolicy.RETAIN with no override. A full teardown should not need to leave this behind by hand.
+    """
+    return logs.LogGroup(
+        scope,
+        id,
+        retention=logs.RetentionDays.ONE_MONTH,
+        removal_policy=cdk.RemovalPolicy.DESTROY,
+    )
+
+
 class WebStack(cdk.Stack):
     """The Next.js app (pages + the REST API as Route Handlers) on Fargate,
     behind an internet-facing Application Load Balancer.
@@ -201,15 +213,13 @@ class WebStack(cdk.Stack):
             execution_role=execution_role,
             task_role=migration_task_role,
         )
+        migration_log_group = _make_log_group(self, "MigrationLogGroup")
         migration_task_definition.add_container(
             "migrate",
             # -migrate is the migrator image's tag convention (web/Dockerfile, .github/workflows/ci.yml) — same
             # repository as the -web image, different build target.
             image=ecs.ContainerImage.from_ecr_repository(repository, tag=f"{migrate_image_tag}-migrate"),
-            logging=ecs.LogDriver.aws_logs(
-                stream_prefix="migrate",
-                log_retention=logs.RetentionDays.ONE_MONTH,
-            ),
+            logging=ecs.LogDriver.aws_logs(stream_prefix="migrate", log_group=migration_log_group),
             environment=db_environment,
             secrets=db_secrets,
         )
@@ -329,6 +339,8 @@ class WebStack(cdk.Stack):
             ),
         )
 
+        web_log_group = _make_log_group(self, "WebLogGroup")
+
         self.service = ecs_patterns.ApplicationLoadBalancedFargateService(
             self,
             "Service",
@@ -386,12 +398,7 @@ class WebStack(cdk.Stack):
                 container_port=CONTAINER_PORT,
                 execution_role=execution_role,
                 task_role=task_role,
-                # Passed explicitly only for the retention: the log group the pattern creates on its own keeps every
-                # line forever. The group itself is still retained on stack delete.
-                log_driver=ecs.LogDriver.aws_logs(
-                    stream_prefix="web",
-                    log_retention=logs.RetentionDays.ONE_MONTH,
-                ),
+                log_driver=ecs.LogDriver.aws_logs(stream_prefix="web", log_group=web_log_group),
                 environment={
                     "UPLOADS_BUCKET": uploads_bucket.bucket_name,
                     "SPLATS_BUCKET": splats_bucket.bucket_name,

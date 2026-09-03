@@ -149,3 +149,13 @@ def test_backups_outlive_a_single_day(wired_stacks):
     """
     template = Template.from_stack(wired_stacks["data"])
     template.has_resource_properties("AWS::RDS::DBInstance", {"BackupRetentionPeriod": 7})
+
+
+def test_database_secret_has_no_fixed_name(wired_stacks):
+    """A fixed name would collide with a later cdk deploy's CreateSecret after
+    a full teardown: Secrets Manager reserves a deleted secret's name for its
+    recovery window, and CloudFormation has no property to skip it.
+    """
+    template = Template.from_stack(wired_stacks["data"])
+    (secret_props,) = template.find_resources("AWS::SecretsManager::Secret").values()
+    assert "Name" not in secret_props["Properties"]

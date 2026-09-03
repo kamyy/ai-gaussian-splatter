@@ -32,6 +32,11 @@ logger = logging.getLogger(__name__)
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
+# COLMAP downsamples for feature detection only and keeps camera intrinsics in the original photo's pixel dimensions.
+# Training at that resolution makes every ground-truth image resident in VRAM at full size, which OOMs a consumer GPU
+# well before a modest photo count. 1600px matches the reference 3DGS implementation's longest-edge target.
+MAX_TRAINING_EDGE = 1600
+
 
 @dataclass
 class GaussianModel:
@@ -56,19 +61,47 @@ def train(sfm_sparse_dir: Path, photos_dir: Path, settings: Settings) -> Trained
         logger.warning("No CUDA device available — training will be extremely slow or impractical.")
 
     sparse = read_sparse_model(sfm_sparse_dir)
+
+    # Translated into a plain RuntimeError so worker/run_job.py's generic handler reports it as-is to the browser
+    # (see web/components/job/JobStatusPoller.tsx). torch's own OutOfMemoryError message is a multi-line CUDA
+    # allocator dump aimed at a developer, not something to show a user waiting on their splat.
+    try:
+        model, cameras, viewmats, images_tensor = _train_loop(sparse, photos_dir, settings)
+    except torch.OutOfMemoryError as exc:
+        raise RuntimeError(
+            f"Training ran out of GPU memory with {len(sparse.images)} registered photos. Try a smaller photo set, "
+            "or a GPU with more VRAM."
+        ) from exc
+
+    canonical_idx = len(images_tensor) // 2
+    canonical_K, canonical_width, canonical_height = cameras[canonical_idx]
+    return TrainedScene(
+        model=model,
+        canonical_viewmat=viewmats[canonical_idx],
+        canonical_K=canonical_K,
+        canonical_width=canonical_width,
+        canonical_height=canonical_height,
+    )
+
+
+def _train_loop(sparse: SparseModel, photos_dir: Path, settings: Settings):
+    """Everything train() wraps in a single OutOfMemoryError handler, factored out so that handler wraps one call
+    instead of re-indenting this whole body.
+    """
     cameras, viewmats, images_tensor = _load_views(sparse, photos_dir)
     model = _init_gaussians(sparse)
 
     iterations = 20 if settings.fast_test_mode else settings.training_iterations
 
     # Schedules are fractions of the run, not fixed step counts: at the default 10k these work out to the usual
-    # densify-every-1000 / log-every-500 / stop-densifying-500-before-the-end, while a 20-iteration fast-test run still
-    # exercises _densify_and_prune instead of never reaching it.
+    # densify-every-1000 / log-every-500 / stop-densifying-500-before-the-end, while a 20-iteration fast-test run
+    # still exercises _densify_and_prune instead of never reaching it.
     densify_every = max(1, iterations // 10)
     densify_until = iterations - max(1, iterations // 20)
     log_every = max(1, iterations // 20)
 
     optimizer = _build_optimizer(model)
+    max_points = _max_gaussians_for_device()
 
     for step in range(iterations):
         idx = np.random.randint(0, len(images_tensor))
@@ -87,18 +120,10 @@ def train(sfm_sparse_dir: Path, photos_dir: Path, settings: Settings) -> Trained
             logger.info("iter %d/%d loss=%.4f", step, iterations, loss.item())
 
         if step > 0 and step % densify_every == 0 and step < densify_until:
-            model = _densify_and_prune(model)
+            model = _densify_and_prune(model, max_points=max_points)
             optimizer = _build_optimizer(model)
 
-    canonical_idx = len(images_tensor) // 2
-    canonical_K, canonical_width, canonical_height = cameras[canonical_idx]
-    return TrainedScene(
-        model=model,
-        canonical_viewmat=viewmats[canonical_idx],
-        canonical_K=canonical_K,
-        canonical_width=canonical_width,
-        canonical_height=canonical_height,
-    )
+    return model, cameras, viewmats, images_tensor
 
 
 def render_view(model: GaussianModel, viewmat: torch.Tensor, K: torch.Tensor, width: int, height: int) -> torch.Tensor:
@@ -117,8 +142,19 @@ def _load_views(sparse: SparseModel, photos_dir: Path):
 
     for image in sparse.images.values():
         camera = sparse.cameras[image.camera_id]
+        fx, fy, cx, cy = camera.fx, camera.fy, camera.cx, camera.cy
+        width, height = camera.width, camera.height
+
+        # fx/fy/cx/cy are scaled by the same factor as width/height, or K no longer matches the pixels it projects
+        # onto.
+        longest_edge = max(width, height)
+        if longest_edge > MAX_TRAINING_EDGE:
+            scale = MAX_TRAINING_EDGE / longest_edge
+            fx, fy, cx, cy = fx * scale, fy * scale, cx * scale, cy * scale
+            width, height = round(width * scale), round(height * scale)
+
         K = torch.tensor(
-            [[camera.fx, 0, camera.cx], [0, camera.fy, camera.cy], [0, 0, 1]],
+            [[fx, 0, cx], [0, fy, cy], [0, 0, 1]],
             dtype=torch.float32,
             device=DEVICE,
         )
@@ -131,11 +167,11 @@ def _load_views(sparse: SparseModel, photos_dir: Path):
         viewmats.append(torch.tensor(viewmat, device=DEVICE))
 
         img_path = photos_dir / image.name
-        pil_img = PILImage.open(img_path).convert("RGB").resize((camera.width, camera.height))
+        pil_img = PILImage.open(img_path).convert("RGB").resize((width, height))
         img_tensor = torch.tensor(np.array(pil_img), dtype=torch.float32, device=DEVICE) / 255.0
         images_tensor.append(img_tensor)
 
-        cameras.append((K, camera.width, camera.height))
+        cameras.append((K, width, height))
 
     if not images_tensor:
         raise RuntimeError("No registered images with matching photo files found for training")
@@ -203,17 +239,46 @@ def _render(model: GaussianModel, viewmat: torch.Tensor, K: torch.Tensor, width:
     return renders[0], alphas[0], meta
 
 
-def _densify_and_prune(model: GaussianModel, opacity_prune_threshold: float = 0.005) -> GaussianModel:
+def _max_gaussians_for_device() -> int:
+    """A device-sized ceiling on the point count densification is allowed to grow to. Without one, cloning keeps
+    adding points on a fixed schedule all the way to densify_until regardless of how much VRAM is left, so a run on a
+    small GPU can climb for thousands of iterations before finally OOMing near the end.
+
+    2KB/point is a deliberately conservative, unmeasured budget covering the point's own five tensors, Adam's two
+    moment estimates per tensor, and gsplat's per-render tile-intersection buffers, which also scale with point
+    count. Read against currently-free memory, not the card's total, so ground-truth images, the optimizer, and
+    PyTorch's own overhead already resident by this point in training are accounted for. Half of what's free is
+    reserved for everything that still grows later (new Adam moment buffers, tile-intersection memory at larger
+    point counts) before this budget is computed.
+    """
+    if not torch.cuda.is_available():
+        return 10**9  # No GPU to run out of, and CPU training is already impractically slow regardless of size.
+    free_bytes, _total_bytes = torch.cuda.mem_get_info()
+    budget_bytes = free_bytes // 2
+    return max(1, budget_bytes // 2048)
+
+
+def _densify_and_prune(
+    model: GaussianModel, opacity_prune_threshold: float = 0.005, max_points: int = 10**9
+) -> GaussianModel:
     """Simplified densification (see module docstring): clone the top 5% of
     points by position-gradient magnitude, and prune points whose opacity
-    has decayed below threshold.
+    has decayed below threshold. Cloning stops once max_points is reached.
+    Pruning keeps running regardless, since it only ever removes points.
+    Raises if every point's opacity has decayed below threshold, since
+    there would be nothing left to clone from or train.
     """
     with torch.no_grad():
         grad_norm = model.means.grad.norm(dim=-1) if model.means.grad is not None else torch.zeros(len(model.means))
         keep = torch.sigmoid(model.opacities) > opacity_prune_threshold
+        n_keep = int(keep.sum().item())
+        if n_keep == 0:
+            raise RuntimeError("Every Gaussian's opacity decayed below the prune threshold; the model has collapsed")
 
-        n_clone = max(1, int(0.05 * keep.sum().item()))
-        clone_idx = torch.topk(grad_norm * keep, n_clone).indices
+        # available can't go negative, so n_clone (which needs at least 1 to make topk meaningful) never exceeds it.
+        available = max(0, max_points - n_keep)
+        n_clone = min(max(1, int(0.05 * n_keep)), available)
+        clone_idx = torch.topk(grad_norm * keep, n_clone).indices if n_clone > 0 else torch.empty(0, dtype=torch.long)
 
         def _cat(t: torch.Tensor, idx: torch.Tensor) -> torch.Tensor:
             kept = t[keep]

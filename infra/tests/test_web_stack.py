@@ -558,15 +558,19 @@ def test_tagging_on_launch_is_granted_and_scoped_to_run_instances(wired_stacks):
     assert statements[0]["Condition"] == {"StringEquals": {"ec2:CreateAction": "RunInstances"}}
 
 
-def test_container_logs_expire(wired_stacks):
+def test_container_logs_expire_and_are_removed_on_teardown(wired_stacks):
     """The log group the ecs-patterns construct creates unprompted has no
-    retention and a Retain deletion policy, so nothing ever reclaims it.
+    retention, so both containers pass an explicit LogGroup instead. That also
+    lets removal_policy be set directly: log_retention='s own log group
+    creation path hardcodes Retain with no override, which a full teardown
+    should not need to clean up by hand.
     """
     template = Template.from_stack(wired_stacks["web"])
     log_groups = template.find_resources("AWS::Logs::LogGroup")
     assert log_groups
     for props in log_groups.values():
         assert props["Properties"].get("RetentionInDays") is not None
+        assert props["DeletionPolicy"] == "Delete"
 
 
 def test_load_balancer_records_requests_and_drops_invalid_headers(wired_stacks):

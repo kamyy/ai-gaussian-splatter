@@ -11,9 +11,7 @@ def test_repository_is_not_in_the_stack_that_pulls_from_it(wired_stacks):
     WebStack's service is pinned to an image tag, so if the repository
     were created in the same stack it would be empty at the moment the
     service starts, the tasks would never reach a steady state, and the
-    circuit breaker would roll the stack back. The repository is RETAIN, so
-    it survives that rollback and then collides by name with the next attempt
-    to create it — leaving a state no retry can clear.
+    circuit breaker would roll the stack back.
     """
     assert Template.from_stack(wired_stacks["web"]).find_resources("AWS::ECR::Repository") == {}
 
@@ -21,14 +19,19 @@ def test_repository_is_not_in_the_stack_that_pulls_from_it(wired_stacks):
     assert len(registry.find_resources("AWS::ECR::Repository")) == 1
 
 
-def test_repository_survives_stack_deletion(wired_stacks):
-    """The images are the deployable artifact. Tearing down the stack must
-    not discard them.
+def test_repository_is_fully_removed_on_stack_deletion(wired_stacks):
+    """A full teardown (RUNBOOK.md's Tearing down) must not leave an orphaned
+    repository under this fixed name — it would block the next
+    `cdk deploy RegistryStack` with a plain "repository already exists"
+    failure that no retry clears.
     """
     template = Template.from_stack(wired_stacks["registry"])
 
     (repository,) = template.find_resources("AWS::ECR::Repository").values()
-    assert repository["DeletionPolicy"] == "Retain"
+    assert repository["DeletionPolicy"] == "Delete"
+    # ECR refuses to delete a non-empty repository outright, so this is required alongside DeletionPolicy: Delete
+    # to actually clear the images rather than getting stuck in DELETE_FAILED.
+    assert repository["Properties"]["EmptyOnDelete"] is True
     assert repository["Properties"]["RepositoryName"] == "ai-gaussian-splatter"
 
 
