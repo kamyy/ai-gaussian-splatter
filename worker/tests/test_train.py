@@ -125,16 +125,26 @@ def test_densify_and_prune_clamps_cloning_to_fit_under_the_cap():
     assert len(result.means) == 103
 
 
+def test_densify_and_prune_raises_when_every_point_is_pruned():
+    """Regression test: n_keep=0 used to still clone one arbitrary already-pruned point back in rather than
+    surfacing the collapse.
+    """
+    model = _make_gaussian_model(10)
+    model.opacities = torch.full((10,), -10.0, requires_grad=True)  # sigmoid(-10) ~ 0, below every threshold
+
+    with pytest.raises(RuntimeError, match="collapsed"):
+        _densify_and_prune(model, max_points=1000)
+
+
 def test_max_gaussians_for_device_has_no_cap_without_cuda(monkeypatch):
     monkeypatch.setattr("pipeline.train.torch.cuda.is_available", lambda: False)
     assert _max_gaussians_for_device() == 10**9
 
 
-def test_max_gaussians_for_device_scales_with_total_vram(monkeypatch):
-    class FakeDeviceProperties:
-        total_memory = 12 * 1024**3  # 12 GiB, a small consumer GPU
+def test_max_gaussians_for_device_scales_with_free_vram(monkeypatch):
+    free_bytes = 8 * 1024**3  # 8 GiB free out of a 12 GiB card already holding loaded images/model state
 
     monkeypatch.setattr("pipeline.train.torch.cuda.is_available", lambda: True)
-    monkeypatch.setattr("pipeline.train.torch.cuda.get_device_properties", lambda _index: FakeDeviceProperties())
+    monkeypatch.setattr("pipeline.train.torch.cuda.mem_get_info", lambda: (free_bytes, 12 * 1024**3))
 
-    assert _max_gaussians_for_device() == (12 * 1024**3 // 2) // 2048
+    assert _max_gaussians_for_device() == (free_bytes // 2) // 2048

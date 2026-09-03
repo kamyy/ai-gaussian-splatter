@@ -38,7 +38,7 @@ function SplatScene({
     // crossOriginIsolated is false here, and the library's SharedArrayBuffer postMessage to its sort worker throws an
     // unhandled rejection deep inside its own promise chain: never caught, never surfaced to our onError, so the
     // loading spinner it already showed just never clears.
-    const dropInViewer = new DropInViewer({ gpuAcceleratedSort: false, sharedMemoryForWorkers: false });
+    const dropInViewer = new DropInViewer({ sharedMemoryForWorkers: false });
     const loadSettled = dropInViewer
       // format is required, not inferred: splatUrl is a presigned S3 URL, and the library's own extension-based
       // detection fails on the query string that follows .ply.
@@ -52,8 +52,12 @@ function SplatScene({
         // COLMAP's reconstruction scale and origin are arbitrary per capture, so a fixed camera position can end up
         // pointed at empty space light-years from the actual splats. Framing from the loaded geometry's own bounding
         // box instead works for any capture.
+        //
+        // isEmpty() guards a degenerate box (e.g. a training collapse to a single point). Three.js represents an
+        // empty Box3 as min=+Infinity/max=-Infinity, which is truthy, not null. getCenter()/getSize() on one yield
+        // NaN, silently producing a camera pointed nowhere with no error surfaced.
         const box = dropInViewer.splatMesh?.computeBoundingBox();
-        if (box) {
+        if (box && !box.isEmpty()) {
           setBoundingBox(box);
           const center = box.getCenter(new Vector3());
           const radius = box.getSize(new Vector3()).length() / 2;
@@ -75,10 +79,10 @@ function SplatScene({
     return () => {
       disposed = true;
       // dispose() waits on the same in-flight load promise it aborts, which never actually settles from the abort
-      // alone — calling it immediately hangs forever with the library's own loading spinner stuck on screen. React's
+      // alone. Calling it immediately hangs forever with the library's own loading spinner stuck on screen. React's
       // dev-only mount-cleanup-remount cycle triggers this on every load, so the dispose is deferred until the load
       // has already settled above, at which point there's nothing left in flight for it to hang on. addSplatScenes()
-      // returns the library's own AbortablePromise, which has .then()/.catch() but not .finally() — Promise.resolve()
+      // returns the library's own AbortablePromise, which has .then()/.catch() but not .finally(). Promise.resolve()
       // adopts its state into a real Promise that does.
       Promise.resolve(loadSettled).finally(() => dropInViewer.dispose());
     };
