@@ -8,14 +8,6 @@ from constructs import Construct
 # the initial database name as an attribute, so without this the literal would have to be repeated in both stacks.
 DATABASE_NAME = "ai_gaussian_splatter"
 
-# Without an explicit secret_name, from_generated_secret() below leaves CloudFormation to pick one with an
-# unpredictable hash suffix. Set here, before DataStack's first deploy, because setting it later would replace an
-# already-created secret. A fixed name, like the Clerk secret's, keeps these credentials discoverable by
-# `aws secretsmanager describe-secret` if we ever need to reach Postgres directly in its private subnet.
-#
-# Once DataStack is deployed, don't rename or remove this: WebStack depends on it.
-RDS_SECRET_NAME = "ai-gaussian-splatter/rds-credentials"
-
 
 class DataStack(cdk.Stack):
     """RDS Postgres (single-AZ, db.t4g.micro — a genuinely relational schema at
@@ -60,7 +52,10 @@ class DataStack(cdk.Stack):
             # RDS defaults to 1, which is the whole recovery window for a bad migration given removal_policy=SNAPSHOT
             # and no deletion protection. Backups of a 20 GiB instance are nearly free.
             backup_retention=cdk.Duration.days(7),
-            credentials=rds.Credentials.from_generated_secret("splatter_admin", secret_name=RDS_SECRET_NAME),
+            # No secret_name: like the buckets below, an auto-generated name means a full teardown's final
+            # DeletionPolicy: Delete never leaves a fixed name behind for the next deploy's CreateSecret to collide
+            # with. WebStack consumes this as the `database.secret` object, never by name, so nothing depends on it.
+            credentials=rds.Credentials.from_generated_secret("splatter_admin"),
             database_name=DATABASE_NAME,
             removal_policy=cdk.RemovalPolicy.SNAPSHOT,
             deletion_protection=False,

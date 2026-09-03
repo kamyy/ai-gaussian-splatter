@@ -18,13 +18,10 @@ RELEASES_KEPT = 10
 class RegistryStack(cdk.Stack):
     """The ECR repository holding the `web/` container image.
 
-    Separate from WebStack for the same reason DataStack holds RDS and
-    S3: its contents outlive any particular service. This also makes a first
-    deploy possible. The ECS service names an image tag, so the repository
-    must exist and hold that image before the ECS service is created.
-    If both lived in one stack, the circuit breaker would roll a first
-    deploy back with nothing to pull, and the retained repository would then
-    collide by name with the next attempt — a state no retry clears.
+    Separate from WebStack so the repository can be created and populated
+    before the ECS service exists: the service names an image tag, so a
+    combined stack's first deploy would have nothing to pull and the circuit
+    breaker would roll it back.
     """
 
     def __init__(self, scope: Construct, id: str, **kwargs) -> None:
@@ -35,8 +32,13 @@ class RegistryStack(cdk.Stack):
             "WebRepository",
             # Repository holds both build targets of web/Dockerfile, distinguished by tag's -web/-migrate suffix.
             repository_name="ai-gaussian-splatter",
-            # The images are the deployable artifact; tearing down the service should never discard them.
-            removal_policy=cdk.RemovalPolicy.RETAIN,
+            # DESTROY, not RETAIN: a full `cdk destroy --all` (see RUNBOOK.md's Tearing down) must not leave an
+            # orphaned repository behind. An orphan under this same fixed name would block the next
+            # `cdk deploy RegistryStack` with a plain "repository already exists" failure that no retry clears.
+            # empty_on_delete is required alongside it: ECR itself refuses to delete a non-empty repository, so
+            # without it the stack would get stuck in DELETE_FAILED on every image pushed since the last deploy.
+            removal_policy=cdk.RemovalPolicy.DESTROY,
+            empty_on_delete=True,
             image_scan_on_push=True,
             # A tag, once pushed, can never be repointed. This is what makes the deployment circuit breaker's rollback
             # mean anything: the previous task definition names a tag that still resolves to the image it was deployed

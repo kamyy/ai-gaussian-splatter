@@ -8,7 +8,8 @@
     "cdk:synth": "cdk synth",
     "cdk:diff": "cdk diff",
     "cdk:deploy:all": "cdk deploy --all",
-    "cdk:deploy:registry": "cdk deploy RegistryStack"
+    "cdk:deploy:registry": "cdk deploy RegistryStack",
+    "cdk:destroy:all": "cdk destroy --all"
   },
   "packageManager": "pnpm@10.33.0",
   "devDependencies": {

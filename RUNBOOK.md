@@ -496,3 +496,33 @@ If the `deploy` job's migration step fails for an infra reason rather than a bad
 2. If `status` is stuck (no update in ~20 min) rather than `failed`: the instance likely died without reporting — check the EC2 console for the tagged instance (`Role=worker`, `JobId=<job_id>`) and its system log.
 3. Confirm self-termination actually fired: the instance should not still be running after the job reaches a terminal state. **If it is, terminate it by hand.** The instance-runtime alarm meant to catch this is not in any stack yet ([State / what's next](AGENTS.md#state--whats-next), Known gaps), so nothing else will.
 4. `docker logs` on the instance (if still running) or CloudWatch Logs (once wired up) for the actual COLMAP/gsplat stack trace.
+
+## Tearing down
+
+`pnpm cdk:destroy:all` removes all 6 CDK-managed stacks. It needs the same six context values as a deploy, resolved the same way ([Resolving context values](#resolving-context-values)) — `infra/app.py` builds the identical stack graph either way, so a missing or placeholder flag fails `read_context`'s guards before anything is destroyed.
+
+```bash
+cd infra # Make sure you're in the right folder.
+
+pnpm cdk:destroy:all \
+  -c hostedZoneId=$HOSTED_ZONE_ID \
+  -c clerkSecretKeyArn=$CLERK_SECRET_KEY_ARN \
+  -c alertEmail=$ALERT_EMAIL \
+  -c appPublicUrl=$APP_PUBLIC_URL \
+  -c workerAmiId=$WORKER_AMI_ID \
+  -c webImageTag=$WEB_IMAGE_TAG
+```
+
+**What this does not remove**, in three groups:
+
+Two resources are a deliberate exception, engineered specifically so nothing about them can block the next `cdk deploy --all`:
+
+- The `ai-gaussian-splatter` ECR repository: `infra/stacks/registry_stack.py` sets `RemovalPolicy.DESTROY` with `empty_on_delete=True`, so a full teardown leaves no orphan under that fixed name for the next `cdk deploy RegistryStack` to collide with. It, and every image in it, is gone once `cdk:destroy:all` finishes.
+- The RDS credentials secret (`infra/stacks/data_stack.py`) has no fixed name, so a redeploy's `CreateSecret` never collides with the old one. The old secret purges itself automatically 30 days after deletion.
+
+Everything else CDK created but marked `RemovalPolicy.RETAIN` (or RDS's `SNAPSHOT` equivalent) survives its stack's deletion on purpose, because unlike the two resources above none of it collides by name on a later redeploy — it just sits there costing a little until a human decides it's safe to lose:
+
+- `uploads`/`splats`/`access-logs` S3 buckets (`infra/stacks/data_stack.py`). No explicit bucket name is set, so CloudFormation generates a fresh unique one on every redeploy — nothing to collide with, just old data to delete once you're sure: `aws s3 rm --recursive s3://<bucket>` then `aws s3api delete-bucket --bucket <bucket>`.
+- The final RDS snapshot `DataStack`'s `removal_policy=SNAPSHOT` creates at delete time. This is the recovery point the policy exists for, so CDK has no way to auto-expire it — only a human can decide the data is disposable. Find it with `aws rds describe-db-snapshots --region us-west-2 --snapshot-type manual --query "DBSnapshots[?starts_with(DBSnapshotIdentifier, 'datastack-snapshot')].DBSnapshotIdentifier"`, then `aws rds delete-db-snapshot --region us-west-2 --db-snapshot-identifier <id>`.
+
+Resources no stack ever owned — hand-created in [First-time account setup](#first-time-account-setup) and [Configuring continuous deployment](#configuring-continuous-deployment) — are untouched by any `cdk destroy` and need their own manual cleanup, if you want them gone too: the Clerk secret (`ai-gaussian-splatter/clerk-secret-key`), the `ai-gaussian-splatter-ci-deploy` IAM role and its inline policy, the GitHub OIDC provider (skip if another app in the account still uses it), the `orky.net` Route 53 hosted zone (imported only — this app never owned it), `AWSServiceRoleForEC2Spot` (account-wide, shared with any other Spot workload), the billing-alerts console preference, and the GitHub repository variables. None of these cost anything meaningful to leave in place, and several (the OIDC provider, the Spot service-linked role, the hosted zone) are shared or reused, so deleting them isn't a like-for-like undo of `cdk:deploy:all`.
