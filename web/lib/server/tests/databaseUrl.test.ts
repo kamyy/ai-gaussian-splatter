@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { databaseSsl, resolveDatabaseUrl } from "./databaseUrl";
+import { databaseSsl, resolveDatabaseUrl } from "../databaseUrl";
 
 /**
  * The production path here is untestable against real AWS, so these pin the contract instead: ECS projects the RDS

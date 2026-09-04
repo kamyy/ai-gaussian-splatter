@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { photoS3Key, presignPhotoUpload, presignSplatDownload } from "./s3";
+import { photoS3Key, presignPhotoUpload, presignSplatDownload } from "../s3";
 
 // No AWS stubbing here: getSignedUrl signs locally and issues no request, so these run offline against fake
 // credentials.

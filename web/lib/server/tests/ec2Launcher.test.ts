@@ -8,7 +8,7 @@ const spawnMock = vi.hoisted(() =>
 vi.mock("node:child_process", () => ({ spawn: spawnMock }));
 vi.mock("node:fs", () => ({ mkdirSync: vi.fn(), openSync: vi.fn(() => 0) }));
 
-import { generateCallbackToken, launchJob, launchJobLocal } from "./ec2Launcher";
+import { generateCallbackToken, launchJob, launchJobLocal } from "../ec2Launcher";
 
 // aws-sdk-client-mock is a call stub with no simulated EC2 state, so these assert on the arguments RunInstances
 // received rather than on state after.

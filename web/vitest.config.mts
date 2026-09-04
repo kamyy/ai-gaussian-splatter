@@ -15,8 +15,8 @@ export default defineConfig({
         test: {
           name: "client",
           environment: "jsdom",
-          setupFiles: ["./test/jsdom-setup.ts"],
-          include: ["app/**/*.test.{ts,tsx}", "components/**/*.test.{ts,tsx}", "lib/*.test.ts"],
+          setupFiles: ["./tests/jsdom-setup.ts"],
+          include: ["app/**/*.test.{ts,tsx}", "components/**/*.test.{ts,tsx}", "lib/tests/*.test.ts"],
           exclude: ["node_modules", ".next", "e2e/**", "app/api/**"],
         },
       },
@@ -25,8 +25,8 @@ export default defineConfig({
         test: {
           name: "server",
           environment: "node",
-          globalSetup: ["./test/migrate-test-db.ts"],
-          setupFiles: ["./test/server-test-env.ts"],
+          globalSetup: ["./tests/migrate-test-db.ts"],
+          setupFiles: ["./tests/server-test-env.ts"],
           include: ["lib/server/**/*.test.ts", "app/api/**/*.test.ts"],
           exclude: ["node_modules", ".next", "e2e/**"],
         },

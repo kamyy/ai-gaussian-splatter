@@ -2,9 +2,9 @@ import { count } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getClientIp, getJobForCallbackToken, getOrCreateUser } from "./auth";
-import { closeDb, getDb } from "./db";
-import { jobs, splats, users } from "./db/schema";
+import { getClientIp, getJobForCallbackToken, getOrCreateUser } from "../auth";
+import { closeDb, getDb } from "../db";
+import { jobs, splats, users } from "../db/schema";
 
 /**
  * @clerk/nextjs verifies JWTs, and testing Clerk's own code isn't this suite's job. What's worth testing is the
