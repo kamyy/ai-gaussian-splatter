@@ -1,8 +1,8 @@
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useJobStatus, useSplat, useSplats } from "./hooks";
-import { JOB_ENDED_STATUSES, type JobRead, type JobStatus } from "./types";
+import { useJobStatus, useSplat, useSplats } from "../hooks";
+import { JOB_ENDED_STATUSES, type JobRead, type JobStatus } from "../types";
 
 // Clerk resolves getToken() to null once it has loaded without a session, so the token is mutable here rather than a
 // fixed string.
@@ -18,7 +18,7 @@ const { getLatestJobMock, getSplatMock, listSplatsMock } = vi.hoisted(() => ({
   getSplatMock: vi.fn<(token: string, ...rest: string[]) => Promise<unknown>>(),
   listSplatsMock: vi.fn<(token: string, ...rest: string[]) => Promise<unknown>>(),
 }));
-vi.mock("./api", () => ({
+vi.mock("../api", () => ({
   getLatestJob: getLatestJobMock,
   getSplat: getSplatMock,
   listSplats: listSplatsMock,
