@@ -1,9 +1,9 @@
 import { sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { closeDb, getDb } from "./db";
-import { HttpError } from "./httpError";
-import { checkAndIncrementGlobalDaily, checkAndIncrementIp, checkAndIncrementUser } from "./rateLimit";
+import { closeDb, getDb } from "../db";
+import { HttpError } from "../httpError";
+import { checkAndIncrementGlobalDaily, checkAndIncrementIp, checkAndIncrementUser } from "../rateLimit";
 
 /**
  * Requires a real Postgres (TEST_DATABASE_URL): these exercise the `INSERT ... ON CONFLICT` upsert, which is the whole
