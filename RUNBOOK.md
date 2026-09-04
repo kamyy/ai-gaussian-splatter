@@ -94,7 +94,7 @@ cd worker # Make sure you're in the right folder.
 # downloads torch/CUDA.
 podman build -t splat-worker:dev . # ~19 GB cold
 
-# Create .env from the SHARED and WORKER sections of the repo root's .env.example.
+# Create .env from worker/.env.example.
 export $(grep -E '^AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|DEFAULT_REGION)=' .env)
 
 SPLAT_ID=$(uuidgen) # Needs to be different for every run.
@@ -158,7 +158,7 @@ podman run -d --name splat-pg --restart=always \
 
 `pnpm dev` and `drizzle-kit` reach the database on `localhost:5432`, since they run natively rather than in a container. The `splat-web` container below reaches it on `host.containers.internal:5432` instead — Podman's built-in alias for the host, no shared network needed. Data is stored at `/var/lib/postgresql`.
 
-One-time setup: create `web/.env` from the SHARED and WEB sections of [`.env.example`](.env.example), then fill in the Clerk keys, the dev IAM key pair, and the worker IDs. The database and bucket values already match the container above.
+One-time setup: create `web/.env` from [`web/.env.example`](web/.env.example), then fill in the Clerk keys, the dev IAM key pair, and the worker IDs. The database and bucket values already match the container above.
 
 ```bash
 # Enable the restart helper once so --restart=always is honored after boot:

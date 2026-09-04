@@ -169,7 +169,7 @@ export function launchJobLocal(params: { jobId: string; splatId: string; callbac
       "-e",
       `CALLBACK_TOKEN=${params.callbackToken}`,
       // Inside the container "localhost" is the container itself, not the host running `next dev` — this is Podman's
-      // alias for the host, matching worker/.env's APP_PUBLIC_URL per .env.example.
+      // alias for the host, matching worker/.env's APP_PUBLIC_URL per worker/.env.example.
       "-e",
       "APP_PUBLIC_URL=http://host.containers.internal:3000",
       "-e",
