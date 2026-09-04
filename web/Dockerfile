@@ -86,15 +86,19 @@ COPY --chown=app:app scripts/db-migrate.cjs ./scripts/db-migrate.cjs
 
 # RDS certs chain to Amazon's own CA, absent from Node's trust store. This path must stay in step with
 # RDS_CA_BUNDLE_PATH (infra/stacks/web_stack.py), which sets DATABASE_SSL_CA to it in the task definition.
-# --checksum pins the download; if AWS updates the bundle the build fails, printing the new digest to paste in here.
+# sha256sum -c pins the download by hand rather than ADD's --checksum flag, which needs a newer buildah than the one
+# bundled with the CI runner's podman package. If AWS updates the bundle this fails, printing the digest to paste in
+# here.
 #
 # Deliberately NOT paired with `ENV DATABASE_SSL_CA=...` here: that would make every run of this image demand TLS,
 # breaking a local container pointed at a plain Postgres with "The server does not support SSL connections". Using the
 # bundle is a deployment decision, so infra/stacks/web_stack.py sets DATABASE_SSL_CA. Keep the two paths in step if this
 # one ever moves.
-ADD --chown=app:app --checksum=sha256:e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3 \
-  https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
-  /app/certs/rds-global-bundle.pem
+RUN mkdir -p /app/certs \
+  && wget -qO /app/certs/rds-global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
+  && echo "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3  /app/certs/rds-global-bundle.pem" \
+       | sha256sum -c - \
+  && chown app:app /app/certs/rds-global-bundle.pem
 
 USER app
 
@@ -119,10 +123,13 @@ EXPOSE 8000
 RUN addgroup -g 1001 -S app && adduser -u 1001 -S app -G app
 
 # As in migrator: Amazon's RDS CA bundle, at a path in step with RDS_CA_BUNDLE_PATH (infra/stacks/web_stack.py). Not
-# paired with an unconditional ENV DATABASE_SSL_CA here — see migrator's stage above for why.
-ADD --chown=app:app --checksum=sha256:e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3 \
-  https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
-  /app/certs/rds-global-bundle.pem
+# paired with an unconditional ENV DATABASE_SSL_CA here — see migrator's stage above for why. sha256sum -c verifies the
+# download by hand; see migrator's stage above for why not ADD --checksum.
+RUN mkdir -p /app/certs \
+  && wget -qO /app/certs/rds-global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
+  && echo "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3  /app/certs/rds-global-bundle.pem" \
+       | sha256sum -c - \
+  && chown app:app /app/certs/rds-global-bundle.pem
 
 COPY --from=builder --chown=app:app /app/.next/standalone ./
 COPY --from=builder --chown=app:app /app/.next/static ./.next/static
