@@ -45,6 +45,7 @@ describe("launchJob", () => {
     jobId: "job-123",
     splatId: "splat-456",
     callbackToken: "tok-abc",
+    stage: "reconstruct" as const,
     workerImageUri: "123456789012.dkr.ecr.us-east-1.amazonaws.com/worker:latest",
     ecrRegistry: "123456789012.dkr.ecr.us-east-1.amazonaws.com",
   };
@@ -100,6 +101,7 @@ describe("launchJob", () => {
     expect(userData).toContain('JOB_ID="job-123"');
     expect(userData).toContain('SPLAT_ID="splat-456"');
     expect(userData).toContain(`APP_PUBLIC_URL="${process.env.APP_PUBLIC_URL}"`);
+    expect(userData).toContain('STAGE="reconstruct"');
     expect(userData).toContain(params.workerImageUri);
   });
 
@@ -110,7 +112,7 @@ describe("launchJob", () => {
 });
 
 describe("launchJobLocal", () => {
-  const params = { jobId: "job-123", splatId: "splat-456", callbackToken: "tok-abc" };
+  const params = { jobId: "job-123", splatId: "splat-456", callbackToken: "tok-abc", stage: "train" as const };
 
   afterEach(() => {
     spawnMock.mockClear();
@@ -126,6 +128,7 @@ describe("launchJobLocal", () => {
     expect(args).toEqual(expect.arrayContaining(["-e", "JOB_ID=job-123"]));
     expect(args).toEqual(expect.arrayContaining(["-e", "SPLAT_ID=splat-456"]));
     expect(args).toEqual(expect.arrayContaining(["-e", "CALLBACK_TOKEN=tok-abc"]));
+    expect(args).toEqual(expect.arrayContaining(["-e", "STAGE=train"]));
     // Podman's alias for the host running `next dev` — see the APP_PUBLIC_URL comment in web/lib/server/ec2Launcher.ts.
     expect(args).toEqual(expect.arrayContaining(["-e", "APP_PUBLIC_URL=http://host.containers.internal:3000"]));
     expect(options).toMatchObject({ detached: true });

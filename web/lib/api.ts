@@ -78,12 +78,20 @@ export function triggerProcess(token: string, splatId: string) {
   return apiFetch<JobRead>(`/api/v1/splats/${splatId}/process`, { token, method: "POST" });
 }
 
+export function triggerTrain(token: string, splatId: string) {
+  return apiFetch<JobRead>(`/api/v1/splats/${splatId}/train`, { token, method: "POST" });
+}
+
 export function getLatestJob(token: string, splatId: string) {
   return apiFetch<JobRead>(`/api/v1/splats/${splatId}/jobs/latest`, { token });
 }
 
 export function getSplatUrl(token: string, splatId: string) {
   return apiFetch<{ url: string }>(`/api/v1/splats/${splatId}/download`, { token });
+}
+
+export function getColmapPointCloudUrl(token: string, splatId: string) {
+  return apiFetch<{ url: string }>(`/api/v1/splats/${splatId}/point-cloud`, { token });
 }
 
 // --- Direct-to-S3 upload (not through apiFetch — raw PUT with the file body, not JSON) ---

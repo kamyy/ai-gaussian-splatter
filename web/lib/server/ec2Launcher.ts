@@ -12,6 +12,8 @@ import { getEnv } from "./env";
  * (infra/stacks/worker_iam_stack.py) to exactly: S3 read (uploads bucket), S3 read/write (splats bucket),
  * ec2:TerminateInstances on itself.
  */
+type WorkerStage = "reconstruct" | "train";
+
 interface UserDataParams {
   callbackToken: string;
   jobId: string;
@@ -19,6 +21,7 @@ interface UserDataParams {
   appPublicUrl: string;
   uploadsBucket: string;
   splatsBucket: string;
+  stage: WorkerStage;
   workerImageUri: string;
   ecrRegistry: string;
   awsRegion: string;
@@ -37,6 +40,7 @@ SPLAT_ID="${p.splatId}"
 APP_PUBLIC_URL="${p.appPublicUrl}"
 UPLOADS_BUCKET="${p.uploadsBucket}"
 SPLATS_BUCKET="${p.splatsBucket}"
+STAGE="${p.stage}"
 
 $(aws ecr get-login --no-include-email --region ${p.awsRegion}) || \\
     aws ecr get-login-password --region ${p.awsRegion} | docker login --username AWS --password-stdin ${p.ecrRegistry}
@@ -48,8 +52,26 @@ docker run --rm --gpus all \\
     -e APP_PUBLIC_URL="$APP_PUBLIC_URL" \\
     -e UPLOADS_BUCKET="$UPLOADS_BUCKET" \\
     -e SPLATS_BUCKET="$SPLATS_BUCKET" \\
+    -e STAGE="$STAGE" \\
     ${p.workerImageUri}
 `;
+}
+
+// Populated from the ECR repo CDK stack output once infra is deployed. Placeholders for local/pre-deploy development.
+// Shared by both web/app/api/v1/splats/[splatId]/process/route.ts (stage "reconstruct") and .../train/route.ts
+// (stage "train"), which launch the same worker image with a different STAGE.
+export function workerImageUri(): string {
+  return process.env.WORKER_IMAGE_URI ?? "REPLACE_WITH_ECR_IMAGE_URI";
+}
+
+export function ecrRegistry(): string {
+  return process.env.ECR_REGISTRY ?? "REPLACE_WITH_ECR_REGISTRY";
+}
+
+// Runs the worker against the caller's own GPU via Podman instead of launching a real EC2 spot instance. See
+// launchJobLocal() below and "Triggering the worker from pnpm dev" in RUNBOOK.md.
+export function localLaunchEnabled(): boolean {
+  return process.env.WORKER_LOCAL_LAUNCH === "true";
 }
 
 /**
@@ -67,6 +89,7 @@ export async function launchJob(params: {
   jobId: string;
   splatId: string;
   callbackToken: string;
+  stage: WorkerStage;
   workerImageUri: string;
   ecrRegistry: string;
 }): Promise<string> {
@@ -80,6 +103,7 @@ export async function launchJob(params: {
     appPublicUrl: env.APP_PUBLIC_URL,
     uploadsBucket: env.UPLOADS_BUCKET,
     splatsBucket: env.SPLATS_BUCKET,
+    stage: params.stage,
     workerImageUri: params.workerImageUri,
     ecrRegistry: params.ecrRegistry,
     awsRegion: env.AWS_REGION,
@@ -140,7 +164,12 @@ export async function launchJob(params: {
  * Fire-and-forget like the EC2 launch it replaces: the worker reports its own progress back over
  * APP_PUBLIC_URL/CALLBACK_TOKEN (worker/pipeline/status.py), so this function doesn't wait on the container.
  */
-export function launchJobLocal(params: { jobId: string; splatId: string; callbackToken: string }): void {
+export function launchJobLocal(params: {
+  jobId: string;
+  splatId: string;
+  callbackToken: string;
+  stage: WorkerStage;
+}): void {
   const env = getEnv();
   const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
   const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
@@ -168,6 +197,8 @@ export function launchJobLocal(params: { jobId: string; splatId: string; callbac
       `SPLAT_ID=${params.splatId}`,
       "-e",
       `CALLBACK_TOKEN=${params.callbackToken}`,
+      "-e",
+      `STAGE=${params.stage}`,
       // Inside the container "localhost" is the container itself, not the host running `next dev` — this is Podman's
       // alias for the host, matching worker/.env's APP_PUBLIC_URL per worker/.env.example.
       "-e",

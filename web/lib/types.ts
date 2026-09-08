@@ -18,6 +18,7 @@ export const JOB_STATUSES = [
   "queued",
   "launching",
   "colmap_running",
+  "awaiting_training",
   "training_running",
   "uploading_result",
   "complete",
@@ -50,6 +51,7 @@ export interface JobRead {
   errorMessage: string | null;
   resultS3Key: string | null;
   thumbnailS3Key: string | null;
+  colmapPointCloudS3Key: string | null;
   createdAt: string;
   updatedAt: string;
 }

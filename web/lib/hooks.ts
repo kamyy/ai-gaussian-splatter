@@ -5,17 +5,24 @@
 // fetching library over a hand-rolled setInterval/useEffect.
 
 import { useAuth } from "@clerk/nextjs";
-import type { GetToken } from "@clerk/nextjs/types";
 import useSWR from "swr";
 import { getLatestJob, getSplat, listSplats } from "./api";
 import type { JobRead, JobStatus } from "./types";
 
-// Poll rate per phase; 0 is how SWR is told to stop. uploading_result can finish inside 30s, so a poll often steps over
-// it and completion shows up to 30s late — accepted, since the phases before it run for minutes.
+// Poll rate per phase; 0 is how SWR is told to stop, and only an ended status may use it. SWR keys its polling effect
+// on this function's identity rather than on the data, so once the function returns 0 it schedules no further timer
+// and nothing but a remount starts one again. A later mutate() does not. A non-terminal status returning 0 would
+// therefore freeze the progress bar for the rest of the job.
+//
+// uploading_result can finish inside 30s, so a poll often steps over it and completion shows up to 30s late —
+// accepted, since the phases before it run for minutes.
 const JOB_POLL_INTERVAL_MS: Record<JobStatus, number> = {
   queued: 30_000,
   launching: 30_000,
   colmap_running: 30_000,
+  // Nothing moves here until the user hits "Proceed to train", and that click mutates the cache directly. Polling
+  // continues anyway: it is what leaves the timer armed for the training run the click starts.
+  awaiting_training: 30_000,
   training_running: 30_000,
   uploading_result: 3_000,
   complete: 0,
@@ -23,47 +30,51 @@ const JOB_POLL_INTERVAL_MS: Record<JobStatus, number> = {
   cancelled: 0,
 };
 
-// Keep this at module scope. Don't put it anywhere it could be recreated on a re-render, otherwise SWR sees a new
-// identity and restarts the countdown.
 function jobPollInterval(latestData: JobRead | undefined) {
+  // Keep this function at  module scope. Don't put it anywhere it could be recreated on a re-render, otherwise SWR
+  // sees a new identity and restarts the countdown.
   if (latestData) {
     return JOB_POLL_INTERVAL_MS[latestData.status];
   }
   return JOB_POLL_INTERVAL_MS.queued;
 }
 
-function guardedFetch<T>(getToken: GetToken, fetcher: (token: string) => Promise<T>) {
-  return async () => {
-    const token = await getToken();
-    if (!token) {
-      // SWR only treats a thrown fetcher as an error. Returning would surface as a successful load.
-      throw new Error("Not signed in");
-    }
-    return fetcher(token);
-  };
-}
-
 export function useSplats() {
   const { getToken } = useAuth();
 
-  return useSWR("splats", guardedFetch(getToken, listSplats));
+  return useSWR("splats", async () => {
+    const token = await getToken();
+    if (!token) {
+      throw new Error("Not signed in"); // SWR only treats a thrown fetcher as an error.
+    }
+    return listSplats(token);
+  });
 }
 
 export function useSplat(splatId: string) {
   const { getToken } = useAuth();
 
-  return useSWR(
-    ["splat", splatId],
-    guardedFetch(getToken, token => getSplat(token, splatId)),
-  );
+  return useSWR(["splat", splatId], async () => {
+    const token = await getToken();
+    if (!token) {
+      throw new Error("Not signed in");
+    }
+    return getSplat(token, splatId);
+  });
 }
 
-export function useJobStatus(splatId: string) {
+export function useLatestJob(splatId: string) {
   const { getToken } = useAuth();
 
   return useSWR(
-    ["job-status", splatId],
-    guardedFetch(getToken, token => getLatestJob(token, splatId)),
+    ["latest-job", splatId],
+    async () => {
+      const token = await getToken();
+      if (!token) {
+        throw new Error("Not signed in");
+      }
+      return getLatestJob(token, splatId);
+    },
     {
       refreshInterval: jobPollInterval,
     },

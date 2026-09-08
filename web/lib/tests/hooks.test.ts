@@ -1,8 +1,8 @@
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useJobStatus, useSplat, useSplats } from "../hooks";
-import { JOB_ENDED_STATUSES, type JobRead, type JobStatus } from "../types";
+import { useLatestJob, useSplat, useSplats } from "../hooks";
+import { JOB_ENDED_STATUSES, JOB_STATUSES, type JobRead, type JobStatus } from "../types";
 
 // Clerk resolves getToken() to null once it has loaded without a session, so the token is mutable here rather than a
 // fixed string.
@@ -50,11 +50,12 @@ const baseJob: JobRead = {
   errorMessage: null,
   resultS3Key: null,
   thumbnailS3Key: null,
+  colmapPointCloudS3Key: null,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
 };
 
-describe("useJobStatus", () => {
+describe("useLatestJob", () => {
   beforeEach(() => {
     useSWRMock.mockClear();
     useSWRMock.mockReturnValue({ data: undefined });
@@ -63,7 +64,7 @@ describe("useJobStatus", () => {
   it("reuses one refreshInterval function across renders", () => {
     // SWR keys its polling effect on this function's identity. A fresh closure per render tears down the pending
     // timeout and restarts the interval, so a page re-rendering faster than the interval would never poll at all.
-    const { rerender } = renderHook(() => useJobStatus("splat-1"));
+    const { rerender } = renderHook(() => useLatestJob("splat-1"));
     rerender();
     rerender();
 
@@ -73,12 +74,12 @@ describe("useJobStatus", () => {
   });
 
   it("keeps polling while no job has been fetched yet", () => {
-    renderHook(() => useJobStatus("splat-1"));
+    renderHook(() => useLatestJob("splat-1"));
     expect(capturedConfig().refreshInterval(undefined)).toBeGreaterThan(0);
   });
 
   it("keeps polling while the job is still running", () => {
-    renderHook(() => useJobStatus("splat-1"));
+    renderHook(() => useLatestJob("splat-1"));
     const { refreshInterval } = capturedConfig();
 
     for (const status of ["queued", "launching", "colmap_running", "training_running", "uploading_result"] as const) {
@@ -88,7 +89,7 @@ describe("useJobStatus", () => {
 
   it("polls faster as the job approaches completion", () => {
     // Never speeds up then slows down again — a later phase polling slower than an earlier one would only add latency.
-    renderHook(() => useJobStatus("splat-1"));
+    renderHook(() => useLatestJob("splat-1"));
     const { refreshInterval } = capturedConfig();
 
     const intervals = (["queued", "launching", "colmap_running", "training_running", "uploading_result"] as const).map(
@@ -100,14 +101,31 @@ describe("useJobStatus", () => {
     expect(intervals.at(-1)).toBeLessThan(intervals[0]);
   });
 
-  it("stops polling once the job has ended", () => {
-    renderHook(() => useJobStatus("splat-1"));
+  it("stops polling once the job has ended, and only then", () => {
+    // SWR keys its polling effect on the refreshInterval function's identity, not on the data, so a 0 is permanent
+    // for the life of the mounted hook — a later mutate() does not re-arm the timer. Any non-terminal status
+    // returning 0 would therefore freeze the UI for the rest of the job. Derived from the status lists so a new
+    // status can't be added with the wrong one.
+    renderHook(() => useLatestJob("splat-1"));
     const { refreshInterval } = capturedConfig();
 
-    // Derived, so a status added to JOB_ENDED_STATUSES without a zero interval fails here.
-    for (const status of JOB_ENDED_STATUSES as readonly JobStatus[]) {
-      expect(refreshInterval({ ...baseJob, status })).toBe(0);
+    for (const status of JOB_STATUSES as readonly JobStatus[]) {
+      if (JOB_ENDED_STATUSES.includes(status)) {
+        expect(refreshInterval({ ...baseJob, status })).toBe(0);
+      } else {
+        expect(refreshInterval({ ...baseJob, status })).toBeGreaterThan(0);
+      }
     }
+  });
+
+  it("keeps polling while paused at awaiting_training", () => {
+    // The pause is open-ended and nothing moves server-side until the user proceeds, but the poll is what leaves the
+    // timer armed for the training run that "Proceed to train" starts.
+    renderHook(() => useLatestJob("splat-1"));
+    const { refreshInterval } = capturedConfig();
+
+    expect(JOB_ENDED_STATUSES).not.toContain("awaiting_training");
+    expect(refreshInterval({ ...baseJob, status: "awaiting_training" })).toBeGreaterThan(0);
   });
 });
 
@@ -117,7 +135,7 @@ describe("session token guard", () => {
   const hooks: { name: string; render: () => unknown; api: typeof listSplatsMock }[] = [
     { name: "useSplats", render: () => useSplats(), api: listSplatsMock },
     { name: "useSplat", render: () => useSplat("splat-1"), api: getSplatMock },
-    { name: "useJobStatus", render: () => useJobStatus("splat-1"), api: getLatestJobMock },
+    { name: "useLatestJob", render: () => useLatestJob("splat-1"), api: getLatestJobMock },
   ];
 
   beforeEach(() => {

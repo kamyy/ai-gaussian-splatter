@@ -107,15 +107,33 @@ aws s3 sync ./photos "s3://ai-gaussian-splatter-dev-uploads/splats/$SPLAT_ID/pho
 # The rm -rf / mkdir is required to setup ./jobdir for a new run.
 rm -rf ./jobdir && mkdir ./jobdir
 
-# Pipeline output lands in ./jobdir and will persist after the container exits. Pass -e FAST_TEST_MODE=true to reduce
-# training to 20 iterations. This doesn't cut GPU memory. Every photo stays resident at full resolution whatever the
-# iteration count, so a GPU smaller than a 24GB A10G needs fewer or downscaled photos to even get through a smoke test.
+# A full run is two container runs, one per STAGE, because in production each stage is its own spot instance and the
+# pause between them is where the user decides whether to pay for training. STAGE is passed with -e rather than living
+# in .env for the same reason SPLAT_ID is: it differs between the two runs.
+#
+# Pipeline output lands in ./jobdir and will persist after the container exits. The reconstruct stage leaves the COLMAP
+# workspace in ./jobdir/colmap and uploads the sparse model and colmap_point_cloud.ply under
+# s3://ai-gaussian-splatter-dev-splats/splats/$SPLAT_ID/.
+podman run --rm \
+  --security-opt=label=disable \
+  --device nvidia.com/gpu=all \
+  --env-file .env \
+  -e SPLAT_ID=$SPLAT_ID \
+  -e STAGE=reconstruct \
+  -v ./jobdir:/tmp/job \
+  splat-worker:dev
+
+# The train stage downloads the sparse model the reconstruct stage uploaded, so it needs nothing left in ./jobdir and
+# can run on a different machine or days later. Pass -e FAST_TEST_MODE=true to reduce training to 20 iterations. This
+# doesn't cut GPU memory. Every photo stays resident at full resolution whatever the iteration count, so a GPU smaller
+# than a 24GB A10G needs fewer or downscaled photos to even get through a smoke test.
 # Success leaves result.ply and thumbnail.png under s3://ai-gaussian-splatter-dev-splats/splats/$SPLAT_ID/.
 podman run --rm \
   --security-opt=label=disable \
   --device nvidia.com/gpu=all \
   --env-file .env \
   -e SPLAT_ID=$SPLAT_ID \
+  -e STAGE=train \
   -v ./jobdir:/tmp/job \
   splat-worker:dev
 ```

@@ -16,6 +16,7 @@ def report_status(
     error_message: str | None = None,
     result_s3_key: str | None = None,
     thumbnail_s3_key: str | None = None,
+    colmap_point_cloud_s3_key: str | None = None,
     ec2_instance_id: str | None = None,
 ) -> None:
     """PATCH the job's status back to the web app. Best-effort: logs and swallows
@@ -30,6 +31,8 @@ def report_status(
         payload["result_s3_key"] = result_s3_key
     if thumbnail_s3_key is not None:
         payload["thumbnail_s3_key"] = thumbnail_s3_key
+    if colmap_point_cloud_s3_key is not None:
+        payload["colmap_point_cloud_s3_key"] = colmap_point_cloud_s3_key
     if ec2_instance_id is not None:
         payload["ec2_instance_id"] = ec2_instance_id
 
