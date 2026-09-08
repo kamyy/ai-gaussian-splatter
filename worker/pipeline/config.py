@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +14,11 @@ class Settings(BaseSettings):
     app_public_url: str
     uploads_bucket: str
     splats_bucket: str
+
+    # Which half of the pipeline this instance runs. Split across two instances so a user can inspect the COLMAP point
+    # cloud before paying for training: "reconstruct" self-terminates at awaiting_training, "train" is launched later
+    # by a separate POST /api/v1/splats/[splatId]/train call reusing the same job_id/callback_token.
+    stage: Literal["reconstruct", "train"] = "reconstruct"
 
     # Single-object-against-plain-background scenes converge well below the paper's 30k default.
     training_iterations: int = 10_000

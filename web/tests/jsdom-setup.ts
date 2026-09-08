@@ -20,3 +20,13 @@ if (typeof window !== "undefined" && !window.matchMedia) {
     dispatchEvent: () => false,
   });
 }
+
+// jsdom doesn't implement ResizeObserver either. Mantine's SegmentedControl uses one (FloatingIndicator, to track the
+// active segment's size) — never needed until this component's first use in the app.
+if (typeof window !== "undefined" && !window.ResizeObserver) {
+  window.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}

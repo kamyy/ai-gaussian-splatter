@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   bigserial,
   boolean,
@@ -88,6 +89,7 @@ export const jobs = pgTable(
     errorMessage: text("error_message"),
     resultS3Key: text("result_s3_key"),
     thumbnailS3Key: text("thumbnail_s3_key"),
+    colmapPointCloudS3Key: text("colmap_point_cloud_s3_key"),
 
     colmapStartedAt: timestamp("colmap_started_at", { withTimezone: true, precision: 6 }),
     colmapFinishedAt: timestamp("colmap_finished_at", { withTimezone: true, precision: 6 }),
@@ -100,7 +102,16 @@ export const jobs = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  table => [index("ix_jobs_splat_id").on(table.splatId)],
+  table => [
+    index("ix_jobs_splat_id").on(table.splatId),
+    // Enforces "at most one active job per splat" at the database level — web/app/api/v1/splats/[splatId]/process/
+    // route.ts relies on this to make its double-trigger guard atomic (a race loses at the INSERT, as a unique
+    // violation, rather than needing a read-then-write check). Keep the excluded statuses in sync with
+    // JOB_ENDED_STATUSES (web/lib/types.ts) by hand — this is a raw SQL fragment, so it can't import that constant.
+    uniqueIndex("uq_jobs_splat_id_active")
+      .on(table.splatId)
+      .where(sql`${table.status} not in ('complete', 'failed', 'cancelled')`),
+  ],
 );
 
 /**

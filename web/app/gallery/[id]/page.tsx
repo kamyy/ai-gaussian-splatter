@@ -41,7 +41,7 @@ export default async function GalleryItemPage({ params }: Props) {
     <Stack p="md">
       <Title order={2}>{item.title}</Title>
       {item.description && <Text c="dimmed">{item.description}</Text>}
-      <SplatViewer splatUrl={item.splatUrl} />
+      <SplatViewer mode="splat" splatUrl={item.splatUrl} colmapPointCloudUrl={null} />
     </Stack>
   );
 }

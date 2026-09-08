@@ -1,5 +1,5 @@
 import { MantineProvider } from "@mantine/core";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { Suspense } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,15 +13,15 @@ vi.mock("@clerk/nextjs", () => ({
 // The viewer pulls in three.js, R3F and gaussian-splats-3d, none of which have a WebGL context under jsdom. Only its
 // presence is under test here.
 vi.mock("@/components/viewer/SplatViewer", () => ({
-  SplatViewer: ({ splatUrl }: { splatUrl: string }) => <div data-testid="splat-viewer">{splatUrl}</div>,
+  SplatViewer: ({ splatUrl }: { splatUrl: string | null }) => <div data-testid="splat-viewer">{splatUrl}</div>,
   SplatViewerLoading: () => <div data-testid="splat-loading" />,
 }));
 
-const { useSplatMock, useJobStatusMock } = vi.hoisted(() => ({
+const { useSplatMock, useLatestJobMock } = vi.hoisted(() => ({
   useSplatMock: vi.fn(),
-  useJobStatusMock: vi.fn(),
+  useLatestJobMock: vi.fn(),
 }));
-vi.mock("@/lib/hooks", () => ({ useSplat: useSplatMock, useJobStatus: useJobStatusMock }));
+vi.mock("@/lib/hooks", () => ({ useSplat: useSplatMock, useLatestJob: useLatestJobMock }));
 
 const { useSWRMock } = vi.hoisted(() => ({ useSWRMock: vi.fn() }));
 vi.mock("swr", () => ({ default: useSWRMock }));
@@ -42,18 +42,26 @@ const baseJob: JobRead = {
   errorMessage: null,
   resultS3Key: null,
   thumbnailS3Key: null,
+  colmapPointCloudS3Key: null,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
 };
 
 const refetchSplat = vi.fn();
+const refetchPresignedUrl = vi.fn(async () => undefined);
+
+// The presigned URL's age is what the page uses to decide whether to re-mint it before a mode switch, so a fixture
+// has to carry one. Fresh unless a test says otherwise.
+function presigned(url: string, ageMs = 0) {
+  return { url, fetchedAt: Date.now() - ageMs };
+}
 
 function setup(options: {
   splat?: SplatRead | undefined;
   splatStatus?: SplatStatus;
   splatError?: Error;
   job?: JobRead;
-  splatFile?: { url: string };
+  splatFile?: { url: string; fetchedAt: number };
   splatFileError?: Error;
 }) {
   const splat =
@@ -67,8 +75,12 @@ function setup(options: {
     error: options.splatError,
     mutate: refetchSplat,
   });
-  useJobStatusMock.mockReturnValue({ data: options.job, error: undefined, isLoading: false });
-  useSWRMock.mockReturnValue({ data: options.splatFile, error: options.splatFileError });
+  useLatestJobMock.mockReturnValue({ data: options.job, error: undefined, isLoading: false, mutate: vi.fn() });
+  useSWRMock.mockReturnValue({
+    data: options.splatFile,
+    error: options.splatFileError,
+    mutate: refetchPresignedUrl,
+  });
 }
 
 // The page reads `params` with React's `use()`, so it suspends on first render. RTL's own `act` scope is synchronous
@@ -109,7 +121,7 @@ describe("SplatDetailPage", () => {
   it("keeps rendering a cached splat when a revalidation fails", async () => {
     // A transient failure of the completion refetch must not replace the whole page. `data` still holds the last good
     // splat.
-    setup({ splatStatus: "complete", splatError: new Error("503"), splatFile: { url: "https://s3/splat.ply" } });
+    setup({ splatStatus: "complete", splatError: new Error("503"), splatFile: presigned("https://s3/splat.ply") });
     await renderPage();
 
     expect(screen.getByText("Ceramic mug")).toBeInTheDocument();
@@ -132,9 +144,71 @@ describe("SplatDetailPage", () => {
   });
 
   it("renders the viewer once the splat url arrives", async () => {
-    setup({ splatStatus: "complete", splatFile: { url: "https://s3/splat.ply" } });
+    setup({ splatStatus: "complete", splatFile: presigned("https://s3/splat.ply") });
     await renderPage();
 
     expect(screen.getByTestId("splat-viewer")).toHaveTextContent("https://s3/splat.ply");
+  });
+
+  it("shows the awaiting-training panel while paused for review, not the completed-splat toggle", async () => {
+    setup({
+      splatStatus: "processing",
+      job: { ...baseJob, status: "awaiting_training", colmapPointCloudS3Key: "splats/x/colmap_point_cloud.ply" },
+      splatFile: presigned("https://s3/colmap_point_cloud.ply"),
+    });
+    await renderPage();
+
+    expect(screen.getByText(/Review the point cloud below/i)).toBeInTheDocument();
+    expect(screen.queryByText("Trained points")).not.toBeInTheDocument();
+  });
+
+  it("shows the 3-way toggle once the splat is complete", async () => {
+    setup({
+      splatStatus: "complete",
+      splatFile: presigned("https://s3/splat.ply"),
+      job: { ...baseJob, status: "complete", colmapPointCloudS3Key: "splats/x/colmap_point_cloud.ply" },
+    });
+    await renderPage();
+
+    expect(screen.getByText("Trained points")).toBeInTheDocument();
+    expect(screen.getByText("COLMAP points")).toBeInTheDocument();
+  });
+
+  it("hides the COLMAP position for a splat that has no point cloud", async () => {
+    // Anything processed before the stage split never uploaded one. Offering the toggle position would render an
+    // empty canvas with nothing to explain it.
+    setup({
+      splatStatus: "complete",
+      splatFile: presigned("https://s3/splat.ply"),
+      job: { ...baseJob, status: "complete", colmapPointCloudS3Key: null },
+    });
+    await renderPage();
+
+    expect(screen.getByText("Trained points")).toBeInTheDocument();
+    expect(screen.queryByText("COLMAP points")).not.toBeInTheDocument();
+  });
+
+  it("re-mints an aged download URL before the switch remounts the viewer", async () => {
+    // Presigned URLs expire after 15 minutes (PRESIGN_EXPIRY_SECONDS, web/lib/server/s3.ts) while SWR would hold one
+    // forever. The remount a mode switch causes is where an expired one fails, so it has to be replaced first.
+    setup({ splatStatus: "complete", splatFile: presigned("https://s3/splat.ply", 20 * 60_000) });
+    await renderPage();
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Trained points"));
+    });
+
+    expect(refetchPresignedUrl).toHaveBeenCalled();
+  });
+
+  it("does not re-mint a URL that is still fresh", async () => {
+    setup({ splatStatus: "complete", splatFile: presigned("https://s3/splat.ply") });
+    await renderPage();
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Trained points"));
+    });
+
+    expect(refetchPresignedUrl).not.toHaveBeenCalled();
   });
 });

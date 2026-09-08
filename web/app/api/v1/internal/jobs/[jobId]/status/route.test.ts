@@ -56,6 +56,21 @@ describe.skipIf(!hasPostgres)("worker status callback", () => {
     expect(updated.updatedAt.getTime()).toBeGreaterThan(job.updatedAt.getTime());
   });
 
+  it("ignores a callback for a job that has already ended", async () => {
+    // web/app/api/v1/splats/[splatId]/process/route.ts cancels a job whose worker stopped reporting so the splat can
+    // be processed again. Letting that worker wake up and write a non-terminal status back would give the splat a
+    // second active job and trip uq_jobs_splat_id_active.
+    const { job } = await seed();
+    await getDb().update(jobs).set({ status: "cancelled" }).where(eq(jobs.id, job.id));
+
+    const res = await PATCH(req("tok", { status: "colmap_running" }), ctx(job.id));
+    expect(res.status).toBe(204);
+
+    const [updated] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
+    expect(updated.status).toBe("cancelled");
+    expect(updated.colmapStartedAt).toBeNull();
+  });
+
   it("does not overwrite a stage timestamp when a callback is duplicated", async () => {
     const { job } = await seed();
     await PATCH(req("tok", { status: "colmap_running" }), ctx(job.id));
@@ -65,6 +80,24 @@ describe.skipIf(!hasPostgres)("worker status callback", () => {
     const [second] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
 
     expect(second.colmapStartedAt?.getTime()).toBe(first.colmapStartedAt?.getTime());
+  });
+
+  it("stamps colmapFinishedAt on awaiting_training, not on the later training_running callback", async () => {
+    // awaiting_training can sit for hours while the user decides whether to train. Stamping colmapFinishedAt on
+    // training_running instead would fold that think-time into COLMAP's own wall clock.
+    const { job } = await seed();
+    await PATCH(req("tok", { status: "colmap_running" }), ctx(job.id));
+
+    await PATCH(req("tok", { status: "awaiting_training", colmap_point_cloud_s3_key: "p.ply" }), ctx(job.id));
+    const [afterAwaiting] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
+    expect(afterAwaiting.colmapFinishedAt).not.toBeNull();
+    expect(afterAwaiting.trainingStartedAt).toBeNull();
+    expect(afterAwaiting.colmapPointCloudS3Key).toBe("p.ply");
+
+    await PATCH(req("tok", { status: "training_running" }), ctx(job.id));
+    const [afterTraining] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
+    expect(afterTraining.colmapFinishedAt?.getTime()).toBe(afterAwaiting.colmapFinishedAt?.getTime());
+    expect(afterTraining.trainingStartedAt).not.toBeNull();
   });
 
   it("moves the job and its splat together on completion", async () => {

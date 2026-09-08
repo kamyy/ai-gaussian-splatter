@@ -56,11 +56,17 @@ class TrainedScene:
     canonical_height: int
 
 
-def train(sfm_sparse_dir: Path, photos_dir: Path, settings: Settings) -> TrainedScene:
+def train(
+    sfm_sparse_dir: Path, photos_dir: Path, settings: Settings, sparse: SparseModel | None = None
+) -> TrainedScene:
+    """sparse is an optional pre-parsed model, for callers (worker/run_job.py's train phase) that already read the
+    same sfm_sparse_dir for their own purposes and would otherwise parse cameras.bin/images.bin/points3D.bin twice.
+    """
     if DEVICE == "cpu":
         logger.warning("No CUDA device available — training will be extremely slow or impractical.")
 
-    sparse = read_sparse_model(sfm_sparse_dir)
+    if sparse is None:
+        sparse = read_sparse_model(sfm_sparse_dir)
 
     # Translated into a plain RuntimeError so worker/run_job.py's generic handler reports it as-is to the browser
     # (see web/components/job/JobStatusPoller.tsx). torch's own OutOfMemoryError message is a multi-line CUDA

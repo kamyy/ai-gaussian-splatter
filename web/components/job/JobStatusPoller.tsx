@@ -2,7 +2,7 @@
 
 import { Alert, Badge, Group, Progress, Stack, Text } from "@mantine/core";
 
-import { useJobStatus } from "@/lib/hooks";
+import { useLatestJob } from "@/lib/hooks";
 import type { JobStatus } from "@/lib/types";
 
 // Keys are the wire/database status values (snake_case); the values are what the user actually reads.
@@ -10,6 +10,7 @@ const STATUS_LABELS: Record<JobStatus, string> = {
   queued: "Queued",
   launching: "Starting GPU worker…",
   colmap_running: "Reconstructing camera positions (COLMAP)…",
+  awaiting_training: "Ready to review — waiting for you to start training",
   training_running: "Training the Gaussian Splat…",
   uploading_result: "Uploading result…",
   complete: "Complete",
@@ -22,6 +23,7 @@ const STATUS_PROGRESS: Record<JobStatus, number> = {
   queued: 5,
   launching: 15,
   colmap_running: 35,
+  awaiting_training: 50,
   training_running: 70,
   uploading_result: 90,
   complete: 100,
@@ -34,7 +36,7 @@ interface JobStatusPollerProps {
 }
 
 export function JobStatusPoller({ splatId }: JobStatusPollerProps) {
-  const { data: job, error, isLoading } = useJobStatus(splatId);
+  const { data: job, error, isLoading } = useLatestJob(splatId);
 
   if (isLoading) {
     return <Text c="dimmed">Loading job status…</Text>;

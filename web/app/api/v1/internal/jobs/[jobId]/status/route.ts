@@ -6,7 +6,7 @@ import { getJobForCallbackToken } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { jobs, splats } from "@/lib/server/db/schema";
 import { HttpError, withErrorHandling } from "@/lib/server/httpError";
-import { JOB_STATUSES, type SplatStatus } from "@/lib/types";
+import { JOB_ENDED_STATUSES, JOB_STATUSES, type SplatStatus } from "@/lib/types";
 
 /**
  * The worker -> app status callback.
@@ -23,6 +23,7 @@ const workerStatusSchema = z.object({
   error_message: z.string().nullish(),
   result_s3_key: z.string().nullish(),
   thumbnail_s3_key: z.string().nullish(),
+  colmap_point_cloud_s3_key: z.string().nullish(),
   ec2_instance_id: z.string().nullish(),
 });
 
@@ -30,6 +31,15 @@ export const PATCH = withErrorHandling(
   async (request: NextRequest, ctx: RouteContext<"/api/v1/internal/jobs/[jobId]/status">) => {
     const { jobId } = await ctx.params;
     const job = await getJobForCallbackToken(jobId, request);
+
+    // An ended job is final. web/app/api/v1/splats/[splatId]/process/route.ts cancels a job whose worker stopped
+    // reporting so the splat can be processed again, and that worker may still wake up afterwards. Writing a
+    // non-terminal status back would give the splat a second active job and trip uq_jobs_splat_id_active
+    // (web/lib/server/db/schema.ts). 204 rather than an error because there is nothing for the worker to retry:
+    // worker/pipeline/status.py only logs a failed callback anyway.
+    if (JOB_ENDED_STATUSES.includes(job.status)) {
+      return new NextResponse(null, { status: 204 });
+    }
 
     const parsed = workerStatusSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
@@ -48,15 +58,28 @@ export const PATCH = withErrorHandling(
     if (body.thumbnail_s3_key != null) {
       jobData.thumbnailS3Key = body.thumbnail_s3_key;
     }
+    if (body.colmap_point_cloud_s3_key != null) {
+      jobData.colmapPointCloudS3Key = body.colmap_point_cloud_s3_key;
+    }
     if (body.ec2_instance_id != null) {
       jobData.ec2InstanceId = body.ec2_instance_id;
     }
 
     // Stage timestamps are only ever set once. A retried or duplicated callback must not overwrite the original start
     // time.
+    //
+    // colmapFinishedAt is stamped on "awaiting_training", not "training_running": the reconstruct phase's instance
+    // self-terminates at "awaiting_training" and the user then decides whether to train, a gap that can last hours.
+    // Stamping it on "training_running" instead would fold that think-time into COLMAP's own wall clock.
+    //
+    // The `?? now` fallback on "training_running" is a rollout backstop, not the normal path: a worker instance
+    // launched by the previous (pre-stage-split) web release never sends "awaiting_training" at all, so without this,
+    // any job already mid-flight when this change deploys would leave colmapFinishedAt permanently null.
     const now = new Date();
     if (status === "colmap_running" && job.colmapStartedAt === null) {
       jobData.colmapStartedAt = now;
+    } else if (status === "awaiting_training") {
+      jobData.colmapFinishedAt = job.colmapFinishedAt ?? now;
     } else if (status === "training_running") {
       jobData.colmapFinishedAt = job.colmapFinishedAt ?? now;
       jobData.trainingStartedAt = job.trainingStartedAt ?? now;
