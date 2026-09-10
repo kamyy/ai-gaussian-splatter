@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { Suspense } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { JobRead, SplatRead, SplatStatus } from "@/lib/types";
+import type { Job, Splat, SplatStatus } from "@/lib/types";
 import SplatDetailPage from "./page";
 
 vi.mock("@clerk/nextjs", () => ({
@@ -26,7 +26,7 @@ vi.mock("@/lib/hooks", () => ({ useSplat: useSplatMock, useLatestJob: useLatestJ
 const { useSWRMock } = vi.hoisted(() => ({ useSWRMock: vi.fn() }));
 vi.mock("swr", () => ({ default: useSWRMock }));
 
-const baseSplat: SplatRead = {
+const baseSplat: Splat = {
   id: "11111111-1111-4111-8111-111111111111",
   name: "Ceramic mug",
   status: "processing",
@@ -35,7 +35,7 @@ const baseSplat: SplatRead = {
   createdAt: "2026-01-01T00:00:00Z",
 };
 
-const baseJob: JobRead = {
+const baseJob: Job = {
   id: "job-1",
   splatId: baseSplat.id,
   status: "training_running",
@@ -57,10 +57,10 @@ function presigned(url: string, ageMs = 0) {
 }
 
 function setup(options: {
-  splat?: SplatRead | undefined;
+  splat?: Splat | undefined;
   splatStatus?: SplatStatus;
   splatError?: Error;
-  job?: JobRead;
+  job?: Job;
   splatFile?: { url: string; fetchedAt: number };
   splatFileError?: Error;
 }) {

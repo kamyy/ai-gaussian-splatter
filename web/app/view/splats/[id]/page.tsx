@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { SplatViewer } from "@/components/viewer/SplatViewer";
 import { getPublicSplat } from "@/lib/server/data";
 
-// See web/app/gallery/page.tsx — same reasoning.
+// Reads the database per request: a shared splat must not be frozen into a build artifact.
 export const dynamic = "force-dynamic";
 
 interface Props {

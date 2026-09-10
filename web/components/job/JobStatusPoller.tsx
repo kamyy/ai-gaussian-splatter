@@ -3,6 +3,7 @@
 import { Alert, Badge, Group, Progress, Stack, Text } from "@mantine/core";
 
 import { useLatestJob } from "@/lib/hooks";
+import { statusColor } from "@/lib/statusColor";
 import type { JobStatus } from "@/lib/types";
 
 // Keys are the wire/database status values (snake_case); the values are what the user actually reads.
@@ -51,9 +52,7 @@ export function JobStatusPoller({ splatId }: JobStatusPollerProps) {
   return (
     <Stack gap="xs">
       <Group justify="space-between">
-        <Badge color={job.status === "failed" ? "red" : job.status === "complete" ? "green" : "blue"}>
-          {STATUS_LABELS[job.status]}
-        </Badge>
+        <Badge color={statusColor(job.status)}>{STATUS_LABELS[job.status]}</Badge>
       </Group>
       <Progress value={STATUS_PROGRESS[job.status]} animated={job.status !== "complete" && job.status !== "failed"} />
       {job.status === "failed" && job.errorMessage && (

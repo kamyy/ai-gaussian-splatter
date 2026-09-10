@@ -6,31 +6,41 @@ import { requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { splats } from "@/lib/server/db/schema";
 import { HttpError, withErrorHandling } from "@/lib/server/httpError";
-import { splatReadColumns } from "@/lib/server/selects";
+import { splatColumns } from "@/lib/server/selects";
 
-const createSchema = z.object({ name: z.string().min(1) });
+const schema = z.object({
+  name: z.string().min(1),
+});
 
-export const POST = withErrorHandling(async (request: Request) => {
+export const POST = withErrorHandling(async (req: Request) => {
   const user = await requireUser();
 
-  const parsed = createSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) {
+  const { success, data } = schema.safeParse(await req.json().catch(() => null));
+  if (!success) {
     throw new HttpError(422, "Invalid request body");
   }
 
   const [splat] = await getDb()
     .insert(splats)
-    .values({ userId: user.id, name: parsed.data.name })
-    .returning(splatReadColumns);
-  return NextResponse.json(splat, { status: 201 });
+    .values({
+      userId: user.id,
+      name: data.name,
+    })
+    .returning(splatColumns);
+
+  return NextResponse.json(splat, {
+    status: 201,
+  });
 });
 
 export const GET = withErrorHandling(async () => {
   const user = await requireUser();
+
   const rows = await getDb()
-    .select(splatReadColumns)
+    .select(splatColumns)
     .from(splats)
     .where(eq(splats.userId, user.id))
     .orderBy(desc(splats.createdAt));
+
   return NextResponse.json(rows);
 });

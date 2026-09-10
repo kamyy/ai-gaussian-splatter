@@ -15,7 +15,7 @@ import {
 import { getEnv } from "@/lib/server/env";
 import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
-import { jobReadColumns } from "@/lib/server/selects";
+import { jobColumns } from "@/lib/server/selects";
 import { JOB_ENDED_STATUSES } from "@/lib/types";
 
 // Postgres error code 23505. drizzle-orm wraps the raw node-postgres DatabaseError (which carries `.code` directly)
@@ -141,7 +141,7 @@ export const POST = withErrorHandling(
       .update(jobs)
       .set({ status: "launching", ec2InstanceId: instanceId })
       .where(eq(jobs.id, created.id))
-      .returning(jobReadColumns);
+      .returning(jobColumns);
     return NextResponse.json(job, { status: 201 });
   },
 );

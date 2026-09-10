@@ -2,7 +2,7 @@ import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useLatestJob, useSplat, useSplats } from "../hooks";
-import { JOB_ENDED_STATUSES, JOB_STATUSES, type JobRead, type JobStatus } from "../types";
+import { JOB_ENDED_STATUSES, JOB_STATUSES, type Job, type JobStatus } from "../types";
 
 // Clerk resolves getToken() to null once it has loaded without a session, so the token is mutable here rather than a
 // fixed string.
@@ -13,19 +13,15 @@ vi.mock("@clerk/nextjs", () => ({
 
 // Mocked so a fetcher that skipped the token guard fails the test rather than reaching fetch() and rejecting on jsdom's
 // absent network for the wrong reason.
-const { getLatestJobMock, getSplatMock, listSplatsMock } = vi.hoisted(() => ({
-  getLatestJobMock: vi.fn<(token: string, ...rest: string[]) => Promise<unknown>>(),
-  getSplatMock: vi.fn<(token: string, ...rest: string[]) => Promise<unknown>>(),
-  listSplatsMock: vi.fn<(token: string, ...rest: string[]) => Promise<unknown>>(),
+const { apiFetchMock } = vi.hoisted(() => ({
+  apiFetchMock: vi.fn<(path: string, method: string, token?: string, body?: unknown) => Promise<unknown>>(),
 }));
-vi.mock("../api", () => ({
-  getLatestJob: getLatestJobMock,
-  getSplat: getSplatMock,
-  listSplats: listSplatsMock,
+vi.mock("../apiFetch", () => ({
+  apiFetch: apiFetchMock,
 }));
 
 interface JobPollConfig {
-  refreshInterval: (latest: JobRead | undefined) => number;
+  refreshInterval: (latest: Job | undefined) => number;
 }
 
 // SWR is stubbed so the config it receives can be inspected directly. That config is the contract under test, not
@@ -43,7 +39,7 @@ function runFetcher(callIndex = 0) {
   return (useSWRMock.mock.calls[callIndex][1] as () => Promise<unknown>)();
 }
 
-const baseJob: JobRead = {
+const baseJob: Job = {
   id: "job-1",
   splatId: "splat-1",
   status: "training_running",
@@ -132,36 +128,34 @@ describe("useLatestJob", () => {
 describe("session token guard", () => {
   // render is widened to unknown because the three hooks return differently typed SWR responses, and only the call is
   // under test here.
-  const hooks: { name: string; render: () => unknown; api: typeof listSplatsMock }[] = [
-    { name: "useSplats", render: () => useSplats(), api: listSplatsMock },
-    { name: "useSplat", render: () => useSplat("splat-1"), api: getSplatMock },
-    { name: "useLatestJob", render: () => useLatestJob("splat-1"), api: getLatestJobMock },
+  const hooks: { name: string; render: () => unknown }[] = [
+    { name: "useSplats", render: () => useSplats() },
+    { name: "useSplat", render: () => useSplat("splat-1") },
+    { name: "useLatestJob", render: () => useLatestJob("splat-1") },
   ];
 
   beforeEach(() => {
     useSWRMock.mockClear();
     useSWRMock.mockReturnValue({ data: undefined });
-    for (const { api } of hooks) {
-      api.mockClear();
-      api.mockResolvedValue(undefined);
-    }
+    apiFetchMock.mockClear();
+    apiFetchMock.mockResolvedValue(undefined);
     auth.token = "test-token";
   });
 
-  it.each(hooks)("$name rejects without calling the API when the session has ended", async ({ render, api }) => {
+  it.each(hooks)("$name rejects without calling the API when the session has ended", async ({ render }) => {
     // Rejecting is what puts SWR in its error state; resolving to an empty result instead would render as a signed-in
     // user with no data.
     auth.token = null;
     renderHook(render);
 
     await expect(runFetcher()).rejects.toThrow("Not signed in");
-    expect(api).not.toHaveBeenCalled();
+    expect(apiFetchMock).not.toHaveBeenCalled();
   });
 
-  it.each(hooks)("$name forwards the token once Clerk has a session", async ({ render, api }) => {
+  it.each(hooks)("$name forwards the token once Clerk has a session", async ({ render }) => {
     renderHook(render);
 
     await expect(runFetcher()).resolves.toBeUndefined();
-    expect(api.mock.calls[0][0]).toBe("test-token");
+    expect(apiFetchMock.mock.calls[0][2]).toBe("test-token");
   });
 });

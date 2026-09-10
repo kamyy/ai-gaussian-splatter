@@ -139,15 +139,6 @@ export const globalJobCounters = pgTable("global_job_counters", {
   jobsStarted: integer("jobs_started").notNull().default(0),
 });
 
-export const galleryItems = pgTable("gallery_items", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  title: text("title").notNull(),
-  description: text("description"),
-  splatS3Key: text("splat_s3_key").notNull(),
-  thumbnailS3Key: text("thumbnail_s3_key").notNull(),
-  displayOrder: integer("display_order").notNull().default(0),
-});
-
 export type User = typeof users.$inferSelect;
 export type Splat = typeof splats.$inferSelect;
 export type Photo = typeof photos.$inferSelect;

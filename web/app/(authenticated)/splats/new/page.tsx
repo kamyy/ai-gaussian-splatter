@@ -7,48 +7,66 @@ import { useState } from "react";
 
 import { PhotoDropzone } from "@/components/upload/PhotoDropzone";
 import { UploadProgress } from "@/components/upload/UploadProgress";
-import { createSplat, triggerProcess } from "@/lib/api";
+import { apiFetch } from "@/lib/apiFetch";
+import type { Job, Splat } from "@/lib/types";
 
 export default function NewSplatPage() {
-  const { getToken } = useAuth();
-  const router = useRouter();
-  const [name, setName] = useState("");
-  const [splatId, setSplatId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [splatId, setSplatId] = useState("");
+  const [name, setName] = useState("");
 
-  const handleCreate = async () => {
-    if (!name.trim()) {
-      return;
+  const { getToken } = useAuth();
+  const router = useRouter();
+
+  const handleNew = async () => {
+    try {
+      setCreating(true);
+
+      if (name.trim()) {
+        const token = await getToken();
+        if (token) {
+          const { id } = await apiFetch<Splat>("/api/v1/splats", "POST", token, { name: name.trim() });
+          setSplatId(id);
+        }
+      }
+    } finally {
+      setCreating(false);
     }
-    setCreating(true);
-    const token = await getToken();
-    if (!token) {
-      return;
-    }
-    const splat = await createSplat(token, name.trim());
-    setSplatId(splat.id);
-    setCreating(false);
   };
 
-  const handleStartProcessing = async () => {
-    if (!splatId) {
-      return;
+  const handleRun = async () => {
+    try {
+      setStarting(true);
+
+      if (splatId) {
+        const token = await getToken();
+        if (token) {
+          await apiFetch<Job>(`/api/v1/splats/${splatId}/process`, "POST", token);
+          router.push(`/splats/${splatId}`);
+        }
+      }
+    } finally {
+      setStarting(false);
     }
-    setStarting(true);
-    const token = await getToken();
-    if (!token) {
-      return;
-    }
-    await triggerProcess(token, splatId);
-    router.push(`/splats/${splatId}`);
   };
 
   return (
     <Stack maw={600}>
       <Title order={2}>New splat</Title>
 
-      {!splatId && (
+      {splatId ? (
+        <>
+          <Text size="sm" c="dimmed">
+            Upload at least 20 photos of the object from different angles.
+          </Text>
+          <PhotoDropzone splatId={splatId} />
+          <UploadProgress />
+          <Button onClick={handleRun} loading={starting}>
+            Start running
+          </Button>
+        </>
+      ) : (
         <>
           <TextInput
             label="Name"
@@ -56,21 +74,8 @@ export default function NewSplatPage() {
             value={name}
             onChange={e => setName(e.currentTarget.value)}
           />
-          <Button onClick={handleCreate} loading={creating} disabled={!name.trim()}>
+          <Button onClick={handleNew} loading={creating} disabled={!name.trim()}>
             Continue
-          </Button>
-        </>
-      )}
-
-      {splatId && (
-        <>
-          <Text size="sm" c="dimmed">
-            Upload at least 20 photos of the object from different angles.
-          </Text>
-          <PhotoDropzone splatId={splatId} />
-          <UploadProgress />
-          <Button onClick={handleStartProcessing} loading={starting}>
-            Start processing
           </Button>
         </>
       )}

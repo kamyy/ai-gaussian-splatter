@@ -22,10 +22,6 @@ export function SiteHeader() {
         </Title>
 
         <Group gap="sm">
-          <Link href="/gallery" style={plainLink}>
-            Gallery
-          </Link>
-
           <Show
             when="signed-in"
             fallback={

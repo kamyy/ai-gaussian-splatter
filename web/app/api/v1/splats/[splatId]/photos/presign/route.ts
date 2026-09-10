@@ -63,6 +63,6 @@ export const POST = withErrorHandling(
     // with the caller holding no ids to retry against and the rate-limit increment already spent.
     await getDb().insert(photos).values(rows);
 
-    return NextResponse.json({ photos: items });
+    return NextResponse.json(items);
   },
 );

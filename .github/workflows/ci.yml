@@ -364,11 +364,13 @@ jobs:
             -c webImageTag=$NEW_TAG -c migrateImageTag=$NEW_TAG
 
       # /api/v1/healthz never touches the database (RUNBOOK.md), so it can't tell a working deploy from one that will
-      # 500 on every real request.
+      # 500 on every real request. A nonexistent splat id still round-trips a real DB query: a working deploy 404s
+      # ("no such row"), while a broken DB connection 500s.
       - name: Smoke test (a real DB-backed route, not /healthz)
         run: |
-          STATUS=$(curl -s -o /dev/null -w '%{http_code}' "$APP_PUBLIC_URL/api/v1/gallery")
-          if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 300 ]; then
-            echo "::error::GET /api/v1/gallery returned $STATUS after deploying $NEW_TAG"
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
+            "$APP_PUBLIC_URL/api/v1/public/splats/00000000-0000-0000-0000-000000000000")
+          if [ "$STATUS" != "404" ]; then
+            echo "::error::GET /api/v1/public/splats/<id> returned $STATUS (expected 404) after deploying $NEW_TAG"
             exit 1
           fi
