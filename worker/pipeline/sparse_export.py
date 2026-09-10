@@ -63,7 +63,7 @@ def download_sparse_model(settings: Settings, dest_dir: Path) -> Path:
 
 def export_and_upload_point_cloud(sfm_sparse_dir: Path, settings: Settings) -> str:
     """Writes the COLMAP sparse point cloud as a plain x/y/z/red/green/blue .ply and
-    uploads it to s3://{splats_bucket}/splats/{splat_id}/colmap_point_cloud.ply.
+    uploads it to s3://{splats_bucket}/splats/{splat_id}/point_cloud.ply.
 
     Unlike worker/pipeline/export.py's result.ply, colors here are already 0-255 RGB straight from COLMAP — no
     spherical-harmonics DC-term encoding to apply, since this isn't a trained Gaussian.
@@ -79,10 +79,10 @@ def export_and_upload_point_cloud(sfm_sparse_dir: Path, settings: Settings) -> s
         sparse.points_rgb[:, 2],
     )
 
-    ply_path = Path(settings.local_workdir) / "colmap_point_cloud.ply"
+    ply_path = Path(settings.local_workdir) / "point_cloud.ply"
     PlyData([PlyElement.describe(vertex, "vertex")], text=False).write(str(ply_path))
 
     s3 = boto3.client("s3")
-    key = f"splats/{settings.splat_id}/colmap_point_cloud.ply"
+    key = f"splats/{settings.splat_id}/point_cloud.ply"
     s3.upload_file(str(ply_path), settings.splats_bucket, key)
     return key

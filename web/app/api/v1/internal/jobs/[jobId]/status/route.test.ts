@@ -88,11 +88,11 @@ describe.skipIf(!hasPostgres)("worker status callback", () => {
     const { job } = await seed();
     await PATCH(req("tok", { status: "colmap_running" }), ctx(job.id));
 
-    await PATCH(req("tok", { status: "awaiting_training", colmap_point_cloud_s3_key: "p.ply" }), ctx(job.id));
+    await PATCH(req("tok", { status: "awaiting_training", point_cloud_s3_key: "p.ply" }), ctx(job.id));
     const [afterAwaiting] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
     expect(afterAwaiting.colmapFinishedAt).not.toBeNull();
     expect(afterAwaiting.trainingStartedAt).toBeNull();
-    expect(afterAwaiting.colmapPointCloudS3Key).toBe("p.ply");
+    expect(afterAwaiting.pointCloudS3Key).toBe("p.ply");
 
     await PATCH(req("tok", { status: "training_running" }), ctx(job.id));
     const [afterTraining] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));

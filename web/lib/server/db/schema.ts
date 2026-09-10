@@ -89,7 +89,7 @@ export const jobs = pgTable(
     errorMessage: text("error_message"),
     resultS3Key: text("result_s3_key"),
     thumbnailS3Key: text("thumbnail_s3_key"),
-    colmapPointCloudS3Key: text("colmap_point_cloud_s3_key"),
+    pointCloudS3Key: text("point_cloud_s3_key"),
 
     colmapStartedAt: timestamp("colmap_started_at", { withTimezone: true, precision: 6 }),
     colmapFinishedAt: timestamp("colmap_finished_at", { withTimezone: true, precision: 6 }),

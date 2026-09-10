@@ -10,14 +10,14 @@ import { SplatViewer } from "./SplatViewer";
 
 interface AwaitingTrainingPanelProps {
   splatId: string;
-  colmapPointCloudUrl: string;
+  pointCloudUrl: string;
   onTrainStarted: () => void;
 }
 
 /** Shown once the reconstruct phase self-terminates at "awaiting_training" — the pause where the user reviews
  * COLMAP's sparse point cloud before paying for the expensive training step (worker/run_job.py's stage split).
  */
-export function AwaitingTrainingPanel({ splatId, colmapPointCloudUrl, onTrainStarted }: AwaitingTrainingPanelProps) {
+export function AwaitingTrainingPanel({ splatId, pointCloudUrl, onTrainStarted }: AwaitingTrainingPanelProps) {
   const { getToken } = useAuth();
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +44,7 @@ export function AwaitingTrainingPanel({ splatId, colmapPointCloudUrl, onTrainSta
         COLMAP finished reconstructing camera positions. Review the point cloud below, then start training — training is
         the expensive, GPU-bound step.
       </Text>
-      <SplatViewer mode="colmap_points" splatUrl={null} colmapPointCloudUrl={colmapPointCloudUrl} />
+      <SplatViewer mode="colmap_points" splatUrl={null} pointCloudUrl={pointCloudUrl} />
       {error && <Alert color="red">{error}</Alert>}
       <Button onClick={handleTrain} loading={isStarting} style={{ alignSelf: "flex-start" }}>
         Proceed to train

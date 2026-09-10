@@ -15,7 +15,7 @@ export const GET = withErrorHandling(
 
     // "Not ready" and "not yours" deliberately collapse to the same 404, matching
     // web/app/api/v1/splats/[splatId]/download/route.ts. Gated on
-    // colmapPointCloudS3Key rather than jobs.status: the reconstruct phase sets this key once and never clears it, so
+    // pointCloudS3Key rather than jobs.status: the reconstruct phase sets this key once and never clears it, so
     // the COLMAP point cloud stays viewable through training and after the splat completes.
     const [splat] = await getDb()
       .select({ id: splats.id })
@@ -29,13 +29,13 @@ export const GET = withErrorHandling(
     const [latestJob] = await getDb()
       .select()
       .from(jobs)
-      .where(and(eq(jobs.splatId, splatId), isNotNull(jobs.colmapPointCloudS3Key)))
+      .where(and(eq(jobs.splatId, splatId), isNotNull(jobs.pointCloudS3Key)))
       .orderBy(desc(jobs.createdAt))
       .limit(1);
-    if (latestJob === undefined || latestJob.colmapPointCloudS3Key === null) {
+    if (latestJob === undefined || latestJob.pointCloudS3Key === null) {
       throw new HttpError(404, "Point cloud not ready");
     }
 
-    return NextResponse.json(await presignSplatDownload(latestJob.colmapPointCloudS3Key));
+    return NextResponse.json(await presignSplatDownload(latestJob.pointCloudS3Key));
   },
 );

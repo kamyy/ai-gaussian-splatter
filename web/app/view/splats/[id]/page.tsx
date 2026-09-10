@@ -39,7 +39,7 @@ export default async function PublicSplatViewPage({ params }: Props) {
   return (
     <Stack p="md">
       <Title order={2}>{splat.title}</Title>
-      <SplatViewer mode="splat" splatUrl={splat.splatUrl} colmapPointCloudUrl={null} />
+      <SplatViewer mode="splat" splatUrl={splat.splatUrl} pointCloudUrl={null} />
     </Stack>
   );
 }

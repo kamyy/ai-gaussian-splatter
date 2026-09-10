@@ -42,7 +42,7 @@ const baseJob: Job = {
   errorMessage: null,
   resultS3Key: null,
   thumbnailS3Key: null,
-  colmapPointCloudS3Key: null,
+  pointCloudS3Key: null,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
 };
@@ -153,8 +153,8 @@ describe("SplatDetailPage", () => {
   it("shows the awaiting-training panel while paused for review, not the completed-splat toggle", async () => {
     setup({
       splatStatus: "processing",
-      job: { ...baseJob, status: "awaiting_training", colmapPointCloudS3Key: "splats/x/colmap_point_cloud.ply" },
-      splatFile: presigned("https://s3/colmap_point_cloud.ply"),
+      job: { ...baseJob, status: "awaiting_training", pointCloudS3Key: "splats/x/point_cloud.ply" },
+      splatFile: presigned("https://s3/point_cloud.ply"),
     });
     await renderPage();
 
@@ -166,7 +166,7 @@ describe("SplatDetailPage", () => {
     setup({
       splatStatus: "complete",
       splatFile: presigned("https://s3/splat.ply"),
-      job: { ...baseJob, status: "complete", colmapPointCloudS3Key: "splats/x/colmap_point_cloud.ply" },
+      job: { ...baseJob, status: "complete", pointCloudS3Key: "splats/x/point_cloud.ply" },
     });
     await renderPage();
 
@@ -180,7 +180,7 @@ describe("SplatDetailPage", () => {
     setup({
       splatStatus: "complete",
       splatFile: presigned("https://s3/splat.ply"),
-      job: { ...baseJob, status: "complete", colmapPointCloudS3Key: null },
+      job: { ...baseJob, status: "complete", pointCloudS3Key: null },
     });
     await renderPage();
 

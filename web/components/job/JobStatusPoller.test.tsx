@@ -23,7 +23,7 @@ const baseJob: Job = {
   errorMessage: null,
   resultS3Key: null,
   thumbnailS3Key: null,
-  colmapPointCloudS3Key: null,
+  pointCloudS3Key: null,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
 };

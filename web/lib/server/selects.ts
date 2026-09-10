@@ -24,7 +24,7 @@ export const jobColumns = {
   errorMessage: jobs.errorMessage,
   resultS3Key: jobs.resultS3Key,
   thumbnailS3Key: jobs.thumbnailS3Key,
-  colmapPointCloudS3Key: jobs.colmapPointCloudS3Key,
+  pointCloudS3Key: jobs.pointCloudS3Key,
   createdAt: jobs.createdAt,
   updatedAt: jobs.updatedAt,
 };

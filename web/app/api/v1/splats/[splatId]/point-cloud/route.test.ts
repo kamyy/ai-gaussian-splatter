@@ -25,12 +25,12 @@ describe.skipIf(!hasPostgres)("GET /api/v1/splats/[splatId]/point-cloud", () => 
     await closeDb();
   });
 
-  async function seed(jobStatus: JobStatus, colmapPointCloudS3Key: string | null) {
+  async function seed(jobStatus: JobStatus, pointCloudS3Key: string | null) {
     const user = await getOrCreateUser("clerk-user-1");
     const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "obj" }).returning();
     const [job] = await getDb()
       .insert(jobs)
-      .values({ splatId: splat.id, callbackToken: "tok", status: jobStatus, colmapPointCloudS3Key })
+      .values({ splatId: splat.id, callbackToken: "tok", status: jobStatus, pointCloudS3Key })
       .returning();
     return { user, splat, job };
   }
@@ -48,16 +48,16 @@ describe.skipIf(!hasPostgres)("GET /api/v1/splats/[splatId]/point-cloud", () => 
   });
 
   it("200s once the key is set, while still awaiting training", async () => {
-    const { splat } = await seed("awaiting_training", "splats/x/colmap_point_cloud.ply");
+    const { splat } = await seed("awaiting_training", "splats/x/point_cloud.ply");
 
     const res = await GET({} as never, ctx(splat.id));
     expect(res.status).toBe(200);
     const url = await res.json();
-    expect(url).toContain("colmap_point_cloud.ply");
+    expect(url).toContain("point_cloud.ply");
   });
 
   it("stays 200 once the job later reaches complete — the key is never cleared", async () => {
-    const { splat } = await seed("complete", "splats/x/colmap_point_cloud.ply");
+    const { splat } = await seed("complete", "splats/x/point_cloud.ply");
 
     const res = await GET({} as never, ctx(splat.id));
     expect(res.status).toBe(200);

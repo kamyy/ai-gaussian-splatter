@@ -23,7 +23,7 @@ const workerStatusSchema = z.object({
   error_message: z.string().nullish(),
   result_s3_key: z.string().nullish(),
   thumbnail_s3_key: z.string().nullish(),
-  colmap_point_cloud_s3_key: z.string().nullish(),
+  point_cloud_s3_key: z.string().nullish(),
   ec2_instance_id: z.string().nullish(),
 });
 
@@ -58,8 +58,8 @@ export const PATCH = withErrorHandling(
     if (body.thumbnail_s3_key != null) {
       jobData.thumbnailS3Key = body.thumbnail_s3_key;
     }
-    if (body.colmap_point_cloud_s3_key != null) {
-      jobData.colmapPointCloudS3Key = body.colmap_point_cloud_s3_key;
+    if (body.point_cloud_s3_key != null) {
+      jobData.pointCloudS3Key = body.point_cloud_s3_key;
     }
     if (body.ec2_instance_id != null) {
       jobData.ec2InstanceId = body.ec2_instance_id;
