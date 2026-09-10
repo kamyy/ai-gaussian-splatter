@@ -36,6 +36,6 @@ export const GET = withErrorHandling(
       throw new HttpError(404, "Point cloud not ready");
     }
 
-    return NextResponse.json({ url: await presignSplatDownload(latestJob.colmapPointCloudS3Key) });
+    return NextResponse.json(await presignSplatDownload(latestJob.colmapPointCloudS3Key));
   },
 );

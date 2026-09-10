@@ -52,8 +52,8 @@ describe.skipIf(!hasPostgres)("GET /api/v1/splats/[splatId]/point-cloud", () => 
 
     const res = await GET({} as never, ctx(splat.id));
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.url).toContain("colmap_point_cloud.ply");
+    const url = await res.json();
+    expect(url).toContain("colmap_point_cloud.ply");
   });
 
   it("stays 200 once the job later reaches complete — the key is never cleared", async () => {

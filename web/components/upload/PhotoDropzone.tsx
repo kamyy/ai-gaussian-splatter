@@ -4,8 +4,9 @@ import { useAuth } from "@clerk/nextjs";
 import { Button, FileInput, Stack, Text } from "@mantine/core";
 import { useState } from "react";
 
-import { completePhoto, presignPhotos, uploadToS3 } from "@/lib/api";
+import { apiFetch } from "@/lib/apiFetch";
 import { useAppStore } from "@/lib/store";
+import type { PhotoPresignItem } from "@/lib/types";
 
 interface PhotoDropzoneProps {
   splatId: string;
@@ -34,9 +35,10 @@ export function PhotoDropzone({ splatId, onAllUploaded }: PhotoDropzoneProps) {
     }
 
     try {
-      const { photos } = await presignPhotos(
+      const photos = await apiFetch<PhotoPresignItem[]>(
+        `/api/v1/splats/${splatId}/photos/presign`,
+        "POST",
         token,
-        splatId,
         files.map(f => ({ filename: f.name, contentType: f.type || "image/jpeg" })),
       );
 
@@ -45,9 +47,16 @@ export function PhotoDropzone({ splatId, onAllUploaded }: PhotoDropzoneProps) {
           const presigned = photos[index];
           setUploadStatus(file.name, "uploading");
           try {
-            await uploadToS3(presigned.presignedPutUrl, file);
+            const uploadResp = await fetch(presigned.presignedPutUrl, {
+              headers: { "Content-Type": file.type },
+              method: "PUT",
+              body: file,
+            });
+            if (!uploadResp.ok) {
+              throw new Error(`S3 upload failed: ${uploadResp.statusText}`);
+            }
             setUploadProgress(file.name, 100);
-            await completePhoto(token, splatId, presigned.photoId);
+            await apiFetch<void>(`/api/v1/splats/${splatId}/photos/${presigned.photoId}/complete`, "POST", token);
             setUploadStatus(file.name, "uploaded");
           } catch (err) {
             setUploadStatus(file.name, "failed", err instanceof Error ? err.message : "Upload failed");

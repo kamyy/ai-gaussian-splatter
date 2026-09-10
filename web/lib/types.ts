@@ -29,7 +29,7 @@ export type JobStatus = (typeof JOB_STATUSES)[number];
 
 export const JOB_ENDED_STATUSES: JobStatus[] = ["complete", "failed", "cancelled"];
 
-export interface SplatRead {
+export interface Splat {
   id: string;
   name: string;
   status: SplatStatus;
@@ -44,7 +44,7 @@ export interface PhotoPresignItem {
   s3Key: string;
 }
 
-export interface JobRead {
+export interface Job {
   id: string;
   splatId: string;
   status: JobStatus;
@@ -56,15 +56,7 @@ export interface JobRead {
   updatedAt: string;
 }
 
-export interface GalleryItemRead {
-  id: string;
-  title: string;
-  description: string | null;
-  thumbnailUrl: string;
-  splatUrl: string;
-}
-
-export interface PublicSplatRead {
+export interface PublicSplat {
   title: string;
   thumbnailUrl: string;
   splatUrl: string;

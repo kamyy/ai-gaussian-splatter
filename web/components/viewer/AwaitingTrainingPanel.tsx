@@ -4,7 +4,8 @@ import { useAuth } from "@clerk/nextjs";
 import { Alert, Button, Stack, Text } from "@mantine/core";
 import { useState } from "react";
 
-import { triggerTrain } from "@/lib/api";
+import { apiFetch } from "@/lib/apiFetch";
+import type { Job } from "@/lib/types";
 import { SplatViewer } from "./SplatViewer";
 
 interface AwaitingTrainingPanelProps {
@@ -29,7 +30,7 @@ export function AwaitingTrainingPanel({ splatId, colmapPointCloudUrl, onTrainSta
       if (!token) {
         throw new Error("Not signed in");
       }
-      await triggerTrain(token, splatId);
+      await apiFetch<Job>(`/api/v1/splats/${splatId}/train`, "POST", token);
       onTrainStarted();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start training");

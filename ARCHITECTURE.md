@@ -45,10 +45,10 @@ M10's baked AMI therefore attacks the smaller half — fixed overhead, not train
 ## API design
 
 - REST (`web/app/api/v1/`), not GraphQL. 12 flat endpoints don't need GraphQL's query flexibility.
-- Postgres (RDS) for `users`, `splats`, `photos`, `jobs`, `gallery_items`, and rate-limit/job counters. Relational, low traffic, and needs atomic `INSERT ... ON CONFLICT`.
+- Postgres (RDS) for `users`, `splats`, `photos`, `jobs`, and rate-limit/job counters. Relational, low traffic, and needs atomic `INSERT ... ON CONFLICT`.
 - Auth: Clerk (`@clerk/nextjs`). Simple and easy to integrate — this app doesn't need enterprise features (SSO, SCIM, custom identity federation).
 - API and pages share one Next.js app.
-  - SSR is needed anyway for Open Graph (`generateMetadata`) and server gallery reads, so a long-running Node process already exists.
+  - SSR is needed anyway for Open Graph (`generateMetadata`) and server-side share-page reads, so a long-running Node process already exists.
   - Putting the API in that same process means one deploy and one TypeScript codebase, with no separate API service whose request/response shapes need to be kept in sync by hand.
 
 ## Frontend
@@ -203,7 +203,7 @@ A rolled-back *service* deployment does not undo an already-applied migration. R
 Three tiers (`.github/workflows/ci.yml`):
 
 - **Unit/component** (every PR): `pytest` + `moto` for `worker/`; Vitest `client` (jsdom) and `server` (Node + real Postgres for rate limits).
-- **E2E** (every PR): Playwright without live Clerk — gallery path. Spec is **skipped** (SSR reads DB; `page.route()` can't intercept; no seed). Server correctness is the Vitest `server` project.
+- **E2E** (every PR): Playwright without live Clerk. No specs yet (SSR reads DB; `page.route()` can't intercept; no seed — see [State / what's next](AGENTS.md#state--whats-next)). Server correctness is the Vitest `server` project.
 - **Real-pipeline** (manual/milestone-gated): real COLMAP + gsplat costs GPU money. `FAST_TEST_MODE` (20 iterations) for cheap end-to-end smoke tests; `worker/pipeline/train.py` derives its densify/log schedules from the iteration count so the short run still exercises densification.
 
 `web/` AWS tests use `aws-sdk-client-mock` (assert command args), not `moto`-style emulation.
@@ -220,6 +220,6 @@ Milestones (`M0`…`M10`) name phases, not a schedule — web/infra largely exis
 - **M5** — EC2 spot launch, worker image, status callback, self-termination (success + induced failure).
 - **M6** — Auth + three rate-limit layers.
 - **M7** — Authenticated UI: upload, job polling, splat viewer.
-- **M8** — Public gallery, share links, OG thumbnails.
+- **M8** — Share links, OG thumbnails.
 - **M9** — IaC + first real deploy.
 - **M10** — Packer-baked worker AMI; measure boot-latency improvement.

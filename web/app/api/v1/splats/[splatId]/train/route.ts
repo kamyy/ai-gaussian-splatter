@@ -8,7 +8,7 @@ import { ecrRegistry, launchJob, launchJobLocal, localLaunchEnabled, workerImage
 import { getEnv } from "@/lib/server/env";
 import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
-import { jobReadColumns } from "@/lib/server/selects";
+import { jobColumns } from "@/lib/server/selects";
 
 /**
  * The "proceed to train" trigger — launches the second EC2 spot instance for a job whose reconstruct phase already
@@ -93,7 +93,7 @@ export const POST = withErrorHandling(
       .update(jobs)
       .set({ ec2InstanceId: instanceId })
       .where(eq(jobs.id, flipped.id))
-      .returning(jobReadColumns);
+      .returning(jobColumns);
     return NextResponse.json(job);
   },
 );

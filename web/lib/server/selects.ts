@@ -8,7 +8,7 @@ import { jobs, splats } from "./db/schema";
  * and `ec2InstanceId` is internal. Neither may reach a client.
  */
 
-export const splatReadColumns = {
+export const splatColumns = {
   id: splats.id,
   name: splats.name,
   status: splats.status,
@@ -17,7 +17,7 @@ export const splatReadColumns = {
   createdAt: splats.createdAt,
 };
 
-export const jobReadColumns = {
+export const jobColumns = {
   id: jobs.id,
   splatId: jobs.splatId,
   status: jobs.status,
@@ -28,6 +28,3 @@ export const jobReadColumns = {
   createdAt: jobs.createdAt,
   updatedAt: jobs.updatedAt,
 };
-
-export type SplatRead = Pick<typeof splats.$inferSelect, keyof typeof splatReadColumns>;
-export type JobRead = Pick<typeof jobs.$inferSelect, keyof typeof jobReadColumns>;

@@ -33,6 +33,6 @@ export const GET = withErrorHandling(
       throw new HttpError(404, "Splat not ready");
     }
 
-    return NextResponse.json({ url: await presignSplatDownload(latestJob.resultS3Key) });
+    return NextResponse.json(await presignSplatDownload(latestJob.resultS3Key));
   },
 );

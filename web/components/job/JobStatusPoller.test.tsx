@@ -2,7 +2,7 @@ import { MantineProvider } from "@mantine/core";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { JobRead } from "@/lib/types";
+import type { Job } from "@/lib/types";
 import { JobStatusPoller } from "./JobStatusPoller";
 
 const { useLatestJobMock } = vi.hoisted(() => ({ useLatestJobMock: vi.fn() }));
@@ -16,7 +16,7 @@ function renderPoller() {
   );
 }
 
-const baseJob: JobRead = {
+const baseJob: Job = {
   id: "job-1",
   splatId: "splat-1",
   status: "training_running",

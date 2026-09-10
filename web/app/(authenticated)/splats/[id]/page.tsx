@@ -8,7 +8,7 @@ import useSWR, { type KeyedMutator } from "swr";
 import { JobStatusPoller } from "@/components/job/JobStatusPoller";
 import { AwaitingTrainingPanel } from "@/components/viewer/AwaitingTrainingPanel";
 import { SplatViewer, SplatViewerLoading, type ViewerMode } from "@/components/viewer/SplatViewer";
-import { getColmapPointCloudUrl, getSplatUrl } from "@/lib/api";
+import { apiFetch } from "@/lib/apiFetch";
 import { useLatestJob, useSplat } from "@/lib/hooks";
 import { JOB_ENDED_STATUSES } from "@/lib/types";
 
@@ -72,7 +72,8 @@ export default function SplatDetailPage({ params }: { params: Promise<{ id: stri
       if (!token) {
         throw new Error("Not signed in");
       }
-      return { url: (await getSplatUrl(token, id)).url, fetchedAt: Date.now() };
+      const url = await apiFetch<string>(`/api/v1/splats/${id}/download`, "GET", token);
+      return { url, fetchedAt: Date.now() };
     },
     PRESIGN_SWR_OPTIONS,
   );
@@ -91,7 +92,10 @@ export default function SplatDetailPage({ params }: { params: Promise<{ id: stri
       if (!token) {
         throw new Error("Not signed in");
       }
-      return { url: (await getColmapPointCloudUrl(token, id)).url, fetchedAt: Date.now() };
+      return {
+        url: await apiFetch<string>(`/api/v1/splats/${id}/point-cloud`, "GET", token),
+        fetchedAt: Date.now(),
+      };
     },
     PRESIGN_SWR_OPTIONS,
   );

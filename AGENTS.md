@@ -4,6 +4,8 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
 
 **Read [`ARCHITECTURE.md`](ARCHITECTURE.md) for the "why" behind every stack choice, and [`RUNBOOK.md`](RUNBOOK.md) for local dev/ops commands before making changes.**
 
+**Don't overengineer.** Solve the problem in front of you, not the general case it might become. No new abstraction, config option, or extensibility hook for a second use case that doesn't exist yet — add it when that use case actually shows up.
+
 **Each fact lives in exactly one of the three docs.** [`ARCHITECTURE.md`](ARCHITECTURE.md) is why — decisions, alternatives rejected, costs accepted. [`RUNBOOK.md`](RUNBOOK.md) is how to run and operate it. This file is what breaks if you don't know it: gotchas, conventions, and current state. Where a gotcha needs its rationale, name the other file instead of restating it.
 
 **Docs and code comments describe current behavior only** — not prior libraries, old version numbers, or "this used to fail with X." Use `git log` for this instead.
@@ -38,7 +40,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 - **`web/proxy.ts` only loads from `web/`'s root, beside `app/`** — not the repo root, not inside `app/`. Next reads it from nowhere else and says nothing when it's misplaced; the symptom is every authenticated route 500ing with "clerkMiddleware() was not run". Confirm `ƒ Proxy (Middleware)` appears in `next build`'s route table.
 - **The matcher skips static files by file extension (`.js`, `.png`, …), not by "the path contains a dot".** A page like `/splats/my.splat.v2` still needs `clerkMiddleware()` to run.
-- **API routes check auth themselves.** Each authenticated handler calls `requireUser()` or `requireClerkUserId()` (`web/lib/server/auth.ts`). Public routes (gallery, `public/splats/[splatId]`, healthz, the worker's token callback) simply don't call those.
+- **API routes check auth themselves.** Each authenticated handler calls `requireUser()` or `requireClerkUserId()` (`web/lib/server/auth.ts`). Public routes (`public/splats/[splatId]`, healthz, the worker's token callback) simply don't call those.
 - **`auth.protect()` in `web/app/(authenticated)/layout.tsx` only redirects unsigned visitors to sign-in.** The API is protected by `requireUser()` / `requireClerkUserId()` in each handler, not by this layout. Next reuses layouts when navigating between sibling routes (`/dashboard` → `/splats/new`), so `auth.protect()` will not re-run. If a page starts rendering protected data on the server, that page needs its own `auth.protect()`.
 - **This Clerk SDK has no `<SignedIn>` / `<SignedOut>`.** Use `<Show when="signed-in">` (`web/components/layout/SiteHeader.tsx`). Pass `fallback` for the signed-out UI. While Clerk is still loading the session, `<Show>` renders nothing — not the fallback.
 - **Set `NEXT_PUBLIC_CLERK_SIGN_IN_URL` and `NEXT_PUBLIC_CLERK_SIGN_UP_URL` at build time**, or Clerk sends users to its hosted Account Portal instead of this app. The paths never change, so `web/Dockerfile` bakes them in as `ENV`. Both pages need an optional catch-all (`web/app/sign-in/[[...sign-in]]/page.tsx`) because Clerk puts verification and SSO steps on sub-paths; a plain `page.tsx` 404s mid-sign-in.
@@ -54,7 +56,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - **`web/` uses TypeScript `^7.0.2` (no JS Compiler API).** Next's typecheck needs `useTypeScriptCli` (default on as of Next `16.3.0`). Without it Next can't load `typescript`, including `web/next.config.ts`. `infra/` has no TypeScript dependency.
 - **There is deliberately no `start` script — `next start` is unsupported under `output: "standalone"`.** Next says so and then serves anyway, so a re-added `pnpm start` looks like it works. `next build` emits `.next/standalone/server.js` (the container's `CMD`), which omits `.next/static`, so running it by hand serves pages with no CSS or JS unless that directory is copied in as `web/Dockerfile` does. Run the container instead ([`RUNBOOK.md`](RUNBOOK.md)).
 - **Server Components reading request-time data need `export const dynamic = "force-dynamic"`**, or `next build` statically prerenders them. They call `web/lib/server/data.ts` directly — not this app's HTTP API.
-- **Playwright `page.route()` can't intercept SSR** (different Node process). Gallery/share pages read the DB via `web/lib/server/data.ts`, so HTTP mocks don't help and the gallery E2E stays `test.skip`. Seed a test DB instead; see Known gaps.
+- **Playwright `page.route()` can't intercept SSR** (different Node process). Share pages read the DB via `web/lib/server/data.ts`, so HTTP mocks don't help. Seed a test DB instead; see Known gaps.
 
 ## Mantine & React Server Components
 
@@ -126,7 +128,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 ### Query patterns
 
-- **UUID-check path params before the DB** — `uuid` columns turn `/api/v1/gallery/abc` into Postgres `22P02` → 500. Use `requireUuid()` (routes) or `isUuid()` (`web/lib/server/data.ts`, null → `notFound()`).
+- **UUID-check path params before the DB** — `uuid` columns turn `/api/v1/splats/abc` into Postgres `22P02` → 500. Use `requireUuid()` (routes) or `isUuid()` (`web/lib/server/data.ts`, null → `notFound()`).
 - **Missing row is `undefined`, not `null`.** Idiom: `const [row] = await getDb().select()…limit(1)` then `if (row === undefined)`.
 - **`onConflictDoNothing()` returns zero rows from `.returning()`.** `getOrCreateUser` uses `onConflictDoUpdate` with no-op `set: { clerkUserId }` so Postgres returns the existing row.
 - **Upsert `set` must reference the column, not a pre-read JS value** — e.g. ``count: sql`${rateLimitCounters.count} + 1` ``. A plain `{ count: n + 1 }` reopens the race. Confirm real SQL with `log_statement='all'` or `drizzle(pool, { logger: true })`.
@@ -169,7 +171,7 @@ Scaffolding (three packages + CI) is in place. Host-run `next dev` can 500 with 
 
 Known gaps, priority order:
 
-1. **E2E asserts nothing.** One skipped gallery spec; pages SSR from the DB with no seed. Seed + un-skip.
+1. **No E2E coverage.** `web/e2e/` has no specs; share/view pages SSR from the DB with no seeded test DB to run against. Seed one and add a spec.
 2. **`web/Dockerfile` never run on AWS** — local podman only; ECS/ECR path unproven.
 3. **Training rasterizes at full photo resolution.** `_load_views` (`worker/pipeline/train.py`) resizes each photo to its COLMAP camera's `width`/`height`, which are the *original* dimensions — COLMAP downsamples for feature detection only and keeps intrinsics in original pixels — so that resize is a no-op and a 12 MP phone photo trains at 12 MP against the reference implementation's ~1600px longest edge. Two consequences: training dominates job wall clock, and every ground-truth image sits in VRAM at full size (~5.9 GB for 40 × 12 MP), so a large enough set OOMs the A10G. Fix is a longest-edge cap in `_load_views` scaling `fx`/`fy`/`cx`/`cy` and `width`/`height` by the same factor, or `K` no longer matches the pixels.
 4. **No maximum photo count or upload size.** `MIN_PHOTOS_PER_SPLAT` has no counterpart and the presign body schema (`web/app/api/v1/splats/[splatId]/photos/presign/route.ts`) is `.min(1)` only. COLMAP's exhaustive matching is O(n²) pairs and the instance runs until `worker/run_job.py` returns, so an oversized upload is unbounded GPU spend. The global daily cap in `process` bounds job count, not job cost ([`ARCHITECTURE.md`](ARCHITECTURE.md)).
