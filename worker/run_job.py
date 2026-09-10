@@ -44,7 +44,7 @@ def _run_reconstruct(settings: Settings) -> int:
         sparse_export.upload_sparse_model(sfm_result.sparse_dir, settings)
         point_cloud_key = sparse_export.export_and_upload_point_cloud(sfm_result.sparse_dir, settings)
 
-        status.report_status(settings, "awaiting_training", colmap_point_cloud_s3_key=point_cloud_key)
+        status.report_status(settings, "awaiting_training", point_cloud_s3_key=point_cloud_key)
         return 0
 
     except Exception as exc:  # noqa: BLE001 — a job failure must always be reported, not just logged

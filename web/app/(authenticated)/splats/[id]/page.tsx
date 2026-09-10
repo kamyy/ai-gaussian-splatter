@@ -82,11 +82,11 @@ export default function SplatDetailPage({ params }: { params: Promise<{ id: stri
   // completion — what makes the COLMAP toggle position available "at any time" on a finished splat, not just during
   // the awaiting_training pause.
   const {
-    data: colmapPointCloud,
-    error: colmapPointCloudError,
-    mutate: refetchColmapPointCloud,
+    data: pointCloud,
+    error: pointCloudError,
+    mutate: refetchPointCloud,
   } = useSWR(
-    job?.colmapPointCloudS3Key ? ["colmap-point-cloud", id] : null,
+    job?.pointCloudS3Key ? ["point-cloud", id] : null,
     async (): Promise<PresignedUrl> => {
       const token = await getToken();
       if (!token) {
@@ -104,7 +104,7 @@ export default function SplatDetailPage({ params }: { params: Promise<{ id: stri
   // expired URL would surface, so it is the moment to replace one that is close to expiring.
   async function handleModeChange(next: ViewerMode) {
     if (next === "colmap_points") {
-      await refreshIfStale(colmapPointCloud, refetchColmapPointCloud);
+      await refreshIfStale(pointCloud, refetchPointCloud);
     } else {
       await refreshIfStale(splatFile, refetchSplatFile);
     }
@@ -125,7 +125,7 @@ export default function SplatDetailPage({ params }: { params: Promise<{ id: stri
   const modeOptions = [
     { label: "Splat", value: "splat" },
     { label: "Trained points", value: "trained_points" },
-    ...(job?.colmapPointCloudS3Key ? [{ label: "COLMAP points", value: "colmap_points" }] : []),
+    ...(job?.pointCloudS3Key ? [{ label: "COLMAP points", value: "colmap_points" }] : []),
   ];
 
   return (
@@ -134,16 +134,12 @@ export default function SplatDetailPage({ params }: { params: Promise<{ id: stri
 
       {splat.status !== "complete" && <JobStatusPoller splatId={id} />}
 
-      {job?.status === "awaiting_training" && colmapPointCloudError && (
+      {job?.status === "awaiting_training" && pointCloudError && (
         <Text c="dimmed">The point cloud isn&apos;t ready yet — still checking.</Text>
       )}
-      {job?.status === "awaiting_training" && !colmapPointCloud && !colmapPointCloudError && <SplatViewerLoading />}
-      {job?.status === "awaiting_training" && colmapPointCloud && (
-        <AwaitingTrainingPanel
-          splatId={id}
-          colmapPointCloudUrl={colmapPointCloud.url}
-          onTrainStarted={() => void refetchJob()}
-        />
+      {job?.status === "awaiting_training" && !pointCloud && !pointCloudError && <SplatViewerLoading />}
+      {job?.status === "awaiting_training" && pointCloud && (
+        <AwaitingTrainingPanel splatId={id} pointCloudUrl={pointCloud.url} onTrainStarted={() => void refetchJob()} />
       )}
 
       {/* The download route collapses "not ready" and "not yours" into one
@@ -159,7 +155,7 @@ export default function SplatDetailPage({ params }: { params: Promise<{ id: stri
             onChange={value => void handleModeChange(value as ViewerMode)}
             data={modeOptions}
           />
-          <SplatViewer mode={mode} splatUrl={splatFile.url} colmapPointCloudUrl={colmapPointCloud?.url ?? null} />
+          <SplatViewer mode={mode} splatUrl={splatFile.url} pointCloudUrl={pointCloud?.url ?? null} />
         </>
       )}
 

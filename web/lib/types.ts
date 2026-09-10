@@ -51,7 +51,7 @@ export interface Job {
   errorMessage: string | null;
   resultS3Key: string | null;
   thumbnailS3Key: string | null;
-  colmapPointCloudS3Key: string | null;
+  pointCloudS3Key: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -112,7 +112,7 @@ rm -rf ./jobdir && mkdir ./jobdir
 # in .env for the same reason SPLAT_ID is: it differs between the two runs.
 #
 # Pipeline output lands in ./jobdir and will persist after the container exits. The reconstruct stage leaves the COLMAP
-# workspace in ./jobdir/colmap and uploads the sparse model and colmap_point_cloud.ply under
+# workspace in ./jobdir/colmap and uploads the sparse model and point_cloud.ply under
 # s3://ai-gaussian-splatter-dev-splats/splats/$SPLAT_ID/.
 podman run --rm \
   --security-opt=label=disable \

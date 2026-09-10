@@ -75,7 +75,7 @@ def test_export_and_upload_point_cloud_writes_raw_rgb_ply(settings, tmp_path, mo
 
     key = export_and_upload_point_cloud(sparse_dir, settings)
 
-    assert key == f"splats/{settings.splat_id}/colmap_point_cloud.ply"
+    assert key == f"splats/{settings.splat_id}/point_cloud.ply"
     downloaded_path = tmp_path / "downloaded.ply"
     s3.download_file(settings.splats_bucket, key, str(downloaded_path))
     ply = PlyData.read(str(downloaded_path))

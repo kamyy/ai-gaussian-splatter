@@ -29,6 +29,13 @@
       "when": 1789050359510,
       "tag": "0003_stale_venom",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789062842901,
+      "tag": "0004_rename_point_cloud_column",
+      "breakpoints": true
     }
   ]
 }

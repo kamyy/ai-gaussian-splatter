@@ -15,7 +15,7 @@ export type ViewerMode = "splat" | "trained_points" | "colmap_points";
 interface SplatViewerProps {
   mode: ViewerMode;
   splatUrl: string | null;
-  colmapPointCloudUrl: string | null;
+  pointCloudUrl: string | null;
 }
 
 /**
@@ -116,13 +116,13 @@ function SplatScene({
 function ViewerSceneManager({
   mode,
   splatUrl,
-  colmapPointCloudUrl,
+  pointCloudUrl,
   onError,
   controlsRef,
 }: {
   mode: ViewerMode;
   splatUrl: string | null;
-  colmapPointCloudUrl: string | null;
+  pointCloudUrl: string | null;
   onError: (message: string) => void;
   controlsRef: React.RefObject<OrbitControlsImpl | null>;
 }) {
@@ -164,11 +164,11 @@ function ViewerSceneManager({
       />
     );
   }
-  if (mode === "colmap_points" && colmapPointCloudUrl) {
+  if (mode === "colmap_points" && pointCloudUrl) {
     return (
       <PointCloudScene
         key="colmap_points"
-        url={colmapPointCloudUrl}
+        url={pointCloudUrl}
         colorMode="raw_rgb"
         onError={onError}
         onFirstLoad={onFirstLoad}
@@ -178,7 +178,7 @@ function ViewerSceneManager({
   return null;
 }
 
-export function SplatViewer({ mode, splatUrl, colmapPointCloudUrl }: SplatViewerProps) {
+export function SplatViewer({ mode, splatUrl, pointCloudUrl }: SplatViewerProps) {
   // The failing mode is stored with the message so only that mode shows it. A bare string would leave one asset's
   // failure pinned over every other toggle position for the rest of the page's life.
   const [error, setError] = useState<{ mode: ViewerMode; message: string } | null>(null);
@@ -193,7 +193,7 @@ export function SplatViewer({ mode, splatUrl, colmapPointCloudUrl }: SplatViewer
 
   // The caller decides which modes it offers, so an unavailable one is not normally reachable. Saying so still beats
   // the alternative when it is, which is an empty canvas that looks like a load that never finishes.
-  const hasAsset = mode === "colmap_points" ? colmapPointCloudUrl !== null : splatUrl !== null;
+  const hasAsset = mode === "colmap_points" ? pointCloudUrl !== null : splatUrl !== null;
 
   return (
     <div style={{ width: "100%", height: "70vh", position: "relative" }}>
@@ -204,7 +204,7 @@ export function SplatViewer({ mode, splatUrl, colmapPointCloudUrl }: SplatViewer
         <ViewerSceneManager
           mode={mode}
           splatUrl={splatUrl}
-          colmapPointCloudUrl={colmapPointCloudUrl}
+          pointCloudUrl={pointCloudUrl}
           onError={handleError}
           controlsRef={controlsRef}
         />
