@@ -1,6 +1,5 @@
 // Zustand store — scoped to genuinely client-only UI state that SWR doesn't cover: upload-queue progress before the
-// server acknowledges it, and rate-limit/error banner visibility. Server-derived data (splats, job status) lives in
-// SWR's cache instead — see lib/hooks.ts.
+// server acknowledges it. Server-derived data (splats, job status) lives in SWR's cache instead — see lib/hooks.ts.
 
 import { create } from "zustand";
 
@@ -13,20 +12,11 @@ export interface UploadItem {
   error?: string;
 }
 
-interface Banner {
-  message: string;
-  variant: "error" | "warning" | "info";
-}
-
 interface AppState {
   uploads: Record<string, UploadItem>; // keyed by filename for the in-progress batch
   setUploadStatus: (filename: string, status: UploadItemStatus, error?: string) => void;
   setUploadProgress: (filename: string, progress: number) => void;
   resetUploads: () => void;
-
-  banner: Banner | null;
-  showBanner: (banner: Banner) => void;
-  dismissBanner: () => void;
 }
 
 export const useAppStore = create<AppState>(set => ({
@@ -55,8 +45,4 @@ export const useAppStore = create<AppState>(set => ({
       },
     })),
   resetUploads: () => set({ uploads: {} }),
-
-  banner: null,
-  showBanner: banner => set({ banner }),
-  dismissBanner: () => set({ banner: null }),
 }));

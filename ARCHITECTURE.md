@@ -54,7 +54,7 @@ M10's baked AMI therefore attacks the smaller half — fixed overhead, not train
 ## Frontend
 
 - Next.js App Router: Open Graph needs server `generateMetadata`, since crawlers don't run JS.
-- UI: **Mantine** over MUI. Native CSS Modules, no CSS-in-JS runtime. Chosen for its small bundle size and for being unopinionated.
+- UI: **MUI** over Mantine. Mantine's `ColorSchemeScript`/`MantineProvider` setup produced SSR hydration mismatches under the App Router; `@mui/material-nextjs`'s `AppRouterCacheProvider` is a mature, documented fix for emotion's SSR style-injection-order problem, the exact failure mode Mantine hit. Trade-off accepted: MUI's default styling engine is emotion, a CSS-in-JS runtime, unlike Mantine's static CSS Modules — a small bundle/runtime cost accepted in exchange for hydration correctness.
 - SWR for server-derived data (job polling via `refreshInterval`).
 - Zustand, not Redux, for pure client UI (upload progress, banners). Zustand needs less boilerplate.
 - `@mkkellogg/gaussian-splats-3d`'s `DropInViewer` runs in r3f via `<primitive>`. It drives itself with Three.js's `onBeforeRender`.

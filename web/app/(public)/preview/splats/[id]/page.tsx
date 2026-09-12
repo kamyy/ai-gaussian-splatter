@@ -1,4 +1,5 @@
-import { Stack, Title } from "@mantine/core";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
@@ -37,8 +38,10 @@ export default async function PublicSplatViewPage({ params }: Props) {
   }
 
   return (
-    <Stack p="md">
-      <Title order={2}>{splat.title}</Title>
+    <Stack spacing={2} sx={{ p: 2 }}>
+      <Typography variant="h2" component="h2">
+        {splat.title}
+      </Typography>
       <SplatViewer mode="splat" splatUrl={splat.splatUrl} pointCloudUrl={null} />
     </Stack>
   );

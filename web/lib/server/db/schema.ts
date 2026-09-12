@@ -140,7 +140,5 @@ export const globalJobCounters = pgTable("global_job_counters", {
 });
 
 export type User = typeof users.$inferSelect;
-export type Splat = typeof splats.$inferSelect;
-export type Photo = typeof photos.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
 export type NewPhoto = typeof photos.$inferInsert;

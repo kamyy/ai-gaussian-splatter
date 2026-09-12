@@ -1,7 +1,10 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { Alert, Button, Stack, Text } from "@mantine/core";
+import Alert from "@mui/material/Alert";
+import Button from "@mui/material/Button";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
 import { useState } from "react";
 
 import { apiFetch } from "@/lib/apiFetch";
@@ -39,14 +42,14 @@ export function AwaitingTrainingPanel({ splatId, pointCloudUrl, onTrainStarted }
   }
 
   return (
-    <Stack>
-      <Text c="dimmed">
+    <Stack spacing={2}>
+      <Typography color="text.secondary">
         COLMAP finished reconstructing camera positions. Review the point cloud below, then start training — training is
         the expensive, GPU-bound step.
-      </Text>
+      </Typography>
       <SplatViewer mode="colmap_points" splatUrl={null} pointCloudUrl={pointCloudUrl} />
-      {error && <Alert color="red">{error}</Alert>}
-      <Button onClick={handleTrain} loading={isStarting} style={{ alignSelf: "flex-start" }}>
+      {error && <Alert severity="error">{error}</Alert>}
+      <Button onClick={handleTrain} loading={isStarting} sx={{ alignSelf: "flex-start" }}>
         Proceed to train
       </Button>
     </Stack>

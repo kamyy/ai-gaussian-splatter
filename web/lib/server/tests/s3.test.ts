@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { photoS3Key, presignPhotoUpload, presignSplatDownload } from "../s3";
+import { photoS3Key, presignPhotoDownload, presignPhotoUpload, presignSplatDownload } from "../s3";
 
 // No AWS stubbing here: getSignedUrl signs locally and issues no request, so these run offline against fake
 // credentials.
@@ -28,6 +28,16 @@ describe("presignSplatDownload", () => {
 
     expect(url).toContain(process.env.SPLATS_BUCKET);
     expect(url).toContain("splats/splat-1/result.ply");
+    expect(url).toContain("X-Amz-Signature=");
+  });
+});
+
+describe("presignPhotoDownload", () => {
+  it("returns a signed URL against UPLOADS_BUCKET, not SPLATS_BUCKET", async () => {
+    const url = await presignPhotoDownload("splats/splat-1/photos/photo-1.jpg");
+
+    expect(url).toContain(process.env.UPLOADS_BUCKET);
+    expect(url).toContain("splats/splat-1/photos/photo-1.jpg");
     expect(url).toContain("X-Amz-Signature=");
   });
 });

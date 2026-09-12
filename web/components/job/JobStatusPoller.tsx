@@ -1,6 +1,11 @@
 "use client";
 
-import { Alert, Badge, Group, Progress, Stack, Text } from "@mantine/core";
+import Alert from "@mui/material/Alert";
+import AlertTitle from "@mui/material/AlertTitle";
+import Chip from "@mui/material/Chip";
+import LinearProgress from "@mui/material/LinearProgress";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
 
 import { useLatestJob } from "@/lib/hooks";
 import { statusColor } from "@/lib/statusColor";
@@ -40,23 +45,40 @@ export function JobStatusPoller({ splatId }: JobStatusPollerProps) {
   const { data: job, error, isLoading } = useLatestJob(splatId);
 
   if (isLoading) {
-    return <Text c="dimmed">Loading job status…</Text>;
+    return <Typography color="text.secondary">Loading job status…</Typography>;
   }
   if (error) {
-    return <Text c="dimmed">No processing job yet.</Text>;
+    return <Typography color="text.secondary">No processing job yet.</Typography>;
   }
   if (!job) {
     return null;
   }
 
+  const inProgress = job.status !== "complete" && job.status !== "failed" && job.status !== "cancelled";
+
   return (
-    <Stack gap="xs">
-      <Group justify="space-between">
-        <Badge color={statusColor(job.status)}>{STATUS_LABELS[job.status]}</Badge>
-      </Group>
-      <Progress value={STATUS_PROGRESS[job.status]} animated={job.status !== "complete" && job.status !== "failed"} />
+    <Stack spacing={1}>
+      <Stack direction="row" sx={{ justifyContent: "space-between" }}>
+        <Chip color={statusColor(job.status)} label={STATUS_LABELS[job.status]} />
+      </Stack>
+      <LinearProgress
+        variant="determinate"
+        value={STATUS_PROGRESS[job.status]}
+        // MUI's LinearProgress has no built-in pulse for a determinate bar (only "indeterminate", which would hide
+        // the percentage). This keeps the percentage while still giving a "still working" visual cue for a
+        // non-terminal status, closer to the old animated bar's intent.
+        sx={
+          inProgress
+            ? {
+                "& .MuiLinearProgress-bar": { animation: "job-progress-pulse 1.4s ease-in-out infinite" },
+                "@keyframes job-progress-pulse": { "0%, 100%": { opacity: 1 }, "50%": { opacity: 0.5 } },
+              }
+            : undefined
+        }
+      />
       {job.status === "failed" && job.errorMessage && (
-        <Alert color="red" title="Processing failed">
+        <Alert severity="error">
+          <AlertTitle>Processing failed</AlertTitle>
           {job.errorMessage}
         </Alert>
       )}

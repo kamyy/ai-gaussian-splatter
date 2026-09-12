@@ -1,6 +1,7 @@
 import { SignUp } from "@clerk/nextjs";
-import { Center } from "@mantine/core";
 import type { Metadata } from "next";
+
+import { Center } from "@/components/layout/Center";
 
 export const metadata: Metadata = {
   title: "Sign up — AI Gaussian Splatter",
@@ -8,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function SignUpPage() {
   return (
-    <Center py="xl">
+    <Center sx={{ py: 4 }}>
       <SignUp />
     </Center>
   );

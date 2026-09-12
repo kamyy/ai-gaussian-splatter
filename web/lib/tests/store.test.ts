@@ -4,7 +4,7 @@ import { useAppStore } from "../store";
 
 describe("useAppStore", () => {
   beforeEach(() => {
-    useAppStore.setState({ uploads: {}, banner: null });
+    useAppStore.setState({ uploads: {} });
   });
 
   it("setUploadStatus creates a new entry with defaults", () => {
@@ -45,13 +45,5 @@ describe("useAppStore", () => {
     expect(uploads["a.jpg"].status).toBe("uploaded");
     expect(uploads["b.jpg"].status).toBe("failed");
     expect(uploads["b.jpg"].error).toBe("boom");
-  });
-
-  it("showBanner and dismissBanner toggle banner state", () => {
-    useAppStore.getState().showBanner({ message: "Rate limited", variant: "error" });
-    expect(useAppStore.getState().banner).toEqual({ message: "Rate limited", variant: "error" });
-
-    useAppStore.getState().dismissBanner();
-    expect(useAppStore.getState().banner).toBeNull();
   });
 });
