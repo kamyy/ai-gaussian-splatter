@@ -2,8 +2,8 @@
   "mcpServers": {
     "clerk": {
       "type": "stdio",
-      "command": "clerk",
-      "args": ["mcp", "run"],
+      "command": "pnpm",
+      "args": ["exec", "clerk", "mcp", "run"],
       "env": {}
     },
     "mui-mcp": {
