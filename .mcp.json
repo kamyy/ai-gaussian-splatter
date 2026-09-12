@@ -9,7 +9,7 @@
     "mui-mcp": {
       "type": "stdio",
       "command": "pnpm",
-      "args": ["dlx", "@mui/mcp@latest"],
+      "args": ["exec", "mcp"],
       "env": {}
     }
   }
