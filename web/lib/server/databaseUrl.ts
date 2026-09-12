@@ -21,7 +21,7 @@ export function databaseSsl(env: Record<string, string | undefined> = process.en
 /**
  * Resolves the Postgres connection string from `DATABASE_HOST` / `DATABASE_PORT` / `DATABASE_NAME` / `DATABASE_USER` /
  * `DATABASE_PASSWORD` — the only shape accepted, everywhere from local dev to production, since ECS cannot itself
- * assemble a `postgresql://` URL out of the Secrets Manager JSON blob RDS generates (see `infra/stacks/web_stack.py`).
+ * assemble a `postgresql://` URL out of the Secrets Manager JSON blob RDS generates (see `infra/web.tf`).
  *
  * Credentials are percent-encoded: an RDS-generated password can contain `:` `?` `#` `%`, any of which would corrupt
  * the URL otherwise; `pg` decodes them back on connect.

@@ -1,4 +1,3 @@
-pnpm run guard:cdk-context
 pnpm run format-staged
 pnpm biome:ci
 pnpm run scripts:check

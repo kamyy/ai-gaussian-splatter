@@ -16,13 +16,13 @@ Built with the help of [Claude Code](https://claude.com/product/claude-code) and
 
 **Backend** — Next.js Route Handlers (REST API) · Drizzle ORM · Postgres (RDS) · Clerk (auth) · Python COLMAP + gsplat pipeline on an EC2 GPU spot instance per job
 
-**Infra** — AWS CDK (Python) · ECS Fargate (Spot) behind an ALB · S3 · ECR · Route 53 / ACM · GitHub Actions (CI/CD via OIDC)
+**Infra** — Terraform · ECS Fargate (Spot) behind an ALB · S3 · ECR · Route 53 / ACM · GitHub Actions (CI/CD via OIDC)
 
 ## Structure
 
 - `web/` — Next.js (App Router) + MUI + SWR + Zustand + react-three-fiber, and the REST API as Route Handlers (auth, rate limiting, job orchestration) backed by Drizzle
 - `worker/` — COLMAP + gsplat reconstruction pipeline, run on a GPU spot instance per job
-- `infra/` — AWS CDK (Python)
+- `infra/` — Terraform
 
 ## Quick start
 
@@ -38,7 +38,7 @@ cd web && pnpm install && pnpm test && pnpm dev
 cd worker && uv sync --group dev && uv run pytest
 
 # Infra
-cd infra && pnpm install && uv sync --group dev && uv run pytest && pnpm cdk:synth
+cd infra && terraform init -backend=false && terraform validate && terraform test
 ```
 
 ## License

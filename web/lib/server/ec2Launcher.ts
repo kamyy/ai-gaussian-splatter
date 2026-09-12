@@ -9,7 +9,7 @@ import { getEnv } from "./env";
 
 /**
  * Direct spot-instance-per-job launch — no SQS/Batch/Step Functions. IAM instance profile is scoped externally
- * (infra/stacks/worker_iam_stack.py) to exactly: S3 read (uploads bucket), S3 read/write (splats bucket),
+ * (infra/worker_iam.tf) to exactly: S3 read (uploads bucket), S3 read/write (splats bucket),
  * ec2:TerminateInstances on itself.
  */
 type WorkerStage = "reconstruct" | "train";
@@ -57,7 +57,7 @@ docker run --rm --gpus all \\
 `;
 }
 
-// Populated from the ECR repo CDK stack output once infra is deployed. Placeholders for local/pre-deploy development.
+// Populated from infra/'s ECR repository output once infra is deployed. Placeholders for local/pre-deploy development.
 // Shared by both web/app/api/v1/splats/[splatId]/process/route.ts (stage "reconstruct") and .../train/route.ts
 // (stage "train"), which launch the same worker image with a different STAGE.
 export function workerImageUri(): string {
@@ -137,9 +137,9 @@ export async function launchJob(params: {
           ResourceType: "instance",
           Tags: [
             { Key: "Name", Value: `ai-gaussian-splatter-worker-${params.jobId}` },
-            // Must match infra/stacks/tags.py's WORKER_TAG_KEY/VALUE and worker_iam_stack.py's self-termination grant.
-            // That's a separate uv package, so the constant can't be imported directly, and the two must stay in sync
-            // by hand.
+            // Must match infra/locals.tf's worker_tag_key/worker_tag_value and worker_iam.tf's self-termination
+            // grant. That's a separate Terraform config, so the constant can't be imported directly, and the two
+            // must stay in sync by hand.
             { Key: "Role", Value: "worker" },
             { Key: "JobId", Value: params.jobId },
           ],

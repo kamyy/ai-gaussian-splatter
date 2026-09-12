@@ -62,8 +62,8 @@ describe("launchJob", () => {
     const tags = runInstancesInput().TagSpecifications?.[0].Tags ?? [];
     const byKey = Object.fromEntries(tags.map(t => [t.Key, t.Value]));
 
-    // Role=worker is what infra/stacks/worker_iam_stack.py's self-termination grant keys off. If this drifts, the
-    // worker can no longer terminate itself.
+    // Role=worker is what infra/worker_iam.tf's self-termination grant keys off. If this drifts, the worker can no
+    // longer terminate itself.
     expect(byKey.Role).toBe("worker");
     expect(byKey.JobId).toBe("job-123");
     expect(byKey.Name).toBe("ai-gaussian-splatter-worker-job-123");

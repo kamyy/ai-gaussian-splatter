@@ -62,7 +62,7 @@ RUN pnpm run build
 
 
 # ======================================================================================================================
-# migrator — SHIPPED. ECS task that applies db migrations, run between the two cdk deploys in ci.yml.
+# migrator — SHIPPED. ECS task that applies db migrations, run between the two terraform applies in ci.yml.
 # ======================================================================================================================
 FROM node:24-alpine AS migrator
 
@@ -85,15 +85,15 @@ COPY --chown=app:app lib/server/databaseUrl.ts ./lib/server/databaseUrl.ts
 COPY --chown=app:app scripts/db-migrate.cjs ./scripts/db-migrate.cjs
 
 # RDS certs chain to Amazon's own CA, absent from Node's trust store. This path must stay in step with
-# RDS_CA_BUNDLE_PATH (infra/stacks/web_stack.py), which sets DATABASE_SSL_CA to it in the task definition.
+# local.rds_ca_bundle_path (infra/locals.tf), which sets DATABASE_SSL_CA to it in the task definition.
 # sha256sum -c pins the download by hand rather than ADD's --checksum flag, which needs a newer buildah than the one
 # bundled with the CI runner's podman package. If AWS updates the bundle this fails, printing the digest to paste in
 # here.
 #
 # Deliberately NOT paired with `ENV DATABASE_SSL_CA=...` here: that would make every run of this image demand TLS,
 # breaking a local container pointed at a plain Postgres with "The server does not support SSL connections". Using the
-# bundle is a deployment decision, so infra/stacks/web_stack.py sets DATABASE_SSL_CA. Keep the two paths in step if this
-# one ever moves.
+# bundle is a deployment decision, so infra/web.tf sets DATABASE_SSL_CA. Keep the two paths in step if this one ever
+# moves.
 RUN mkdir -p /app/certs \
   && wget -qO /app/certs/rds-global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
   && echo "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3  /app/certs/rds-global-bundle.pem" \
@@ -115,14 +115,14 @@ FROM node:24-alpine AS web
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Matches infra/stacks/web_stack.py's CONTAINER_PORT, which the load balancer's target group also health-checks on.
+# Matches infra/locals.tf's container_port, which the load balancer's target group also health-checks on.
 ENV PORT=8000
 ENV HOSTNAME=0.0.0.0
 EXPOSE 8000
 
 RUN addgroup -g 1001 -S app && adduser -u 1001 -S app -G app
 
-# As in migrator: Amazon's RDS CA bundle, at a path in step with RDS_CA_BUNDLE_PATH (infra/stacks/web_stack.py). Not
+# As in migrator: Amazon's RDS CA bundle, at a path in step with local.rds_ca_bundle_path (infra/locals.tf). Not
 # paired with an unconditional ENV DATABASE_SSL_CA here — see migrator's stage above for why. sha256sum -c verifies the
 # download by hand; see migrator's stage above for why not ADD --checksum.
 RUN mkdir -p /app/certs \

@@ -4,7 +4,7 @@ Why the system is shaped this way: decisions, alternatives rejected, costs accep
 
 ## Monorepo tooling
 
-- **pnpm**, not npm or yarn, for both `web/` and `infra/`. `infra/` only needs it for the npm-distributed CDK CLI ([`AGENTS.md`](AGENTS.md)).
+- **pnpm**, not npm or yarn, for `web/` and the root scripts. `infra/` needs no Node tooling at all: Terraform ships as a standalone CLI binary, installed directly rather than through a package manager.
 - Its content-addressable store keeps one copy of each package version on disk. Every project that needs a package gets it hard-linked in, rather than duplicating it per `node_modules`.
 - Its `node_modules` layout also only exposes packages a project actually lists in `package.json`. Code can't accidentally import an undeclared transitive dependency — the "phantom dependency" problem npm's and yarn's flat layout allows.
 
@@ -80,15 +80,15 @@ M10's baked AMI therefore attacks the smaller half — fixed overhead, not train
 
 ## Infra
 
-- Infra: **AWS CDK (Python)**. Shares `worker/`'s `uv`/`ruff`/`mypy` tooling.
-- The CDK CLI is still npm-only, so `infra/` keeps a minimal `package.json`.
-- Six stacks:
+- Infra: **Terraform**. One root module (`infra/`) holding one state, plus a separate `infra/bootstrap/` module (its own local state) that exists only to create the S3 bucket the root module's state lives in.
+- Six logical areas, one per `.tf` file rather than one per CloudFormation-style stack — a single state resolves the dependencies between them directly, so there's no cross-stack export/import to keep in sync:
   - **network** — VPC, subnets, security groups.
   - **data** — RDS, S3.
   - **registry** — ECR alone, so the image can push before the service exists.
-  - **worker-iam** — IAM for the GPU worker instances.
+  - **worker_iam** — IAM for the GPU worker instances.
   - **web** — ALB + Fargate.
-  - **budgets** — `us-east-1`, since billing metrics only exist there.
+  - **budgets** — a second, `us-east-1`-aliased provider, since billing metrics only exist there.
+- `infra/tests/*.tftest.hcl` (native `terraform test`, `mock_provider "aws" {}`) replaces hand-written assertions against synthesized templates with the same offline, zero-credential guarantee, run by `.github/workflows/ci.yml`'s `infra` job on every PR.
 
 ## Hosting
 
@@ -109,36 +109,32 @@ The web app runs on **Fargate** behind an **Application Load Balancer** (`Applic
 - Tradeoff: `web_security_group`'s single ingress rule, from `alb_security_group` on `CONTAINER_PORT`, is the only network control between the tasks and the internet.
 - RDS is `PRIVATE_ISOLATED`: it has no outbound need.
 - The subnet type must be explicit — `PRIVATE_WITH_EGRESS` + `nat_gateways=0` synthesizes "isolated in everything but name," which isn't the same declaration.
-- Both security groups live in `infra/stacks/network_stack.py`. Declaring the ALB group in `WebStack` instead would make the ingress rule cross-stack and trigger a `DependencyCycle`.
+- Both security groups live in `infra/network.tf`. A single Terraform state has no cross-stack boundary for declaring the ALB group elsewhere to trip over.
 
 ### TLS & DNS
 
 - TLS terminates at the ALB (ACM cert for `ai-gaussian-splatter.orky.net`; 80→443).
-- The cert is declared in `infra/stacks/web_stack.py` so it lands in the ALB's region — ALBs can't use out-of-region certs.
+- The cert is declared in `infra/web.tf` so it lands in the ALB's region — ALBs can't use out-of-region certs.
 - `us-east-1` only matters for CloudFront, which this app doesn't use.
-- Route 53 zone is *imported* (`from_hosted_zone_attributes`, zone ID as CDK context).
-- Not looked up: a lookup needs live credentials and writes account-specific data into `cdk.context.json`.
-- Not created either: that would put the zone itself in the stack's resource set.
-- Deploy only adds records to the existing zone.
+- Route 53 zone is referenced by ID only (`var.hosted_zone_id`), never looked up or created — this config only ever adds records to an existing zone.
 
 ### Image tags
 
-- The web image is tagged per release with the commit SHA, in an ECR repository this app owns (`infra/stacks/registry_stack.py`). The tag travels as CDK context.
+- The web image is tagged per release with the commit SHA, in an ECR repository this app owns (`infra/registry.tf`). The tag travels as a Terraform variable (`web_image_tag`).
 - A moving tag like `latest` would be simpler to push, but it leaves every release sharing one task definition. That disarms the deployment circuit breaker: rollback restarts the previous deployment against that same string, so Fargate re-pulls whatever was pushed most recently — the image that just failed.
 - Per-release tags make each deploy its own task definition instead. The repository is also `IMMUTABLE`, so a pushed tag can never be repointed.
 - Costs of this approach:
-  - A context value is required on every `cdk` invocation.
+  - A variable is required on every `terraform apply`.
   - Rebuilding an already-pushed commit is rejected at push time.
   - The rollback window is bounded by `RELEASES_KEPT`, not unlimited.
-- Rejected: `ContainerImage.from_asset`, which solves the same problem by having CDK build and publish into the bootstrap asset repository. It removes the registry stack and the push step entirely, but it moves the images out of a repository the app stacks own.
 
 ### Clerk secret
 
-- The Clerk secret is imported the same way (`from_secret_complete_arn`, ARN as CDK context), not created.
-- A stack-created secret comes up holding CloudFormation's generated random value. ECS resolves secrets at task start, not on live update, so putting the real key in afterward would cost a second rollout on every fresh environment.
-- Creating it would also claim the secret's name, making a hand-created secret collide as an out-of-band `ResourceExistsException` on the next deploy.
-- Complete ARN, not `from_secret_name_v2`'s partial one, because ECS matches `valueFrom` on the six-character suffix.
-- Cost: a second required context value on every `cdk` invocation, and a credential whose lifecycle no stack owns.
+- The Clerk secret is referenced by its complete ARN (`var.clerk_secret_key_arn`), not created.
+- A Terraform-created secret comes up holding a value this config would have to generate and never actually use. ECS resolves secrets at task start, not on live update, so putting the real key in afterward would cost a second rollout on every fresh environment.
+- Creating it would also claim the secret's name, making a hand-created secret collide as an out-of-band `ResourceExistsException` on the next apply.
+- Complete ARN, not just the secret name, because ECS matches a task definition's `valueFrom` on the six-character suffix Secrets Manager assigns.
+- Cost: a second required variable on every `terraform apply`, and a credential whose lifecycle nothing in this config owns.
 
 ## Abuse protection
 
@@ -150,7 +146,7 @@ Three request-path layers (`web/lib/server/rateLimit.ts`). A per-user quota alon
 2. Per-user, alongside it.
 3. Global daily job cap, in `process` only — bounds worst-case GPU spend regardless of caller.
 
-Ops fallback: AWS Budget + CloudWatch billing alarm (`infra/stacks/budgets_stack.py`) for spend the request path never sees.
+Ops fallback: AWS Budget + CloudWatch billing alarm (`infra/budgets.tf`) for spend the request path never sees.
 
 ## CI/CD
 
@@ -167,25 +163,22 @@ Ops fallback: AWS Budget + CloudWatch billing alarm (`infra/stacks/budgets_stack
 
 ## Migration ordering
 
-Two separate images are in play here: the **migrator image** (runs the one-off migration task) and the **web image** (runs the service). Both are built from the same commit, but `cdk deploy` tracks their tags independently — `migrateImageTag` for the migrator image, `webImageTag` for the web image.
+Two separate images are in play here: the **migrator image** (runs the one-off migration task) and the **web image** (runs the service). Both are built from the same commit, but `terraform apply` tracks their tags independently — `migrate_image_tag` for the migrator image, `web_image_tag` for the web image.
 
 The core ordering problem:
 
 - A migration must finish before any task running the new **web image** starts serving traffic.
 - But `ecs:RunTask` can only run an already-registered task-definition revision.
-- And a single `cdk deploy` that updates both the migrator image and the web image together gives CloudFormation no place to pause between them.
+- And a single `terraform apply` that updates both the migrator image and the web image together gives Terraform no place to pause between them.
 
-Solved by giving the migration task its own CDK context flag (`migrateImageTag`, defaulting to `webImageTag` so every existing manual invocation is unaffected), then calling `cdk deploy` twice:
+Solved by giving the migration task its own variable (`migrate_image_tag`, defaulting to `web_image_tag` so every existing manual invocation is unaffected), then calling `terraform apply` twice:
 
-1. Deploy with `migrateImageTag` on the new commit's SHA but `webImageTag` still on the old one. This registers the migration task against the new **migrator image** while the service stays pinned to its old **web image** — no diff on the service, so no rollout.
-2. Only if the migration task exits 0, deploy again with `webImageTag` also updated to the new SHA (now equal to `migrateImageTag`). This second deploy is what actually moves the service onto the new **web image**.
+1. Apply with `migrate_image_tag` on the new commit's SHA but `web_image_tag` still on the old one. This registers the migration task against the new **migrator image** while the service stays pinned to its old **web image** — no diff on the service, so no rollout.
+2. Only if the migration task exits 0, apply again with `web_image_tag` also updated to the new SHA (now equal to `migrate_image_tag`). This second apply is what actually moves the service onto the new **web image**.
 
-CDK stays the sole owner of "what's currently deployed" — nothing calls `aws ecs update-service` out of band.
+Terraform stays the sole owner of "what's currently deployed" — nothing calls `aws ecs update-service` out of band.
 
-Rejected alternatives:
-
-- **A CloudFormation custom resource** (Lambda-backed) gating the service on migration success within one `cdk deploy`. Technically tighter — one deploy call, CloudFormation-native sequencing — but it trades a plain, linear GitHub Actions log, where every step is a visible `aws`/`cdk` command, for a Lambda whose failure mode is debugged through a different service's logs.
-- **Running migrations from a human's laptop through a bastion.** `DataStack`'s RDS instance sits in an isolated subnet with no NAT gateway and no security-group path for an ad hoc host, and no bastion exists in this infra. So there's no manual fallback: a bad migration is fixed the same way as any other bug, with a corrective migration through a normal PR (see [Fixing a bad migration](RUNBOOK.md#fixing-a-bad-migration)).
+Rejected alternative: **running migrations from a human's laptop through a bastion.** The RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway and no security-group path for an ad hoc host, and no bastion exists in this infra. So there's no manual fallback: a bad migration is fixed the same way as any other bug, with a corrective migration through a normal PR (see [Fixing a bad migration](RUNBOOK.md#fixing-a-bad-migration)).
 
 A rolled-back *service* deployment does not undo an already-applied migration. Rollback and "was the migration a good idea" are orthogonal once the migration has committed. This is why every migration has to follow the expand/contract discipline in [`AGENTS.md`](AGENTS.md), not an incidental style preference.
 
@@ -193,10 +186,8 @@ A rolled-back *service* deployment does not undo an already-applied migration. R
 
 - CI authenticates to AWS via **GitHub OIDC**, not static IAM access keys — no long-lived credential to leak or rotate.
 - The identity token's `sub` claim scopes it specifically to `repo:<owner>@<ownerId>/<repo>@<repoId>:ref:refs/heads/main`, so PRs and forks can't assume the role.
-- That role, `ai-gaussian-splatter-ci-deploy`, is created by hand once ([Creating the OIDC provider and CI role](RUNBOOK.md#creating-the-oidc-provider-and-ci-role)), not by a CDK stack, for two reasons:
-  - It's chicken-and-egg: CI can't deploy the stack that grants CI its own deploy permission.
-  - It's account-wide and security-sensitive: it can `sts:AssumeRole` on CDK's bootstrap roles, whose `CloudFormationExecutionRole` carries near-admin permissions by default, not permissions scoped to this app's stacks. Same reasoning that already keeps the Clerk secret and `AWSServiceRoleForEC2Spot` as hand-run, RUNBOOK-documented one-time setup rather than stack-managed resources.
-- `cdk deploy` itself runs under that role via `sts:AssumeRole` on CDK's own bootstrap roles (created by `cdk bootstrap`), rather than granting the CI role broad CloudFormation/IAM permissions directly.
+- That role, `ai-gaussian-splatter-ci-deploy`, is created by hand once ([Creating the OIDC provider and CI role](RUNBOOK.md#creating-the-oidc-provider-and-ci-role)), not by this config, because it's chicken-and-egg: CI can't apply the config that grants CI its own apply permission.
+- Unlike a design that delegates through a separate bootstrap role, this role holds the AWS permissions `terraform apply` itself needs directly — ec2, ecr, rds, s3, iam, ecs, elasticloadbalancing, route53, acm, kms, sns, budgets, cloudwatch, secretsmanager — scoped by resource-name prefix where a service supports it. Same reasoning that already keeps the Clerk secret and `AWSServiceRoleForEC2Spot` as hand-run, RUNBOOK-documented one-time setup rather than Terraform-managed resources: whoever can grant broad infrastructure permissions to a CI role is a step this repo keeps out of any automated apply.
 
 ## Testing
 

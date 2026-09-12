@@ -18,8 +18,13 @@ dist/
 build/
 .turbo/
 
-# CDK
-infra/cdk.out/
+# Terraform
+infra/**/.terraform/
+infra/**/*.tfstate*
+infra/**/crash.log*
+infra/**/override.tf*
+infra/**/*.tfvars
+!infra/**/*.tfvars.example
 
 # Env / secrets
 .env
