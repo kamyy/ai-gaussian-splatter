@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "clerk": {
+      "type": "stdio",
+      "command": "clerk",
+      "args": ["mcp", "run"],
+      "env": {}
+    },
+    "mui-mcp": {
+      "type": "stdio",
+      "command": "pnpm",
+      "args": ["dlx", "@mui/mcp@latest"],
+      "env": {}
+    }
+  }
+}
