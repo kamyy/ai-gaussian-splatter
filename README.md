@@ -12,7 +12,7 @@ Built with the help of [Claude Code](https://claude.com/product/claude-code) and
 
 ## Tech stack
 
-**Frontend** — Next.js (App Router) · Mantine · SWR · Zustand · react-three-fiber (`@mkkellogg/gaussian-splats-3d` for splat rendering)
+**Frontend** — Next.js (App Router) · MUI · SWR · Zustand · react-three-fiber (`@mkkellogg/gaussian-splats-3d` for splat rendering)
 
 **Backend** — Next.js Route Handlers (REST API) · Drizzle ORM · Postgres (RDS) · Clerk (auth) · Python COLMAP + gsplat pipeline on an EC2 GPU spot instance per job
 
@@ -20,7 +20,7 @@ Built with the help of [Claude Code](https://claude.com/product/claude-code) and
 
 ## Structure
 
-- `web/` — Next.js (App Router) + Mantine + SWR + Zustand + react-three-fiber, and the REST API as Route Handlers (auth, rate limiting, job orchestration) backed by Drizzle
+- `web/` — Next.js (App Router) + MUI + SWR + Zustand + react-three-fiber, and the REST API as Route Handlers (auth, rate limiting, job orchestration) backed by Drizzle
 - `worker/` — COLMAP + gsplat reconstruction pipeline, run on a GPU spot instance per job
 - `infra/` — AWS CDK (Python)
 

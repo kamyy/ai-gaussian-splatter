@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { type Box3, type BufferGeometry, Float32BufferAttribute } from "three";
 import { PLYLoader } from "three/examples/jsm/loaders/PLYLoader.js";
 
+import { AXES_HELPER_SIZE } from "./constants";
+
 // Inverse-sigmoid DC-term convention worker/pipeline/export.py documents: color = SH_C0 * f_dc + 0.5. Only
 // "trained_points" mode needs this — the COLMAP point cloud already carries plain 0-255 red/green/blue, which
 // PLYLoader decodes into a standard color attribute on its own.
@@ -81,12 +83,14 @@ export function PointCloudScene({ url, colorMode, onError, onFirstLoad }: PointC
     };
   }, [colorMode, onError, onFirstLoad]);
 
-  if (!geometry) {
-    return null;
-  }
   return (
-    <points geometry={geometry}>
-      <pointsMaterial vertexColors size={0.01} sizeAttenuation />
-    </points>
+    <>
+      <axesHelper args={[AXES_HELPER_SIZE]} />
+      {geometry && (
+        <points geometry={geometry}>
+          <pointsMaterial vertexColors size={0.01} sizeAttenuation />
+        </points>
+      )}
+    </>
   );
 }

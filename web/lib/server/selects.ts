@@ -1,4 +1,4 @@
-import { jobs, splats } from "./db/schema";
+import { jobs, photos, splats } from "./db/schema";
 
 /**
  * Which columns responses may expose.
@@ -27,4 +27,12 @@ export const jobColumns = {
   pointCloudS3Key: jobs.pointCloudS3Key,
   createdAt: jobs.createdAt,
   updatedAt: jobs.updatedAt,
+};
+
+export const photoColumns = {
+  id: photos.id,
+  splatId: photos.splatId,
+  s3Key: photos.s3Key,
+  originalFilename: photos.originalFilename,
+  createdAt: photos.createdAt,
 };

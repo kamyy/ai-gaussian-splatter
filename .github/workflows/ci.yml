@@ -67,8 +67,8 @@ jobs:
       # bundle points at Clerk's hosted Account Portal rather than the app's own sign-in page.
       NEXT_PUBLIC_CLERK_SIGN_IN_URL: /sign-in
       NEXT_PUBLIC_CLERK_SIGN_UP_URL: /sign-up
-      NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: /dashboard
-      NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: /dashboard
+      NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: /splats
+      NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: /splats
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test
       DATABASE_HOST: localhost
       DATABASE_PORT: "5432"

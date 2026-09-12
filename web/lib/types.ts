@@ -12,7 +12,6 @@ export const SPLAT_STATUSES = ["draft", "uploading", "ready_to_process", "proces
 export type SplatStatus = (typeof SPLAT_STATUSES)[number];
 
 export const PHOTO_UPLOAD_STATUSES = ["pending", "uploaded", "failed"] as const;
-export type PhotoUploadStatus = (typeof PHOTO_UPLOAD_STATUSES)[number];
 
 export const JOB_STATUSES = [
   "queued",
@@ -38,10 +37,26 @@ export interface Splat {
   createdAt: string;
 }
 
+// GET /api/v1/splats — what the carousel needs per splat without an N+1 call per card. thumbnailPhotoUrl is a
+// presigned GET for the first uploaded photo, distinct from Splat.thumbnailS3Key (the worker-rendered splat preview,
+// only set once a job completes).
+export interface SplatListItem extends Splat {
+  hasUploadedPhotos: boolean;
+  hasPointCloud: boolean;
+  hasTrainedSplat: boolean;
+  thumbnailPhotoUrl: string | null;
+}
+
 export interface PhotoPresignItem {
   photoId: string;
   presignedPutUrl: string;
   s3Key: string;
+}
+
+export interface PhotoListItem {
+  id: string;
+  originalFilename: string;
+  url: string;
 }
 
 export interface Job {

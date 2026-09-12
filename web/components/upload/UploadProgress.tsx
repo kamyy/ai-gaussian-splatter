@@ -1,14 +1,17 @@
 "use client";
 
-import { Group, Progress, Stack, Text, ThemeIcon } from "@mantine/core";
-
+import Box from "@mui/material/Box";
+import LinearProgress from "@mui/material/LinearProgress";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import type { UploadItemStatus } from "@/lib/store";
 import { useAppStore } from "@/lib/store";
 
-const STATUS_COLOR: Record<string, string> = {
-  pending: "gray",
-  uploading: "blue",
-  uploaded: "green",
-  failed: "red",
+const STATUS_COLOR: Record<UploadItemStatus, "primary" | "info" | "success" | "error"> = {
+  pending: "primary",
+  uploading: "info",
+  uploaded: "success",
+  failed: "error",
 };
 
 export function UploadProgress() {
@@ -20,17 +23,39 @@ export function UploadProgress() {
   }
 
   return (
-    <Stack gap="xs">
+    <Stack spacing={1}>
       {items.map(item => (
-        <Group key={item.filename} justify="space-between" wrap="nowrap">
-          <Text size="sm" truncate style={{ flex: 1 }}>
+        <Stack
+          key={item.filename}
+          direction="row"
+          spacing={1}
+          sx={{ justifyContent: "space-between", flexWrap: "nowrap", alignItems: "center" }}
+        >
+          <Typography variant="body2" noWrap sx={{ flex: 1 }}>
             {item.filename}
-          </Text>
-          <Progress value={item.progress} w={120} color={STATUS_COLOR[item.status]} />
-          <ThemeIcon size="sm" color={STATUS_COLOR[item.status]} variant="light">
-            <Text size="xs">{item.status === "uploaded" ? "✓" : item.status === "failed" ? "✕" : "…"}</Text>
-          </ThemeIcon>
-        </Group>
+          </Typography>
+          <LinearProgress
+            variant="determinate"
+            value={item.progress}
+            color={STATUS_COLOR[item.status]}
+            sx={{ width: 120 }}
+          />
+          <Box
+            sx={{
+              width: 24,
+              height: 24,
+              borderRadius: "50%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              bgcolor: `${STATUS_COLOR[item.status]}.main`,
+            }}
+          >
+            <Typography variant="caption">
+              {item.status === "uploaded" ? "✓" : item.status === "failed" ? "✕" : "…"}
+            </Typography>
+          </Box>
+        </Stack>
       ))}
     </Stack>
   );

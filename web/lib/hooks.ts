@@ -7,7 +7,7 @@
 import { useAuth } from "@clerk/nextjs";
 import useSWR from "swr";
 import { apiFetch } from "./apiFetch";
-import type { Job, JobStatus, Splat } from "./types";
+import type { Job, JobStatus, PhotoListItem, Splat, SplatListItem } from "./types";
 
 // Poll rate per phase; 0 is how SWR is told to stop, and only an ended status may use it. SWR keys its polling effect
 // on this function's identity rather than on the data, so once the function returns 0 it schedules no further timer
@@ -41,43 +41,56 @@ function refreshInterval(job: Job | undefined) {
 export function useSplats() {
   const { getToken } = useAuth();
 
-  const fetcher = async () => {
+  return useSWR("splats", async () => {
     const token = await getToken();
     if (token) {
-      return apiFetch<Splat[]>("/api/v1/splats", "GET", token);
+      return apiFetch<SplatListItem[]>("/api/v1/splats", "GET", token);
     }
     throw new Error("Not signed in");
-  };
-
-  return useSWR("splats", fetcher);
+  });
 }
 
-export function useSplat(splatId: string) {
+// splatId is nullable so AuthHeader (web/components/layout/AuthHeader.tsx) can call this unconditionally with
+// whatever id it parses out of the current path, or null off a route with no splat in it, rather than skipping the
+// hook call — conditional hook calls aren't allowed.
+export function useSplat(splatId: string | null) {
   const { getToken } = useAuth();
 
-  const fetcher = async () => {
+  return useSWR(splatId ? ["splat", splatId] : null, async () => {
     const token = await getToken();
     if (token) {
       return apiFetch<Splat>(`/api/v1/splats/${splatId}`, "GET", token);
     }
     throw new Error("Not signed in");
-  };
+  });
+}
 
-  return useSWR(["splat", splatId], fetcher);
+export function usePhotos(splatId: string) {
+  const { getToken } = useAuth();
+
+  return useSWR(["photos", splatId], async () => {
+    const token = await getToken();
+    if (token) {
+      return apiFetch<PhotoListItem[]>(`/api/v1/splats/${splatId}/photos`, "GET", token);
+    }
+    throw new Error("Not signed in");
+  });
 }
 
 export function useLatestJob(splatId: string) {
   const { getToken } = useAuth();
 
-  const fetcher = async () => {
-    const token = await getToken();
-    if (token) {
-      return apiFetch<Job>(`/api/v1/splats/${splatId}/jobs/latest`, "GET", token);
-    }
-    throw new Error("Not signed in");
-  };
-
-  return useSWR(["latest-job", splatId], fetcher, {
-    refreshInterval,
-  });
+  return useSWR(
+    ["latest-job", splatId],
+    async () => {
+      const token = await getToken();
+      if (token) {
+        return apiFetch<Job>(`/api/v1/splats/${splatId}/jobs/latest`, "GET", token);
+      }
+      throw new Error("Not signed in");
+    },
+    {
+      refreshInterval,
+    },
+  );
 }

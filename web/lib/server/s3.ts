@@ -39,3 +39,10 @@ export async function presignSplatDownload(splatsBucketKey: string): Promise<str
   const command = new GetObjectCommand({ Bucket: env.SPLATS_BUCKET, Key: splatsBucketKey });
   return getSignedUrl(s3Client(), command, { expiresIn: PRESIGN_EXPIRY_SECONDS });
 }
+
+/** Uploaded photos live in UPLOADS_BUCKET (see presignPhotoUpload above), not SPLATS_BUCKET. */
+export async function presignPhotoDownload(uploadsBucketKey: string): Promise<string> {
+  const env = getEnv();
+  const command = new GetObjectCommand({ Bucket: env.UPLOADS_BUCKET, Key: uploadsBucketKey });
+  return getSignedUrl(s3Client(), command, { expiresIn: PRESIGN_EXPIRY_SECONDS });
+}

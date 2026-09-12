@@ -47,3 +47,28 @@ a {
     color-scheme: dark;
   }
 }
+
+/* Used by the splat carousel (web/components/splats/SplatCarousel.tsx) and the photo filmstrip
+(web/components/splats/PhotoFilmstrip.tsx) — both are native overflow-scroll containers, not a JS carousel library, so
+the browser's own scrollbar is the only affordance; this just narrows it instead of leaving each platform's default
+width. `scrollbar-width` covers Firefox, the `::-webkit-scrollbar*` rules cover Chromium/WebKit. */
+/* #adb5bd is a fixed value (not theme-driven) since this app is dark-mode-only with no color
+variation to track. */
+.thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #adb5bd transparent;
+}
+
+.thin-scrollbar::-webkit-scrollbar {
+  width: 0.375rem;
+  height: 0.375rem;
+}
+
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #adb5bd;
+  border-radius: 0.1875rem;
+}

@@ -6,8 +6,7 @@ import { afterEach } from "vitest";
 // every render stays in the document and later tests match elements left behind by earlier ones.
 afterEach(cleanup);
 
-// jsdom doesn't implement matchMedia. Mantine's color-scheme detection needs it, so component tests using
-// MantineProvider fail without this.
+// jsdom doesn't implement matchMedia, which some MUI internals probe for.
 if (typeof window !== "undefined" && !window.matchMedia) {
   window.matchMedia = (query: string) => ({
     matches: false,
@@ -21,8 +20,7 @@ if (typeof window !== "undefined" && !window.matchMedia) {
   });
 }
 
-// jsdom doesn't implement ResizeObserver either. Mantine's SegmentedControl uses one (FloatingIndicator, to track the
-// active segment's size) — never needed until this component's first use in the app.
+// jsdom doesn't implement ResizeObserver either. PhotoFilmstrip.tsx uses one directly to measure its own body height.
 if (typeof window !== "undefined" && !window.ResizeObserver) {
   window.ResizeObserver = class {
     observe() {}

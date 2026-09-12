@@ -1,21 +1,26 @@
 "use client";
 
-import { Center, Loader, Text } from "@mantine/core";
 import { DropInViewer, SceneFormat } from "@mkkellogg/gaussian-splats-3d";
+import Box from "@mui/material/Box";
+import CircularProgress from "@mui/material/CircularProgress";
+import Typography from "@mui/material/Typography";
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type Box3, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 
+import { Center } from "@/components/layout/Center";
+import { AXES_HELPER_SIZE } from "./constants";
 import { PointCloudScene } from "./PointCloudScene";
 
-export type ViewerMode = "splat" | "trained_points" | "colmap_points";
+export type ViewerMode = "splat" | "colmap_points";
 
 interface SplatViewerProps {
   mode: ViewerMode;
   splatUrl: string | null;
   pointCloudUrl: string | null;
+  height?: string;
 }
 
 /**
@@ -95,11 +100,12 @@ function SplatScene({
   }, [onError, onFirstLoad]);
 
   if (!viewer) {
-    return null;
+    return <axesHelper args={[AXES_HELPER_SIZE]} />;
   }
   return (
     <>
       <primitive object={viewer} />
+      <axesHelper args={[AXES_HELPER_SIZE]} />
       {boundingBox && <box3Helper args={[boundingBox]} />}
     </>
   );
@@ -107,9 +113,9 @@ function SplatScene({
 
 /**
  * Lives inside <Canvas> (needs useThree()) so it can place the camera directly, unlike SplatViewer itself. Owns the
- * one-shot-per-viewer camera framing: whichever of the three assets (splat / trained points / COLMAP points) loads
- * first frames the camera, and later loads — including switching the mode toggle to a not-yet-loaded asset — never
- * re-frame it. That's what makes "same camera pose across the toggle" hold with no manual save/restore: all three
+ * one-shot-per-viewer camera framing: whichever of the two assets (splat / COLMAP points) loads first frames the
+ * camera, and the other loading later — including switching the mode toggle to a not-yet-loaded asset — never
+ * re-frames it. That's what makes "same camera pose across the toggle" hold with no manual save/restore: both
  * assets share one coordinate frame, since worker/pipeline/train.py seeds Gaussian means directly from COLMAP's
  * points_xyz with no rescale.
  */
@@ -153,17 +159,6 @@ function ViewerSceneManager({
   if (mode === "splat" && splatUrl) {
     return <SplatScene key="splat" splatUrl={splatUrl} onError={onError} onFirstLoad={onFirstLoad} />;
   }
-  if (mode === "trained_points" && splatUrl) {
-    return (
-      <PointCloudScene
-        key="trained_points"
-        url={splatUrl}
-        colorMode="sh_dc"
-        onError={onError}
-        onFirstLoad={onFirstLoad}
-      />
-    );
-  }
   if (mode === "colmap_points" && pointCloudUrl) {
     return (
       <PointCloudScene
@@ -178,7 +173,7 @@ function ViewerSceneManager({
   return null;
 }
 
-export function SplatViewer({ mode, splatUrl, pointCloudUrl }: SplatViewerProps) {
+export function SplatViewer({ mode, splatUrl, pointCloudUrl, height = "70vh" }: SplatViewerProps) {
   // The failing mode is stored with the message so only that mode shows it. A bare string would leave one asset's
   // failure pinned over every other toggle position for the rest of the page's life.
   const [error, setError] = useState<{ mode: ViewerMode; message: string } | null>(null);
@@ -196,7 +191,7 @@ export function SplatViewer({ mode, splatUrl, pointCloudUrl }: SplatViewerProps)
   const hasAsset = mode === "colmap_points" ? pointCloudUrl !== null : splatUrl !== null;
 
   return (
-    <div style={{ width: "100%", height: "70vh", position: "relative" }}>
+    <Box sx={{ width: "100%", height, position: "relative" }}>
       {/* flat/linear: R3F's default ACESFilmicToneMapping + SRGBColorSpace runs the splat shader's raw, untoneMapped
           color output through a curve it was never designed for. This library predates R3F's color-managed
           defaults. */}
@@ -211,23 +206,23 @@ export function SplatViewer({ mode, splatUrl, pointCloudUrl }: SplatViewerProps)
         <OrbitControls ref={controlsRef} makeDefault />
       </Canvas>
       {activeError && (
-        <Center style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-          <Text c="red">{activeError}</Text>
+        <Center sx={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+          <Typography color="error">{activeError}</Typography>
         </Center>
       )}
       {!activeError && !hasAsset && (
-        <Center style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-          <Text c="dimmed">Not available for this splat.</Text>
+        <Center sx={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+          <Typography color="text.secondary">Not available for this splat.</Typography>
         </Center>
       )}
-    </div>
+    </Box>
   );
 }
 
 export function SplatViewerLoading() {
   return (
-    <Center style={{ width: "100%", height: "70vh" }}>
-      <Loader />
+    <Center sx={{ width: "100%", height: "70vh" }}>
+      <CircularProgress />
     </Center>
   );
 }
