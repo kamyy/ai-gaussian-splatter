@@ -2,7 +2,7 @@
 
 ## Dev AWS resources
 
-The `infra/` stack only describes production, so dev's uploads/splats buckets must be created and configured by hand. `web/components/upload/PhotoDropzone.tsx` PUTs to a presigned S3 URL and the worker reads/writes both buckets via boto3, so real buckets are needed.
+The `infra/` config only describes production, so dev's uploads/splats buckets must be created and configured by hand. `web/components/upload/PhotoDropzone.tsx` PUTs to a presigned S3 URL and the worker reads/writes both buckets via boto3, so real buckets are needed.
 
 ```bash
 for b in ai-gaussian-splatter-dev-uploads ai-gaussian-splatter-dev-splats; do
@@ -204,7 +204,7 @@ pnpm run infra:check
 # next line would fail to find its folder.
 (cd web && pnpm test && pnpm test:e2e)
 (cd worker && uv run pytest -v)
-(cd infra && uv run pytest -v && pnpm cdk:synth)
+(cd infra && terraform test)
 ```
 
 The `server` Vitest project's Postgres-dependent tests (rate limiting, `getOrCreateUser`, the worker callback token) skip unless `TEST_DATABASE_URL` is set — CI wires this up itself (`.github/workflows/ci.yml`'s `web` job).
@@ -243,31 +243,31 @@ curl -s http://localhost:8000/api/v1/healthz   # should be {"status":"ok"}
 
 ## Deploying to production
 
-**This whole section is one-time setup, not something repeated per release.** It walks a fresh account to the point where `.github/workflows/ci.yml`'s `deploy` job can take over every future deploy: push to `main`, and CD builds, migrates, and rolls the service out on its own (see ["Fixing a bad migration"](#fixing-a-bad-migration) and ["Configuring continuous deployment"](#configuring-continuous-deployment) below). After that, a human runs `cdk` by hand again only for two rare exceptions: a rollback, or previewing an infra change with `cdk diff` before it applies — both reuse the same context values and commands below.
+**This whole section is one-time setup, not something repeated per release.** It walks a fresh account to the point where `.github/workflows/ci.yml`'s `deploy` job can take over every future deploy: push to `main`, and CD builds, migrates, and rolls the service out on its own (see ["Fixing a bad migration"](#fixing-a-bad-migration) and ["Configuring continuous deployment"](#configuring-continuous-deployment) below). After that, a human runs `terraform` by hand again only for two rare exceptions: a rollback, or previewing an infra change with `terraform plan` before it applies — both reuse the same variable values and commands below.
 
-Start by finishing **[First-time account setup](#first-time-account-setup)** before `pnpm cdk:deploy:all`. Those steps create the Clerk secret, create `AWSServiceRoleForEC2Spot` if it doesn't already exist, turn on billing alerts, bootstrap both regions, and stand up the ECR repository. Skip the secret and tasks fail at start: `WebStack` imports it rather than creating it. Skip the Spot role and the failure doesn't surface until the first real worker job tries to launch a Spot instance. Skip bootstrap and the first stack fails before creating anything. Skip the registry (or the push into it) and Fargate has nothing to pull; the circuit breaker rolls the stack back. ["Configuring continuous deployment"](#configuring-continuous-deployment) is also one-time, but it needs `WebStack` to already exist, so it waits until after the first `cdk:deploy:all`.
+Start by finishing **[First-time account setup](#first-time-account-setup)** before `terraform apply`. Those steps create the Clerk secret, create `AWSServiceRoleForEC2Spot` if it doesn't already exist, turn on billing alerts, bootstrap the Terraform state backend, and stand up the ECR repository. Skip the secret and tasks fail at start: the web/migration task definitions reference it rather than creating it. Skip the Spot role and the failure doesn't surface until the first real worker job tries to launch a Spot instance. Skip the bootstrap and `terraform init` fails before creating anything. Skip the registry (or the push into it) and Fargate has nothing to pull; the circuit breaker rolls the service back. ["Configuring continuous deployment"](#configuring-continuous-deployment) is also one-time, but it needs the web service's IAM roles to already exist, so it waits until after the first full apply.
 
-### Resolving context values
+### Resolving variable values
 
-Every `pnpm cdk:*` invocation below — bootstrap, registry, and the full deploy — needs the same six values. Resolve them once per shell session and reuse them for everything that follows. `RegistryStack` itself reads none of them, but `pnpm cdk:*` always builds the whole app first, `WebStack` included, and that's where they're required. Only `AWS_ACCOUNT_ID` needs `export`. `infra/app.py` reads it straight from its environment; the rest are only ever expanded into `-c key=value` flags by this same shell, so a plain assignment works just as well. 
+Every `terraform` invocation below — the full apply, and a diff preview — needs the same six values. Resolve them once per shell session and reuse them for everything that follows. Terraform reads a `TF_VAR_<name>` environment variable for the matching variable automatically, matching each name in `infra/variables.tf`, so once these are exported no invocation below needs a repeated `-var` flag. `AWS_ACCOUNT_ID` isn't a Terraform variable — it's used below to name the state bucket and build the CI role's ARN — so export it separately.
 
 ```bash
 export AWS_ACCOUNT_ID=replace-with-your-account-id # Use a real AWS account id.
 ```
 
-`ALERT_EMAIL` is where `BudgetsStack` sends spend alerts. Omitting it breaks `pnpm cdk:*`, but nothing can tell a wrong address from a right one, and a wrong one deploys green with the alerts never arriving. AWS emails a confirmation link on the first deploy; until it's clicked the subscription stays pending and sends nothing, so check for it.
+`TF_VAR_alert_email` is where the AWS Budget and CloudWatch billing alarm (`infra/budgets.tf`) send spend alerts. Omitting it fails `terraform plan`/`apply` immediately, but nothing can tell a wrong address from a right one, and a wrong one applies green with the alerts never arriving. AWS emails a confirmation link on the first apply; until it's clicked the subscription stays pending and sends nothing, so check for it.
 
 ```bash
-ALERT_EMAIL=replace-with-your-email
+export TF_VAR_alert_email=replace-with-your-email
 ```
 
-`APP_PUBLIC_URL` is where the worker PATCHes job status back to, and what the ALB is aliased to. Keep it in step with `APP_HOSTNAME` in `web_stack.py`, which is what the certificate and the Route 53 record are built from — nothing cross-checks the two, so a mismatch sends every status callback at a host that won't answer.
+`TF_VAR_app_public_url` is where the worker PATCHes job status back to, and what the ALB is aliased to. Keep it in step with `local.app_hostname` in `infra/locals.tf`, which is what the certificate and the Route 53 record are built from — nothing cross-checks the two, so a mismatch sends every status callback at a host that won't answer.
 
 ```bash
-APP_PUBLIC_URL=https://ai-gaussian-splatter.orky.net
+export TF_VAR_app_public_url=https://ai-gaussian-splatter.orky.net
 ```
 
-`WORKER_AMI_ID` is the AMI each job's spot instance boots. `ec2Launcher.ts`'s user data runs `aws ecr get-login-password` and `docker run --gpus all` with no provisioning of its own, so the image must already carry Docker, the NVIDIA driver and container toolkit, and the AWS CLI. AWS's Deep Learning Base GPU AMIs do; this lists them newest first:
+`TF_VAR_worker_ami_id` is the AMI each job's spot instance boots. `ec2Launcher.ts`'s user data runs `aws ecr get-login-password` and `docker run --gpus all` with no provisioning of its own, so the image must already carry Docker, the NVIDIA driver and container toolkit, and the AWS CLI. AWS's Deep Learning Base GPU AMIs do; this lists them newest first:
 
 ```bash
 aws ec2 describe-images --region us-west-2 --owners amazon \
@@ -276,29 +276,29 @@ aws ec2 describe-images --region us-west-2 --owners amazon \
             "Name=state,Values=available" \
   --query 'reverse(sort_by(Images,&CreationDate))[:5].{id:ImageId,name:Name,created:CreationDate}' \
   --output table
-WORKER_AMI_ID=<ami-... from the table>
+export TF_VAR_worker_ami_id=<ami-... from the table>
 ```
 
-`WEB_IMAGE_TAG` is the pushed build SHA. Per-release, not moving — each deploy gets its own task definition, so the circuit breaker (and manual rollback) can point at an older SHA that still exists in the repo. `WebStack` requires a SHA; the ECR repo refuses to repoint an existing tag. `migrateImageTag` (the migration task's own image) is deliberately not passed below. It defaults to `webImageTag`, which is exactly what a manual "build once, deploy once" flow wants. `ci.yml`'s `deploy` job is the one caller that ever diverges the two on purpose.
+`TF_VAR_web_image_tag` is the pushed build SHA. Per-release, not moving — each deploy gets its own task definition, so the circuit breaker (and manual rollback) can point at an older SHA that still exists in the repo. `infra/variables.tf`'s validation block requires a SHA; the ECR repo refuses to repoint an existing tag. `migrate_image_tag` (the migration task's own image) is deliberately not passed below. It defaults to `web_image_tag`, which is exactly what a manual "build once, deploy once" flow wants. `ci.yml`'s `deploy` job is the one caller that ever diverges the two on purpose.
 
 ```bash
-WEB_IMAGE_TAG=$(git rev-parse --short HEAD)
+export TF_VAR_web_image_tag=$(git rev-parse --short HEAD)
 ```
 
-`CLERK_SECRET_KEY_ARN` includes Secrets Manager's six-character suffix. `WebStack` reads the secret and validates the ARN's account/region on every `pnpm cdk:*` invocation. This `describe-secret` call needs the Clerk secret to already exist, so only run this after creating the secret in ["First-time account setup"](#first-time-account-setup).
+`TF_VAR_clerk_secret_key_arn` includes Secrets Manager's six-character suffix. ECS matches a task definition's `valueFrom` against that suffix, so a partial ARN applies clean and only fails at task start. This `describe-secret` call needs the Clerk secret to already exist, so only run this after creating the secret in ["First-time account setup"](#first-time-account-setup).
 
 ```bash
-CLERK_SECRET_KEY_ARN=$(aws secretsmanager describe-secret \
+export TF_VAR_clerk_secret_key_arn=$(aws secretsmanager describe-secret \
   --region us-west-2 \
   --secret-id ai-gaussian-splatter/clerk-secret-key \
   --query ARN \
   --output text)
 ```
 
-`HOSTED_ZONE_ID` is the orky.net zone for the ALB's DNS record and ACM validation. Omitting it breaks `pnpm cdk:*`. The zone is imported only, not created — it must already exist. CDK adds the app's A-alias and ACM's validation CNAME to it; nothing else in the zone is this app's concern.
+`TF_VAR_hosted_zone_id` is the orky.net zone for the ALB's DNS record and ACM validation. Omitting it fails `terraform plan`/`apply`. The zone is referenced only, not created — it must already exist. Terraform adds the app's A-alias and ACM's validation CNAME to it; nothing else in the zone is this app's concern.
 
 ```bash
-HOSTED_ZONE_ID=$(aws route53 list-hosted-zones-by-name \
+export TF_VAR_hosted_zone_id=$(aws route53 list-hosted-zones-by-name \
   --dns-name orky.net \
   --query "HostedZones[?Name=='orky.net.' && Config.PrivateZone==\`false\`].Id | [0]" \
   --output text | cut -d/ -f3)
@@ -306,9 +306,9 @@ HOSTED_ZONE_ID=$(aws route53 list-hosted-zones-by-name \
 
 ### First-time account setup
 
-One-time per account. Complete all this before the first `pnpm cdk:deploy:all`.
+One-time per account. Complete all this before the first `terraform apply`.
 
-Clerk secret is imported, not created by any stack. See `describe-secret` in ["Resolving context values"](#resolving-context-values) to retrieve the ARN for the value. To change the value later, update it directly in Secrets Manager, then force a new ECS deployment (`aws ecs update-service --force-new-deployment`) since ECS only resolves secrets at task start.
+Clerk secret is referenced, not created by this config. See `describe-secret` in ["Resolving variable values"](#resolving-variable-values) to retrieve the ARN for the value. To change the value later, update it directly in Secrets Manager, then force a new ECS deployment (`aws ecs update-service --force-new-deployment`) since ECS only resolves secrets at task start.
 
 ```bash
 aws secretsmanager create-secret \
@@ -319,50 +319,48 @@ aws secretsmanager create-secret \
   --query ARN --output text
 ```
 
-`AWSServiceRoleForEC2Spot` is also not created by any stack. It's one account-wide role shared by every other Spot workload in the account. It has to exist before `ec2Launcher.ts`'s first `RunInstances` call. This app cannot auto-create it. Trying to create it a second time fails outright, hence the guard before  creating it:
+`AWSServiceRoleForEC2Spot` is also not created by this config. It's one account-wide role shared by every other Spot workload in the account. It has to exist before `ec2Launcher.ts`'s first `RunInstances` call. This app cannot auto-create it. Trying to create it a second time fails outright, hence the guard before  creating it:
 
 ```bash
 aws iam get-role --role-name AWSServiceRoleForEC2Spot >/dev/null 2>&1 || \
   aws iam create-service-linked-role --aws-service-name spot.amazonaws.com
 ```
 
-Turn on billing alerts, or `BudgetsStack`'s CloudWatch alarm never fires. `AWS/Billing EstimatedCharges` publishes no data at all until the account preference is set, and there is no API or CloudFormation resource for it — Billing console → Billing preferences → **Receive AWS Free Tier alerts and billing alerts**, in `us-east-1`. The AWS Budget half of that stack works regardless; only the alarm depends on this.
+Turn on billing alerts, or the CloudWatch billing alarm (`infra/budgets.tf`) never fires. `AWS/Billing EstimatedCharges` publishes no data at all until the account preference is set, and there is no API or Terraform resource for it — Billing console → Billing preferences → **Receive AWS Free Tier alerts and billing alerts**, in `us-east-1`. The AWS Budget half works regardless; only the alarm depends on this.
 
-That console checkbox only wires up the alarm; it isn't where spend itself is visible. To see current estimated month-to-date spend, Billing console → **Billing Home** shows it on the landing page; **Cost Explorer** breaks it down by service. To check `BudgetsStack`'s own budget instead of hunting the console, `aws budgets describe-budgets --account-id $AWS_ACCOUNT_ID --region us-east-1` returns its `CalculatedSpend` — the Budgets API is `us-east-1`-only regardless of the resources it's tracking, same as the stack itself.
+That console checkbox only wires up the alarm; it isn't where spend itself is visible. To see current estimated month-to-date spend, Billing console → **Billing Home** shows it on the landing page; **Cost Explorer** breaks it down by service. To check the budget directly instead of hunting the console, `aws budgets describe-budgets --account-id $AWS_ACCOUNT_ID --region us-east-1` returns its `CalculatedSpend` — the Budgets API is `us-east-1`-only regardless of the resources it's tracking.
 
-Now resolve the six context values in ["Resolving context values"](#resolving-context-values) above, in the same shell.
+Now resolve the six variable values in ["Resolving variable values"](#resolving-variable-values) above, in the same shell.
 
-A fresh account needs `pnpm cdk:bootstrap` once per region before any deploy. It creates a CDKToolkit stack that CDK uploads templates/assets to. Every template carries a BootstrapVersion SSM lookup, so without it the first stack fails before creating anything. `BudgetsStack` lives in `us-east-1`; the rest live in `us-west-2`.
-
-Bootstrap still needs all six `-c` flags below even though bootstrap deploys no stack of its own. `pnpm cdk bootstrap` can take multiple environment targets in one call.
+A fresh account needs the Terraform state backend bootstrapped once. `infra/bootstrap/` is a separate, tiny root module (its own local state) that creates only the S3 bucket `infra/`'s own `backend "s3"` block points at — nothing in `infra/`'s real config can apply before that bucket exists. It takes no variables at all.
 
 ```bash
-cd infra # Make sure you're in the right folder.
+cd infra/bootstrap # Make sure you're in the right folder.
 
-pnpm cdk:bootstrap aws://$AWS_ACCOUNT_ID/us-east-1 aws://$AWS_ACCOUNT_ID/us-west-2 \
-  -c hostedZoneId=$HOSTED_ZONE_ID \
-  -c clerkSecretKeyArn=$CLERK_SECRET_KEY_ARN \
-  -c alertEmail=$ALERT_EMAIL \
-  -c appPublicUrl=$APP_PUBLIC_URL \
-  -c workerAmiId=$WORKER_AMI_ID \
-  -c webImageTag=$WEB_IMAGE_TAG
+terraform init
+terraform apply
+terraform output state_bucket # confirm the bucket name, used below
 ```
 
-Deploy `RegistryStack` by itself first. Then push both images under ["Going live"](#going-live). This order matters: `pnpm cdk:deploy:all` deploys everything, including `WebStack`. `WebStack` pins the web service to a specific image tag, so running it before the registry exists and the web image is pushed leaves nothing to pull. Once both steps are done, `cdk:deploy:all` can run.
+Now initialize `infra/` itself against that bucket, and deploy the ECR repository by itself first. Then push both images under ["Going live"](#going-live). This order matters: a plain `terraform apply` would try to create the web service too, and the web service pins to a specific image tag — running it before the registry exists and the web image is pushed leaves nothing to pull.
 
 ```bash
-pnpm cdk:deploy:registry \
-  -c hostedZoneId=$HOSTED_ZONE_ID \
-  -c clerkSecretKeyArn=$CLERK_SECRET_KEY_ARN \
-  -c alertEmail=$ALERT_EMAIL \
-  -c appPublicUrl=$APP_PUBLIC_URL \
-  -c workerAmiId=$WORKER_AMI_ID \
-  -c webImageTag=$WEB_IMAGE_TAG
+cd ../ # Back to infra/.
+
+terraform init \
+  -backend-config="bucket=ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID" \
+  -backend-config="key=infra.tfstate" \
+  -backend-config="region=us-west-2"
+
+# -target is otherwise best avoided with Terraform (it can leave state subtly out of sync with config), but this
+# is a deliberate one-time exception: the ECR repository has to exist before either image can be pushed, and the
+# web service can't be created before the image it names has actually been pushed.
+terraform apply -target=aws_ecr_repository.web -target=aws_ecr_lifecycle_policy.web
 ```
 
 ### Going live
 
-This is the step that actually ships code — push both images and bring `WebStack` up, completing the one-time setup. It's also the exact command reused for the two rare exceptions after CD is live: a rollback (an older `WEB_IMAGE_TAG`) or a `cdk diff` preview (swap `cdk:deploy:all` for `cdk:diff`).
+This is the step that actually ships code — push both images and bring the web service up, completing the one-time setup. It's also the exact command reused for the two rare exceptions after CD is live: a rollback (an older `TF_VAR_web_image_tag`) or a `terraform plan` preview.
 
 ```bash
 cd infra # Make sure you're in the right folder.
@@ -371,40 +369,34 @@ ECR_TOKEN=$(aws ecr get-login-password --region us-west-2)
 REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com
 REPO=$REGISTRY/ai-gaussian-splatter
 
-# Push both images whenever you have a new build. The -migrate image backs MigrationTaskDefinition
-# (infra/stacks/web_stack.py). Push it too, or a manual `aws ecs run-task` against that family has nothing to pull.
+# Push both images whenever you have a new build. The -migrate image backs the migration task definition
+# (infra/web.tf). Push it too, or a manual `aws ecs run-task` against that family has nothing to pull.
 # CI's deploy job builds and pushes both the same way (ci.yml).
 podman login --username AWS --password-stdin $REGISTRY <<< "$ECR_TOKEN"
 
-podman build --target web -t $REPO:$WEB_IMAGE_TAG-web \
+podman build --target web -t $REPO:$TF_VAR_web_image_tag-web \
   --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=<pk_live_...> ../web
-podman push $REPO:$WEB_IMAGE_TAG-web
+podman push $REPO:$TF_VAR_web_image_tag-web
 
-podman build --target migrator -t $REPO:$WEB_IMAGE_TAG-migrate ../web
-podman push $REPO:$WEB_IMAGE_TAG-migrate
+podman build --target migrator -t $REPO:$TF_VAR_web_image_tag-migrate ../web
+podman push $REPO:$TF_VAR_web_image_tag-migrate
 
-pnpm cdk:deploy:all \
-  -c hostedZoneId=$HOSTED_ZONE_ID \
-  -c clerkSecretKeyArn=$CLERK_SECRET_KEY_ARN \
-  -c alertEmail=$ALERT_EMAIL \
-  -c appPublicUrl=$APP_PUBLIC_URL \
-  -c workerAmiId=$WORKER_AMI_ID \
-  -c webImageTag=$WEB_IMAGE_TAG
+terraform apply
 ```
 
-The first deploy waits on ACM DNS validation, which can take several minutes; ACM writes the validation record into the zone itself.
+The first apply waits on ACM DNS validation, which can take several minutes; ACM writes the validation record into the zone itself.
 
-`min_healthy_percent=100` will keep any old task serving until the new one passes health checks. If the new image fails those checks, the circuit breaker rolls back to the previous task definition, which names its own still-present tag, so ECS re-pulls the build that was working. Rolling back by hand is the same `cdk:deploy:all` call using an older `WEB_IMAGE_TAG`.
+`deployment_minimum_healthy_percent = 100` will keep any old task serving until the new one passes health checks. If the new image fails those checks, the circuit breaker rolls back to the previous task definition, which names its own still-present tag, so ECS re-pulls the build that was working. Rolling back by hand is the same `terraform apply` using an older `TF_VAR_web_image_tag`.
 
-Only the last few releases are kept (`RELEASES_KEPT` in `infra/stacks/registry_stack.py`); older tags are expired and can no longer be rolled back to.
+Only the last few releases are kept (`local.releases_kept` in `infra/registry.tf`); older tags are expired and can no longer be rolled back to.
 
-**`pnpm cdk:deploy:all` never applies migrations.** The database has no tables yet, but the target group reports healthy anyway — `/api/v1/healthz` never touches the database. There's no supported out-of-band way to apply one by hand either (see ["Fixing a bad migration"](#fixing-a-bad-migration) below).
+**`terraform apply` never applies migrations.** The database has no tables yet, but the target group reports healthy anyway — `/api/v1/healthz` never touches the database. There's no supported out-of-band way to apply one by hand either (see ["Fixing a bad migration"](#fixing-a-bad-migration) below).
 
 So the site stays broken after this first deploy until CD applies the first migration. Finish ["Configuring continuous deployment"](#configuring-continuous-deployment) below, then push a commit touching at least one non-Markdown file to `main`. `.github/workflows/ci.yml`'s `paths-ignore` skips the whole workflow, deploy included, for a commit that only touches `.md` files. That push is what actually runs the first migration. That `deploy` job run builds the migrator image, applies it, and rolls the service forward, exactly like every release after it.
 
 ## Configuring continuous deployment
 
-One-time, and only possible **after** [First-time account setup](#first-time-account-setup). Policy below names `MigrationTaskRole` and `ExecutionRole` neither of which exist before the first `pnpm cdk:deploy:all`. The `ai-gaussian-splatter-ci-deploy` role created below cannot be CDK-managed otherwise it would lead to a chicken-egg situation.
+One-time, and only possible **after** [First-time account setup](#first-time-account-setup). Policy below names the migration task role and execution role, neither of which exist before the first `terraform apply`. The `ai-gaussian-splatter-ci-deploy` role created below cannot be Terraform-managed either, or it would lead to a chicken-egg situation.
 
 ### Creating the OIDC provider and CI role
 
@@ -446,11 +438,9 @@ aws iam create-role --role-name ai-gaussian-splatter-ci-deploy \
 
 ### Granting deploy permissions
 
-`ExecutionRole`'s name is fixed (`ai-gaussian-splatter-execution`), like `MigrationTaskRole`'s below, so its ARN can be built directly instead of looked up:
+Unlike a design that delegates through a separate bootstrap role, this role needs the AWS permissions `terraform apply` itself uses directly, since nothing else stands between it and the resources it manages. IAM permissions are scoped by resource-name prefix where the service supports it (this app's own resources are all named or tagged `ai-gaussian-splatter-*`); the networking/database/load-balancer/budgets services below mostly don't support resource-level permissions for their create/modify/delete actions at all, so those stay `Resource: "*"` the same way they would under any tool. Expect to refine this policy against real `AccessDenied` errors during the first live apply — it's a reasonable starting point, not a exhaustively verified minimal policy.
 
 ```bash
-EXECUTION_ROLE_ARN="arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-gaussian-splatter-execution"
-
 cat > ci-deploy-policy.json <<EOF
 {
   "Version": "2012-10-17",
@@ -458,7 +448,9 @@ cat > ci-deploy-policy.json <<EOF
     {"Effect": "Allow", "Action": "ecr:GetAuthorizationToken", "Resource": "*"},
     {"Effect": "Allow", "Action": [
         "ecr:BatchCheckLayerAvailability", "ecr:PutImage", "ecr:InitiateLayerUpload",
-        "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"
+        "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer",
+        "ecr:CreateRepository", "ecr:DeleteRepository", "ecr:DescribeRepositories",
+        "ecr:PutLifecyclePolicy", "ecr:GetLifecyclePolicy", "ecr:TagResource", "ecr:PutImageTagMutability"
       ], "Resource": "arn:aws:ecr:us-west-2:$AWS_ACCOUNT_ID:repository/ai-gaussian-splatter"},
     {"Effect": "Allow", "Action": "ecs:RunTask", "Resource": [
         "arn:aws:ecs:us-west-2:$AWS_ACCOUNT_ID:task-definition/ai-gaussian-splatter-migrate:*",
@@ -466,14 +458,97 @@ cat > ci-deploy-policy.json <<EOF
       ]},
     {"Effect": "Allow", "Action": ["ecs:DescribeTasks", "ecs:DescribeServices"], "Resource": "*",
       "Condition": {"ArnEquals": {"ecs:cluster": "arn:aws:ecs:us-west-2:$AWS_ACCOUNT_ID:cluster/ai-gaussian-splatter"}}},
-    {"Effect": "Allow", "Action": "ecs:DescribeTaskDefinition", "Resource": "*"},
+    {"Effect": "Allow", "Action": [
+        "ecs:DescribeTaskDefinition", "ecs:RegisterTaskDefinition", "ecs:DeregisterTaskDefinition",
+        "ecs:CreateCluster", "ecs:DeleteCluster", "ecs:DescribeClusters", "ecs:PutClusterCapacityProviders",
+        "ecs:CreateService", "ecs:UpdateService", "ecs:DeleteService", "ecs:TagResource",
+        "ecs:PutAccountSetting", "ecs:ListTagsForResource"
+      ], "Resource": "*"},
+    {"Effect": "Allow", "Action": [
+        "application-autoscaling:RegisterScalableTarget", "application-autoscaling:DeregisterScalableTarget",
+        "application-autoscaling:PutScalingPolicy", "application-autoscaling:DeleteScalingPolicy",
+        "application-autoscaling:DescribeScalableTargets", "application-autoscaling:DescribeScalingPolicies"
+      ], "Resource": "*"},
     {"Effect": "Allow", "Action": "iam:PassRole", "Resource": [
-        "$EXECUTION_ROLE_ARN", "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-gaussian-splatter-migrate-task"
+        "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-gaussian-splatter-execution",
+        "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-gaussian-splatter-migrate-task",
+        "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-gaussian-splatter-task",
+        "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-gaussian-splatter-worker"
       ]},
-    {"Effect": "Allow", "Action": "sts:AssumeRole", "Resource": [
-        "arn:aws:iam::$AWS_ACCOUNT_ID:role/cdk-hnb659fds-deploy-role-$AWS_ACCOUNT_ID-*",
-        "arn:aws:iam::$AWS_ACCOUNT_ID:role/cdk-hnb659fds-file-publishing-role-$AWS_ACCOUNT_ID-*",
-        "arn:aws:iam::$AWS_ACCOUNT_ID:role/cdk-hnb659fds-lookup-role-$AWS_ACCOUNT_ID-*"
+    {"Effect": "Allow", "Action": [
+        "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:TagRole",
+        "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRolePolicy", "iam:ListRolePolicies",
+        "iam:CreateInstanceProfile", "iam:DeleteInstanceProfile", "iam:GetInstanceProfile",
+        "iam:AddRoleToInstanceProfile", "iam:RemoveRoleFromInstanceProfile"
+      ], "Resource": "arn:aws:iam::$AWS_ACCOUNT_ID:*/ai-gaussian-splatter-*"},
+    {"Effect": "Allow", "Action": [
+        "s3:CreateBucket", "s3:DeleteBucket*", "s3:ListBucket", "s3:GetBucket*", "s3:PutBucket*",
+        "s3:PutObject", "s3:GetObject", "s3:DeleteObject",
+        "s3:PutEncryptionConfiguration", "s3:GetEncryptionConfiguration",
+        "s3:PutLifecycleConfiguration", "s3:GetLifecycleConfiguration"
+      ], "Resource": [
+        "arn:aws:s3:::ai-gaussian-splatter-*", "arn:aws:s3:::ai-gaussian-splatter-*/*"
+      ]},
+    {"Effect": "Allow", "Action": [
+        "ec2:CreateVpc", "ec2:DeleteVpc", "ec2:DescribeVpcs", "ec2:ModifyVpcAttribute",
+        "ec2:CreateSubnet", "ec2:DeleteSubnet", "ec2:DescribeSubnets", "ec2:ModifySubnetAttribute",
+        "ec2:CreateInternetGateway", "ec2:DeleteInternetGateway", "ec2:AttachInternetGateway",
+        "ec2:DetachInternetGateway", "ec2:DescribeInternetGateways",
+        "ec2:CreateRouteTable", "ec2:DeleteRouteTable", "ec2:CreateRoute", "ec2:DeleteRoute",
+        "ec2:AssociateRouteTable", "ec2:DisassociateRouteTable", "ec2:DescribeRouteTables",
+        "ec2:CreateVpcEndpoint", "ec2:DeleteVpcEndpoints", "ec2:DescribeVpcEndpoints",
+        "ec2:CreateSecurityGroup", "ec2:DeleteSecurityGroup", "ec2:DescribeSecurityGroups",
+        "ec2:AuthorizeSecurityGroupIngress", "ec2:AuthorizeSecurityGroupEgress",
+        "ec2:RevokeSecurityGroupIngress", "ec2:RevokeSecurityGroupEgress",
+        "ec2:DescribeSecurityGroupRules", "ec2:UpdateSecurityGroupRuleDescriptionsIngress",
+        "ec2:UpdateSecurityGroupRuleDescriptionsEgress",
+        "ec2:CreateTags", "ec2:DeleteTags", "ec2:DescribeTags", "ec2:DescribeAvailabilityZones"
+      ], "Resource": "*"},
+    {"Effect": "Allow", "Action": [
+        "rds:CreateDBInstance", "rds:DeleteDBInstance", "rds:ModifyDBInstance", "rds:DescribeDBInstances",
+        "rds:CreateDBSubnetGroup", "rds:DeleteDBSubnetGroup", "rds:DescribeDBSubnetGroups",
+        "rds:AddTagsToResource", "rds:ListTagsForResource"
+      ], "Resource": "*"},
+    {"Effect": "Allow", "Action": [
+        "elasticloadbalancing:CreateLoadBalancer", "elasticloadbalancing:DeleteLoadBalancer",
+        "elasticloadbalancing:DescribeLoadBalancers", "elasticloadbalancing:ModifyLoadBalancerAttributes",
+        "elasticloadbalancing:CreateTargetGroup", "elasticloadbalancing:DeleteTargetGroup",
+        "elasticloadbalancing:DescribeTargetGroups", "elasticloadbalancing:ModifyTargetGroupAttributes",
+        "elasticloadbalancing:CreateListener", "elasticloadbalancing:DeleteListener",
+        "elasticloadbalancing:DescribeListeners", "elasticloadbalancing:ModifyListener",
+        "elasticloadbalancing:AddTags", "elasticloadbalancing:DescribeTags"
+      ], "Resource": "*"},
+    {"Effect": "Allow", "Action": [
+        "route53:ChangeResourceRecordSets", "route53:GetHostedZone", "route53:ListResourceRecordSets",
+        "route53:GetChange"
+      ], "Resource": "*"},
+    {"Effect": "Allow", "Action": [
+        "acm:RequestCertificate", "acm:DeleteCertificate", "acm:DescribeCertificate", "acm:AddTagsToCertificate"
+      ], "Resource": "*"},
+    {"Effect": "Allow", "Action": [
+        "kms:CreateKey", "kms:ScheduleKeyDeletion", "kms:DescribeKey", "kms:PutKeyPolicy", "kms:GetKeyPolicy",
+        "kms:EnableKeyRotation", "kms:GetKeyRotationStatus", "kms:TagResource", "kms:CreateAlias", "kms:DeleteAlias"
+      ], "Resource": "*"},
+    {"Effect": "Allow", "Action": [
+        "sns:CreateTopic", "sns:DeleteTopic", "sns:GetTopicAttributes", "sns:SetTopicAttributes",
+        "sns:Subscribe", "sns:Unsubscribe", "sns:ListSubscriptionsByTopic", "sns:TagResource"
+      ], "Resource": "*"},
+    {"Effect": "Allow", "Action": [
+        "budgets:ViewBudget", "budgets:ModifyBudget"
+      ], "Resource": "*"},
+    {"Effect": "Allow", "Action": [
+        "cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms", "cloudwatch:DescribeAlarms",
+        "cloudwatch:TagResource"
+      ], "Resource": "*"},
+    {"Effect": "Allow", "Action": [
+        "logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:DescribeLogGroups", "logs:PutRetentionPolicy",
+        "logs:TagResource"
+      ], "Resource": "arn:aws:logs:us-west-2:$AWS_ACCOUNT_ID:log-group:/ecs/ai-gaussian-splatter-*"},
+    {"Effect": "Allow", "Action": ["secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue"],
+      "Resource": "arn:aws:secretsmanager:us-west-2:$AWS_ACCOUNT_ID:secret:*"},
+    {"Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject", "s3:ListBucket"], "Resource": [
+        "arn:aws:s3:::ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID",
+        "arn:aws:s3:::ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID/*"
       ]}
   ]
 }
@@ -482,7 +557,7 @@ aws iam put-role-policy --role-name ai-gaussian-splatter-ci-deploy \
   --policy-name deploy --policy-document file://ci-deploy-policy.json
 ```
 
-`sts:AssumeRole` on the CDK bootstrap roles needs no trust-policy change on their end — they already trust any principal in the same account (`Principal: {"AWS": <account>}`), gated only by the assuming principal's own identity policy, which is exactly what the statement above grants. The trailing `-*` covers both `us-west-2` (everything but `BudgetsStack`) and `us-east-1` (`BudgetsStack` only, billing metrics only exist there). `pnpm cdk:deploy:all` deploys both in one invocation, so both regions' bootstrap roles are needed even though the app's primary region is `us-west-2`. `ecs:DescribeTaskDefinition` has no resource-level permissions to scope to, hence `Resource: "*"`. `ecs:RunTask`'s task-definition ARN uses the wildcard-revision form (`:*`), not a pinned revision. A pinned one would break on every new migration image push, since each push registers a new revision.
+`ecs:DescribeTaskDefinition` and most of the networking/database/load-balancer/budgets actions above have no resource-level permissions to scope to, hence `Resource: "*"` — this is an AWS API limitation these services share regardless of which tool manages them. `ecs:RunTask`'s task-definition ARN uses the wildcard-revision form (`:*`), not a pinned revision. A pinned one would break on every new migration image push, since each push registers a new revision. The last statement grants read/write on the Terraform state bucket itself, without which `terraform init`/`apply` can't read or update state at all.
 
 ### Setting GitHub repository variables
 
@@ -498,11 +573,11 @@ Set these as GitHub repository variables (Settings → Secrets and variables →
 
 Live re-resolution (`aws route53 list-hosted-zones-by-name`, etc.) was deliberately skipped for these in CI — one production environment, rarely-changing values, and a `vars.*` edit is itself a reviewable, logged event, unlike giving the CI role extra read permissions just to re-derive them every run.
 
-**Setup is done — CD owns every deploy from here.** Push to `main` and `ci.yml`'s `deploy` job builds, migrates, and rolls the service forward on its own. Come back to ["Going live"](#going-live) only for the two exceptions: a rollback, or previewing an infra change with `cdk diff` first.
+**Setup is done — CD owns every deploy from here.** Push to `main` and `ci.yml`'s `deploy` job builds, migrates, and rolls the service forward on its own. Come back to ["Going live"](#going-live) only for the two exceptions: a rollback, or previewing an infra change with `terraform plan` first.
 
 ## Fixing a bad migration
 
-**CI applies migrations automatically on every push to `main`.** The `deploy` job in `.github/workflows/ci.yml` runs the `migrator` image (`web/Dockerfile`) as a one-off ECS task before rolling the service forward. There is no supported way to reach the database by hand instead: `DataStack`'s RDS instance sits in an isolated subnet with no NAT gateway (`infra/stacks/network_stack.py`), reachable only from `web_security_group` on port 5432, and no bastion exists in this infra. The CD migration task works because CDK registers it with the web service's own network configuration; a human's laptop, or any other host, has no path to reproduce that.
+**CI applies migrations automatically on every push to `main`.** The `deploy` job in `.github/workflows/ci.yml` runs the `migrator` image (`web/Dockerfile`) as a one-off ECS task before rolling the service forward. There is no supported way to reach the database by hand instead: the RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway (`infra/network.tf`), reachable only from `aws_security_group.web` on port 5432, and no bastion exists in this infra. The CD migration task works because Terraform registers it with the web service's own network configuration; a human's laptop, or any other host, has no path to reproduce that.
 
 So fix a bad migration the same way you'd fix any other bug: write a corrective migration following the expand/contract discipline in [Schema & migrations (Drizzle)](AGENTS.md#schema--migrations-drizzle) (edit `web/lib/server/db/schema.ts`, `pnpm db:generate`, review the emitted SQL in `web/drizzle/`), commit it, and land it through a normal PR to `main`. CD builds the new `migrator` image, applies it, and rolls the service forward exactly like every other release.
 
@@ -512,35 +587,21 @@ If the `deploy` job's migration step fails for an infra reason rather than a bad
 
 1. Check `jobs.status` and `jobs.error_message` for the splat (`GET /api/v1/splats/{id}/jobs/latest`).
 2. If `status` is stuck (no update in ~20 min) rather than `failed`: the instance likely died without reporting — check the EC2 console for the tagged instance (`Role=worker`, `JobId=<job_id>`) and its system log.
-3. Confirm self-termination actually fired: the instance should not still be running after the job reaches a terminal state. **If it is, terminate it by hand.** The instance-runtime alarm meant to catch this is not in any stack yet ([State / what's next](AGENTS.md#state--whats-next), Known gaps), so nothing else will.
+3. Confirm self-termination actually fired: the instance should not still be running after the job reaches a terminal state. **If it is, terminate it by hand.** The instance-runtime alarm meant to catch this isn't implemented in `infra/` yet ([State / what's next](AGENTS.md#state--whats-next), Known gaps), so nothing else will.
 4. `docker logs` on the instance (if still running) or CloudWatch Logs (once wired up) for the actual COLMAP/gsplat stack trace.
 
 ## Tearing down
 
-`pnpm cdk:destroy:all` removes all 6 CDK-managed stacks. It needs the same six context values as a deploy, resolved the same way ([Resolving context values](#resolving-context-values)) — `infra/app.py` builds the identical stack graph either way, so a missing or placeholder flag fails `read_context`'s guards before anything is destroyed.
+`terraform destroy` removes everything in `infra/`'s state, including the 3 data S3 buckets (force-destroyed, contents and all) and the RDS instance (no final snapshot). It needs the same six variable values as a deploy, resolved the same way ([Resolving variable values](#resolving-variable-values)) and exported as `TF_VAR_*` — a missing one fails before anything is destroyed, same as a missing value fails `apply`.
 
 ```bash
 cd infra # Make sure you're in the right folder.
 
-pnpm cdk:destroy:all \
-  -c hostedZoneId=$HOSTED_ZONE_ID \
-  -c clerkSecretKeyArn=$CLERK_SECRET_KEY_ARN \
-  -c alertEmail=$ALERT_EMAIL \
-  -c appPublicUrl=$APP_PUBLIC_URL \
-  -c workerAmiId=$WORKER_AMI_ID \
-  -c webImageTag=$WEB_IMAGE_TAG
+terraform destroy
 ```
 
-**What this does not remove**, in three groups:
+**This is a full, unconditional teardown** — unlike some infrastructure-as-code setups that protect data resources from deletion by default, nothing here does, because there's no real data yet to protect (see `infra/data.tf`'s comments on `force_destroy`/`skip_final_snapshot`). Revisit this before a real deploy holds real uploads or splats: add `lifecycle { prevent_destroy = true }` to the 3 buckets and `aws_db_instance.main`, and drop `force_destroy`/`skip_final_snapshot`, so a `terraform destroy` run by mistake fails loudly on those resources instead of quietly deleting user data.
 
-Two resources are a deliberate exception, engineered specifically so nothing about them can block the next `cdk deploy --all`:
+The ECR repository (`infra/registry.tf`) is destroyed too — `force_delete = true` means every image in it goes as well, leaving no orphan under that fixed name for the next apply to collide with.
 
-- The `ai-gaussian-splatter` ECR repository: `infra/stacks/registry_stack.py` sets `RemovalPolicy.DESTROY` with `empty_on_delete=True`, so a full teardown leaves no orphan under that fixed name for the next `cdk deploy RegistryStack` to collide with. It, and every image in it, is gone once `cdk:destroy:all` finishes.
-- The RDS credentials secret (`infra/stacks/data_stack.py`) has no fixed name, so a redeploy's `CreateSecret` never collides with the old one. The old secret purges itself automatically 30 days after deletion.
-
-Everything else CDK created but marked `RemovalPolicy.RETAIN` (or RDS's `SNAPSHOT` equivalent) survives its stack's deletion on purpose, because unlike the two resources above none of it collides by name on a later redeploy — it just sits there costing a little until a human decides it's safe to lose:
-
-- `uploads`/`splats`/`access-logs` S3 buckets (`infra/stacks/data_stack.py`). No explicit bucket name is set, so CloudFormation generates a fresh unique one on every redeploy — nothing to collide with, just old data to delete once you're sure: `aws s3 rm --recursive s3://<bucket>` then `aws s3api delete-bucket --bucket <bucket>`.
-- The final RDS snapshot `DataStack`'s `removal_policy=SNAPSHOT` creates at delete time. This is the recovery point the policy exists for, so CDK has no way to auto-expire it — only a human can decide the data is disposable. Find it with `aws rds describe-db-snapshots --region us-west-2 --snapshot-type manual --query "DBSnapshots[?starts_with(DBSnapshotIdentifier, 'datastack-snapshot')].DBSnapshotIdentifier"`, then `aws rds delete-db-snapshot --region us-west-2 --db-snapshot-identifier <id>`.
-
-Resources no stack ever owned — hand-created in [First-time account setup](#first-time-account-setup) and [Configuring continuous deployment](#configuring-continuous-deployment) — are untouched by any `cdk destroy` and need their own manual cleanup, if you want them gone too: the Clerk secret (`ai-gaussian-splatter/clerk-secret-key`), the `ai-gaussian-splatter-ci-deploy` IAM role and its inline policy, the GitHub OIDC provider (skip if another app in the account still uses it), the `orky.net` Route 53 hosted zone (imported only — this app never owned it), `AWSServiceRoleForEC2Spot` (account-wide, shared with any other Spot workload), the billing-alerts console preference, and the GitHub repository variables. None of these cost anything meaningful to leave in place, and several (the OIDC provider, the Spot service-linked role, the hosted zone) are shared or reused, so deleting them isn't a like-for-like undo of `cdk:deploy:all`.
+Resources this config never owned — hand-created in [First-time account setup](#first-time-account-setup) and [Configuring continuous deployment](#configuring-continuous-deployment) — are untouched by `terraform destroy` and need their own manual cleanup, if you want them gone too: the Clerk secret (`ai-gaussian-splatter/clerk-secret-key`), the `ai-gaussian-splatter-ci-deploy` IAM role and its inline policy, the GitHub OIDC provider (skip if another app in the account still uses it), the `orky.net` Route 53 hosted zone (referenced only — this app never owned it), `AWSServiceRoleForEC2Spot` (account-wide, shared with any other Spot workload), the billing-alerts console preference, the GitHub repository variables, and the `infra/bootstrap/`-created state bucket itself (`terraform -chdir=infra/bootstrap destroy`, only after `infra/`'s own destroy has finished with it). None of these cost anything meaningful to leave in place, and several (the OIDC provider, the Spot service-linked role, the hosted zone) are shared or reused, so deleting them isn't a like-for-like undo of `terraform apply`.
