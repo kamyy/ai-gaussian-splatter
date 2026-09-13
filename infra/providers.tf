@@ -2,7 +2,8 @@
 # here: the bucket comes from infra/bootstrap/ and its name is account-specific. use_lockfile is Terraform's
 # native S3 state locking (>= 1.10) — no separate DynamoDB table needed.
 terraform {
-  required_version = ">= 1.10"
+  # Same version .github/workflows/ci.yml installs. A floor would let a newer local CLI plan silently.
+  required_version = "1.16.2"
 
   required_providers {
     aws = {

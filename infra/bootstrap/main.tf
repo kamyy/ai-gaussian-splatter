@@ -3,7 +3,8 @@
 # before the first `terraform init` in infra/. See RUNBOOK.md's "First-time account setup" section.
 
 terraform {
-  required_version = ">= 1.10"
+  # Same version .github/workflows/ci.yml installs. A floor would let a newer local CLI plan silently.
+  required_version = "1.16.2"
 
   required_providers {
     aws = {
