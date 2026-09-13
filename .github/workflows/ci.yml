@@ -182,7 +182,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: [lint-format, worker, web, infra]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Disabled while the AWS account is torn down, since nothing it deploys to exists. Re-enable by deleting
+    # `false && ` once AGENTS.md's current-state prerequisites are done.
+    if: false && github.event_name == 'push' && github.ref == 'refs/heads/main'
     # One at a time, queued rather than cancelled: two pushes close together would otherwise run overlapping deploy
     # sequences against the same ECS service and Terraform state — racing `terraform apply` calls at best, or a
     # service rollout starting before its own migration-then-rollout sequence actually finished at worst (Terraform's
