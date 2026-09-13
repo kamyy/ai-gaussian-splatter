@@ -8,7 +8,7 @@ const spawnMock = vi.hoisted(() =>
 vi.mock("node:child_process", () => ({ spawn: spawnMock }));
 vi.mock("node:fs", () => ({ mkdirSync: vi.fn(), openSync: vi.fn(() => 0) }));
 
-import { generateCallbackToken, launchJob, launchJobLocal } from "../ec2Launcher";
+import { generateCallbackToken, launchJob, launchJobLocal, WORKER_MAX_LIFETIME_MINUTES } from "../ec2Launcher";
 
 // aws-sdk-client-mock is a call stub with no simulated EC2 state, so these assert on the arguments RunInstances
 // received rather than on state after.
@@ -103,6 +103,21 @@ describe("launchJob", () => {
     expect(userData).toContain(`APP_PUBLIC_URL="${process.env.APP_PUBLIC_URL}"`);
     expect(userData).toContain('STAGE="reconstruct"');
     expect(userData).toContain(params.workerImageUri);
+  });
+
+  it("schedules a shutdown as the first thing user-data does, ahead of docker login/run", async () => {
+    ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
+    await launchJob(params);
+
+    // Regression guard for the worker-never-reports gap (AGENTS.md): this must fire regardless of whether docker
+    // login/pull ever succeeds, so it has to come before either, not depend on them.
+    const userData = Buffer.from(runInstancesInput().UserData ?? "", "base64").toString();
+    const shutdownLine = userData.indexOf("shutdown -h +");
+    const dockerLoginLine = userData.indexOf("docker login --username");
+    expect(shutdownLine).toBeGreaterThan(-1);
+    expect(shutdownLine).toBeLessThan(dockerLoginLine);
+    // Under set -e, a failed shutdown with no fallback would exit before the job and leave no ceiling scheduled.
+    expect(userData).toContain(`shutdown -h +${WORKER_MAX_LIFETIME_MINUTES} || poweroff -f`);
   });
 
   it("throws if EC2 returns no instance", async () => {

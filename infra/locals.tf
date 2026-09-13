@@ -1,5 +1,6 @@
-# Constants shared across the *.tf files below. Keeping them in one place means a rename touches one file instead
-# of every .tf file that references it.
+# Constants shared across more than one of the *.tf files below (values used by only one file stay local to it,
+# e.g. web.tf's worker_subnet/db_environment). Keeping a shared value here means a rename touches one file
+# instead of every file that references it.
 locals {
   project_tag = "ai-gaussian-splatter"
 
@@ -40,15 +41,14 @@ locals {
   # 502s — see AGENTS.md.
   keep_alive_timeout_ms = "65000"
 
-  # Clerk's server-side API key is created out of band before this config is ever applied (RUNBOOK.md) and only
-  # read here via var.clerk_secret_key_arn. Naming it once lets RUNBOOK's create-secret command and this name
-  # agree by construction.
-  clerk_secret_key_name = "ai-gaussian-splatter/clerk-secret-key"
-
-  # How many releases the ECR repository keeps per tag suffix. See registry.tf.
+  # How many releases the web ECR repository keeps per tag suffix. See registry.tf.
   releases_kept = 10
 
-  # Shared by every S3 role-policy grant in data.tf/web.tf/worker_iam.tf, so an action list change (e.g. adding
+  # Far shallower than releases_kept: the worker image is ~19 GB and isn't part of any ECS rollback mechanism,
+  # so there's no reason to pay for that many of them. See registry.tf.
+  worker_releases_kept = 2
+
+  # Shared by every S3 role-policy grant in web.tf/worker_iam.tf, so an action list change (e.g. adding
   # s3:PutObjectTagging) is made once instead of separately on each role/bucket pair.
   s3_read_actions = ["s3:GetObject", "s3:GetBucketLocation", "s3:ListBucket"]
   s3_read_write_actions = concat(local.s3_read_actions, [

@@ -1,9 +1,9 @@
-# RDS Postgres (single-AZ, db.t4g.micro — a genuinely relational schema at low traffic, with no need for
-# Multi-AZ at this scale) and the two S3 buckets (uploads, splats).
+# RDS Postgres and the three S3 buckets (uploads, splats, access_logs).
 #
-# Both buckets' CORS rules name local.app_origin rather than "*": the browser talks to S3 directly on both legs
-# (presigned PUT on upload, presigned GET in the viewer), so "*" would let any page a visitor lands on read a
-# shared or leaked splat URL cross-origin.
+# The uploads and splats buckets' CORS rules name local.app_origin rather than "*": the browser talks to S3
+# directly on both legs (presigned PUT on upload, presigned GET in the viewer), so "*" would let another
+# origin's JavaScript read a shared or leaked splat URL cross-origin via fetch/XHR. It does not stop a leaked
+# URL from being opened directly (CORS only gates cross-origin script reads, not navigation).
 
 resource "aws_db_subnet_group" "main" {
   name       = "ai-gaussian-splatter"
@@ -46,8 +46,8 @@ resource "aws_db_instance" "main" {
   skip_final_snapshot = true
 }
 
-# Uploads are ephemeral (source photos, not the deliverable). They expire after 90 days to bound storage cost;
-# splats are the actual output and kept indefinitely (no lifecycle rule).
+# Uploads (source photos) and splats (the deliverable) are both kept indefinitely. Nothing expires them; delete
+# an object by hand if it should go. Access logs are the exception — they age out below.
 resource "aws_s3_bucket" "uploads" {
   bucket_prefix = "ai-gaussian-splatter-uploads-"
   # No live data exists yet to protect, so `terraform destroy` empties and deletes this bucket outright.
@@ -83,21 +83,9 @@ resource "aws_s3_bucket_cors_configuration" "uploads" {
   }
 }
 
-resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
-  bucket = aws_s3_bucket.uploads.id
-
-  rule {
-    id     = "expire-after-90-days"
-    status = "Enabled"
-    filter {}
-    expiration {
-      days = 90
-    }
-  }
-}
-
-# Adds the aws:SecureTransport deny. The browser reaches this bucket directly on a presigned URL, which is the
-# one hop in this architecture that leaves AWS's network.
+# Adds the aws:SecureTransport deny. The browser reaches this bucket directly on a presigned URL, one of
+# several hops in this architecture that cross the public internet (alongside the ALB and the worker's status
+# callback to it).
 resource "aws_s3_bucket_policy" "uploads" {
   bucket = aws_s3_bucket.uploads.id
   policy = local.deny_insecure_transport_policy["uploads"]
@@ -144,9 +132,10 @@ resource "aws_s3_bucket_policy" "splats" {
   policy = local.deny_insecure_transport_policy["splats"]
 }
 
-# ALB access logs are written by the ELB service rather than by the app, so no CORS rule is needed. The ALB is
-# otherwise the one hop that keeps no record of who called. 90 days is how far back an abuse investigation is
-# likely to reach.
+# ALB access logs are written by the ELB service rather than by the app, so no CORS rule is needed. Without
+# this bucket the ALB would keep no record of who called — the app's own logs cover only requests its handlers
+# actually received, not the ones the ALB rejected or redirected first (web.tf). 90 days is how far back an
+# abuse investigation is likely to reach.
 resource "aws_s3_bucket" "access_logs" {
   bucket_prefix = "ai-gaussian-splatter-access-logs-"
   force_destroy = true

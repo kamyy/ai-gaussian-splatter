@@ -1,14 +1,18 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
 
-import { databaseSsl, resolveDatabaseUrl } from "../databaseUrl";
+import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
+import { mockClient } from "aws-sdk-client-mock";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { clearDatabasePasswordCache, databaseSsl, fetchDatabasePassword, resolveDatabaseUrl } from "../databaseUrl";
 
 /**
  * The production path here is untestable against real AWS, so these pin the contract instead: ECS projects the RDS
- * secret's fields into DATABASE_USER/DATABASE_PASSWORD (see the matching assertion in infra/tests/test_web_stack.py)
- * and this assembles the URL from them.
+ * secret's fields into DATABASE_USER/DATABASE_PASSWORD (see the matching assertion in infra/tests/web.tftest.hcl)
+ * and this assembles the URL from them. This is the path the migration task and local dev use — the long-lived web
+ * service instead uses fetchDatabasePassword, below.
  */
 describe("resolveDatabaseUrl", () => {
   it("assembles the URL from the parts ECS supplies", () => {
@@ -69,5 +73,61 @@ describe("databaseSsl", () => {
     const ssl = databaseSsl({ DATABASE_SSL_CA: path });
     expect(ssl?.ca).toContain("BEGIN CERTIFICATE");
     expect(ssl).not.toHaveProperty("rejectUnauthorized");
+  });
+});
+
+describe("fetchDatabasePassword", () => {
+  const secretsMock = mockClient(SecretsManagerClient);
+  const region = "us-west-2";
+
+  beforeEach(() => {
+    secretsMock.reset();
+    clearDatabasePasswordCache();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("extracts the password field from the secret's JSON body", async () => {
+    secretsMock.on(GetSecretValueCommand).resolves({ SecretString: JSON.stringify({ password: "s3cret" }) });
+    await expect(
+      fetchDatabasePassword("arn:aws:secretsmanager:us-west-2:000000000000:secret:one", region),
+    ).resolves.toBe("s3cret");
+  });
+
+  it("throws rather than returning undefined when the secret has no SecretString", async () => {
+    secretsMock.on(GetSecretValueCommand).resolves({});
+    await expect(
+      fetchDatabasePassword("arn:aws:secretsmanager:us-west-2:000000000000:secret:two", region),
+    ).rejects.toThrow("no SecretString");
+  });
+
+  it("throws when the secret's JSON body has no usable password field", async () => {
+    secretsMock.on(GetSecretValueCommand).resolves({ SecretString: JSON.stringify({ username: "splatter_admin" }) });
+    await expect(
+      fetchDatabasePassword("arn:aws:secretsmanager:us-west-2:000000000000:secret:no-password", region),
+    ).rejects.toThrow("no password field");
+  });
+
+  it("caches the value instead of calling Secrets Manager on every connection", async () => {
+    secretsMock.on(GetSecretValueCommand).resolves({ SecretString: JSON.stringify({ password: "first" }) });
+    const arn = "arn:aws:secretsmanager:us-west-2:000000000000:secret:three";
+
+    await expect(fetchDatabasePassword(arn, region)).resolves.toBe("first");
+    secretsMock.on(GetSecretValueCommand).resolves({ SecretString: JSON.stringify({ password: "second" }) });
+    await expect(fetchDatabasePassword(arn, region)).resolves.toBe("first");
+    expect(secretsMock.commandCalls(GetSecretValueCommand)).toHaveLength(1);
+  });
+
+  it("re-fetches once the cache entry is older than the TTL, picking up a rotated password", async () => {
+    secretsMock.on(GetSecretValueCommand).resolves({ SecretString: JSON.stringify({ password: "first" }) });
+    const arn = "arn:aws:secretsmanager:us-west-2:000000000000:secret:four";
+
+    await expect(fetchDatabasePassword(arn, region)).resolves.toBe("first");
+    vi.advanceTimersByTime(6 * 60 * 1000);
+    secretsMock.on(GetSecretValueCommand).resolves({ SecretString: JSON.stringify({ password: "rotated" }) });
+    await expect(fetchDatabasePassword(arn, region)).resolves.toBe("rotated");
   });
 });

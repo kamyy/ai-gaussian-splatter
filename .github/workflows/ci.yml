@@ -209,6 +209,9 @@ jobs:
       TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
       TF_VAR_app_public_url: ${{ vars.APP_PUBLIC_URL }}
       TF_VAR_worker_ami_id: ${{ vars.WORKER_AMI_ID }}
+      # GPU worker deployment stays manual, so this changes only when someone hand-builds and pushes a new
+      # worker image (RUNBOOK.md), not on every push to main the way web/migrate_image_tag do.
+      TF_VAR_worker_image_tag: ${{ vars.WORKER_IMAGE_TAG }}
       APP_PUBLIC_URL: ${{ vars.APP_PUBLIC_URL }}
     steps:
       - uses: actions/checkout@v7
@@ -251,8 +254,8 @@ jobs:
           echo "REGISTRY=$REGISTRY" >> "$GITHUB_ENV"
           SERVICE_JSON=$(aws ecs describe-services --cluster "$CLUSTER_NAME" --services "$SERVICE_NAME")
           OLD_TASK_DEF=$(jq -r '.services[0].deployments[] | select(.status=="PRIMARY") | .taskDefinition' <<<"$SERVICE_JSON")
-          # image is tagged "<sha>-web" (WebStack appends the role suffix); webImageTag takes a bare commit SHA, so
-          # strip it back off.
+          # image is tagged "<sha>-web" (infra/web.tf appends the -web suffix); web_image_tag takes a bare commit
+          # SHA, so strip it back off.
           OLD_TAG=$(aws ecs describe-task-definition --task-definition "$OLD_TASK_DEF" \
             --query 'taskDefinition.containerDefinitions[0].image' --output text | awk -F: '{print $NF}')
           echo "OLD_TAG=${OLD_TAG%-web}" >> "$GITHUB_ENV"

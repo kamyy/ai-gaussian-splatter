@@ -26,8 +26,7 @@ provider "aws" {
   }
 }
 
-# Budgets/billing resources only exist in us-east-1 regardless of where the rest of the app runs — see
-# locals.tf and budgets.tf.
+# The Budgets API only operates in us-east-1 regardless of where the rest of the app runs — see budgets.tf.
 provider "aws" {
   alias  = "billing"
   region = "us-east-1"

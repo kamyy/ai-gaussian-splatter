@@ -10,19 +10,46 @@ variables {
   hosted_zone_id       = "Z00000000000000000000"
   clerk_secret_key_arn = "arn:aws:secretsmanager:us-west-2:000000000000:secret:ai-gaussian-splatter/clerk-secret-key-AAAAAA"
   web_image_tag        = "0123abc"
+  worker_image_tag     = "0123abc"
 }
 
 run "worker_self_terminate_scoped_by_tag" {
   command = apply
 
   assert {
-    condition     = jsondecode(aws_iam_role_policy.worker_self_terminate.policy).Statement[0].Condition.StringEquals["ec2:ResourceTag/Role"] == "worker"
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.worker.policy).Statement :
+      s.Sid == "SelfTerminate" && try(s.Condition.StringEquals["ec2:ResourceTag/Role"], "") == "worker"
+    ])
     error_message = "the worker's self-terminate grant must be scoped to instances tagged Role=worker, matching web.tf's task role condition"
   }
 
   assert {
-    condition     = jsondecode(aws_iam_role_policy.worker_self_terminate.policy).Statement[0].Action == "ec2:TerminateInstances"
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.worker.policy).Statement :
+      s.Sid == "SelfTerminate" && s.Action == "ec2:TerminateInstances"
+    ])
     error_message = "the worker role must be able to terminate itself"
+  }
+}
+
+run "worker_can_pull_its_own_image" {
+  command = apply
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.worker.policy).Statement :
+      s.Sid == "EcrPull" && s.Resource == aws_ecr_repository.worker.arn
+    ])
+    error_message = "the worker role must be able to pull from its own ECR repository, or docker run never starts"
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.worker.policy).Statement :
+      s.Sid == "EcrAuth" && s.Action == "ecr:GetAuthorizationToken"
+    ])
+    error_message = "ecr:GetAuthorizationToken has no resource-level permissions, so it must stay Resource: *"
   }
 }
 
@@ -69,13 +96,6 @@ override_resource {
     arn      = "arn:aws:elasticloadbalancing:us-west-2:000000000000:loadbalancer/app/ai-gaussian-splatter/abc123"
     dns_name = "ai-gaussian-splatter-123456.us-west-2.elb.amazonaws.com"
     zone_id  = "Z1H1FL5HABSF5"
-  }
-}
-
-override_resource {
-  target = aws_sns_topic.billing_alerts
-  values = {
-    arn = "arn:aws:sns:us-east-1:000000000000:ai-gaussian-splatter-billing-alerts"
   }
 }
 

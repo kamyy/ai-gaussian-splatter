@@ -1,23 +1,11 @@
 # The Next.js app (pages + the REST API as Route Handlers) on Fargate, behind an internet-facing Application
 # Load Balancer.
 #
-# The tasks share the public subnets with the ALB and carry a public IP, so their calls to S3 and the EC2 API
-# egress through the internet gateway rather than a NAT gateway (see network.tf for the cost reasoning).
+# The tasks share the public subnets with the ALB and carry a public IP. Their calls to the EC2 API egress
+# through the internet gateway; S3 calls stay on AWS's network through the gateway endpoint (network.tf) instead.
 # Nothing can open a connection to them regardless: aws_security_group.web admits only aws_security_group.alb.
 # TLS terminates at the ALB with an ACM certificate for local.app_hostname, and plain HTTP is redirected to
 # HTTPS.
-
-# ---------------------------------------------------------------------------
-# Execution role — pulls the container image and writes logs. It's also the role ECS uses to fetch the DB
-# secret's value before handing it to the container as an env var, so the DB secret grant belongs here, not on
-# the task role.
-#
-# Deliberately not the AmazonECSTaskExecutionRolePolicy managed policy: it grants the two logs actions below at
-# Resource: "*" (every log group in the account) and the image-pull actions at Resource: "*" too (read access to
-# every ECR repo in the account). Reconstructed below instead: the logs actions scoped to this config's own two
-# log groups, and the pull actions scoped to this one repository (ecr:GetAuthorizationToken stays account-wide —
-# it has no resource-level permissions to scope to).
-# ---------------------------------------------------------------------------
 
 locals {
   ecs_tasks_assume_role_policy = jsonencode({
@@ -35,61 +23,49 @@ resource "aws_iam_role" "execution" {
   assume_role_policy = local.ecs_tasks_assume_role_policy
 }
 
-resource "aws_iam_role_policy" "execution_logs" {
-  role = aws_iam_role.execution.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = ["logs:CreateLogStream", "logs:PutLogEvents"]
-      Resource = [
-        "${aws_cloudwatch_log_group.web.arn}:*",
-        "${aws_cloudwatch_log_group.migration.arn}:*",
-      ]
-    }]
-  })
-}
-
-resource "aws_iam_role_policy" "execution_ecr_pull" {
+# Pulls the container image, writes logs, and fetches both secrets (DB, Clerk) before handing them to the
+# container as env vars — everything ECS itself needs before the application code starts.
+#
+# Deliberately not the AmazonECSTaskExecutionRolePolicy managed policy: it grants the logs actions at
+# Resource: "*" (every log group in the account) and the image-pull actions at Resource: "*" too (read access to
+# every ECR repo in the account). Reconstructed below instead: the logs actions scoped to this config's own two
+# log groups, and the pull actions scoped to this one repository (ecr:GetAuthorizationToken stays account-wide —
+# it has no resource-level permissions to scope to).
+resource "aws_iam_role_policy" "execution" {
   role = aws_iam_role.execution.id
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      { Effect = "Allow", Action = "ecr:GetAuthorizationToken", Resource = "*" },
       {
+        Sid    = "WriteLogs"
+        Effect = "Allow"
+        Action = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = [
+          "${aws_cloudwatch_log_group.web.arn}:*",
+          "${aws_cloudwatch_log_group.migration.arn}:*",
+        ]
+      },
+      { Sid = "EcrAuth", Effect = "Allow", Action = "ecr:GetAuthorizationToken", Resource = "*" },
+      {
+        Sid      = "EcrPull"
         Effect   = "Allow"
         Action   = ["ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage"]
         Resource = aws_ecr_repository.web.arn
       },
+      {
+        Sid      = "DbSecretRead"
+        Effect   = "Allow"
+        Action   = "secretsmanager:GetSecretValue"
+        Resource = aws_db_instance.main.master_user_secret[0].secret_arn
+      },
+      {
+        Sid      = "ClerkSecretRead"
+        Effect   = "Allow"
+        Action   = "secretsmanager:GetSecretValue"
+        Resource = var.clerk_secret_key_arn
+      },
     ]
-  })
-}
-
-resource "aws_iam_role_policy" "execution_db_secret_read" {
-  role = aws_iam_role.execution.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "secretsmanager:GetSecretValue"
-      Resource = aws_db_instance.main.master_user_secret[0].secret_arn
-    }]
-  })
-}
-
-resource "aws_iam_role_policy" "execution_clerk_secret_read" {
-  role = aws_iam_role.execution.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "secretsmanager:GetSecretValue"
-      Resource = var.clerk_secret_key_arn
-    }]
   })
 
   # var.clerk_secret_key_arn's own validation block can only check its shape, not that it names this deploy's own
@@ -110,9 +86,17 @@ locals {
   worker_subnet = values(aws_subnet.public)[0]
 }
 
+# The registry hostname web/lib/server/ec2Launcher.ts's user-data logs into before pulling — built from
+# account/region directly rather than parsed out of aws_ecr_repository.worker.repository_url, matching how
+# .github/workflows/ci.yml and RUNBOOK.md construct the same string for their own docker/podman logins.
+locals {
+  ecr_registry     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com"
+  worker_image_uri = "${aws_ecr_repository.worker.repository_url}:${var.worker_image_tag}"
+}
+
 # Shared by both containers that talk to Postgres — the web service below and the migration task. Defined once
 # so a future change (a renamed secret field, a moved CA path) can't be applied to one and silently missed on
-# the other.
+# the other. The username is shared too, since it never changes. The password is not: see db_password_secret.
 locals {
   db_environment = [
     { name = "DATABASE_HOST", value = aws_db_instance.main.address },
@@ -122,8 +106,14 @@ locals {
     # rather than a hardcoded path so a locally-run container can still talk to a plain Postgres.
     { name = "DATABASE_SSL_CA", value = local.rds_ca_bundle_path },
   ]
-  db_secrets = [
+  db_user_secret = [
     { name = "DATABASE_USER", valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:username::" },
+  ]
+  # Only the migration task takes this: it runs for seconds and exits, well inside RDS's 7-day rotation window for
+  # this secret, so a value ECS injects once at task start can't go stale. The long-lived web service instead
+  # fetches the current password itself at connect time (DATABASE_SECRET_ARN below, web/lib/server/databaseUrl.ts's
+  # fetchDatabasePassword) rather than trusting one this static either.
+  db_password_secret = [
     { name = "DATABASE_PASSWORD", valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:password::" },
   ]
 }
@@ -169,145 +159,117 @@ resource "aws_ecs_task_definition" "migration" {
       }
     }
     environment = local.db_environment
-    secrets     = local.db_secrets
+    secrets     = concat(local.db_user_secret, local.db_password_secret)
   }])
 }
-
-# ---------------------------------------------------------------------------
-# Task role — the running application code's own permissions: S3 rw on both buckets,
-# ec2:RunInstances/TerminateInstances scoped by tag.
-# ---------------------------------------------------------------------------
 
 resource "aws_iam_role" "task" {
   name               = "ai-gaussian-splatter-task"
   assume_role_policy = local.ecs_tasks_assume_role_policy
 }
 
-resource "aws_iam_role_policy" "task_bucket_read_write" {
-  for_each = { uploads = aws_s3_bucket.uploads, splats = aws_s3_bucket.splats }
-
+# The running application code's own permissions: S3 rw on both buckets, launching and terminating the GPU
+# worker (split across several statements — see each one below), and `aws ecs execute-command` access.
+resource "aws_iam_role_policy" "task" {
   role = aws_iam_role.task.id
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = local.s3_read_write_actions
-      Resource = [each.value.arn, "${each.value.arn}/*"]
-    }]
-  })
-}
-
-# RunInstances is authorized against every resource the request touches, each one separately. Only the
-# instance carries the worker tag (web/lib/server/ec2Launcher.ts tags ResourceType "instance"), so
-# aws:RequestTag is absent from the request context for the rest. A single statement conditioned on that key
-# would evaluate false for them and deny the whole call. Hence the split: the tag constrains what can be
-# launched (the second statement below), this one only names what it is launched from and into.
-resource "aws_iam_role_policy" "task_ec2_run_instances" {
-  role = aws_iam_role.task.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = "ec2:RunInstances"
-      Resource = [
-        # AMIs are not account-scoped, hence the empty account segment.
-        "arn:aws:ec2:${var.aws_region}::image/*",
-        # The worker only ever launches into this one subnet and this one security group (both passed as env vars
-        # by web/lib/server/ec2Launcher.ts), so both are scoped to the exact resource rather than every subnet or
-        # security group in the account.
-        local.worker_subnet.arn,
-        aws_security_group.worker.arn,
-        # The ENI and root volume RunInstances creates don't exist yet at authorization time, so neither can be
-        # scoped past the resource type.
-        "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:network-interface/*",
-        "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:volume/*",
-        "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:key-pair/*",
-        # Only evaluated at all if the spot request itself is tagged on create, which web/lib/server/ec2Launcher.ts
-        # does not do. But omitting it would otherwise start failing every launch with nothing to point at.
-        "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:spot-instances-request/*",
-      ]
-    }]
-  })
-}
-
-resource "aws_iam_role_policy" "task_ec2_run_instances_tagged" {
-  role = aws_iam_role.task.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Action    = "ec2:RunInstances"
-      Resource  = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:instance/*"
-      Condition = { StringEquals = { "aws:RequestTag/${local.worker_tag_key}" = local.worker_tag_value } }
-    }]
-  })
-}
-
-# A request carrying TagSpecifications is authorized a second time against ec2:CreateTags, separately from
-# RunInstances. Without this the launch fails even though the statements above allow it. The ec2:CreateAction
-# condition keeps it from becoming a general tag-anything grant: it only applies to tags applied at launch.
-resource "aws_iam_role_policy" "task_ec2_create_tags" {
-  role = aws_iam_role.task.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Action    = "ec2:CreateTags"
-      Resource  = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:*/*"
-      Condition = { StringEquals = { "ec2:CreateAction" = "RunInstances" } }
-    }]
-  })
-}
-
-resource "aws_iam_role_policy" "task_ec2_terminate" {
-  role = aws_iam_role.task.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Action    = "ec2:TerminateInstances"
-      Resource  = "*"
-      Condition = { StringEquals = { "ec2:ResourceTag/${local.worker_tag_key}" = local.worker_tag_value } }
-    }]
-  })
-}
-
-# PassRole is authorized against the role being passed, not the instance profile ARN that wraps it.
-# RunInstances with IamInstanceProfile evaluates iam:PassRole against the underlying role's ARN.
-resource "aws_iam_role_policy" "task_pass_worker_role" {
-  role = aws_iam_role.task.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "iam:PassRole"
-      Resource = aws_iam_role.worker.arn
-    }]
-  })
-}
-
-# `aws ecs execute-command` opens an SSM Session Manager channel from inside the task, which needs these four
-# actions on the task role. `enable_execute_command = true` on the service below does not grant them itself.
-# None of the four support resource-level scoping.
-resource "aws_iam_role_policy" "task_ssm_exec" {
-  role = aws_iam_role.task.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "ssmmessages:CreateControlChannel", "ssmmessages:CreateDataChannel",
-        "ssmmessages:OpenControlChannel", "ssmmessages:OpenDataChannel",
-      ]
-      Resource = "*"
-    }]
+    Statement = [
+      {
+        Sid      = "S3UploadsReadWrite"
+        Effect   = "Allow"
+        Action   = local.s3_read_write_actions
+        Resource = [aws_s3_bucket.uploads.arn, "${aws_s3_bucket.uploads.arn}/*"]
+      },
+      {
+        Sid      = "S3SplatsReadWrite"
+        Effect   = "Allow"
+        Action   = local.s3_read_write_actions
+        Resource = [aws_s3_bucket.splats.arn, "${aws_s3_bucket.splats.arn}/*"]
+      },
+      # The app's own runtime permission to re-fetch the DB master password at connect time (databaseUrl.ts's
+      # fetchDatabasePassword), separate from execution_role's DbSecretRead statement above, which only covers
+      # what ECS itself needs at task start.
+      {
+        Sid      = "DbSecretRead"
+        Effect   = "Allow"
+        Action   = "secretsmanager:GetSecretValue"
+        Resource = aws_db_instance.main.master_user_secret[0].secret_arn
+      },
+      # RunInstances is authorized against every resource the request touches, each one separately. Only the
+      # instance carries the worker tag (web/lib/server/ec2Launcher.ts tags ResourceType "instance"), so
+      # aws:RequestTag is absent from the request context for the rest. A single statement conditioned on that
+      # key would evaluate false for them and deny the whole call. Hence the split: the tag constrains what can
+      # be launched (the RunInstancesTagged statement below), this one only names what it is launched from and
+      # into.
+      {
+        Sid    = "RunInstances"
+        Effect = "Allow"
+        Action = "ec2:RunInstances"
+        Resource = [
+          # AMIs are not account-scoped, hence the empty account segment.
+          "arn:aws:ec2:${var.aws_region}::image/*",
+          # The worker only ever launches into this one subnet and this one security group (both passed as env
+          # vars by web/lib/server/ec2Launcher.ts), so both are scoped to the exact resource rather than every
+          # subnet or security group in the account.
+          local.worker_subnet.arn,
+          aws_security_group.worker.arn,
+          # The ENI and root volume RunInstances creates don't exist yet at authorization time, so neither can
+          # be scoped past the resource type.
+          "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:network-interface/*",
+          "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:volume/*",
+          # IAM authorizes every Spot RunInstances call against this resource type too, tagged or not — omitting
+          # it fails every launch with nothing in the request to point at as the cause.
+          "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:spot-instances-request/*",
+        ]
+      },
+      {
+        Sid       = "RunInstancesTagged"
+        Effect    = "Allow"
+        Action    = "ec2:RunInstances"
+        Resource  = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:instance/*"
+        Condition = { StringEquals = { "aws:RequestTag/${local.worker_tag_key}" = local.worker_tag_value } }
+      },
+      # A request carrying TagSpecifications is authorized a second time against ec2:CreateTags, separately
+      # from RunInstances. Without this the launch fails even though the statements above allow it. The
+      # ec2:CreateAction condition keeps it from becoming a general tag-anything grant: it only applies to tags
+      # applied at launch.
+      {
+        Sid       = "CreateTagsOnLaunch"
+        Effect    = "Allow"
+        Action    = "ec2:CreateTags"
+        Resource  = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:*/*"
+        Condition = { StringEquals = { "ec2:CreateAction" = "RunInstances" } }
+      },
+      {
+        Sid       = "TerminateWorker"
+        Effect    = "Allow"
+        Action    = "ec2:TerminateInstances"
+        Resource  = "*"
+        Condition = { StringEquals = { "ec2:ResourceTag/${local.worker_tag_key}" = local.worker_tag_value } }
+      },
+      # PassRole is authorized against the role being passed, not the instance profile ARN that wraps it.
+      # RunInstances with IamInstanceProfile evaluates iam:PassRole against the underlying role's ARN.
+      {
+        Sid      = "PassWorkerRole"
+        Effect   = "Allow"
+        Action   = "iam:PassRole"
+        Resource = aws_iam_role.worker.arn
+      },
+      # `aws ecs execute-command` opens an SSM Session Manager channel from inside the task, which needs these
+      # four actions on the task role. `enable_execute_command = true` on the service below does not grant them
+      # itself. None of the four support resource-level scoping.
+      {
+        Sid    = "SsmExec"
+        Effect = "Allow"
+        Action = [
+          "ssmmessages:CreateControlChannel", "ssmmessages:CreateDataChannel",
+          "ssmmessages:OpenControlChannel", "ssmmessages:OpenDataChannel",
+        ]
+        Resource = "*"
+      },
+    ]
   })
 }
 
@@ -360,8 +322,8 @@ resource "aws_lb" "web" {
   # assembled out of them.
   drop_invalid_header_fields = true
 
-  # The only record of who called: the app logs its own handlers, not the requests the ALB rejected or
-  # redirected before reaching them.
+  # Without this the app's own logs would be the only record of who called, and those cover only requests its
+  # handlers actually received, not the ones the ALB rejected or redirected first.
   access_logs {
     bucket  = aws_s3_bucket.access_logs.id
     enabled = true
@@ -498,22 +460,34 @@ resource "aws_ecs_task_definition" "web" {
       }
     }
     environment = concat(local.db_environment, [
+      # Read by every AWS SDK client the app constructs (s3.ts, ec2Launcher.ts, databaseUrl.ts's
+      # fetchDatabasePassword) via getEnv().AWS_REGION. Without this, each client falls back to its own default
+      # region resolution, which can land somewhere other than where these resources actually live.
+      { name = "AWS_REGION", value = var.aws_region },
       { name = "UPLOADS_BUCKET", value = aws_s3_bucket.uploads.id },
       { name = "SPLATS_BUCKET", value = aws_s3_bucket.splats.id },
       { name = "WORKER_AMI_ID", value = var.worker_ami_id },
       { name = "WORKER_SUBNET_ID", value = local.worker_subnet.id },
       { name = "WORKER_SECURITY_GROUP_ID", value = aws_security_group.worker.id },
       { name = "WORKER_INSTANCE_PROFILE_ARN", value = aws_iam_instance_profile.worker.arn },
+      # Read by web/lib/server/ec2Launcher.ts's workerImageUri()/ecrRegistry(), which otherwise fall back to
+      # REPLACE_WITH_* placeholders meant only for local/pre-deploy development.
+      { name = "WORKER_IMAGE_URI", value = local.worker_image_uri },
+      { name = "ECR_REGISTRY", value = local.ecr_registry },
       # Where the GPU worker PATCHes job status back to. Passed in rather than read off the load balancer, so
       # it stays the stable custom domain the ALB is aliased to.
       { name = "APP_PUBLIC_URL", value = local.app_origin },
       # Read by Next's standalone server.js to override Node's 5s idle-socket close, which the ALB outlives —
       # see AGENTS.md.
       { name = "KEEP_ALIVE_TIMEOUT", value = local.keep_alive_timeout_ms },
+      # Read by web/lib/server/databaseUrl.ts's fetchDatabasePassword to fetch the current master password at
+      # connect time, instead of trusting the static value db_password_secret injects for the migration task
+      # below. A plain env var naming the secret, not the secret's value itself, so no `secrets` entry is needed.
+      { name = "DATABASE_SECRET_ARN", value = aws_db_instance.main.master_user_secret[0].secret_arn },
     ])
     # Only the credentials go through Secrets Manager; the endpoint and database name above aren't secret and
-    # stay readable in the console.
-    secrets = concat(local.db_secrets, [
+    # stay readable in the console. DATABASE_PASSWORD is deliberately absent — see DATABASE_SECRET_ARN above.
+    secrets = concat(local.db_user_secret, [
       { name = "CLERK_SECRET_KEY", valueFrom = var.clerk_secret_key_arn },
     ])
   }])

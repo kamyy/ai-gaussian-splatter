@@ -9,8 +9,8 @@ import { getEnv } from "./env";
 
 /**
  * Direct spot-instance-per-job launch — no SQS/Batch/Step Functions. IAM instance profile is scoped externally
- * (infra/worker_iam.tf) to exactly: S3 read (uploads bucket), S3 read/write (splats bucket),
- * ec2:TerminateInstances on itself.
+ * (infra/worker_iam.tf) to: ECR pull on the worker repository, S3 read (uploads bucket), S3 read/write (splats
+ * bucket), and ec2:TerminateInstances on any instance tagged Role=worker, not only itself.
  */
 type WorkerStage = "reconstruct" | "train";
 
@@ -25,11 +25,21 @@ interface UserDataParams {
   workerImageUri: string;
   ecrRegistry: string;
   awsRegion: string;
+  maxLifetimeMinutes: number;
 }
 
 function renderUserData(p: UserDataParams): string {
   return `#!/bin/bash
 set -euo pipefail
+
+# Hard ceiling independent of everything below: a failed docker login/pull, or a hang inside the container, would
+# otherwise leave this instance running (and billing) forever, since worker/pipeline/instance.py's own
+# self-terminate never gets a chance to run in either case. Scheduled before any of the failure-prone steps.
+# InstanceInitiatedShutdownBehavior=terminate on the launch (below) is what makes this actually terminate the
+# instance instead of just stopping it. A normal job still finishes and self-terminates well before this fires.
+# If the ceiling can't be scheduled, power off now instead. Under set -e a bare failure here would exit with no job
+# and no ceiling, billing until someone notices. -f skips systemd, in case systemd is why shutdown failed.
+shutdown -h +${p.maxLifetimeMinutes} || poweroff -f
 
 # Plaintext, and EC2 user-data is readable by anyone holding
 # ec2:DescribeInstances. The token is per-job and only authorizes status
@@ -84,6 +94,13 @@ export function generateCallbackToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
+/**
+ * How long after boot renderUserData's `shutdown -h` terminates a worker, whatever its job is doing. It caps
+ * worst-case billing and is not a tuned SLA. M0 hasn't run on real hardware yet (AGENTS.md), so 2 hours is a rough
+ * guess generous over the expected job. Revisit it once real wall-clock numbers exist.
+ */
+export const WORKER_MAX_LIFETIME_MINUTES = 120;
+
 /** Launches the spot worker instance and returns its instance ID. */
 export async function launchJob(params: {
   jobId: string;
@@ -107,6 +124,7 @@ export async function launchJob(params: {
     workerImageUri: params.workerImageUri,
     ecrRegistry: params.ecrRegistry,
     awsRegion: env.AWS_REGION,
+    maxLifetimeMinutes: WORKER_MAX_LIFETIME_MINUTES,
   });
 
   const response = await ec2.send(
@@ -145,6 +163,9 @@ export async function launchJob(params: {
           ],
         },
       ],
+      // Paired with the scheduled `shutdown -h` in renderUserData's max-lifetime safety net above: without this,
+      // that shutdown would just stop the instance (AWS's default), leaving it around to bill EBS storage and
+      // block cleanup instead of actually going away.
       InstanceInitiatedShutdownBehavior: "terminate",
     }),
   );

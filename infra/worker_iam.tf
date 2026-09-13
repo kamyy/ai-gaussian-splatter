@@ -1,10 +1,12 @@
-# The GPU spot worker's IAM role/instance profile — scoped to exactly: S3 read (uploads), S3 read/write
-# (splats), and terminating itself. No other permissions, so a compromised instance can't do much beyond its
-# own job.
+# The GPU spot worker's IAM role/instance profile — pulling its own image, read on the uploads bucket,
+# read/write on the splats bucket, and terminating any instance tagged Role=worker. Both bucket grants cover the
+# whole bucket, not just the calling job's own objects, and the terminate grant matches every worker instance,
+# not only the caller — EC2 has no resource-level condition for "the calling instance" to scope either one down
+# further.
 
 resource "aws_iam_role" "worker" {
   name        = "ai-gaussian-splatter-worker"
-  description = "GPU spot worker instance role: S3 read on uploads, read/write on splats, self-terminate only"
+  description = "GPU spot worker instance role: ECR pull, S3 read on uploads, read/write on splats, terminate instances tagged Role=worker"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -15,47 +17,46 @@ resource "aws_iam_role" "worker" {
   })
 }
 
-resource "aws_iam_role_policy" "worker_uploads_read" {
+resource "aws_iam_role_policy" "worker" {
   role = aws_iam_role.worker.id
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = local.s3_read_actions
-      Resource = [aws_s3_bucket.uploads.arn, "${aws_s3_bucket.uploads.arn}/*"]
-    }]
-  })
-}
-
-resource "aws_iam_role_policy" "worker_splats_read_write" {
-  role = aws_iam_role.worker.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = local.s3_read_write_actions
-      Resource = [aws_s3_bucket.splats.arn, "${aws_s3_bucket.splats.arn}/*"]
-    }]
-  })
-}
-
-# Self-termination only, scoped so the worker can kill itself at the end of its job (worker/run_job.py's
-# finally block) but nothing else running in the account. EC2 doesn't support resource-level restriction to
-# "the calling instance" directly, so this is scoped by the same worker-tag convention used in web.tf's
-# RunInstances grant — see locals.tf for the shared tag key/value.
-resource "aws_iam_role_policy" "worker_self_terminate" {
-  role = aws_iam_role.worker.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Action    = "ec2:TerminateInstances"
-      Resource  = "*"
-      Condition = { StringEquals = { "ec2:ResourceTag/${local.worker_tag_key}" = local.worker_tag_value } }
-    }]
+    Statement = [
+      # web/lib/server/ec2Launcher.ts's user-data runs `aws ecr get-login-password` then `docker run`, which
+      # pulls aws_ecr_repository.worker's image using this instance's own role — nothing else authenticates
+      # that pull. ecr:GetAuthorizationToken has no resource-level permissions to scope to.
+      { Sid = "EcrAuth", Effect = "Allow", Action = "ecr:GetAuthorizationToken", Resource = "*" },
+      {
+        Sid      = "EcrPull"
+        Effect   = "Allow"
+        Action   = ["ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage"]
+        Resource = aws_ecr_repository.worker.arn
+      },
+      {
+        Sid      = "UploadsRead"
+        Effect   = "Allow"
+        Action   = local.s3_read_actions
+        Resource = [aws_s3_bucket.uploads.arn, "${aws_s3_bucket.uploads.arn}/*"]
+      },
+      {
+        Sid      = "SplatsReadWrite"
+        Effect   = "Allow"
+        Action   = local.s3_read_write_actions
+        Resource = [aws_s3_bucket.splats.arn, "${aws_s3_bucket.splats.arn}/*"]
+      },
+      # Self-termination, scoped by the same worker-tag convention used in web.tf's RunInstances grant (see
+      # locals.tf for the shared tag key/value) since EC2 has no resource-level condition for "the calling
+      # instance." This is what lets worker/run_job.py's finally block terminate its own instance at the end of
+      # a job.
+      {
+        Sid       = "SelfTerminate"
+        Effect    = "Allow"
+        Action    = "ec2:TerminateInstances"
+        Resource  = "*"
+        Condition = { StringEquals = { "ec2:ResourceTag/${local.worker_tag_key}" = local.worker_tag_value } }
+      },
+    ]
   })
 }
 

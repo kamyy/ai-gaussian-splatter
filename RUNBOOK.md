@@ -245,17 +245,17 @@ curl -s http://localhost:8000/api/v1/healthz   # should be {"status":"ok"}
 
 **This whole section is one-time setup, not something repeated per release.** It walks a fresh account to the point where `.github/workflows/ci.yml`'s `deploy` job can take over every future deploy: push to `main`, and CD builds, migrates, and rolls the service out on its own (see ["Fixing a bad migration"](#fixing-a-bad-migration) and ["Configuring continuous deployment"](#configuring-continuous-deployment) below). After that, a human runs `terraform` by hand again only for two rare exceptions: a rollback, or previewing an infra change with `terraform plan` before it applies — both reuse the same variable values and commands below.
 
-Start by finishing **[First-time account setup](#first-time-account-setup)** before `terraform apply`. Those steps create the Clerk secret, create `AWSServiceRoleForEC2Spot` if it doesn't already exist, turn on billing alerts, bootstrap the Terraform state backend, and stand up the ECR repository. Skip the secret and tasks fail at start: the web/migration task definitions reference it rather than creating it. Skip the Spot role and the failure doesn't surface until the first real worker job tries to launch a Spot instance. Skip the bootstrap and `terraform init` fails before creating anything. Skip the registry (or the push into it) and Fargate has nothing to pull; the circuit breaker rolls the service back. ["Configuring continuous deployment"](#configuring-continuous-deployment) is also one-time, but it needs the web service's IAM roles to already exist, so it waits until after the first full apply.
+Start by finishing **[First-time account setup](#first-time-account-setup)** before `terraform apply`. Those steps create the Clerk secret, create `AWSServiceRoleForEC2Spot` if it doesn't already exist, bootstrap the Terraform state backend, and stand up the ECR repository. Skip the secret and tasks fail at start: the web/migration task definitions reference it rather than creating it. Skip the Spot role and the failure doesn't surface until the first real worker job tries to launch a Spot instance. Skip the bootstrap and `terraform init` fails before creating anything. Skip the registry (or the push into it) and Fargate has nothing to pull; the circuit breaker rolls the service back. ["Configuring continuous deployment"](#configuring-continuous-deployment) is also one-time, but it needs the web service's IAM roles to already exist, so it waits until after the first full apply.
 
 ### Resolving variable values
 
-Every `terraform` invocation below — the full apply, and a diff preview — needs the same six values. Resolve them once per shell session and reuse them for everything that follows. Terraform reads a `TF_VAR_<name>` environment variable for the matching variable automatically, matching each name in `infra/variables.tf`, so once these are exported no invocation below needs a repeated `-var` flag. `AWS_ACCOUNT_ID` isn't a Terraform variable — it's used below to name the state bucket and build the CI role's ARN — so export it separately.
+Every `terraform` invocation below — the full apply, and a diff preview — needs the same seven values. Resolve them once per shell session and reuse them for everything that follows. Terraform reads a `TF_VAR_<name>` environment variable for the matching variable automatically, matching each name in `infra/variables.tf`, so once these are exported no invocation below needs a repeated `-var` flag. `AWS_ACCOUNT_ID` isn't a Terraform variable — it's used below to name the state bucket and build the CI role's ARN — so export it separately.
 
 ```bash
 export AWS_ACCOUNT_ID=replace-with-your-account-id # Use a real AWS account id.
 ```
 
-`TF_VAR_alert_email` is where the AWS Budget and CloudWatch billing alarm (`infra/budgets.tf`) send spend alerts. Omitting it fails `terraform plan`/`apply` immediately, but nothing can tell a wrong address from a right one, and a wrong one applies green with the alerts never arriving. AWS emails a confirmation link on the first apply; until it's clicked the subscription stays pending and sends nothing, so check for it.
+`TF_VAR_alert_email` is where the AWS Budget (`infra/budgets.tf`) sends spend alerts directly, with no subscription-confirmation step to check. Omitting it fails `terraform plan`/`apply` immediately, but nothing can tell a wrong address from a right one, and a wrong one applies green with the alerts never arriving. The only way to catch a typo is to watch for a real alert once spend crosses a threshold, or temporarily lower `monthly_budget_limit_usd` to force one.
 
 ```bash
 export TF_VAR_alert_email=replace-with-your-email
@@ -283,6 +283,12 @@ export TF_VAR_worker_ami_id=<ami-... from the table>
 
 ```bash
 export TF_VAR_web_image_tag=$(git rev-parse --short HEAD)
+```
+
+`TF_VAR_worker_image_tag` is the worker image's own build SHA. GPU worker deployment stays manual ([`ARCHITECTURE.md`](ARCHITECTURE.md)), so unlike `web_image_tag` this doesn't move on every release — it only changes when you actually build and push a new worker image (["Building and pushing the worker image"](#building-and-pushing-the-worker-image), below). Terraform can't verify the tag has actually been pushed, the same way it can't for `web_image_tag`; it only validates the shape. On a fresh account with nothing pushed yet, the current commit is a reasonable placeholder:
+
+```bash
+export TF_VAR_worker_image_tag=$(git rev-parse --short HEAD)
 ```
 
 `TF_VAR_clerk_secret_key_arn` includes Secrets Manager's six-character suffix. ECS matches a task definition's `valueFrom` against that suffix, so a partial ARN applies clean and only fails at task start. This `describe-secret` call needs the Clerk secret to already exist, so only run this after creating the secret in ["First-time account setup"](#first-time-account-setup).
@@ -326,11 +332,9 @@ aws iam get-role --role-name AWSServiceRoleForEC2Spot >/dev/null 2>&1 || \
   aws iam create-service-linked-role --aws-service-name spot.amazonaws.com
 ```
 
-Turn on billing alerts, or the CloudWatch billing alarm (`infra/budgets.tf`) never fires. `AWS/Billing EstimatedCharges` publishes no data at all until the account preference is set, and there is no API or Terraform resource for it — Billing console → Billing preferences → **Receive AWS Free Tier alerts and billing alerts**, in `us-east-1`. The AWS Budget half works regardless; only the alarm depends on this.
+To see current estimated month-to-date spend, Billing console → **Billing Home** shows it on the landing page; **Cost Explorer** breaks it down by service. To check the budget directly instead of hunting the console, `aws budgets describe-budgets --account-id $AWS_ACCOUNT_ID --region us-east-1` returns its `CalculatedSpend` — the Budgets API is `us-east-1`-only regardless of the resources it's tracking.
 
-That console checkbox only wires up the alarm; it isn't where spend itself is visible. To see current estimated month-to-date spend, Billing console → **Billing Home** shows it on the landing page; **Cost Explorer** breaks it down by service. To check the budget directly instead of hunting the console, `aws budgets describe-budgets --account-id $AWS_ACCOUNT_ID --region us-east-1` returns its `CalculatedSpend` — the Budgets API is `us-east-1`-only regardless of the resources it's tracking.
-
-Now resolve the six variable values in ["Resolving variable values"](#resolving-variable-values) above, in the same shell.
+Now resolve the seven variable values in ["Resolving variable values"](#resolving-variable-values) above, in the same shell.
 
 A fresh account needs the Terraform state backend bootstrapped once. `infra/bootstrap/` is a separate, tiny root module (its own local state) that creates only the S3 bucket `infra/`'s own `backend "s3"` block points at — nothing in `infra/`'s real config can apply before that bucket exists. It takes no variables at all.
 
@@ -394,6 +398,30 @@ Only the last few releases are kept (`local.releases_kept` in `infra/registry.tf
 
 So the site stays broken after this first deploy until CD applies the first migration. Finish ["Configuring continuous deployment"](#configuring-continuous-deployment) below, then push a commit touching at least one non-Markdown file to `main`. `.github/workflows/ci.yml`'s `paths-ignore` skips the whole workflow, deploy included, for a commit that only touches `.md` files. That push is what actually runs the first migration. That `deploy` job run builds the migrator image, applies it, and rolls the service forward, exactly like every release after it.
 
+### Building and pushing the worker image
+
+Unlike the web/migrate images, nothing builds or pushes this on its own — GPU worker deployment stays manual ([`ARCHITECTURE.md`](ARCHITECTURE.md)). Do this whenever `worker/` changes and you want a job to actually pick up the new build; the previous section's `terraform apply` already creates `aws_ecr_repository.worker` regardless of whether anything has been pushed to it yet, since `WORKER_IMAGE_URI` is just a string env var the web task carries, not something ECS itself tries to pull.
+
+```bash
+cd infra # Make sure you're in the right folder.
+
+REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com
+REPO=$REGISTRY/ai-gaussian-splatter-worker
+
+aws ecr get-login-password --region us-west-2 | podman login --username AWS --password-stdin $REGISTRY
+
+podman build -t $REPO:$TF_VAR_worker_image_tag ../worker
+podman push $REPO:$TF_VAR_worker_image_tag
+
+terraform apply
+```
+
+`terraform apply` here only updates `WORKER_IMAGE_URI` on the web task definition to point at the tag just pushed — it does not restart the running service. Force one (`aws ecs update-service --cluster ai-gaussian-splatter --service ai-gaussian-splatter-web --force-new-deployment`) if a job launched before this apply should not keep using the old image; otherwise the next job launch picks up the new value on its own.
+
+Only the last `local.worker_releases_kept` images are kept (`infra/registry.tf`) — far fewer than the web repository's `local.releases_kept`, since the ~19 GB worker image isn't part of any ECS rollback mechanism: `WORKER_IMAGE_URI` just names whatever tag `worker_image_tag` currently points at, with nothing to roll back to the way a task definition revision does.
+
+Then set the `WORKER_IMAGE_TAG` repository variable ([Configuring continuous deployment](#configuring-continuous-deployment)) to the tag just pushed. CI's `deploy` job passes it as `TF_VAR_worker_image_tag` on every push to `main`, so a stale value silently reverts `WORKER_IMAGE_URI` on the next deploy. Once `local.worker_releases_kept` newer images exist, the lifecycle policy expires that old tag, and every job launch then fails its pull and bills until the `WORKER_MAX_LIFETIME_MINUTES` shutdown.
+
 ## Configuring continuous deployment
 
 One-time, and only possible **after** [First-time account setup](#first-time-account-setup). Policy below names the migration task role and execution role, neither of which exist before the first `terraform apply`. The `ai-gaussian-splatter-ci-deploy` role created below cannot be Terraform-managed either, or it would lead to a chicken-egg situation.
@@ -451,7 +479,7 @@ cat > ci-deploy-policy.json <<EOF
         "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer",
         "ecr:CreateRepository", "ecr:DeleteRepository", "ecr:DescribeRepositories",
         "ecr:PutLifecyclePolicy", "ecr:GetLifecyclePolicy", "ecr:TagResource", "ecr:PutImageTagMutability"
-      ], "Resource": "arn:aws:ecr:us-west-2:$AWS_ACCOUNT_ID:repository/ai-gaussian-splatter"},
+      ], "Resource": "arn:aws:ecr:us-west-2:$AWS_ACCOUNT_ID:repository/ai-gaussian-splatter*"},
     {"Effect": "Allow", "Action": "ecs:RunTask", "Resource": [
         "arn:aws:ecs:us-west-2:$AWS_ACCOUNT_ID:task-definition/ai-gaussian-splatter-migrate:*",
         "arn:aws:ecs:us-west-2:$AWS_ACCOUNT_ID:cluster/ai-gaussian-splatter"
@@ -526,19 +554,7 @@ cat > ci-deploy-policy.json <<EOF
         "acm:RequestCertificate", "acm:DeleteCertificate", "acm:DescribeCertificate", "acm:AddTagsToCertificate"
       ], "Resource": "*"},
     {"Effect": "Allow", "Action": [
-        "kms:CreateKey", "kms:ScheduleKeyDeletion", "kms:DescribeKey", "kms:PutKeyPolicy", "kms:GetKeyPolicy",
-        "kms:EnableKeyRotation", "kms:GetKeyRotationStatus", "kms:TagResource", "kms:CreateAlias", "kms:DeleteAlias"
-      ], "Resource": "*"},
-    {"Effect": "Allow", "Action": [
-        "sns:CreateTopic", "sns:DeleteTopic", "sns:GetTopicAttributes", "sns:SetTopicAttributes",
-        "sns:Subscribe", "sns:Unsubscribe", "sns:ListSubscriptionsByTopic", "sns:TagResource"
-      ], "Resource": "*"},
-    {"Effect": "Allow", "Action": [
         "budgets:ViewBudget", "budgets:ModifyBudget"
-      ], "Resource": "*"},
-    {"Effect": "Allow", "Action": [
-        "cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms", "cloudwatch:DescribeAlarms",
-        "cloudwatch:TagResource"
       ], "Resource": "*"},
     {"Effect": "Allow", "Action": [
         "logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:DescribeLogGroups", "logs:PutRetentionPolicy",
@@ -569,6 +585,7 @@ Set these as GitHub repository variables (Settings → Secrets and variables →
 - `ALERT_EMAIL`
 - `APP_PUBLIC_URL`
 - `WORKER_AMI_ID`
+- `WORKER_IMAGE_TAG` — same reasoning as `WORKER_AMI_ID`: GPU worker deployment stays manual, so this is set once (["Building and pushing the worker image"](#building-and-pushing-the-worker-image)) and only touched again when someone hand-pushes a new worker image, not on every deploy.
 - `CLERK_PUBLISHABLE_KEY` (the `pk_live_...` key, not the secret one)
 
 Live re-resolution (`aws route53 list-hosted-zones-by-name`, etc.) was deliberately skipped for these in CI — one production environment, rarely-changing values, and a `vars.*` edit is itself a reviewable, logged event, unlike giving the CI role extra read permissions just to re-derive them every run.
@@ -587,7 +604,7 @@ If the `deploy` job's migration step fails for an infra reason rather than a bad
 
 1. Check `jobs.status` and `jobs.error_message` for the splat (`GET /api/v1/splats/{id}/jobs/latest`).
 2. If `status` is stuck (no update in ~20 min) rather than `failed`: the instance likely died without reporting — check the EC2 console for the tagged instance (`Role=worker`, `JobId=<job_id>`) and its system log.
-3. Confirm self-termination actually fired: the instance should not still be running after the job reaches a terminal state. **If it is, terminate it by hand.** The instance-runtime alarm meant to catch this isn't implemented in `infra/` yet ([State / what's next](AGENTS.md#state--whats-next), Known gaps), so nothing else will.
+3. Confirm the instance actually went away. It should self-terminate the moment the job reaches a terminal state, and — even if it never does — `web/lib/server/ec2Launcher.ts` schedules a hard `shutdown` at its `WORKER_MAX_LIFETIME_MINUTES` constant (2 hours) as the very first thing user-data runs, so it should disappear on its own by then regardless of what happened inside the container. **Still running well past that ceiling means cloud-init/user-data itself never started** — a boot failure (bad AMI, IMDS/networking issue), not a job failure, since that's the one case the scheduled shutdown can't catch: it's never scheduled if user-data never runs. Terminate it by hand in that case. There's still no alerting when any of this fires ([State / what's next](AGENTS.md#state--whats-next), Known gaps), so this check has to be done by hand.
 4. `docker logs` on the instance (if still running) or CloudWatch Logs (once wired up) for the actual COLMAP/gsplat stack trace.
 
 ## Tearing down
@@ -604,4 +621,4 @@ terraform destroy
 
 The ECR repository (`infra/registry.tf`) is destroyed too — `force_delete = true` means every image in it goes as well, leaving no orphan under that fixed name for the next apply to collide with.
 
-Resources this config never owned — hand-created in [First-time account setup](#first-time-account-setup) and [Configuring continuous deployment](#configuring-continuous-deployment) — are untouched by `terraform destroy` and need their own manual cleanup, if you want them gone too: the Clerk secret (`ai-gaussian-splatter/clerk-secret-key`), the `ai-gaussian-splatter-ci-deploy` IAM role and its inline policy, the GitHub OIDC provider (skip if another app in the account still uses it), the `orky.net` Route 53 hosted zone (referenced only — this app never owned it), `AWSServiceRoleForEC2Spot` (account-wide, shared with any other Spot workload), the billing-alerts console preference, the GitHub repository variables, and the `infra/bootstrap/`-created state bucket itself (`terraform -chdir=infra/bootstrap destroy`, only after `infra/`'s own destroy has finished with it). None of these cost anything meaningful to leave in place, and several (the OIDC provider, the Spot service-linked role, the hosted zone) are shared or reused, so deleting them isn't a like-for-like undo of `terraform apply`.
+Resources this config never owned — hand-created in [First-time account setup](#first-time-account-setup) and [Configuring continuous deployment](#configuring-continuous-deployment) — are untouched by `terraform destroy` and need their own manual cleanup, if you want them gone too: the Clerk secret (`ai-gaussian-splatter/clerk-secret-key`), the `ai-gaussian-splatter-ci-deploy` IAM role and its inline policy, the GitHub OIDC provider (skip if another app in the account still uses it), the `orky.net` Route 53 hosted zone (referenced only — this app never owned it), `AWSServiceRoleForEC2Spot` (account-wide, shared with any other Spot workload), the GitHub repository variables, and the `infra/bootstrap/`-created state bucket itself (`terraform -chdir=infra/bootstrap destroy`, only after `infra/`'s own destroy has finished with it). None of these cost anything meaningful to leave in place, and several (the OIDC provider, the Spot service-linked role, the hosted zone) are shared or reused, so deleting them isn't a like-for-like undo of `terraform apply`.
