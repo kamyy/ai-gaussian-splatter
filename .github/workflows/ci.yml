@@ -251,22 +251,59 @@ jobs:
           role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-gaussian-splatter-ci-deploy
           aws-region: us-west-2
 
-      # Discovers what's live before touching anything, so the migration-only deploy below (which must leave the service
-      # alone) has a real value to pin it to, and so this job needs no separate lookup of the service's network
-      # placement for `ecs run-task` below.
-      - name: Resolve tags and current placement
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.2
+          # The wrapper adds its own lines to a command's stdout, which would corrupt the state JSON captured below.
+          terraform_wrapper: false
+
+      - name: terraform init
+        working-directory: infra
         run: |
-          echo "NEW_TAG=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
-          REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-          echo "REGISTRY=$REGISTRY" >> "$GITHUB_ENV"
-          SERVICE_JSON=$(aws ecs describe-services --cluster "$CLUSTER_NAME" --services "$SERVICE_NAME")
-          OLD_TASK_DEF=$(jq -r '.services[0].deployments[] | select(.status=="PRIMARY") | .taskDefinition' <<<"$SERVICE_JSON")
-          # image is tagged "<sha>-web" (infra/web.tf appends the -web suffix); web_image_tag takes a bare commit
-          # SHA, so strip it back off.
-          OLD_TAG=$(aws ecs describe-task-definition --task-definition "$OLD_TASK_DEF" \
-            --query 'taskDefinition.containerDefinitions[0].image' --output text | awk -F: '{print $NF}')
-          echo "OLD_TAG=${OLD_TAG%-web}" >> "$GITHUB_ENV"
-          jq '.services[0].networkConfiguration' <<<"$SERVICE_JSON" > network-config.json
+          terraform init -input=false \
+            -backend-config="bucket=ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID" \
+            -backend-config="key=infra.tfstate" \
+            -backend-config="region=$AWS_REGION"
+
+      # Discovers what's live before touching anything, so the migration-only deploy below (which must leave the service
+      # alone) has a real value to pin it to. Terraform state, not an ECS lookup, decides whether this is the first
+      # deploy into an empty account. A failed state read fails this step, while a failed ECS lookup could pass for "no
+      # service yet" and roll the service forward before its migration ran.
+      - name: Resolve tags
+        working-directory: infra
+        run: |
+          NEW_TAG=$(git rev-parse --short HEAD)
+          echo "NEW_TAG=$NEW_TAG" >> "$GITHUB_ENV"
+          echo "REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com" >> "$GITHUB_ENV"
+          # `state pull` prints nothing and exits 0 when the state is empty.
+          STATE=$(terraform state pull)
+          HAS_SERVICE=false
+          if [ -n "$STATE" ]; then
+            HAS_SERVICE=$(jq 'any(.resources[]; .type == "aws_ecs_service" and .name == "web")' <<<"$STATE")
+          fi
+          if [ "$HAS_SERVICE" = false ]; then
+            # Nothing is serving yet, so there is no old image to keep the service on. With OLD_TAG equal to NEW_TAG,
+            # the first apply below creates the whole stack, service included.
+            echo "FIRST_DEPLOY=true" >> "$GITHUB_ENV"
+            echo "OLD_TAG=$NEW_TAG" >> "$GITHUB_ENV"
+          else
+            SERVICE_JSON=$(aws ecs describe-services --cluster "$CLUSTER_NAME" --services "$SERVICE_NAME")
+            OLD_TASK_DEF=$(jq -r '.services[0].deployments[] | select(.status=="PRIMARY") | .taskDefinition' <<<"$SERVICE_JSON")
+            # image is tagged "<sha>-web" (infra/web.tf appends the -web suffix); web_image_tag takes a bare commit
+            # SHA, so strip it back off.
+            OLD_TAG=$(aws ecs describe-task-definition --task-definition "$OLD_TASK_DEF" \
+              --query 'taskDefinition.containerDefinitions[0].image' --output text | awk -F: '{print $NF}')
+            echo "OLD_TAG=${OLD_TAG%-web}" >> "$GITHUB_ENV"
+          fi
+
+      # The first deploy has no repository to push into yet. Only the repository is applied here, because the service
+      # can't be created before the image it names has been pushed.
+      - name: terraform apply — ECR repository only (first deploy)
+        if: env.FIRST_DEPLOY == 'true'
+        working-directory: infra
+        env:
+          TF_VAR_web_image_tag: ${{ env.NEW_TAG }}
+        run: terraform apply -auto-approve -input=false -target=aws_ecr_repository.web -target=aws_ecr_lifecycle_policy.web
 
       # Each tag is skipped if it is already in the repository: the repository is IMMUTABLE (infra/registry.tf), so
       # re-running this job after a failure in any step below would otherwise abort here with ImageTagAlreadyExists —
@@ -310,22 +347,11 @@ jobs:
             exit 1
           fi
 
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.16.2
-
-      - name: terraform init
-        working-directory: infra
-        run: |
-          terraform init -input=false \
-            -backend-config="bucket=ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID" \
-            -backend-config="key=infra.tfstate" \
-            -backend-config="region=$AWS_REGION"
-
       # Registers the migration task against NEW_TAG while pinning the service's own image to OLD_TAG — Terraform
       # sees no diff for the service, so no rollout starts. This is the whole trick: it's the only way to get a
       # runnable migration task definition for the new image without also moving the service forward before the
-      # migration exists.
+      # migration exists. On the first deploy OLD_TAG is NEW_TAG, so this apply creates the whole stack and the service
+      # starts before its migration runs. Nothing older is serving yet for that to break.
       - name: terraform apply — migration task only (service stays on OLD_TAG)
         working-directory: infra
         env:
@@ -335,6 +361,10 @@ jobs:
 
       - name: Run migration
         run: |
+          # Looked up here rather than before the apply above, because on the first deploy that apply is what created
+          # the service.
+          aws ecs describe-services --cluster "$CLUSTER_NAME" --services "$SERVICE_NAME" \
+            | jq '.services[0].networkConfiguration' > network-config.json
           TASK_ARN=$(aws ecs run-task --cluster "$CLUSTER_NAME" \
             --task-definition "$MIGRATION_TASK_FAMILY" --launch-type FARGATE \
             --network-configuration file://network-config.json \
@@ -343,13 +373,13 @@ jobs:
           EXIT_CODE=$(aws ecs describe-tasks --cluster "$CLUSTER_NAME" --tasks "$TASK_ARN" \
             --query 'tasks[0].containers[0].exitCode' --output text)
           if [ "$EXIT_CODE" != "0" ]; then
-            echo "::error::migration task exited $EXIT_CODE — service left on $OLD_TAG, not rolled out"
+            echo "::error::migration task exited $EXIT_CODE — stopping before the roll-forward apply"
             exit 1
           fi
 
       # Only reached if the migration above exited 0. Now both tags match, so this apply includes the service's
-      # image change — Terraform rolls it out, and deployment_circuit_breaker(rollback) still protects exactly as
-      # it does for a manual deploy.
+      # image change — Terraform rolls it out, and deployment_circuit_breaker(rollback) protects the rollout. On the
+      # first deploy there is nothing left to change, so this apply is a no-op.
       - name: terraform apply — roll the service forward to NEW_TAG
         working-directory: infra
         env:
@@ -359,9 +389,11 @@ jobs:
 
       # /api/v1/healthz never touches the database (RUNBOOK.md), so it can't tell a working deploy from one that will
       # 500 on every real request. A nonexistent splat id still round-trips a real DB query: a working deploy 404s
-      # ("no such row"), while a broken DB connection 500s.
+      # ("no such row"), while a broken DB connection 500s. It waits for the rollout to settle first. On the first
+      # deploy no older task answers in the meantime, so the ALB returns 503 until the new task passes health checks.
       - name: Smoke test (a real DB-backed route, not /healthz)
         run: |
+          aws ecs wait services-stable --cluster "$CLUSTER_NAME" --services "$SERVICE_NAME"
           STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
             "$APP_PUBLIC_URL/api/v1/public/splats/00000000-0000-0000-0000-000000000000")
           if [ "$STATUS" != "404" ]; then

@@ -182,7 +182,7 @@ Postgres-dependent web tests need `TEST_DATABASE_URL` (see [`RUNBOOK.md`](RUNBOO
 
 Scaffolding (three packages + CI) is in place. Host-run `next dev` can 500 with `ECONNREFUSED ::1` in sandboxes that block loopback to the Next proxy process — use the container (own netns); not an app bug.
 
-**CI's `deploy` job is disabled** (`if: false && …` in `.github/workflows/ci.yml`) while the AWS account is torn down. Nothing it deploys to exists: no state bucket, no CI role, no stack. Re-enable it by deleting `false && ` only after redoing [First-time account setup](RUNBOOK.md#first-time-account-setup), [Configuring continuous deployment](RUNBOOK.md#configuring-continuous-deployment) (including the new `WORKER_IMAGE_TAG` repository variable), and [Building and pushing the worker image](RUNBOOK.md#building-and-pushing-the-worker-image).
+**CI's `deploy` job is disabled** (`if: false && …` in `.github/workflows/ci.yml`) while the AWS account is torn down. Nothing it deploys to exists: no state bucket, no CI role, no stack. Re-enable it by deleting `false && ` only after redoing [First-time account setup](RUNBOOK.md#first-time-account-setup) and [Configuring continuous deployment](RUNBOOK.md#configuring-continuous-deployment), including the `WORKER_IMAGE_TAG` repository variable. [Going live](RUNBOOK.md#going-live) covers the switch. The job's first run deploys the whole stack, and the worker image is pushed after that ([Building and pushing the worker image](RUNBOOK.md#building-and-pushing-the-worker-image)).
 
 Known gaps, priority order:
 
