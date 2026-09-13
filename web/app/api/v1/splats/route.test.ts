@@ -13,9 +13,7 @@ import { GET } from "./route";
  * every splat id, then reduces each in JS to one row per splat — these tests exercise that reduction's correctness
  * rather than the query count directly.
  */
-const hasPostgres = Boolean(process.env.TEST_DATABASE_URL);
-
-describe.skipIf(!hasPostgres)("GET /api/v1/splats", () => {
+describe("GET /api/v1/splats", () => {
   beforeEach(async () => {
     await getDb().delete(jobs);
     await getDb().delete(photos);

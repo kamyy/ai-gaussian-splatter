@@ -9,9 +9,7 @@ import { checkAndIncrementGlobalDaily, checkAndIncrementIp, checkAndIncrementUse
  * Requires a real Postgres (TEST_DATABASE_URL): these exercise the `INSERT ... ON CONFLICT` upsert, which is the whole
  * point of the implementation and can't be faithfully faked. CI wires it to a service container.
  */
-const hasPostgres = Boolean(process.env.TEST_DATABASE_URL);
-
-describe.skipIf(!hasPostgres)("rate limiting", () => {
+describe("rate limiting", () => {
   beforeEach(async () => {
     // Truncate rather than drop/recreate per test: the schema is applied once by the migrate step, and this is far
     // faster than a full DDL cycle.

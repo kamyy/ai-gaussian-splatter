@@ -9,9 +9,7 @@ import { SecretPasswordPool } from "../db";
  * Requires a real Postgres (TEST_DATABASE_URL): the retry keys off the `28P01` error Postgres itself sends for a
  * rejected password, which a mocked pool couldn't prove. Secrets Manager is mocked to play the part of a rotation.
  */
-const hasPostgres = Boolean(process.env.TEST_DATABASE_URL);
-
-describe.skipIf(!hasPostgres)("SecretPasswordPool", () => {
+describe("SecretPasswordPool", () => {
   const secretsMock = mockClient(SecretsManagerClient);
   const arn = "arn:aws:secretsmanager:us-west-2:000000000000:secret:rotating";
   let pool: SecretPasswordPool | undefined;

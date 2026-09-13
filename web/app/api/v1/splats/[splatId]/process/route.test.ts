@@ -17,19 +17,17 @@ import { globalJobCounters, jobs, photos, splats, users } from "@/lib/server/db/
 import { getEnv } from "@/lib/server/env";
 import { POST } from "./route";
 
+function ctx(splatId: string) {
+  return { params: Promise.resolve({ splatId }) } as never;
+}
+
 /**
  * Requires a real Postgres (TEST_DATABASE_URL). launchJob is mocked so this never touches real AWS. Covers the two
  * safety properties this route relies on: uq_jobs_splat_id_active (schema.ts) makes the double-trigger guard atomic,
  * and a launch failure moves the job/splat to "failed" rather than stranding them at "queued"/"processing" — which
  * would otherwise permanently block every future POST here for that splat under the same constraint.
  */
-const hasPostgres = Boolean(process.env.TEST_DATABASE_URL);
-
-function ctx(splatId: string) {
-  return { params: Promise.resolve({ splatId }) } as never;
-}
-
-describe.skipIf(!hasPostgres)("POST /api/v1/splats/[splatId]/process", () => {
+describe("POST /api/v1/splats/[splatId]/process", () => {
   beforeEach(async () => {
     launchJobMock.mockClear();
     launchJobMock.mockResolvedValue("i-0abc123");

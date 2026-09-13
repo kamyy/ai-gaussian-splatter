@@ -17,17 +17,15 @@ import { globalJobCounters, jobs, splats, users } from "@/lib/server/db/schema";
 import type { JobStatus } from "@/lib/types";
 import { POST } from "./route";
 
-/**
- * Requires a real Postgres (TEST_DATABASE_URL). launchJob is mocked so this never touches real AWS — only the atomic
- * status flip and the daily-cap gate are under test here.
- */
-const hasPostgres = Boolean(process.env.TEST_DATABASE_URL);
-
 function ctx(splatId: string) {
   return { params: Promise.resolve({ splatId }) } as never;
 }
 
-describe.skipIf(!hasPostgres)("POST /api/v1/splats/[splatId]/train", () => {
+/**
+ * Requires a real Postgres (TEST_DATABASE_URL). launchJob is mocked so this never touches real AWS — only the atomic
+ * status flip and the daily-cap gate are under test here.
+ */
+describe("POST /api/v1/splats/[splatId]/train", () => {
   beforeEach(async () => {
     launchJobMock.mockClear();
     await getDb().delete(jobs);

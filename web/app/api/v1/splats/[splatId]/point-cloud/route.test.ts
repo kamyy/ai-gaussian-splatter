@@ -8,13 +8,11 @@ import { jobs, splats, users } from "@/lib/server/db/schema";
 import type { JobStatus } from "@/lib/types";
 import { GET } from "./route";
 
-const hasPostgres = Boolean(process.env.TEST_DATABASE_URL);
-
 function ctx(splatId: string) {
   return { params: Promise.resolve({ splatId }) } as never;
 }
 
-describe.skipIf(!hasPostgres)("GET /api/v1/splats/[splatId]/point-cloud", () => {
+describe("GET /api/v1/splats/[splatId]/point-cloud", () => {
   beforeEach(async () => {
     await getDb().delete(jobs);
     await getDb().delete(splats);
