@@ -18,6 +18,7 @@
     "files.exclude": {
       "**/node_modules": true,
       "**/.venv": true,
+      "**/.terraform": true,
       "**/.next": true,
       "**/dist": true,
       "**/__pycache__": true,
@@ -31,6 +32,7 @@
     "search.exclude": {
       "**/node_modules": true,
       "**/.venv": true,
+      "**/.terraform": true,
       "**/.next": true,
       "**/dist": true,
       "**/__pycache__": true,

@@ -140,23 +140,14 @@ podman run --rm \
 
 ### Triggering the worker from pnpm dev
 
-Set `WORKER_LOCAL_LAUNCH=true` in `web/.env` to make the web app's Process button run the worker on your own GPU
-instead of launching a real EC2 spot instance. `web/lib/server/ec2Launcher.ts`'s `launchJobLocal()` then does what the
-[Running the pipeline](#running-the-pipeline) command above does by hand: it shells out to `podman run` against the
-`splat-worker:dev` image, with output landing in `worker/jobdir/<jobId>/worker.log` for the same
-[registration debugging](#capture) the manual flow uses. Requires the same one-time
-[GPU passthrough setup](#one-time-gpu-passthrough-setup) and an image already built via `podman build` above — this
-path never builds it for you.
+Set `WORKER_LOCAL_LAUNCH=true` in `web/.env` to make the web app's Process button run the worker on your own GPU instead of launching a real EC2 spot instance. `web/lib/server/ec2Launcher.ts`'s `launchJobLocal()` then does what the [Running the pipeline](#running-the-pipeline) command above does by hand: it shells out to `podman run` against the `splat-worker:dev` image, with output landing in `worker/jobdir/<jobId>/worker.log` for the same [registration debugging](#capture) the manual flow uses. Requires the same one-time [GPU passthrough setup](#one-time-gpu-passthrough-setup) and an image already built via `podman build` above — this path never builds it for you.
 
 ```bash
 cd worker && podman build -t splat-worker:dev . # once, and again after any worker code change
 cd ../web && pnpm dev
 ```
 
-Upload photos and click Process in the browser as normal — the job goes through the same DB rows, callback token, and
-`/api/v1/internal/jobs/[jobId]/status` route a real EC2 run would use, so its status updates in the dashboard live.
-Leave `WORKER_LOCAL_LAUNCH` unset (or `false`) to go back to launching a real spot instance; `WORKER_AMI_ID` and the
-rest of that block stay unused either way.
+Upload photos and click Process in the browser as normal — the job goes through the same DB rows, callback token, and `/api/v1/internal/jobs/[jobId]/status` route a real EC2 run would use, so its status updates in the dashboard live. Leave `WORKER_LOCAL_LAUNCH` unset (or `false`) to go back to launching a real spot instance; `WORKER_AMI_ID` and the rest of that block stay unused either way.
 
 ## Web (frontend + REST API)
 
@@ -243,13 +234,13 @@ curl -s http://localhost:8000/api/v1/healthz   # should be {"status":"ok"}
 
 ## Deploying to production
 
-**This whole section is one-time setup, not something repeated per release.** It walks a fresh account to the point where `.github/workflows/ci.yml`'s `deploy` job can take over every future deploy: push to `main`, and CD builds, migrates, and rolls the service out on its own (see ["Fixing a bad migration"](#fixing-a-bad-migration) and ["Configuring continuous deployment"](#configuring-continuous-deployment) below). After that, a human runs `terraform` by hand again only for two rare exceptions: a rollback, or previewing an infra change with `terraform plan` before it applies — both reuse the same variable values and commands below.
+This section is the first-account walkthrough. The same command blocks are what a human uses for every ship while the `deploy` job is off ([State / what's next](AGENTS.md#state--whats-next)). ["Configuring continuous deployment"](#configuring-continuous-deployment) is still the one-time IAM/OIDC setup. It has to exist before that job can be turned back on. Once the job is re-enabled, a push to `main` builds, migrates, and rolls the service, and a human comes back here only for a rollback, a worker-image tag change, or a `terraform plan` preview. See ["Fixing a bad migration"](#fixing-a-bad-migration).
 
 Start by finishing **[First-time account setup](#first-time-account-setup)** before `terraform apply`. Those steps create the Clerk secret, create `AWSServiceRoleForEC2Spot` if it doesn't already exist, bootstrap the Terraform state backend, and stand up the ECR repository. Skip the secret and tasks fail at start: the web/migration task definitions reference it rather than creating it. Skip the Spot role and the failure doesn't surface until the first real worker job tries to launch a Spot instance. Skip the bootstrap and `terraform init` fails before creating anything. Skip the registry (or the push into it) and Fargate has nothing to pull; the circuit breaker rolls the service back. ["Configuring continuous deployment"](#configuring-continuous-deployment) is also one-time, but it needs the web service's IAM roles to already exist, so it waits until after the first full apply.
 
 ### Resolving variable values
 
-Every `terraform` invocation below — the full apply, and a diff preview — needs the same seven values. Resolve them once per shell session and reuse them for everything that follows. Terraform reads a `TF_VAR_<name>` environment variable for the matching variable automatically, matching each name in `infra/variables.tf`, so once these are exported no invocation below needs a repeated `-var` flag. `AWS_ACCOUNT_ID` isn't a Terraform variable — it's used below to name the state bucket and build the CI role's ARN — so export it separately.
+Every `terraform` invocation below — the full apply, and a diff preview — needs the same seven values. Resolve them once per shell session and reuse them for everything that follows. Terraform reads a `TF_VAR_<name>` environment variable for the matching variable automatically, matching each name in `infra/variables.tf`, so once these are exported no invocation below needs a repeated `-var` flag. `AWS_ACCOUNT_ID` isn't a Terraform variable. It's used below to name the state bucket and the ECR registry host, and to build the CI role's policies, so export it separately.
 
 ```bash
 export AWS_ACCOUNT_ID=replace-with-your-account-id # Use a real AWS account id.
@@ -396,7 +387,7 @@ Only the last few releases are kept (`local.releases_kept` in `infra/registry.tf
 
 **`terraform apply` never applies migrations.** The database has no tables yet, but the target group reports healthy anyway — `/api/v1/healthz` never touches the database. There's no supported out-of-band way to apply one by hand either (see ["Fixing a bad migration"](#fixing-a-bad-migration) below).
 
-So the site stays broken after this first deploy until CD applies the first migration. Finish ["Configuring continuous deployment"](#configuring-continuous-deployment) below, then push a commit touching at least one non-Markdown file to `main`. `.github/workflows/ci.yml`'s `paths-ignore` skips the whole workflow, deploy included, for a commit that only touches `.md` files. That push is what actually runs the first migration. That `deploy` job run builds the migrator image, applies it, and rolls the service forward, exactly like every release after it.
+The site stays broken after this first deploy. Nothing applies the first migration while the `deploy` job is off ([State / what's next](AGENTS.md#state--whats-next)). Finish ["Configuring continuous deployment"](#configuring-continuous-deployment) below, re-enable the job, then push a commit that touches at least one non-Markdown file. `.github/workflows/ci.yml`'s `paths-ignore` skips the whole workflow, deploy included, for a commit that only touches `.md` files.
 
 ### Building and pushing the worker image
 
@@ -420,7 +411,7 @@ terraform apply
 
 Only the last `local.worker_releases_kept` images are kept (`infra/registry.tf`) — far fewer than the web repository's `local.releases_kept`, since the ~19 GB worker image isn't part of any ECS rollback mechanism: `WORKER_IMAGE_URI` just names whatever tag `worker_image_tag` currently points at, with nothing to roll back to the way a task definition revision does.
 
-Then set the `WORKER_IMAGE_TAG` repository variable ([Configuring continuous deployment](#configuring-continuous-deployment)) to the tag just pushed. CI's `deploy` job passes it as `TF_VAR_worker_image_tag` on every push to `main`, so a stale value silently reverts `WORKER_IMAGE_URI` on the next deploy. Once `local.worker_releases_kept` newer images exist, the lifecycle policy expires that old tag, and every job launch then fails its pull and bills until the `WORKER_MAX_LIFETIME_MINUTES` shutdown.
+Then set the `WORKER_IMAGE_TAG` repository variable ([Configuring continuous deployment](#configuring-continuous-deployment)) to the tag just pushed. Once the `deploy` job is re-enabled ([State / what's next](AGENTS.md#state--whats-next)), it passes that as `TF_VAR_worker_image_tag` on every push to `main`, so a stale value silently reverts `WORKER_IMAGE_URI` on the next deploy. Once `local.worker_releases_kept` newer images exist, the lifecycle policy expires that old tag, and every job launch then fails its pull and bills until the `WORKER_MAX_LIFETIME_MINUTES` shutdown.
 
 ## Configuring continuous deployment
 
@@ -590,13 +581,13 @@ Set these as GitHub repository variables (Settings → Secrets and variables →
 
 Live re-resolution (`aws route53 list-hosted-zones-by-name`, etc.) was deliberately skipped for these in CI — one production environment, rarely-changing values, and a `vars.*` edit is itself a reviewable, logged event, unlike giving the CI role extra read permissions just to re-derive them every run.
 
-**Setup is done — CD owns every deploy from here.** Push to `main` and `ci.yml`'s `deploy` job builds, migrates, and rolls the service forward on its own. Come back to ["Going live"](#going-live) only for the two exceptions: a rollback, or previewing an infra change with `terraform plan` first.
+OIDC role and repository variables are in place. The `deploy` job is still off ([State / what's next](AGENTS.md#state--whats-next)), so keep shipping with ["Going live"](#going-live). After the job is re-enabled, a push to `main` is the deploy, and this section is only for a rollback or a `terraform plan` preview.
 
 ## Fixing a bad migration
 
-**CI applies migrations automatically on every push to `main`.** The `deploy` job in `.github/workflows/ci.yml` runs the `migrator` image (`web/Dockerfile`) as a one-off ECS task before rolling the service forward. There is no supported way to reach the database by hand instead: the RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway (`infra/network.tf`), reachable only from `aws_security_group.web` on port 5432, and no bastion exists in this infra. The CD migration task works because Terraform registers it with the web service's own network configuration; a human's laptop, or any other host, has no path to reproduce that.
+The only supported production apply is the `deploy` job in `.github/workflows/ci.yml`, which runs the `migrator` image (`web/Dockerfile`) as a one-off ECS task before rolling the service forward. That job is currently off ([State / what's next](AGENTS.md#state--whats-next)). There is no supported way to reach the database by hand instead: the RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway (`infra/network.tf`), reachable only from `aws_security_group.web` on port 5432, and no bastion exists in this infra. The migration task reaches it only because the `deploy` job launches it with the web service's own network configuration. Launching that task by hand with `aws ecs run-task` is possible, but it isn't a supported path.
 
-So fix a bad migration the same way you'd fix any other bug: write a corrective migration following the expand/contract discipline in [Schema & migrations (Drizzle)](AGENTS.md#schema--migrations-drizzle) (edit `web/lib/server/db/schema.ts`, `pnpm db:generate`, review the emitted SQL in `web/drizzle/`), commit it, and land it through a normal PR to `main`. CD builds the new `migrator` image, applies it, and rolls the service forward exactly like every other release.
+Fix a bad migration the same way you'd fix any other bug: write a corrective migration following the expand/contract discipline in [Schema & migrations (Drizzle)](AGENTS.md#schema--migrations-drizzle) (edit `web/lib/server/db/schema.ts`, `pnpm db:generate`, review the emitted SQL in `web/drizzle/`), commit it, and land it through a normal PR to `main`. It applies when the `deploy` job is re-enabled and that commit reaches `main`.
 
 If the `deploy` job's migration step fails for an infra reason rather than a bad migration (a transient AWS error, a placement failure), retry the whole job rather than reaching for manual AWS commands — it's designed to be idempotent end to end (each image build step already skips if that commit's tag is already pushed): `gh run rerun <run-id> --failed-jobs`.
 
@@ -609,7 +600,7 @@ If the `deploy` job's migration step fails for an infra reason rather than a bad
 
 ## Tearing down
 
-`terraform destroy` removes everything in `infra/`'s state, including the 3 data S3 buckets (force-destroyed, contents and all) and the RDS instance (no final snapshot). It needs the same six variable values as a deploy, resolved the same way ([Resolving variable values](#resolving-variable-values)) and exported as `TF_VAR_*` — a missing one fails before anything is destroyed, same as a missing value fails `apply`.
+`terraform destroy` removes everything in `infra/`'s state, including the 3 data S3 buckets (force-destroyed, contents and all) and the RDS instance (no final snapshot). It needs the same seven variable values as a deploy, resolved the same way ([Resolving variable values](#resolving-variable-values)) and exported as `TF_VAR_*` — a missing one fails before anything is destroyed, same as a missing value fails `apply`.
 
 ```bash
 cd infra # Make sure you're in the right folder.

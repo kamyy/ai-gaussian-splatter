@@ -5,7 +5,7 @@ description: Generate, review, and apply a Drizzle migration after changing web/
 
 # Drizzle migration
 
-A schema edit changes nothing on disk by itself. `schema.ts` is ordinary TypeScript, so the types — and `tsc` — update the moment you save, while the database stays as it was. That gap is the whole reason this procedure exists: nothing fails until a query hits a column Postgres doesn't have.
+A schema edit changes nothing on disk by itself. `web/lib/server/db/schema.ts` is ordinary TypeScript, so the types — and `tsc` — update the moment you save, while the database stays as it was. That gap is the whole reason this procedure exists: nothing fails until a query hits a column Postgres doesn't have.
 
 All commands run from `web/`.
 
@@ -13,7 +13,7 @@ All commands run from `web/`.
 
 **1. Edit `web/lib/server/db/schema.ts`.**
 
-Every column states its database name explicitly (`uuid("user_id")`). Do not add drizzle's `casing` option to fix a name — it would have to be set in both `drizzle.config.ts` and the runtime `drizzle()` call, and setting one without the other produces a schema and a query layer that disagree silently.
+Every column states its database name explicitly (`uuid("user_id")`). Do not add drizzle's `casing` option to fix a name. It would have to be set in both `web/drizzle.config.ts` and the runtime `drizzle()` call, and setting one without the other produces a schema and a query layer that disagree silently.
 
 Enum values live in `web/lib/types.ts` and are imported here, so the TypeScript union and the Postgres labels stay one list. Add values there, not inline.
 
@@ -23,21 +23,23 @@ Enum values live in `web/lib/types.ts` and are imported here, so the TypeScript 
 pnpm db:generate
 ```
 
-This diffs `schema.ts` against the checked-in snapshot in `web/drizzle/meta/` and writes a new `NNNN_name.sql` plus an updated snapshot. It is a no-op when they already match.
+This diffs `web/lib/server/db/schema.ts` against the checked-in snapshot in `web/drizzle/meta/` and writes a new `NNNN_name.sql` plus an updated snapshot. It is a no-op when they already match.
+
+**A table or column rename can't be generated from a non-interactive shell.** drizzle-kit asks whether the new name was created or renamed from the old one. Without a TTY it prints `Error: Interactive prompts require a TTY terminal`, writes nothing, and still exits 0, so read the output rather than trusting the exit code. On that error, stop and ask the user to run `pnpm db:generate` from `web/` in their own terminal and answer "renamed".
 
 **3. Read the emitted SQL. Do not skip this.**
 
 ```bash
-cat web/drizzle/<newest>.sql
+cat drizzle/<newest>.sql
 ```
 
 This is the only step with no automated backstop. CI can tell that a migration exists, not that it does the right thing. Stop and confirm with the user before applying if you see:
 
 - `DROP TABLE` or `DROP COLUMN` — data loss.
-- A **rename emitted as drop-then-add**. drizzle-kit cannot see intent, so renaming a column usually appears as a new column plus a dropped one, silently discarding every existing value. It needs rewriting by hand as `ALTER TABLE … RENAME COLUMN`.
+- A **rename emitted as drop-then-add**, which means the step 2 prompt was answered "created". It silently discards every existing value. Regenerate and answer "renamed" instead.
 - `NOT NULL` added to an existing column with no `DEFAULT` — fails outright on a table that already has rows.
-- A dropped or renamed enum value, which Postgres will not do while any row still uses it.
-- Anything that breaks the expand/contract discipline `AGENTS.md` requires for every migration (CI applies migrations before rolling the service forward, and a rollback of the service doesn't undo one already applied).
+- A removed or renamed enum value. drizzle-kit never emits `ALTER TYPE … RENAME VALUE`. For either change it converts the column to `text`, drops and recreates the type, then converts back, which fails if any row still holds a label the new type lacks. For a pure rename, replace that SQL by hand with `ALTER TYPE … RENAME VALUE`.
+- Anything that breaks the expand/contract discipline in [Schema & migrations (Drizzle)](../../../AGENTS.md#schema--migrations-drizzle). The `deploy` job applies migrations before rolling the service forward, and a rollback of the service doesn't undo one already applied.
 
 Never hand-edit `web/drizzle/meta/*.json`. They are `generate`'s record of the last known schema; editing them makes the next diff wrong.
 
@@ -47,7 +49,7 @@ Never hand-edit `web/drizzle/meta/*.json`. They are `generate`'s record of the l
 pnpm db:migrate
 ```
 
-Needs the local Postgres running (`podman ps` should show `splat-pg`) and the `DATABASE_*` variables from `web/.env`. See `RUNBOOK.md` if it isn't up.
+Needs the local Postgres running (`podman ps` should show `splat-pg`) and the `DATABASE_*` variables from `web/.env`. See [Web (frontend + REST API)](../../../RUNBOOK.md#web-frontend--rest-api) if it isn't up.
 
 **5. Verify.**
 
@@ -56,12 +58,12 @@ Needs the local Postgres running (`podman ps` should show `splat-pg`) and the `D
 TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ai_gaussian_splatter_test pnpm test
 ```
 
-`web:check` is a repo-root script (the one exception to "all commands run from `web/`" above) — it's the piece that actually matters for a schema edit; `worker`/`infra`'s checks have nothing to do with `schema.ts`.
+`web:check` is a repo-root script, the one exception to "all commands run from `web/`" above. It's the check that matters for a schema edit. The `worker` and `infra` checks have nothing to do with `web/lib/server/db/schema.ts`.
 
 The database-backed tests skip silently without `TEST_DATABASE_URL`, so a run that "passes" without it has not exercised the new schema at all. `ai_gaussian_splatter_test` is a separate database on the same `splat-pg` instance, not the dev one — see [RUNBOOK.md § "Full test suite"](../../../RUNBOOK.md#full-test-suite) for the one-time `createdb`.
 
-**6. Commit `schema.ts` and the whole `web/drizzle/` tree together**, `meta/` snapshots included. CI re-runs `db:generate` and fails if it produces anything, so a schema change committed without its migration blocks the PR. `web/drizzle/` is excluded from Biome, so the generated SQL is not reformatted.
+**6. Commit `web/lib/server/db/schema.ts` and the whole `web/drizzle/` tree together**, `meta/` snapshots included. CI re-runs `db:generate` and fails if it writes anything or prints an error, so a schema change committed without its migration blocks the PR. `web/drizzle/` is excluded from Biome, so the generated SQL is not reformatted.
 
 ## Applying to a deployed database
 
-CI applies this automatically on every push to `main` (`ci.yml`'s `deploy` job runs `web/Dockerfile`'s `migrator` image as a one-off ECS task before rolling the service forward) — not covered here. The image deliberately does not migrate on boot, since up to three tasks would race with nothing serialising them. There is no manual, out-of-band way to apply one instead: RDS sits in an isolated subnet with no NAT gateway and no bastion. A bad migration is fixed like any other bug, with a corrective migration through a normal PR — see [RUNBOOK.md § "Fixing a bad migration"](../../../RUNBOOK.md#fixing-a-bad-migration).
+The only supported production apply is `.github/workflows/ci.yml`'s `deploy` job, which runs `web/Dockerfile`'s `migrator` image as a one-off ECS task before rolling the service forward. That job is currently off ([State / what's next](../../../AGENTS.md#state--whats-next)), so a production schema change waits until it is re-enabled. The image deliberately does not migrate on boot, since up to three tasks would race with nothing serialising them. Nothing outside the VPC can connect to RDS directly: it sits in an isolated subnet with no NAT gateway and no bastion. Launching the migrator task by hand with `aws ecs run-task` is possible but not a supported path, so don't. A bad migration is fixed like any other bug, with a corrective migration through a normal PR. See [RUNBOOK.md § "Fixing a bad migration"](../../../RUNBOOK.md#fixing-a-bad-migration).
