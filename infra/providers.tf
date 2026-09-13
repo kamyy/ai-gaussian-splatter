@@ -1,6 +1,6 @@
 # Bucket/key/region are supplied via `-backend-config` at `terraform init` (see RUNBOOK.md), not hardcoded
-# here: the bucket comes from infra/bootstrap/ and its name is account-specific. use_lockfile is Terraform's
-# native S3 state locking (>= 1.10) — no separate DynamoDB table needed.
+# here. The bucket is created by hand once in First-time account setup. Its name is account-specific.
+# use_lockfile is Terraform's native S3 state locking (>= 1.10). No separate DynamoDB table is needed.
 terraform {
   # Same version .github/workflows/ci.yml installs. A floor would let a newer local CLI plan silently.
   required_version = "1.16.2"

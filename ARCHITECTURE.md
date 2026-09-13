@@ -91,7 +91,7 @@ The migration task (`web/scripts/db-migrate.cjs`) keeps the old static-env-var b
 
 ## Infra
 
-- Infra: **Terraform**. One root module (`infra/`) holding one state, plus a separate `infra/bootstrap/` module (its own local state) that exists only to create the S3 bucket the root module's state lives in.
+- Infra: **Terraform**. One root module (`infra/`) holding one state. The S3 bucket that state lives in is created by hand ([First-time account setup](RUNBOOK.md#first-time-account-setup)). `terraform init` needs the bucket before any apply. Managing it inside `infra/` would store state in a bucket this config also owns. A second Terraform module with its own local state was rejected.
 - Six logical areas, one per `.tf` file rather than one per CloudFormation-style stack — a single state resolves the dependencies between them directly, so there's no cross-stack export/import to keep in sync:
   - **network** — VPC, subnets, security groups.
   - **data** — RDS, S3.
@@ -162,7 +162,7 @@ Ops fallback: an AWS Budget (`infra/budgets.tf`) for spend the request path neve
 ## CI/CD
 
 - CI (`.github/workflows/ci.yml`'s `deploy` job) builds, migrates, and rolls out the web service on every push to `main`, including the first deploy into an empty account. A human never applies `infra/` itself.
-- Two Terraform steps stay on a laptop: bootstrapping the state bucket and tearing down. CI can't `terraform init` against a bucket that doesn't exist yet. A teardown is too rare and too destructive to put behind a push.
+- Creating the state bucket and tearing down stay on a laptop. CI can't `terraform init` against a bucket that doesn't exist yet. A teardown is too rare and too destructive to put behind a push.
 - No manual approval gate: there's no live traffic yet to protect, and this is the first real deploy (M9).
 - GPU worker deployment stays manual ([State / what's next](AGENTS.md#state--whats-next), gap 5): no ECR pull permissions yet.
 
@@ -201,7 +201,7 @@ A rolled-back *service* deployment does not undo an already-applied migration. R
 - CI authenticates to AWS via **GitHub OIDC**, not static IAM access keys — no long-lived credential to leak or rotate.
 - The identity token's `sub` claim scopes it specifically to `repo:<owner>@<ownerId>/<repo>@<repoId>:ref:refs/heads/main`, so PRs and forks can't assume the role.
 - That role, `ai-gaussian-splatter-ci-deploy`, is created by hand once ([Creating the OIDC provider and CI role](RUNBOOK.md#creating-the-oidc-provider-and-ci-role)), not by this config, because it's chicken-and-egg: CI can't apply the config that grants CI its own apply permission.
-- Unlike a design that delegates through a separate bootstrap role, this role holds the AWS permissions `terraform apply` itself needs directly — ec2, ecr, rds, s3, iam, ecs, elasticloadbalancing, route53, acm, budgets, logs, secretsmanager — scoped by resource-name prefix where a service supports it. Same reasoning that already keeps the Clerk secret and `AWSServiceRoleForEC2Spot` as hand-run, RUNBOOK-documented one-time setup rather than Terraform-managed resources: whoever can grant broad infrastructure permissions to a CI role is a step this repo keeps out of any automated apply.
+- Unlike a design that delegates through a separate bootstrap role, this role holds the AWS permissions `terraform apply` itself needs directly — ec2, ecr, rds, s3, iam, ecs, elasticloadbalancing, route53, acm, budgets, logs, secretsmanager — scoped by resource-name prefix where a service supports it. Same reasoning that already keeps the Clerk secret, the state bucket, and `AWSServiceRoleForEC2Spot` as hand-run, RUNBOOK-documented one-time setup rather than Terraform-managed resources: whoever can grant broad infrastructure permissions to a CI role is a step this repo keeps out of any automated apply.
 
 ## Testing
 
