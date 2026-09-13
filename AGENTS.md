@@ -147,8 +147,8 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 ### Local dev & tests
 
-- **`await closeDb()` in `afterAll`** or Vitest hangs (open `pg` Pool). `web/test/migrate-test-db.ts` closes its own migration pool in `finally`.
-- **DB tests skip unless `TEST_DATABASE_URL` is set** (CI starts one as a `podman run` step in `.github/workflows/ci.yml`, not a `services:` container — see [`ARCHITECTURE.md`](ARCHITECTURE.md)). Try `podman run postgres:18` if Postgres seems missing.
+- **`await closeDb()` in `afterAll`** or Vitest hangs (open `pg` Pool). `web/tests/migrate-test-db.ts` closes its own migration pool in `finally`.
+- **The `server` Vitest project fails outright when `TEST_DATABASE_URL` is unset**, so a green run means the DB tests actually ran. `web/tests/migrate-test-db.ts` throws before any test starts, including the server tests that never touch Postgres. CI sets it and starts Postgres as a `podman run` step in `.github/workflows/ci.yml`, not a `services:` container — see [`ARCHITECTURE.md`](ARCHITECTURE.md). Locally `web/vitest.config.mts` reads it from `web/.env`. `pnpm db:up` if Postgres seems missing ([`RUNBOOK.md`](RUNBOOK.md#web-frontend--rest-api)).
 - **`fileParallelism: false` in `web/vitest.config.mts`.** DB-backed files share one DB and clear tables in `beforeEach`; parallel runs delete each other's fixtures. Per-worker DBs would restore parallelism. Transaction-per-test can't cover the real concurrency tests (`getOrCreateUser` race, rate-limit atomicity) — one connection serializes queries.
 
 ### Connecting to RDS in production

@@ -2,7 +2,7 @@
 
 ## Dev AWS resources
 
-The `infra/` config only describes production, so dev's uploads/splats buckets must be created and configured by hand. `web/components/upload/PhotoDropzone.tsx` PUTs to a presigned S3 URL and the worker reads/writes both buckets via boto3, so real buckets are needed.
+The `infra/` config only describes production, so dev's uploads/splats buckets must be created and configured by hand. `web/lib/uploadPhotos.ts` PUTs to a presigned S3 URL and the worker reads/writes both buckets via boto3, so real buckets are needed.
 
 ```bash
 for b in ai-gaussian-splatter-dev-uploads ai-gaussian-splatter-dev-splats; do
@@ -95,7 +95,7 @@ cd worker # Make sure you're in the right folder.
 podman build -t splat-worker:dev . # ~19 GB cold
 
 # Create .env from worker/.env.example.
-export $(grep -E '^AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|DEFAULT_REGION)=' .env)
+export $(grep -E '^(AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|AWS_DEFAULT_REGION)=' .env)
 
 SPLAT_ID=$(uuidgen) # Needs to be different for every run.
 
@@ -153,21 +153,15 @@ Upload photos and click Process in the browser as normal — the job goes throug
 
 The REST API is served via route handlers in `web/app/api/v1/`, backed by Postgres via Drizzle.
 
-Start the database before running `pnpm dev`:
+Start Postgres before running `pnpm dev`. `pnpm db:up` starts the `splat-pg` container if needed and creates the empty `ai_gaussian_splatter` and `ai_gaussian_splatter_test` databases in it. `pnpm db:down` stops and removes the container and the `splat-pg-data` volume. Dev and test databases are gone.
 
 ```bash
-podman run -d --name splat-pg --restart=always \
-  -p 5432:5432 \
-  -v splat-pg-data:/var/lib/postgresql \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=ai_gaussian_splatter \
-  postgres:18
+cd web && pnpm db:up
 ```
 
-`pnpm dev` and `drizzle-kit` reach the database on `localhost:5432`, since they run natively rather than in a container. The `splat-web` container below reaches it on `host.containers.internal:5432` instead — Podman's built-in alias for the host, no shared network needed. Data is stored at `/var/lib/postgresql`.
+`pnpm dev` and `drizzle-kit` reach that container on `localhost:5432`, since they run natively rather than in a container. The `splat-web` container below reaches it on `host.containers.internal:5432` instead — Podman's built-in alias for the host, no shared network needed. Data is stored at `/var/lib/postgresql`.
 
-One-time setup: create `web/.env` from [`web/.env.example`](web/.env.example), then fill in the Clerk keys, the dev IAM key pair, and the worker IDs. The database and bucket values already match the container above.
+One-time setup: create `web/.env` from [`web/.env.example`](web/.env.example), then fill in the Clerk keys, the dev IAM key pair, and the worker IDs. The `DATABASE_*` and bucket values already match the container above.
 
 ```bash
 # Enable the restart helper once so --restart=always is honored after boot:
@@ -211,16 +205,12 @@ pnpm run infra:check
 (cd infra && terraform test)
 ```
 
-The `server` Vitest project's Postgres-dependent tests (rate limiting, `getOrCreateUser`, the worker callback token) skip unless `TEST_DATABASE_URL` is set — CI wires this up itself (`.github/workflows/ci.yml`'s `web` job).
+Several of the tests `pnpm test` runs in `web/` need Postgres (rate limiting, `getOrCreateUser`, the worker callback token). They use `TEST_DATABASE_URL` from `web/.env` (`ai_gaussian_splatter_test` on `splat-pg`, created by `pnpm db:up`). `pnpm test` fails if that container is down or the variable is missing from `web/.env`. CI's `web` job in `.github/workflows/ci.yml` sets the same variable itself.
 
-Point it at a separate database on the same `splat-pg` instance, not `ai_gaussian_splatter` itself — the test run applies migrations and writes rows, which would otherwise land in your dev data. One-time setup:
-
-```bash
-podman exec splat-pg createdb -U postgres ai_gaussian_splatter_test
-```
+`web/tests/migrate-test-db.ts` (Vitest `globalSetup`) applies `web/drizzle/` to that URL before those tests run. Local `pnpm db:migrate` still only hits `DATABASE_*` (dev).
 
 ```bash
-cd web && TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ai_gaussian_splatter_test pnpm test
+cd web && pnpm test
 ```
 
 ## Building and running the splat-web container locally
