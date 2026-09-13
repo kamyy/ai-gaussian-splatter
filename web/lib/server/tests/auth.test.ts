@@ -42,14 +42,12 @@ describe("getClientIp", () => {
   });
 });
 
-const hasPostgres = Boolean(process.env.TEST_DATABASE_URL);
-
 async function userCount(): Promise<number> {
   const [row] = await getDb().select({ n: count() }).from(users);
   return row.n;
 }
 
-describe.skipIf(!hasPostgres)("database-backed auth helpers", () => {
+describe("database-backed auth helpers", () => {
   beforeEach(async () => {
     // Ordered to respect the foreign keys: jobs and photos hang off splats, splats off users.
     await getDb().delete(jobs);

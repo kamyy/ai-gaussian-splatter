@@ -7,13 +7,11 @@ import { closeDb, getDb } from "@/lib/server/db";
 import { photos, splats, users } from "@/lib/server/db/schema";
 import { GET } from "./route";
 
-const hasPostgres = Boolean(process.env.TEST_DATABASE_URL);
-
 function ctx(splatId: string) {
   return { params: Promise.resolve({ splatId }) } as never;
 }
 
-describe.skipIf(!hasPostgres)("GET /api/v1/splats/[splatId]/photos", () => {
+describe("GET /api/v1/splats/[splatId]/photos", () => {
   beforeEach(async () => {
     await getDb().delete(photos);
     await getDb().delete(splats);

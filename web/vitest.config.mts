@@ -1,5 +1,18 @@
+import { existsSync, readFileSync } from "node:fs";
+import { parseEnv } from "node:util";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
+
+// Vitest doesn't read web/.env itself. Only TEST_DATABASE_URL is taken from it, so the dev DATABASE_* values never
+// reach a test. A value already set in the shell, as CI's web job does, wins. Setting process.env here, before any
+// worker starts, is what lets both globalSetup and the test files see it.
+const envFile = `${import.meta.dirname}/.env`;
+if (existsSync(envFile)) {
+  const testDatabaseUrl = parseEnv(readFileSync(envFile, "utf8")).TEST_DATABASE_URL;
+  if (testDatabaseUrl !== undefined) {
+    process.env.TEST_DATABASE_URL ??= testDatabaseUrl;
+  }
+}
 
 // Two projects: component tests need jsdom, while server-side code is plain
 // Node — no DOM, and a real Postgres for the rate-limit and Route Handler tiers.
