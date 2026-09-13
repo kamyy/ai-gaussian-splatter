@@ -183,6 +183,19 @@ pnpm db:studio  # opens Drizzle Studio to browse/edit rows.
 
 After editing `web/lib/server/db/schema.ts`, run `pnpm db:generate` to emit a migration into `web/drizzle/`, then `pnpm db:migrate` to apply it. The types update the moment you save the schema, so `tsc` will not catch a schema you forgot to generate a migration for.
 
+## Installing Terraform
+
+`infra/providers.tf` and `infra/bootstrap/main.tf` pin an exact `required_version`, so any other CLI version fails `terraform init`. Install that exact release as a standalone binary:
+
+```bash
+# Run from the repo root. The version is read out of infra/providers.tf rather than repeated here.
+TF_VERSION=$(grep -oP 'required_version = "\K[^"]+' infra/providers.tf)
+curl -fsSLO https://releases.hashicorp.com/terraform/$TF_VERSION/terraform_${TF_VERSION}_linux_amd64.zip
+unzip -o terraform_${TF_VERSION}_linux_amd64.zip terraform -d ~/.local/bin
+rm terraform_${TF_VERSION}_linux_amd64.zip
+terraform version
+```
+
 ## Full test suite
 
 ```bash
@@ -237,6 +250,14 @@ curl -s http://localhost:8000/api/v1/healthz   # should be {"status":"ok"}
 This section is the first-account walkthrough. The same command blocks are what a human uses for every ship while the `deploy` job is off ([State / what's next](AGENTS.md#state--whats-next)). ["Configuring continuous deployment"](#configuring-continuous-deployment) is still the one-time IAM/OIDC setup. It has to exist before that job can be turned back on. Once the job is re-enabled, a push to `main` builds, migrates, and rolls the service, and a human comes back here only for a rollback, a worker-image tag change, or a `terraform plan` preview. See ["Fixing a bad migration"](#fixing-a-bad-migration).
 
 Start by finishing **[First-time account setup](#first-time-account-setup)** before `terraform apply`. Those steps create the Clerk secret, create `AWSServiceRoleForEC2Spot` if it doesn't already exist, bootstrap the Terraform state backend, and stand up the ECR repository. Skip the secret and tasks fail at start: the web/migration task definitions reference it rather than creating it. Skip the Spot role and the failure doesn't surface until the first real worker job tries to launch a Spot instance. Skip the bootstrap and `terraform init` fails before creating anything. Skip the registry (or the push into it) and Fargate has nothing to pull; the circuit breaker rolls the service back. ["Configuring continuous deployment"](#configuring-continuous-deployment) is also one-time, but it needs the web service's IAM roles to already exist, so it waits until after the first full apply.
+
+### Signing in to AWS
+
+Run every `aws` and `terraform` command in this section as an admin IAM identity signed in with `aws login`, which needs AWS CLI 2.32.0 or later. The `ai-gaussian-splatter-dev` user from [Dev AWS resources](#dev-aws-resources) can only reach the two dev buckets. The CI role from [Configuring continuous deployment](#configuring-continuous-deployment) doesn't exist until after the first full apply.
+
+```bash
+aws login # Needed again only after the session expires, up to 12 hours later.
+```
 
 ### Resolving variable values
 
@@ -327,10 +348,10 @@ To see current estimated month-to-date spend, Billing console → **Billing Home
 
 Now resolve the seven variable values in ["Resolving variable values"](#resolving-variable-values) above, in the same shell.
 
-A fresh account needs the Terraform state backend bootstrapped once. `infra/bootstrap/` is a separate, tiny root module (its own local state) that creates only the S3 bucket `infra/`'s own `backend "s3"` block points at — nothing in `infra/`'s real config can apply before that bucket exists. It takes no variables at all.
+A fresh account needs the Terraform state backend bootstrapped once. `infra/bootstrap/` is a separate, tiny root module (its own local state) that creates only the S3 bucket `infra/`'s own `backend "s3"` block points at — nothing in `infra/`'s real config can apply before that bucket exists. It has no required variables.
 
 ```bash
-cd infra/bootstrap # Make sure you're in the right folder.
+cd "$(git rev-parse --show-toplevel)/infra/bootstrap"
 
 terraform init
 terraform apply
@@ -358,7 +379,7 @@ terraform apply -target=aws_ecr_repository.web -target=aws_ecr_lifecycle_policy.
 This is the step that actually ships code — push both images and bring the web service up, completing the one-time setup. It's also the exact command reused for the two rare exceptions after CD is live: a rollback (an older `TF_VAR_web_image_tag`) or a `terraform plan` preview.
 
 ```bash
-cd infra # Make sure you're in the right folder.
+cd "$(git rev-parse --show-toplevel)/infra"
 
 ECR_TOKEN=$(aws ecr get-login-password --region us-west-2)
 REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com
@@ -394,7 +415,7 @@ The site stays broken after this first deploy. Nothing applies the first migrati
 Unlike the web/migrate images, nothing builds or pushes this on its own — GPU worker deployment stays manual ([`ARCHITECTURE.md`](ARCHITECTURE.md)). Do this whenever `worker/` changes and you want a job to actually pick up the new build; the previous section's `terraform apply` already creates `aws_ecr_repository.worker` regardless of whether anything has been pushed to it yet, since `WORKER_IMAGE_URI` is just a string env var the web task carries, not something ECS itself tries to pull.
 
 ```bash
-cd infra # Make sure you're in the right folder.
+cd "$(git rev-parse --show-toplevel)/infra"
 
 REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com
 REPO=$REGISTRY/ai-gaussian-splatter-worker
@@ -600,10 +621,10 @@ If the `deploy` job's migration step fails for an infra reason rather than a bad
 
 ## Tearing down
 
-`terraform destroy` removes everything in `infra/`'s state, including the 3 data S3 buckets (force-destroyed, contents and all) and the RDS instance (no final snapshot). It needs the same seven variable values as a deploy, resolved the same way ([Resolving variable values](#resolving-variable-values)) and exported as `TF_VAR_*` — a missing one fails before anything is destroyed, same as a missing value fails `apply`.
+`terraform destroy` removes everything in `infra/`'s state, including the 3 data S3 buckets (force-destroyed, contents and all) and the RDS instance (no final snapshot). It needs the same seven variable values as a deploy, resolved the same way ([Resolving variable values](#resolving-variable-values)) and exported as `TF_VAR_*` — a missing one fails before anything is destroyed, same as a missing value fails `apply`. Run it signed in the same way ([Signing in to AWS](#signing-in-to-aws)).
 
 ```bash
-cd infra # Make sure you're in the right folder.
+cd "$(git rev-parse --show-toplevel)/infra"
 
 terraform destroy
 ```
