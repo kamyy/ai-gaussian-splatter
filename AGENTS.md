@@ -28,7 +28,7 @@ Monorepo, three independent packages:
 
 - `web/` — Next.js 16 (App Router) + MUI + SWR + Zustand + react-three-fiber, **and** the REST API as Route Handlers under `app/api/v1/` backed by Drizzle.
 - `worker/` — COLMAP + gsplat pipeline, runs on an EC2 GPU spot instance per job.
-- `infra/` — Terraform. One root module (network, registry, data, worker IAM, web, budgets in separate `.tf` files, one state) plus `infra/bootstrap/` for the state backend's own S3 bucket.
+- `infra/` — Terraform. One root module (network, registry, data, worker IAM, web, budgets in separate `.tf` files, one state).
 
 Server-only code lives in `web/lib/server/` — never import it from a `"use client"` file. The one shared client-safe module is `web/lib/types.ts` (status-value tuples for Drizzle `pgEnum`s); import runs types → schema, never the reverse.
 
@@ -92,7 +92,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 ### Structure & state
 
 - **One root module, one state.** `infra/`'s six logical areas (network, registry, data, worker IAM, web, budgets) live in separate `.tf` files for readability, not separate Terraform states — there's no CloudFormation-style cross-stack export/import to keep in sync, so moving a resource between files or renaming one of the six areas is a file-organization change only.
-- **`infra/bootstrap/` is a second, separate root module with its own local state.** It exists only to create the S3 bucket that `infra/providers.tf`'s `backend "s3"` block points at: nothing can create that bucket from inside `infra/` itself before the bucket exists. Run it once per account; never point its own backend at the bucket it creates.
+- **Never add the state bucket as a resource in `infra/`.** Skip creating it ([First-time account setup](RUNBOOK.md#first-time-account-setup)) and `terraform init` fails.
 - **`infra/tests/*.tftest.hcl` run fully offline via `mock_provider "aws" {}`.** Every file needs two `mock_provider "aws"` blocks — one default, one `alias = "billing"` — since a bare `mock_provider "aws" {}` only covers the unaliased provider configuration and `providers.tf` declares a second one for `us-east-1`.
 - **Terraform reads `aws login` credentials only through a recent AWS provider.** An older `hashicorp/aws` fails at the first `plan` with `No valid credential sources found`, even though `terraform init` succeeds, because the S3 backend reads the credentials itself. `terraform version` in `infra/` names the provider version actually installed.
 
@@ -121,7 +121,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 - **No placeholder-value fallback for required variables.** `terraform validate` and `terraform test` (`mock_provider`) never touch real AWS, so required variables (`worker_ami_id`, `alert_email`, `hosted_zone_id`, `clerk_secret_key_arn`, `web_image_tag`, `worker_image_tag`) simply have no default in `infra/variables.tf`. CI's `infra` job never has to supply one. A real `terraform plan`/`apply` fails immediately when one is unset. `.github/workflows/ci.yml`'s `deploy` job maps each from a GitHub repository variable, though, and an unset repository variable arrives as `""`, which Terraform accepts as a value. There only a `validation` block catches it, so every required variable has one that rejects `""`. Give any new required variable one too.
 - **The account id used to build IAM/ARN resources comes from `data.aws_caller_identity.current`**, evaluated fresh on every real plan or apply. `.github/workflows/ci.yml`'s `deploy` job still validates its own `AWS_ACCOUNT_ID` repository variable, but only to build the CI role's ARN and the state bucket name — nothing in `infra/` itself reads that environment variable.
-- **The state bucket name (`ai-gaussian-splatter-tfstate-<account-id>`) is passed to `terraform init` via `-backend-config`, never hardcoded in `infra/providers.tf`.** The bucket is account-specific and created once by `infra/bootstrap/`; baking its name into the shared `backend "s3"` block would make the whole config account-specific too.
+- **The state bucket name (`ai-gaussian-splatter-tfstate-<account-id>`) is passed to `terraform init` via `-backend-config`, never hardcoded in `infra/providers.tf`.** The bucket is account-specific and created once by hand; baking its name into the shared `backend "s3"` block would make the whole config account-specific too.
 
 ### Stack construction
 

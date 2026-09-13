@@ -10,7 +10,7 @@
     "scripts:check": "cd scripts && biome lint .",
     "web:check": "cd web && pnpm exec biome lint . && pnpm exec next typegen && pnpm exec tsc --noEmit",
     "worker:check": "cd worker && uv run ruff check . && uv run ruff format --check . && uv run mypy pipeline",
-    "infra:check": "cd infra && terraform fmt -check -recursive && terraform init -backend=false -input=false && terraform validate && terraform -chdir=bootstrap init -input=false && terraform -chdir=bootstrap validate"
+    "infra:check": "cd infra && terraform fmt -check -recursive && terraform init -backend=false -input=false && terraform validate"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.10",

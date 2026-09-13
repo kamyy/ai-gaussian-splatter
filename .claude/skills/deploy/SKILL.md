@@ -16,7 +16,7 @@ description: Deploy the AWS Terraform config or ship a new web image to ECS. Use
 | Situation | What to do |
 |---|---|
 | `web/` or `infra/*.tf` change, job on | Land it on `main` through a PR. The job builds, migrates, and rolls out. A push touching only `.md` files skips the whole workflow (`paths-ignore`). |
-| Fresh or torn-down account | [First-time account setup](../../../RUNBOOK.md#first-time-account-setup) (Clerk secret, then `AWSServiceRoleForEC2Spot` if missing, then the state bucket) → [Configuring continuous deployment](../../../RUNBOOK.md#configuring-continuous-deployment) (OIDC provider, CI role and policy, repository variables) → [Going live](../../../RUNBOOK.md#going-live) (turn the job on through a PR). After the first run, build and push the worker image. |
+| Fresh or torn-down account | [First-time account setup](../../../RUNBOOK.md#first-time-account-setup) (Clerk secret, then `AWSServiceRoleForEC2Spot` if missing, then the state bucket via that section's AWS CLI) → [Configuring continuous deployment](../../../RUNBOOK.md#configuring-continuous-deployment) (OIDC provider, CI role and policy, repository variables) → [Going live](../../../RUNBOOK.md#going-live) (turn the job on through a PR). After the first run, build and push the worker image. |
 | New worker image | [Building and pushing the worker image](../../../RUNBOOK.md#building-and-pushing-the-worker-image), then update `WORKER_IMAGE_TAG`. The next deploy points `WORKER_IMAGE_URI` at it. |
 | Preview a change | `terraform plan` from a laptop ([Running Terraform from a laptop](../../../RUNBOOK.md#running-terraform-from-a-laptop)). Never `apply` from there. Only the job runs migrations before rolling the service. |
 | Roll back | The circuit breaker rolls a bad image back on its own. To roll back by hand, revert the change and push. A schema change gets a corrective migration instead ([Fixing a bad migration](../../../RUNBOOK.md#fixing-a-bad-migration)). |
@@ -28,6 +28,7 @@ description: Deploy the AWS Terraform config or ship a new web image to ECS. Use
 2. Every repository variable must be set. An unset one arrives as `""`, which each Terraform variable's `validation` block rejects, so the job fails at its first apply rather than deploying a placeholder. On a fresh account no worker image exists for `WORKER_IMAGE_TAG` to name. Any commit SHA passes validation until one is pushed.
 3. Validation can't catch a well-formed wrong value, and `ALERT_EMAIL` is the one that stays silent about it. A mistyped address applies green with no subscription state to check, since the AWS Budget emails it directly. Confirm the address with the user rather than inferring one. Change `APP_PUBLIC_URL` only alongside `local.app_hostname` in `infra/locals.tf`.
 4. If job launches matter, confirm the AMI in `WORKER_AMI_ID` and the image under `WORKER_IMAGE_TAG` both exist. Their `validation` blocks check shape only.
+5. The state bucket must already exist ([First-time account setup](../../../RUNBOOK.md#first-time-account-setup)). Skip it and the job's `terraform init` fails.
 
 ## Before merging an `infra/` change
 

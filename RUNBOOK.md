@@ -185,7 +185,7 @@ After editing `web/lib/server/db/schema.ts`, run `pnpm db:generate` to emit a mi
 
 ## Installing Terraform
 
-`infra/providers.tf` and `infra/bootstrap/main.tf` pin an exact `required_version`, so any other CLI version fails `terraform init`. Install that exact release as a standalone binary:
+`infra/providers.tf` pins an exact `required_version`, so any other CLI version fails `terraform init`. Install that exact release as a standalone binary:
 
 ```bash
 # Run from the repo root. The version is read out of infra/providers.tf rather than repeated here.
@@ -261,10 +261,10 @@ aws login # Needed again only after the session expires, up to 12 hours later.
 
 ### Resolving variable values
 
-Six of the seven values below become the `deploy` job's repository variables ([Setting GitHub repository variables](#setting-github-repository-variables)). The job sets `web_image_tag` itself. A laptop `terraform plan` or `destroy` needs all seven. Resolve them once per shell session and reuse them for everything that follows. Terraform reads a `TF_VAR_<name>` environment variable for the matching variable automatically, matching each name in `infra/variables.tf`, so once these are exported no invocation below needs a repeated `-var` flag. `AWS_ACCOUNT_ID` isn't a Terraform variable. It's used below to name the state bucket and the ECR registry host, and to build the CI role's policies, so export it separately.
+Six of the seven values below become the `deploy` job's repository variables ([Setting GitHub repository variables](#setting-github-repository-variables)). The job sets `web_image_tag` itself. A laptop `terraform plan` or `destroy` needs all seven. Resolve them once per shell session and reuse them for everything that follows. Terraform reads a `TF_VAR_<name>` environment variable for the matching variable automatically, matching each name in `infra/variables.tf`, so once these are exported no invocation below needs a repeated `-var` flag. `AWS_ACCOUNT_ID` isn't a Terraform variable. It's used below to name the state bucket and the ECR registry host, and to build the CI role's policies. Read it from the signed-in session so a leftover placeholder cannot name those.
 
 ```bash
-export AWS_ACCOUNT_ID=replace-with-your-account-id # Use a real AWS account id.
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 ```
 
 `TF_VAR_alert_email` is where the AWS Budget (`infra/budgets.tf`) sends spend alerts directly, with no subscription-confirmation step to check. Omitting it fails `terraform plan`/`apply` immediately, but nothing can tell a wrong address from a right one, and a wrong one applies green with the alerts never arriving. The only way to catch a typo is to watch for a real alert once spend crosses a threshold, or temporarily lower `monthly_budget_limit_usd` to force one.
@@ -346,16 +346,29 @@ aws iam get-role --role-name AWSServiceRoleForEC2Spot >/dev/null 2>&1 || \
 
 To see current estimated month-to-date spend, Billing console → **Billing Home** shows it on the landing page; **Cost Explorer** breaks it down by service. To check the budget directly instead of hunting the console, `aws budgets describe-budgets --account-id $AWS_ACCOUNT_ID --region us-east-1` returns its `CalculatedSpend` — the Budgets API is `us-east-1`-only regardless of the resources it's tracking.
 
-Now resolve the seven variable values in ["Resolving variable values"](#resolving-variable-values) above, in the same shell.
-
-A fresh account needs the Terraform state backend bootstrapped once. `infra/bootstrap/` is a separate, tiny root module (its own local state) that creates only the S3 bucket `infra/`'s own `backend "s3"` block points at — nothing in `infra/`'s real config can apply before that bucket exists. It has no required variables.
+The Terraform state bucket is created by hand once. `terraform init` (the `deploy` job's, or a laptop [plan](#running-terraform-from-a-laptop)) needs it before any apply. The name uses the signed-in account, the same way ["Resolving variable values"](#resolving-variable-values) sets `AWS_ACCOUNT_ID`.
 
 ```bash
-cd "$(git rev-parse --show-toplevel)/infra/bootstrap"
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+BUCKET="ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID"
 
-terraform init
-terraform apply
-terraform output state_bucket # Should be ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID.
+aws s3api create-bucket --bucket "$BUCKET" --region us-west-2 \
+  --create-bucket-configuration LocationConstraint=us-west-2
+
+aws s3api put-bucket-versioning --bucket "$BUCKET" --region us-west-2 \
+  --versioning-configuration Status=Enabled
+
+aws s3api put-bucket-encryption --bucket "$BUCKET" --region us-west-2 \
+  --server-side-encryption-configuration \
+  '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+
+aws s3api put-public-access-block --bucket "$BUCKET" --region us-west-2 \
+  --public-access-block-configuration \
+  BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+
+# Same Project tag the rest of infra/ gets from provider default_tags.
+aws s3api put-bucket-tagging --bucket "$BUCKET" --region us-west-2 \
+  --tagging '{"TagSet":[{"Key":"Project","Value":"ai-gaussian-splatter"}]}'
 ```
 
 ### Going live
@@ -606,4 +619,20 @@ terraform destroy
 
 The ECR repository (`infra/registry.tf`) is destroyed too — `force_delete = true` means every image in it goes as well, leaving no orphan under that fixed name for the next apply to collide with.
 
-Resources this config never owned — hand-created in [First-time account setup](#first-time-account-setup) and [Configuring continuous deployment](#configuring-continuous-deployment) — are untouched by `terraform destroy` and need their own manual cleanup, if you want them gone too: the Clerk secret (`ai-gaussian-splatter/clerk-secret-key`), the `ai-gaussian-splatter-ci-deploy` IAM role and its inline policy, the GitHub OIDC provider (skip if another app in the account still uses it), the `orky.net` Route 53 hosted zone (referenced only — this app never owned it), `AWSServiceRoleForEC2Spot` (account-wide, shared with any other Spot workload), the GitHub repository variables, and the `infra/bootstrap/`-created state bucket itself (`terraform -chdir=infra/bootstrap destroy`, only after `infra/`'s own destroy has finished with it). None of these cost anything meaningful to leave in place, and several (the OIDC provider, the Spot service-linked role, the hosted zone) are shared or reused, so deleting them isn't a like-for-like undo of `terraform apply`.
+Resources this config never owned — hand-created in [First-time account setup](#first-time-account-setup) and [Configuring continuous deployment](#configuring-continuous-deployment) — are untouched by `terraform destroy` and need their own manual cleanup, if you want them gone too: the Clerk secret (`ai-gaussian-splatter/clerk-secret-key`), the `ai-gaussian-splatter-ci-deploy` IAM role and its inline policy, the GitHub OIDC provider (skip if another app in the account still uses it), the `orky.net` Route 53 hosted zone (referenced only — this app never owned it), `AWSServiceRoleForEC2Spot` (account-wide, shared with any other Spot workload), the GitHub repository variables, and the state bucket itself. None of these cost anything meaningful to leave in place, and several (the OIDC provider, the Spot service-linked role, the hosted zone) are shared or reused, so deleting them isn't a like-for-like undo of `terraform apply`.
+
+Only delete the state bucket after `infra/`'s own destroy has finished with it. Versioning is on, so empty current objects and old versions before `delete-bucket`. The name uses the signed-in account. `delete-objects` takes at most 1000 keys, but the CLI merges every page of `list-object-versions` into one result. `--no-paginate` keeps each listing to a single S3 page of at most 1000 versions and delete markers combined, so the loop repeats until a page has no keys. `--max-items` can't replace it, because it counts only `Versions` and lets delete markers through uncounted.
+
+```bash
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+BUCKET="ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID"
+while :; do
+  OBJECTS=$(aws s3api list-object-versions --bucket "$BUCKET" --region us-west-2 --no-paginate \
+    --output json --query '{Objects: [Versions[], DeleteMarkers[]][].{Key:Key,VersionId:VersionId}}')
+  if ! printf '%s' "$OBJECTS" | grep -q '"Key"'; then
+    break
+  fi
+  aws s3api delete-objects --bucket "$BUCKET" --region us-west-2 --delete "$OBJECTS" || break
+done
+aws s3api delete-bucket --bucket "$BUCKET" --region us-west-2
+```
