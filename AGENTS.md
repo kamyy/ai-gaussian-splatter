@@ -94,6 +94,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - **One root module, one state.** `infra/`'s six logical areas (network, registry, data, worker IAM, web, budgets) live in separate `.tf` files for readability, not separate Terraform states — there's no CloudFormation-style cross-stack export/import to keep in sync, so moving a resource between files or renaming one of the six areas is a file-organization change only.
 - **`infra/bootstrap/` is a second, separate root module with its own local state.** It exists only to create the S3 bucket that `infra/providers.tf`'s `backend "s3"` block points at: nothing can create that bucket from inside `infra/` itself before the bucket exists. Run it once per account; never point its own backend at the bucket it creates.
 - **`infra/tests/*.tftest.hcl` run fully offline via `mock_provider "aws" {}`.** Every file needs two `mock_provider "aws"` blocks — one default, one `alias = "billing"` — since a bare `mock_provider "aws" {}` only covers the unaliased provider configuration and `providers.tf` declares a second one for `us-east-1`.
+- **Terraform reads `aws login` credentials only through a recent AWS provider.** An older `hashicorp/aws` fails at the first `plan` with `No valid credential sources found`, even though `terraform init` succeeds, because the S3 backend reads the credentials itself. `terraform version` in `infra/` names the provider version actually installed.
 
 ### Networking & TLS
 

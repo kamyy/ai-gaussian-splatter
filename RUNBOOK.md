@@ -255,19 +255,8 @@ Start by finishing **[First-time account setup](#first-time-account-setup)** bef
 
 Run every `aws` and `terraform` command in this section as an admin IAM identity signed in with `aws login`, which needs AWS CLI 2.32.0 or later. The `ai-gaussian-splatter-dev` user from [Dev AWS resources](#dev-aws-resources) can only reach the two dev buckets. The CI role from [Configuring continuous deployment](#configuring-continuous-deployment) doesn't exist until after the first full apply.
 
-Terraform's AWS provider, at the version `infra/.terraform.lock.hcl` locks, can't read `aws login` credentials and fails with `No valid credential sources found`. The S3 backend and the AWS CLI read them fine. That means `terraform init` succeeds and the failure only shows up at the first `plan` or `apply`. Wrap the login session in a `credential_process` profile, which the provider does read. Add it to `~/.aws/config` once:
-
-```ini
-[profile terraform]
-credential_process = aws configure export-credentials --profile default --format process
-region = us-west-2
-```
-
-Each set of credentials that command prints lasts at most 15 minutes. The SDK re-runs it before they expire, so a first apply that waits on RDS and ACM validation for longer than that keeps working. Exporting them once as `AWS_*` environment variables instead would expire partway through.
-
 ```bash
 aws login # Needed again only after the session expires, up to 12 hours later.
-export AWS_PROFILE=terraform
 ```
 
 ### Resolving variable values
@@ -632,7 +621,7 @@ If the `deploy` job's migration step fails for an infra reason rather than a bad
 
 ## Tearing down
 
-`terraform destroy` removes everything in `infra/`'s state, including the 3 data S3 buckets (force-destroyed, contents and all) and the RDS instance (no final snapshot). It needs the same seven variable values as a deploy, resolved the same way ([Resolving variable values](#resolving-variable-values)) and exported as `TF_VAR_*` — a missing one fails before anything is destroyed, same as a missing value fails `apply`. Run it with the same `AWS_PROFILE` too ([Signing in to AWS](#signing-in-to-aws)).
+`terraform destroy` removes everything in `infra/`'s state, including the 3 data S3 buckets (force-destroyed, contents and all) and the RDS instance (no final snapshot). It needs the same seven variable values as a deploy, resolved the same way ([Resolving variable values](#resolving-variable-values)) and exported as `TF_VAR_*` — a missing one fails before anything is destroyed, same as a missing value fails `apply`. Run it signed in the same way ([Signing in to AWS](#signing-in-to-aws)).
 
 ```bash
 cd "$(git rev-parse --show-toplevel)/infra"
