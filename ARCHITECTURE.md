@@ -27,7 +27,7 @@ The "AI" here is per-object gradient descent through a differentiable rasterizer
 ## Compute
 
 - Each job gets a dedicated EC2 GPU **spot** instance (`web/lib/server/ec2Launcher.ts`; type from `WORKER_INSTANCE_TYPE`, default `g5.xlarge`). It runs the worker container, then self-terminates on success or failure.
-- Intended fallback if a worker dies without reporting: an instance-runtime CloudWatch alarm. Not built in `infra/` yet.
+- Fallback if a worker dies without reporting: `web/lib/server/ec2Launcher.ts` schedules `shutdown -h +WORKER_MAX_LIFETIME_MINUTES` as the first thing user-data does, before the failure-prone steps (ECR login, `docker run`) that could otherwise leave `worker/pipeline/instance.py`'s own self-terminate unreached. `InstanceInitiatedShutdownBehavior = "terminate"` on the launch makes that shutdown actually terminate the instance rather than just stop it. If scheduling that shutdown fails, user-data powers the instance off immediately rather than run the job without a ceiling. Losing one job costs less than a GPU instance billing with no bound. A CloudWatch runtime alarm was considered instead (or in addition) for alerting when this fires, but nothing in the request path needs to *know* a job hung, only to stop it from billing — so the ceiling alone was built; alerting is [gap 5](AGENTS.md#state--whats-next).
 - No SQS, Batch, or always-on fleet — job volume is bounded by the global daily job cap instead.
 - A queue is only worth the added complexity at higher, decoupled-fleet scale.
 
@@ -78,6 +78,17 @@ M10's baked AMI therefore attacks the smaller half — fixed overhead, not train
 - CI's Postgres starts as a plain `podman run` step (`.github/workflows/ci.yml`'s `web` job), not GitHub Actions' declarative `services:` block. The migrator-image test ([CI/CD](#cicd), below) needs to reach it by container name from a sibling podman container, and a Docker-managed `services:` container isn't reachable that way.
 - It runs on a dedicated podman network, not `--network host`. Host networking doesn't reliably provide true loopback under rootless podman here — verified directly against this runner setup.
 
+### Master password refresh
+
+RDS's `manage_master_user_password` rotates its Secrets Manager secret every 7 days by default. A value ECS injects once as an env var at task start goes stale for the web service, which stays up for weeks: Postgres doesn't re-authenticate already-open connections, but rejects new ones with the old password, so this would show up as growing, intermittent connection failures rather than a clean cutover.
+
+Two fixes were considered:
+
+- **Scheduled forced redeployment**: an EventBridge Scheduler rule calling `ecs:UpdateService(forceNewDeployment)` on a cadence under 7 days, via a direct "universal target" API call with no Lambda needed. Fully infra-only and cheap, but adds a routine rolling restart as a permanent fixture of the architecture, and only patches the symptom — the app still never verifies it's holding a current password between restarts.
+- **Fetch the password at connect time** (chosen): the web service re-fetches the current password from Secrets Manager on every new `pg` connection instead of trusting a cached value, so it's never more than a few minutes stale regardless of when RDS rotates. This is also what Secrets Manager rotation is designed around — the alternative treats an env var as a cache of something meant to be read live.
+
+The migration task (`web/scripts/db-migrate.cjs`) keeps the old static-env-var behavior: it runs for seconds and exits, well inside the 7-day window, so there's nothing for it to go stale against, and changing it would need its own Secrets Manager IAM grant for no benefit.
+
 ## Infra
 
 - Infra: **Terraform**. One root module (`infra/`) holding one state, plus a separate `infra/bootstrap/` module (its own local state) that exists only to create the S3 bucket the root module's state lives in.
@@ -87,12 +98,12 @@ M10's baked AMI therefore attacks the smaller half — fixed overhead, not train
   - **registry** — ECR alone, so the image can push before the service exists.
   - **worker_iam** — IAM for the GPU worker instances.
   - **web** — ALB + Fargate.
-  - **budgets** — a second, `us-east-1`-aliased provider, since billing metrics only exist there.
+  - **budgets** — a second, `us-east-1`-aliased provider, since the Budgets API only operates there.
 - `infra/tests/*.tftest.hcl` (native `terraform test`, `mock_provider "aws" {}`) replaces hand-written assertions against synthesized templates with the same offline, zero-credential guarantee, run by `.github/workflows/ci.yml`'s `infra` job on every PR.
 
 ## Hosting
 
-The web app runs on **Fargate** behind an **Application Load Balancer** (`ApplicationLoadBalancedFargateService`). Tasks use the `FARGATE_SPOT` capacity provider (~70% cheaper than on-demand).
+The web app runs on **Fargate** behind an **Application Load Balancer** (`infra/web.tf`: `aws_lb`, `aws_ecs_service`). Tasks use the `FARGATE_SPOT` capacity provider (~70% cheaper than on-demand).
 
 ### Spot tradeoffs
 
@@ -104,18 +115,18 @@ The web app runs on **Fargate** behind an **Application Load Balancer** (`Applic
 
 ### Networking
 
-- Tasks share public subnets with the ALB and have a public IP, for S3/EC2 API egress via the IGW.
+- Tasks share public subnets with the ALB and have a public IP, for EC2 API egress via the IGW. S3 calls instead go through a gateway VPC endpoint (free, no IGW hop).
 - No NAT: it costs ~$33/mo + $0.045/GB, and a multi-GB worker ECR pull would cost more per job than the spot instance itself.
 - Tradeoff: `web_security_group`'s single ingress rule, from `alb_security_group` on `CONTAINER_PORT`, is the only network control between the tasks and the internet.
-- RDS is `PRIVATE_ISOLATED`: it has no outbound need.
-- The subnet type must be explicit — `PRIVATE_WITH_EGRESS` + `nat_gateways=0` synthesizes "isolated in everything but name," which isn't the same declaration.
+- RDS sits in a private subnet whose route table carries no default route out: it has no outbound need.
+- That route table is a resource in its own right, not inferred from the subnet — an explicit table with no `0.0.0.0/0` route is the only thing that actually blocks outbound traffic; nothing about a subnet being "private" does that on its own.
 - Both security groups live in `infra/network.tf`. A single Terraform state has no cross-stack boundary for declaring the ALB group elsewhere to trip over.
 
 ### TLS & DNS
 
 - TLS terminates at the ALB (ACM cert for `ai-gaussian-splatter.orky.net`; 80→443).
 - The cert is declared in `infra/web.tf` so it lands in the ALB's region — ALBs can't use out-of-region certs.
-- `us-east-1` only matters for CloudFront, which this app doesn't use.
+- For ACM specifically, `us-east-1` only matters for CloudFront, which this app doesn't use — the cert stays in the ALB's own region. `us-east-1` does matter elsewhere in this config, for an unrelated reason: the Budgets API (`infra/budgets.tf`) only operates there.
 - Route 53 zone is referenced by ID only (`var.hosted_zone_id`), never looked up or created — this config only ever adds records to an existing zone.
 
 ### Image tags
@@ -146,7 +157,7 @@ Three request-path layers (`web/lib/server/rateLimit.ts`). A per-user quota alon
 2. Per-user, alongside it.
 3. Global daily job cap, in `process` only — bounds worst-case GPU spend regardless of caller.
 
-Ops fallback: AWS Budget + CloudWatch billing alarm (`infra/budgets.tf`) for spend the request path never sees.
+Ops fallback: an AWS Budget (`infra/budgets.tf`) for spend the request path never sees.
 
 ## CI/CD
 
@@ -187,7 +198,7 @@ A rolled-back *service* deployment does not undo an already-applied migration. R
 - CI authenticates to AWS via **GitHub OIDC**, not static IAM access keys — no long-lived credential to leak or rotate.
 - The identity token's `sub` claim scopes it specifically to `repo:<owner>@<ownerId>/<repo>@<repoId>:ref:refs/heads/main`, so PRs and forks can't assume the role.
 - That role, `ai-gaussian-splatter-ci-deploy`, is created by hand once ([Creating the OIDC provider and CI role](RUNBOOK.md#creating-the-oidc-provider-and-ci-role)), not by this config, because it's chicken-and-egg: CI can't apply the config that grants CI its own apply permission.
-- Unlike a design that delegates through a separate bootstrap role, this role holds the AWS permissions `terraform apply` itself needs directly — ec2, ecr, rds, s3, iam, ecs, elasticloadbalancing, route53, acm, kms, sns, budgets, cloudwatch, secretsmanager — scoped by resource-name prefix where a service supports it. Same reasoning that already keeps the Clerk secret and `AWSServiceRoleForEC2Spot` as hand-run, RUNBOOK-documented one-time setup rather than Terraform-managed resources: whoever can grant broad infrastructure permissions to a CI role is a step this repo keeps out of any automated apply.
+- Unlike a design that delegates through a separate bootstrap role, this role holds the AWS permissions `terraform apply` itself needs directly — ec2, ecr, rds, s3, iam, ecs, elasticloadbalancing, route53, acm, budgets, logs, secretsmanager — scoped by resource-name prefix where a service supports it. Same reasoning that already keeps the Clerk secret and `AWSServiceRoleForEC2Spot` as hand-run, RUNBOOK-documented one-time setup rather than Terraform-managed resources: whoever can grant broad infrastructure permissions to a CI role is a step this repo keeps out of any automated apply.
 
 ## Testing
 

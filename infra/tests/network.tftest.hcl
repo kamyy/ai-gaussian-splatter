@@ -1,6 +1,5 @@
-# Fully offline via mock_provider: terraform test never reaches real AWS here, matching CDK synth's own
-# zero-credential guarantee. Values below are arbitrary but well-formed stand-ins for the real ones a deploy
-# would pass — see infra/variables.tf for what each means.
+# Fully offline via mock_provider: terraform test never reaches real AWS here. Values below are arbitrary but
+# well-formed stand-ins for the real ones a deploy would pass — see infra/variables.tf for what each means.
 mock_provider "aws" {}
 
 mock_provider "aws" {
@@ -13,6 +12,7 @@ variables {
   hosted_zone_id       = "Z00000000000000000000"
   clerk_secret_key_arn = "arn:aws:secretsmanager:us-west-2:000000000000:secret:ai-gaussian-splatter/clerk-secret-key-AAAAAA"
   web_image_tag        = "0123abc"
+  worker_image_tag     = "0123abc"
 }
 
 run "no_nat_gateway_or_extra_public_ingress" {
@@ -56,7 +56,7 @@ run "default_security_group_is_stripped" {
 
   assert {
     condition     = length(aws_default_security_group.default.ingress) == 0 && length(aws_default_security_group.default.egress) == 0
-    error_message = "the VPC's default security group must carry no rules (equivalent of CDK's restrictDefaultSecurityGroup)"
+    error_message = "the VPC's default security group must carry no rules"
   }
 }
 
@@ -103,13 +103,6 @@ override_resource {
     arn      = "arn:aws:elasticloadbalancing:us-west-2:000000000000:loadbalancer/app/ai-gaussian-splatter/abc123"
     dns_name = "ai-gaussian-splatter-123456.us-west-2.elb.amazonaws.com"
     zone_id  = "Z1H1FL5HABSF5"
-  }
-}
-
-override_resource {
-  target = aws_sns_topic.billing_alerts
-  values = {
-    arn = "arn:aws:sns:us-east-1:000000000000:ai-gaussian-splatter-billing-alerts"
   }
 }
 

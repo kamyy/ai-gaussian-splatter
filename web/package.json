@@ -16,6 +16,7 @@
   "dependencies": {
     "@aws-sdk/client-ec2": "^3.1113.0",
     "@aws-sdk/client-s3": "^3.1113.0",
+    "@aws-sdk/client-secrets-manager": "^3.1113.0",
     "@aws-sdk/s3-request-presigner": "^3.1113.0",
     "@clerk/nextjs": "^7.7.8",
     "@emotion/react": "^11.14.0",
@@ -57,5 +58,10 @@
     "three-stdlib": "^2.36.1",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"
+  },
+  "pnpm": {
+    "overrides": {
+      "@smithy/types": "4.17.2"
+    }
   }
 }

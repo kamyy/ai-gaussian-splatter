@@ -1,11 +1,11 @@
-# VPC, subnets, and security groups. Deliberately minimal — one VPC with public + isolated subnets across 2
-# AZs, no NAT gateway or multi-AZ complexity, since this is a low-traffic demo project, not a production-scale
-# service.
+# VPC, subnets, and security groups. One VPC with public + isolated subnets across 2 AZs, no NAT gateway
+# (ARCHITECTURE.md has the cost reasoning) and no RDS Multi-AZ failover, since this is a low-traffic demo
+# project, not a production-scale service.
 #
-# nat_gateways=0 equivalent: everything needing outbound internet (the web tasks, the GPU workers) runs in the
-# public subnets with a public IP and egresses through the internet gateway instead — ARCHITECTURE.md has the
-# cost reasoning. The security groups, not the absence of a route, are therefore what keep those tasks
-# unreachable from outside. The isolated subnets hold only RDS, which needs no outbound access.
+# Everything needing outbound internet (the web tasks, the GPU workers) runs in the public subnets with a
+# public IP and egresses through the internet gateway instead. The security groups, not the absence of a
+# route, are therefore what keep those tasks unreachable from outside. The isolated subnets hold only RDS,
+# which needs no outbound access.
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_support   = true
@@ -16,8 +16,9 @@ resource "aws_vpc" "main" {
   }
 }
 
-# Every VPC gets a default security group with an allow-all ingress/egress rule from AWS itself. Managing it here
-# with no ingress/egress blocks strips both, so nothing can attach to it and inherit an open rule by accident.
+# Every VPC gets a default security group with an AWS-provided self-referencing ingress rule (allow from other
+# members of the same group) plus allow-all egress. Managing it here with no ingress/egress blocks strips both,
+# so nothing can attach to it and inherit either rule by accident.
 resource "aws_default_security_group" "default" {
   vpc_id = aws_vpc.main.id
 }
@@ -39,8 +40,9 @@ resource "aws_subnet" "public" {
   }
 }
 
-# RDS is the only thing here — it needs no outbound internet, so it keeps the stronger placement: no route in
-# or out, reachable only from db_security_group's one ingress rule below.
+# RDS is the only thing here — it needs no outbound internet, so its route table (below) carries no default
+# route out. It's still reachable from the public subnets over the VPC's implicit local route; the db security
+# group's one ingress rule is what actually restricts that.
 resource "aws_subnet" "private" {
   for_each = { for idx, az in local.availability_zones : az => idx }
 
@@ -99,16 +101,15 @@ resource "aws_vpc_endpoint" "s3" {
   route_table_ids   = [aws_route_table.public.id, aws_route_table.private.id]
 }
 
-# Declared here, not in web.tf, so it sits alongside the other group that names a public CIDR. The ALB-to-tasks
-# ingress rule itself lives in web.tf, once the container port is known.
+# Declared here, not in web.tf, so it sits alongside the two rules below that name a public CIDR. The
+# ALB-to-tasks ingress rule itself lives in web.tf, once the container port is known.
 resource "aws_security_group" "alb" {
   name        = "ai-gaussian-splatter-alb"
   description = "Public ALB in front of the web ECS service"
   vpc_id      = aws_vpc.main.id
 }
 
-# The app's only route in from the internet, and the only rule in this file that names a public CIDR. Port 80
-# is the redirect listener; it never reaches a task.
+# The app's only route in from the internet. Port 80 is the redirect listener; it never reaches a task.
 resource "aws_vpc_security_group_ingress_rule" "alb_https" {
   security_group_id = aws_security_group.alb.id
   cidr_ipv4         = "0.0.0.0/0"

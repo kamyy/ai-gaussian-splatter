@@ -10,6 +10,7 @@ variables {
   hosted_zone_id       = "Z00000000000000000000"
   clerk_secret_key_arn = "arn:aws:secretsmanager:us-west-2:000000000000:secret:ai-gaussian-splatter/clerk-secret-key-AAAAAA"
   web_image_tag        = "0123abc"
+  worker_image_tag     = "4567def"
 }
 
 run "fixed_literal_names" {
@@ -49,7 +50,10 @@ run "pass_role_targets_the_role_not_the_instance_profile" {
   # Regression guard: RunInstances with IamInstanceProfile evaluates iam:PassRole against the underlying role's
   # ARN, not the instance profile ARN that wraps it. Getting this wrong is a real prior AccessDenied bug.
   assert {
-    condition     = jsondecode(aws_iam_role_policy.task_pass_worker_role.policy).Statement[0].Resource == aws_iam_role.worker.arn
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.task.policy).Statement :
+      s.Sid == "PassWorkerRole" && s.Resource == aws_iam_role.worker.arn
+    ])
     error_message = "iam:PassRole must target the worker role's ARN, not aws_iam_instance_profile.worker.arn"
   }
 }
@@ -60,27 +64,34 @@ run "run_instances_statements_stay_split" {
   # Regression guard: a single statement conditioned on aws:RequestTag would evaluate false for every resource
   # type except the tagged instance itself and deny the whole RunInstances call.
   assert {
-    condition     = jsondecode(aws_iam_role_policy.task_ec2_run_instances.policy).Statement[0].Action == "ec2:RunInstances"
-    error_message = "the unconditioned RunInstances statement must exist"
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.task.policy).Statement :
+      s.Sid == "RunInstances" && s.Action == "ec2:RunInstances" && !contains(keys(s), "Condition")
+    ])
+    error_message = "the unconditioned RunInstances statement must exist and must not carry aws:RequestTag — that's the separate RunInstancesTagged statement"
   }
 
   assert {
-    condition     = !contains(keys(jsondecode(aws_iam_role_policy.task_ec2_run_instances.policy).Statement[0]), "Condition")
-    error_message = "the unconditioned RunInstances statement must not carry aws:RequestTag — that's the second, separate statement"
-  }
-
-  assert {
-    condition     = jsondecode(aws_iam_role_policy.task_ec2_run_instances_tagged.policy).Statement[0].Condition.StringEquals["aws:RequestTag/Role"] == "worker"
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.task.policy).Statement :
+      s.Sid == "RunInstancesTagged" && try(s.Condition.StringEquals["aws:RequestTag/Role"], "") == "worker"
+    ])
     error_message = "the tagged RunInstances statement must require aws:RequestTag/Role=worker"
   }
 
   assert {
-    condition     = jsondecode(aws_iam_role_policy.task_ec2_create_tags.policy).Statement[0].Condition.StringEquals["ec2:CreateAction"] == "RunInstances"
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.task.policy).Statement :
+      s.Sid == "CreateTagsOnLaunch" && try(s.Condition.StringEquals["ec2:CreateAction"], "") == "RunInstances"
+    ])
     error_message = "ec2:CreateTags must be scoped to tags applied at launch, not a general tag-anything grant"
   }
 
   assert {
-    condition     = jsondecode(aws_iam_role_policy.task_ec2_terminate.policy).Statement[0].Condition.StringEquals["ec2:ResourceTag/Role"] == "worker"
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.task.policy).Statement :
+      s.Sid == "TerminateWorker" && try(s.Condition.StringEquals["ec2:ResourceTag/Role"], "") == "worker"
+    ])
     error_message = "ec2:TerminateInstances must be scoped to instances tagged Role=worker"
   }
 }
@@ -102,16 +113,84 @@ run "web_container_wiring" {
   }
 
   assert {
-    condition = length([
-      for s in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].secrets :
-      s.name if contains(["DATABASE_USER", "DATABASE_PASSWORD"], s.name)
-    ]) == 2
-    error_message = "DB credentials must reach the container as two separate secret fields, never one assembled DATABASE_URL"
+    condition = anytrue([
+      for s in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].secrets : s.name == "DATABASE_USER"
+    ])
+    error_message = "DATABASE_USER must reach the web container as a secret field, never one assembled DATABASE_URL"
+  }
+
+  # Regression guard: the web service must fetch its own password at connect time (databaseUrl.ts's
+  # fetchDatabasePassword) rather than trusting a value ECS injected once at task start, which RDS's 7-day secret
+  # rotation would eventually make stale for this long-lived service.
+  assert {
+    condition = !anytrue([
+      for s in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].secrets : s.name == "DATABASE_PASSWORD"
+    ])
+    error_message = "the web task must not receive a static DATABASE_PASSWORD — see DATABASE_SECRET_ARN instead"
+  }
+
+  assert {
+    condition = anytrue([
+      for e in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].environment :
+      e.name == "DATABASE_SECRET_ARN" && e.value == aws_db_instance.main.master_user_secret[0].secret_arn
+    ])
+    error_message = "DATABASE_SECRET_ARN must name the RDS-managed secret so the app can fetch the current password"
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.task.policy).Statement :
+      s.Sid == "DbSecretRead" && s.Resource == aws_db_instance.main.master_user_secret[0].secret_arn
+    ])
+    error_message = "the task role must be able to read the DB secret itself, or fetchDatabasePassword can't work"
   }
 
   assert {
     condition     = jsondecode(aws_ecs_task_definition.web.container_definitions)[0].portMappings[0].containerPort == 8000
     error_message = "container must listen on the same port the target group health check and SG rule use"
+  }
+
+  # The override_resource blocks below give each ECR repository its own URL, and worker_image_tag differs from
+  # web_image_tag. So this fails if WORKER_IMAGE_URI names the web repository or the web tag.
+  assert {
+    condition = anytrue([
+      for e in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].environment :
+      e.name == "WORKER_IMAGE_URI" && e.value == "000000000000.dkr.ecr.us-west-2.amazonaws.com/ai-gaussian-splatter-worker:4567def"
+    ])
+    error_message = "WORKER_IMAGE_URI must point at the worker ECR repository, tagged with worker_image_tag"
+  }
+
+  assert {
+    condition = anytrue([
+      for e in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].environment :
+      e.name == "ECR_REGISTRY" && e.value == "000000000000.dkr.ecr.us-west-2.amazonaws.com"
+    ])
+    error_message = "ECR_REGISTRY must be the account's ECR registry hostname, for docker login in ec2Launcher.ts's user-data"
+  }
+
+  # Regression guard: every AWS SDK client the app constructs reads getEnv().AWS_REGION explicitly. Without this
+  # env var, each client falls back to its own default-region resolution instead, which can silently land on the
+  # wrong region.
+  assert {
+    condition = anytrue([
+      for e in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].environment :
+      e.name == "AWS_REGION" && e.value == var.aws_region
+    ])
+    error_message = "AWS_REGION must be set explicitly so the app's AWS SDK clients target the right region"
+  }
+}
+
+run "migration_task_keeps_the_static_password" {
+  command = apply
+
+  # Unlike the web service, the migration task runs for seconds and exits — well inside RDS's 7-day rotation
+  # window — so it keeps using the value ECS injects once at task start instead of fetching its own.
+  assert {
+    condition = length([
+      for s in jsondecode(aws_ecs_task_definition.migration.container_definitions)[0].secrets :
+      s.name if contains(["DATABASE_USER", "DATABASE_PASSWORD"], s.name)
+    ]) == 2
+    error_message = "the migration task must still receive both DB credential fields as secrets"
   }
 }
 
@@ -205,6 +284,66 @@ run "rejects_an_empty_web_image_tag" {
   expect_failures = [var.web_image_tag]
 }
 
+run "rejects_a_moving_worker_image_tag" {
+  command = plan
+
+  variables {
+    worker_image_tag = "latest"
+  }
+
+  expect_failures = [var.worker_image_tag]
+}
+
+run "rejects_an_empty_worker_image_tag" {
+  command = plan
+
+  variables {
+    worker_image_tag = ""
+  }
+
+  expect_failures = [var.worker_image_tag]
+}
+
+run "rejects_an_empty_worker_ami_id" {
+  command = plan
+
+  variables {
+    worker_ami_id = ""
+  }
+
+  expect_failures = [var.worker_ami_id]
+}
+
+run "rejects_an_ami_name_as_worker_ami_id" {
+  command = plan
+
+  variables {
+    worker_ami_id = "Deep Learning Base OSS Nvidia Driver GPU AMI (Ubuntu 22.04)"
+  }
+
+  expect_failures = [var.worker_ami_id]
+}
+
+run "rejects_an_empty_hosted_zone_id" {
+  command = plan
+
+  variables {
+    hosted_zone_id = ""
+  }
+
+  expect_failures = [var.hosted_zone_id]
+}
+
+run "rejects_a_prefixed_hosted_zone_id" {
+  command = plan
+
+  variables {
+    hosted_zone_id = "/hostedzone/Z00000000000000000000"
+  }
+
+  expect_failures = [var.hosted_zone_id]
+}
+
 run "rejects_a_non_https_app_public_url" {
   command = plan
 
@@ -213,6 +352,16 @@ run "rejects_a_non_https_app_public_url" {
   }
 
   expect_failures = [var.app_public_url]
+}
+
+run "rejects_a_non_email_alert_email" {
+  command = plan
+
+  variables {
+    alert_email = "not-an-email"
+  }
+
+  expect_failures = [var.alert_email]
 }
 
 run "rejects_a_clerk_secret_arn_with_no_suffix" {
@@ -242,7 +391,7 @@ run "rejects_a_clerk_secret_arn_from_a_different_account" {
     clerk_secret_key_arn = "arn:aws:secretsmanager:us-west-2:999999999999:secret:ai-gaussian-splatter/clerk-secret-key-AAAAAA"
   }
 
-  expect_failures = [aws_iam_role_policy.execution_clerk_secret_read]
+  expect_failures = [aws_iam_role_policy.execution]
 }
 
 # mock_provider fills computed attributes with plausible-looking scalars, but leaves computed
@@ -283,13 +432,6 @@ override_resource {
 }
 
 override_resource {
-  target = aws_sns_topic.billing_alerts
-  values = {
-    arn = "arn:aws:sns:us-east-1:000000000000:ai-gaussian-splatter-billing-alerts"
-  }
-}
-
-override_resource {
   target = aws_iam_role.execution
   values = {
     arn = "arn:aws:iam::000000000000:role/ai-gaussian-splatter-execution"
@@ -321,6 +463,22 @@ override_resource {
   target = aws_lb_target_group.web
   values = {
     arn = "arn:aws:elasticloadbalancing:us-west-2:000000000000:targetgroup/ai-gaussian-splatter-web/abc123"
+  }
+}
+
+# Distinct literal URLs so the WORKER_IMAGE_URI assertion can tell the two repositories apart. mock_provider would
+# otherwise give each a random string.
+override_resource {
+  target = aws_ecr_repository.web
+  values = {
+    repository_url = "000000000000.dkr.ecr.us-west-2.amazonaws.com/ai-gaussian-splatter"
+  }
+}
+
+override_resource {
+  target = aws_ecr_repository.worker
+  values = {
+    repository_url = "000000000000.dkr.ecr.us-west-2.amazonaws.com/ai-gaussian-splatter-worker"
   }
 }
 

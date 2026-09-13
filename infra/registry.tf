@@ -60,3 +60,36 @@ resource "aws_ecr_lifecycle_policy" "web" {
     ]
   })
 }
+
+# A separate repository, not a third tag suffix on the one above: the worker image is a completely different
+# build (~19 GB of COLMAP + gsplat) with no reason to share the web repository's retention depth. It isn't part
+# of any ECS rollback mechanism either — web/lib/server/ec2Launcher.ts just reads whatever WORKER_IMAGE_URI
+# currently points to — so worker_releases_kept (locals.tf) is far shallower than releases_kept. GPU worker
+# deployment stays manual (RUNBOOK.md), so nothing pushes here automatically.
+resource "aws_ecr_repository" "worker" {
+  name                 = "ai-gaussian-splatter-worker"
+  image_tag_mutability = "IMMUTABLE"
+  force_delete         = true
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}
+
+resource "aws_ecr_lifecycle_policy" "worker" {
+  repository = aws_ecr_repository.worker.name
+
+  policy = jsonencode({
+    rules = [{
+      rulePriority = 1
+      description  = "Keep the last ${local.worker_releases_kept} worker images"
+      selection = {
+        tagStatus      = "tagged"
+        tagPatternList = ["*"]
+        countType      = "imageCountMoreThan"
+        countNumber    = local.worker_releases_kept
+      }
+      action = { type = "expire" }
+    }]
+  })
+}

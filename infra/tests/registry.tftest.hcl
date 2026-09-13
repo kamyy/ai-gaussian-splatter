@@ -10,6 +10,7 @@ variables {
   hosted_zone_id       = "Z00000000000000000000"
   clerk_secret_key_arn = "arn:aws:secretsmanager:us-west-2:000000000000:secret:ai-gaussian-splatter/clerk-secret-key-AAAAAA"
   web_image_tag        = "0123abc"
+  worker_image_tag     = "0123abc"
 }
 
 run "repository_is_fixed_name_immutable_and_force_deletable" {
@@ -56,6 +57,37 @@ run "lifecycle_policy_keeps_web_and_migrate_tags_separately" {
   }
 }
 
+run "worker_repository_is_separate_immutable_and_force_deletable" {
+  command = apply
+
+  assert {
+    condition     = aws_ecr_repository.worker.name == "ai-gaussian-splatter-worker"
+    error_message = "the worker repository name is a fixed literal RUNBOOK.md names directly"
+  }
+
+  assert {
+    condition     = aws_ecr_repository.worker.image_tag_mutability == "IMMUTABLE"
+    error_message = "a pushed worker tag must never be repointable, matching the web repository's discipline"
+  }
+
+  assert {
+    condition     = aws_ecr_repository.worker.force_delete == true
+    error_message = "a full `terraform destroy` must not get stuck on a non-empty repository"
+  }
+}
+
+run "worker_lifecycle_keeps_far_fewer_images_than_web" {
+  command = apply
+
+  assert {
+    condition = anytrue([
+      for rule in jsondecode(aws_ecr_lifecycle_policy.worker.policy).rules :
+      contains(rule.selection.tagPatternList, "*") && rule.selection.countNumber == 2
+    ])
+    error_message = "the ~19 GB worker image isn't part of any ECS rollback mechanism, so it should keep far fewer images than RELEASES_KEPT (10)"
+  }
+}
+
 # mock_provider fills computed attributes with plausible-looking scalars, but leaves computed
 # lists/sets empty by default and doesn't know about format-validated fields (ARNs). These overrides
 # give the handful of computed values other resources in this config actually depend on (or validate
@@ -90,13 +122,6 @@ override_resource {
     arn      = "arn:aws:elasticloadbalancing:us-west-2:000000000000:loadbalancer/app/ai-gaussian-splatter/abc123"
     dns_name = "ai-gaussian-splatter-123456.us-west-2.elb.amazonaws.com"
     zone_id  = "Z1H1FL5HABSF5"
-  }
-}
-
-override_resource {
-  target = aws_sns_topic.billing_alerts
-  values = {
-    arn = "arn:aws:sns:us-east-1:000000000000:ai-gaussian-splatter-billing-alerts"
   }
 }
 

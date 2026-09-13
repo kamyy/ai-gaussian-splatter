@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 
 import type { ConnectionOptions } from "node:tls";
 
+import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
+
 /**
  * TLS settings for the Postgres connection, or undefined for a plain one. Driven by `DATABASE_SSL_CA`, a path to a PEM
  * bundle: set it (production, pointed at the bundle `web/Dockerfile` bakes in) and the connection is encrypted and
@@ -20,8 +22,10 @@ export function databaseSsl(env: Record<string, string | undefined> = process.en
 
 /**
  * Resolves the Postgres connection string from `DATABASE_HOST` / `DATABASE_PORT` / `DATABASE_NAME` / `DATABASE_USER` /
- * `DATABASE_PASSWORD` — the only shape accepted, everywhere from local dev to production, since ECS cannot itself
- * assemble a `postgresql://` URL out of the Secrets Manager JSON blob RDS generates (see `infra/web.tf`).
+ * `DATABASE_PASSWORD`, since ECS cannot itself assemble a `postgresql://` URL out of the Secrets Manager JSON blob
+ * RDS generates (see `infra/web.tf`). Used by local dev, CI, `drizzle-kit`, and the migration task — not by the
+ * production web service, which fetches its password at connect time instead (see `fetchDatabasePassword`, below)
+ * and never assembles a single connection string.
  *
  * Credentials are percent-encoded: an RDS-generated password can contain `:` `?` `#` `%`, any of which would corrupt
  * the URL otherwise; `pg` decodes them back on connect.
@@ -40,4 +44,62 @@ export function resolveDatabaseUrl(env: Record<string, string | undefined> = pro
 
   const port = env.DATABASE_PORT || "5432";
   return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${name}`;
+}
+
+const PASSWORD_CACHE_TTL_MS = 5 * 60 * 1000;
+
+let secretsClient: SecretsManagerClient | undefined;
+let cachedPassword: { secretArn: string; value: string; fetchedAt: number } | undefined;
+
+/**
+ * Fetches the RDS master password from Secrets Manager on demand, rather than trusting a value ECS injected once
+ * as an env var at task start. RDS rotates this secret every 7 days by default; a long-lived web task that never
+ * re-fetches keeps authenticating new pg connections with a password Postgres no longer accepts, which shows up as
+ * growing, intermittent connection failures rather than a clean cutover, since already-open connections are
+ * unaffected by a password change.
+ *
+ * `getDb()` (web/lib/server/db/index.ts) passes this as a `pg.Pool` `password` callback, so it re-runs on every new
+ * physical connection instead of once. Cached for PASSWORD_CACHE_TTL_MS so a pool opening many connections in quick
+ * succession doesn't call Secrets Manager on every single one. A rotation makes the cached value wrong immediately,
+ * not when the TTL runs out. `SecretPasswordPool` (web/lib/server/db/index.ts) therefore clears the cache and retries
+ * once whenever Postgres rejects the password.
+ *
+ * Not used by the migration task (web/scripts/db-migrate.cjs): it runs for seconds and exits, well inside that same
+ * rotation window, so it keeps using the static DATABASE_PASSWORD ECS injects at its own task start instead.
+ */
+export async function fetchDatabasePassword(secretArn: string, region: string): Promise<string> {
+  const now = Date.now();
+  if (
+    cachedPassword &&
+    cachedPassword.secretArn === secretArn &&
+    now - cachedPassword.fetchedAt < PASSWORD_CACHE_TTL_MS
+  ) {
+    return cachedPassword.value;
+  }
+
+  // Without an explicit region, the SDK's own default-region resolution can land somewhere other than where the
+  // secret actually lives (e.g. RDS's region), failing with a not-found rather than an auth error — matching how
+  // s3.ts/ec2Launcher.ts already pass region: getEnv().AWS_REGION to their own clients rather than omitting it.
+  secretsClient ??= new SecretsManagerClient({ region });
+  const { SecretString } = await secretsClient.send(new GetSecretValueCommand({ SecretId: secretArn }));
+  if (!SecretString) {
+    throw new Error(`Secret ${secretArn} has no SecretString`);
+  }
+
+  const { password } = JSON.parse(SecretString) as { password: unknown };
+  if (typeof password !== "string" || password.length === 0) {
+    throw new Error(`Secret ${secretArn} has no password field`);
+  }
+
+  cachedPassword = { secretArn, value: password, fetchedAt: now };
+  return password;
+}
+
+/**
+ * Drops the cached password so the next connection fetches a fresh one from Secrets Manager. `SecretPasswordPool`
+ * (web/lib/server/db/index.ts) calls it when Postgres rejects the cached value. Tests call it so one test's cached
+ * password can't leak into another's.
+ */
+export function clearDatabasePasswordCache(): void {
+  cachedPassword = undefined;
 }

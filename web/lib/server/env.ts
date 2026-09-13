@@ -1,32 +1,42 @@
 import { z } from "zod";
 
-import { resolveDatabaseUrl } from "./databaseUrl";
-
 /** Server-side configuration. Clerk needs no JWKS settings. Its SDK verifies sessions from CLERK_SECRET_KEY. */
-const envSchema = z.object({
-  // Assembled by resolveDatabaseUrl() before parsing, from the DATABASE_HOST/NAME/USER/PASSWORD parts ECS projects out
-  // of the RDS secret. See web/lib/server/databaseUrl.ts.
-  DATABASE_URL: z.string().min(1, "set DATABASE_HOST, DATABASE_NAME, DATABASE_USER and DATABASE_PASSWORD"),
+const envSchema = z
+  .object({
+    DATABASE_HOST: z.string().min(1),
+    DATABASE_PORT: z.coerce.number().int().positive().default(5432),
+    DATABASE_NAME: z.string().min(1),
+    DATABASE_USER: z.string().min(1),
+    // Exactly one of these: DATABASE_PASSWORD is a static value (local dev, CI, and the migration task, which runs
+    // too briefly to hit RDS's 7-day rotation). DATABASE_SECRET_ARN is what the long-lived web service uses
+    // instead, fetching the current password from Secrets Manager on every new pg connection rather than trusting
+    // a value ECS injected once at task start — see web/lib/server/databaseUrl.ts's fetchDatabasePassword.
+    DATABASE_PASSWORD: z.string().min(1).optional(),
+    DATABASE_SECRET_ARN: z.string().min(1).optional(),
 
-  UPLOADS_BUCKET: z.string().min(1),
-  SPLATS_BUCKET: z.string().min(1),
-  AWS_REGION: z.string().min(1).default("us-west-2"),
+    UPLOADS_BUCKET: z.string().min(1),
+    SPLATS_BUCKET: z.string().min(1),
+    AWS_REGION: z.string().min(1).default("us-west-2"),
 
-  WORKER_AMI_ID: z.string().min(1),
-  WORKER_INSTANCE_TYPE: z.string().min(1).default("g5.xlarge"),
-  WORKER_SUBNET_ID: z.string().min(1),
-  WORKER_SECURITY_GROUP_ID: z.string().min(1),
-  WORKER_INSTANCE_PROFILE_ARN: z.string().min(1),
+    WORKER_AMI_ID: z.string().min(1),
+    WORKER_INSTANCE_TYPE: z.string().min(1).default("g5.xlarge"),
+    WORKER_SUBNET_ID: z.string().min(1),
+    WORKER_SECURITY_GROUP_ID: z.string().min(1),
+    WORKER_INSTANCE_PROFILE_ARN: z.string().min(1),
 
-  // Rate limiting — deliberately simple config knobs, not architecture. Tune based on real usage once deployed.
-  RATE_LIMIT_IP_PER_HOUR: z.coerce.number().int().positive().default(5),
-  RATE_LIMIT_USER_PER_DAY: z.coerce.number().int().positive().default(3),
-  GLOBAL_MAX_JOBS_PER_DAY: z.coerce.number().int().positive().default(20),
-  MIN_PHOTOS_PER_SPLAT: z.coerce.number().int().positive().default(20),
+    // Rate limiting — deliberately simple config knobs, not architecture. Tune based on real usage once deployed.
+    RATE_LIMIT_IP_PER_HOUR: z.coerce.number().int().positive().default(5),
+    RATE_LIMIT_USER_PER_DAY: z.coerce.number().int().positive().default(3),
+    GLOBAL_MAX_JOBS_PER_DAY: z.coerce.number().int().positive().default(20),
+    MIN_PHOTOS_PER_SPLAT: z.coerce.number().int().positive().default(20),
 
-  // Where the GPU worker PATCHes its status back to.
-  APP_PUBLIC_URL: z.string().url(),
-});
+    // Where the GPU worker PATCHes its status back to.
+    APP_PUBLIC_URL: z.string().url(),
+  })
+  .refine(v => (v.DATABASE_PASSWORD === undefined) !== (v.DATABASE_SECRET_ARN === undefined), {
+    message: "set exactly one of DATABASE_PASSWORD or DATABASE_SECRET_ARN",
+    path: ["DATABASE_PASSWORD"],
+  });
 
 export type Env = z.infer<typeof envSchema>;
 
@@ -38,7 +48,7 @@ let cached: Env | null = null;
  */
 export function getEnv(): Env {
   if (cached === null) {
-    const parsed = envSchema.safeParse({ ...process.env, DATABASE_URL: resolveDatabaseUrl() ?? "" });
+    const parsed = envSchema.safeParse(process.env);
     if (!parsed.success) {
       const detail = parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join(", ");
       throw new Error(`Invalid server environment: ${detail}`);
