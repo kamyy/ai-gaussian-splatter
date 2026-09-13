@@ -247,13 +247,13 @@ curl -s http://localhost:8000/api/v1/healthz   # should be {"status":"ok"}
 
 ## Deploying to production
 
-This section is the first-account walkthrough. The same command blocks are what a human uses for every ship while the `deploy` job is off ([State / what's next](AGENTS.md#state--whats-next)). ["Configuring continuous deployment"](#configuring-continuous-deployment) is still the one-time IAM/OIDC setup. It has to exist before that job can be turned back on. Once the job is re-enabled, a push to `main` builds, migrates, and rolls the service, and a human comes back here only for a rollback, a worker-image tag change, or a `terraform plan` preview. See ["Fixing a bad migration"](#fixing-a-bad-migration).
+CI's `deploy` job (`.github/workflows/ci.yml`) does every deploy, including the first one into an empty account. On a push to `main` it builds and pushes both web images, applies Terraform, runs the migration, and rolls the service forward. It's off while the account is torn down ([State / what's next](AGENTS.md#state--whats-next)).
 
-Start by finishing **[First-time account setup](#first-time-account-setup)** before `terraform apply`. Those steps create the Clerk secret, create `AWSServiceRoleForEC2Spot` if it doesn't already exist, bootstrap the Terraform state backend, and stand up the ECR repository. Skip the secret and tasks fail at start: the web/migration task definitions reference it rather than creating it. Skip the Spot role and the failure doesn't surface until the first real worker job tries to launch a Spot instance. Skip the bootstrap and `terraform init` fails before creating anything. Skip the registry (or the push into it) and Fargate has nothing to pull; the circuit breaker rolls the service back. ["Configuring continuous deployment"](#configuring-continuous-deployment) is also one-time, but it needs the web service's IAM roles to already exist, so it waits until after the first full apply.
+A human's part is one-time setup, in this order: [First-time account setup](#first-time-account-setup), [Configuring continuous deployment](#configuring-continuous-deployment), then [Going live](#going-live) to turn the job on. After that, a human only builds the worker image ([Building and pushing the worker image](#building-and-pushing-the-worker-image)) and runs Terraform for a `terraform plan` preview or a teardown ([Running Terraform from a laptop](#running-terraform-from-a-laptop)).
 
 ### Signing in to AWS
 
-Run every `aws` and `terraform` command in this section as an admin IAM identity signed in with `aws login`, which needs AWS CLI 2.32.0 or later. The `ai-gaussian-splatter-dev` user from [Dev AWS resources](#dev-aws-resources) can only reach the two dev buckets. The CI role from [Configuring continuous deployment](#configuring-continuous-deployment) doesn't exist until after the first full apply.
+Run every `aws` and `terraform` command in this section as an admin IAM identity signed in with `aws login`, which needs AWS CLI 2.32.0 or later. The `ai-gaussian-splatter-dev` user from [Dev AWS resources](#dev-aws-resources) can only reach the two dev buckets. The CI role from [Configuring continuous deployment](#configuring-continuous-deployment) can only be assumed by the `deploy` job itself.
 
 ```bash
 aws login # Needed again only after the session expires, up to 12 hours later.
@@ -261,7 +261,7 @@ aws login # Needed again only after the session expires, up to 12 hours later.
 
 ### Resolving variable values
 
-Every `terraform` invocation below — the full apply, and a diff preview — needs the same seven values. Resolve them once per shell session and reuse them for everything that follows. Terraform reads a `TF_VAR_<name>` environment variable for the matching variable automatically, matching each name in `infra/variables.tf`, so once these are exported no invocation below needs a repeated `-var` flag. `AWS_ACCOUNT_ID` isn't a Terraform variable. It's used below to name the state bucket and the ECR registry host, and to build the CI role's policies, so export it separately.
+Six of the seven values below become the `deploy` job's repository variables ([Setting GitHub repository variables](#setting-github-repository-variables)). The job sets `web_image_tag` itself. A laptop `terraform plan` or `destroy` needs all seven. Resolve them once per shell session and reuse them for everything that follows. Terraform reads a `TF_VAR_<name>` environment variable for the matching variable automatically, matching each name in `infra/variables.tf`, so once these are exported no invocation below needs a repeated `-var` flag. `AWS_ACCOUNT_ID` isn't a Terraform variable. It's used below to name the state bucket and the ECR registry host, and to build the CI role's policies, so export it separately.
 
 ```bash
 export AWS_ACCOUNT_ID=replace-with-your-account-id # Use a real AWS account id.
@@ -291,7 +291,7 @@ aws ec2 describe-images --region us-west-2 --owners amazon \
 export TF_VAR_worker_ami_id=<ami-... from the table>
 ```
 
-`TF_VAR_web_image_tag` is the pushed build SHA. Per-release, not moving — each deploy gets its own task definition, so the circuit breaker (and manual rollback) can point at an older SHA that still exists in the repo. `infra/variables.tf`'s validation block requires a SHA; the ECR repo refuses to repoint an existing tag. `migrate_image_tag` (the migration task's own image) is deliberately not passed below. It defaults to `web_image_tag`, which is exactly what a manual "build once, deploy once" flow wants. `ci.yml`'s `deploy` job is the one caller that ever diverges the two on purpose.
+`TF_VAR_web_image_tag` is the build the service runs, as a bare commit SHA. `infra/variables.tf`'s validation block requires that shape. On a laptop, use the SHA the service is running, or `plan` shows an image change that isn't coming. `destroy` only needs a value of the right shape. `migrate_image_tag` defaults to `web_image_tag`, and only the `deploy` job sets the two apart.
 
 ```bash
 export TF_VAR_web_image_tag=$(git rev-parse --short HEAD)
@@ -324,7 +324,7 @@ export TF_VAR_hosted_zone_id=$(aws route53 list-hosted-zones-by-name \
 
 ### First-time account setup
 
-One-time per account. Complete all this before the first `terraform apply`.
+One-time per account. Complete all this before turning the `deploy` job on.
 
 Clerk secret is referenced, not created by this config. See `describe-secret` in ["Resolving variable values"](#resolving-variable-values) to retrieve the ARN for the value. To change the value later, update it directly in Secrets Manager, then force a new ECS deployment (`aws ecs update-service --force-new-deployment`) since ECS only resolves secrets at task start.
 
@@ -355,88 +355,59 @@ cd "$(git rev-parse --show-toplevel)/infra/bootstrap"
 
 terraform init
 terraform apply
-terraform output state_bucket # confirm the bucket name, used below
-```
-
-Now initialize `infra/` itself against that bucket, and deploy the ECR repository by itself first. Then push both images under ["Going live"](#going-live). This order matters: a plain `terraform apply` would try to create the web service too, and the web service pins to a specific image tag — running it before the registry exists and the web image is pushed leaves nothing to pull.
-
-```bash
-cd ../ # Back to infra/.
-
-terraform init \
-  -backend-config="bucket=ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID" \
-  -backend-config="key=infra.tfstate" \
-  -backend-config="region=us-west-2"
-
-# -target is otherwise best avoided with Terraform (it can leave state subtly out of sync with config), but this
-# is a deliberate one-time exception: the ECR repository has to exist before either image can be pushed, and the
-# web service can't be created before the image it names has actually been pushed.
-terraform apply -target=aws_ecr_repository.web -target=aws_ecr_lifecycle_policy.web
+terraform output state_bucket # Should be ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID.
 ```
 
 ### Going live
 
-This is the step that actually ships code — push both images and bring the web service up, completing the one-time setup. It's also the exact command reused for the two rare exceptions after CD is live: a rollback (an older `TF_VAR_web_image_tag`) or a `terraform plan` preview.
+Once [Configuring continuous deployment](#configuring-continuous-deployment) is done, turn the `deploy` job on: delete `false && ` from its `if:` in `.github/workflows/ci.yml` and land that through a PR. Merging it to `main` is the first deploy.
 
-```bash
-cd "$(git rev-parse --show-toplevel)/infra"
+The job finds no service in the Terraform state, so it treats the run as a first deploy. It applies the ECR repository on its own, pushes both images into it, then applies everything else on this commit's image. The service starts before the migration runs, so real routes 500 until the migration finishes. The first apply also waits on ACM DNS validation, which can take several minutes. ACM writes the validation record into the zone itself.
 
-ECR_TOKEN=$(aws ecr get-login-password --region us-west-2)
-REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com
-REPO=$REGISTRY/ai-gaussian-splatter
-
-# Push both images whenever you have a new build. The -migrate image backs the migration task definition
-# (infra/web.tf). Push it too, or a manual `aws ecs run-task` against that family has nothing to pull.
-# CI's deploy job builds and pushes both the same way (ci.yml).
-podman login --username AWS --password-stdin $REGISTRY <<< "$ECR_TOKEN"
-
-podman build --target web -t $REPO:$TF_VAR_web_image_tag-web \
-  --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=<pk_live_...> ../web
-podman push $REPO:$TF_VAR_web_image_tag-web
-
-podman build --target migrator -t $REPO:$TF_VAR_web_image_tag-migrate ../web
-podman push $REPO:$TF_VAR_web_image_tag-migrate
-
-terraform apply
-```
-
-The first apply waits on ACM DNS validation, which can take several minutes; ACM writes the validation record into the zone itself.
-
-`deployment_minimum_healthy_percent = 100` will keep any old task serving until the new one passes health checks. If the new image fails those checks, the circuit breaker rolls back to the previous task definition, which names its own still-present tag, so ECS re-pulls the build that was working. Rolling back by hand is the same `terraform apply` using an older `TF_VAR_web_image_tag`.
+`deployment_minimum_healthy_percent = 100` will keep any old task serving until the new one passes health checks. If the new image fails those checks, the circuit breaker rolls back to the previous task definition, which names its own still-present tag, so ECS re-pulls the build that was working. To roll back by hand, revert the change and push. A schema change gets a corrective migration instead ([Fixing a bad migration](#fixing-a-bad-migration)).
 
 Only the last few releases are kept (`local.releases_kept` in `infra/registry.tf`); older tags are expired and can no longer be rolled back to.
 
-**`terraform apply` never applies migrations.** The database has no tables yet, but the target group reports healthy anyway — `/api/v1/healthz` never touches the database. There's no supported out-of-band way to apply one by hand either (see ["Fixing a bad migration"](#fixing-a-bad-migration) below).
-
-The site stays broken after this first deploy. Nothing applies the first migration while the `deploy` job is off ([State / what's next](AGENTS.md#state--whats-next)). Finish ["Configuring continuous deployment"](#configuring-continuous-deployment) below, re-enable the job, then push a commit that touches at least one non-Markdown file. `.github/workflows/ci.yml`'s `paths-ignore` skips the whole workflow, deploy included, for a commit that only touches `.md` files.
+A push that touches only `.md` files doesn't deploy. `.github/workflows/ci.yml`'s `paths-ignore` skips the whole workflow for it.
 
 ### Building and pushing the worker image
 
-Unlike the web/migrate images, nothing builds or pushes this on its own — GPU worker deployment stays manual ([`ARCHITECTURE.md`](ARCHITECTURE.md)). Do this whenever `worker/` changes and you want a job to actually pick up the new build; the previous section's `terraform apply` already creates `aws_ecr_repository.worker` regardless of whether anything has been pushed to it yet, since `WORKER_IMAGE_URI` is just a string env var the web task carries, not something ECS itself tries to pull.
+Unlike the web/migrate images, nothing builds or pushes this on its own — GPU worker deployment stays manual ([`ARCHITECTURE.md`](ARCHITECTURE.md)). Do this whenever `worker/` changes and you want a job to actually pick up the new build. Its repository, `aws_ecr_repository.worker`, comes from the first deploy. That deploy doesn't need an image in it yet, since `WORKER_IMAGE_URI` is just a string env var the web task carries, not something ECS itself tries to pull.
 
 ```bash
-cd "$(git rev-parse --show-toplevel)/infra"
+cd "$(git rev-parse --show-toplevel)"
 
 REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com
 REPO=$REGISTRY/ai-gaussian-splatter-worker
 
 aws ecr get-login-password --region us-west-2 | podman login --username AWS --password-stdin $REGISTRY
 
-podman build -t $REPO:$TF_VAR_worker_image_tag ../worker
+podman build -t $REPO:$TF_VAR_worker_image_tag worker
 podman push $REPO:$TF_VAR_worker_image_tag
-
-terraform apply
 ```
 
-`terraform apply` here only updates `WORKER_IMAGE_URI` on the web task definition to point at the tag just pushed — it does not restart the running service. Force one (`aws ecs update-service --cluster ai-gaussian-splatter --service ai-gaussian-splatter-web --force-new-deployment`) if a job launched before this apply should not keep using the old image; otherwise the next job launch picks up the new value on its own.
+Then set the `WORKER_IMAGE_TAG` repository variable ([Setting GitHub repository variables](#setting-github-repository-variables)) to the tag just pushed. The next deploy passes it as `TF_VAR_worker_image_tag`, which points `WORKER_IMAGE_URI` on the web task definition at the new image. Until then, job launches keep using the old one.
 
-Only the last `local.worker_releases_kept` images are kept (`infra/registry.tf`) — far fewer than the web repository's `local.releases_kept`, since the ~19 GB worker image isn't part of any ECS rollback mechanism: `WORKER_IMAGE_URI` just names whatever tag `worker_image_tag` currently points at, with nothing to roll back to the way a task definition revision does.
+Only the last `local.worker_releases_kept` images are kept (`infra/registry.tf`) — far fewer than the web repository's `local.releases_kept`, since the ~19 GB worker image isn't part of any ECS rollback mechanism: `WORKER_IMAGE_URI` just names whatever tag `worker_image_tag` currently points at, with nothing to roll back to the way a task definition revision does. That makes a stale `WORKER_IMAGE_TAG` the risk. Once `local.worker_releases_kept` newer images exist, the lifecycle policy expires the tag it names, and every job launch then fails its pull and bills until the `WORKER_MAX_LIFETIME_MINUTES` shutdown.
 
-Then set the `WORKER_IMAGE_TAG` repository variable ([Configuring continuous deployment](#configuring-continuous-deployment)) to the tag just pushed. Once the `deploy` job is re-enabled ([State / what's next](AGENTS.md#state--whats-next)), it passes that as `TF_VAR_worker_image_tag` on every push to `main`, so a stale value silently reverts `WORKER_IMAGE_URI` on the next deploy. Once `local.worker_releases_kept` newer images exist, the lifecycle policy expires that old tag, and every job launch then fails its pull and bills until the `WORKER_MAX_LIFETIME_MINUTES` shutdown.
+### Running Terraform from a laptop
+
+A `terraform plan` preview and a teardown are the only Terraform a human runs against `infra/`. Don't `apply` from here, because only the `deploy` job runs migrations before rolling the service. Sign in ([Signing in to AWS](#signing-in-to-aws)) and export the variables ([Resolving variable values](#resolving-variable-values)) first, then point `infra/` at the state bucket:
+
+```bash
+cd "$(git rev-parse --show-toplevel)/infra"
+
+terraform init \
+  -backend-config="bucket=ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID" \
+  -backend-config="key=infra.tfstate" \
+  -backend-config="region=us-west-2"
+
+terraform plan
+```
 
 ## Configuring continuous deployment
 
-One-time, and only possible **after** [First-time account setup](#first-time-account-setup). Policy below names the migration task role and execution role, neither of which exist before the first `terraform apply`. The `ai-gaussian-splatter-ci-deploy` role created below cannot be Terraform-managed either, or it would lead to a chicken-egg situation.
+One-time, after [First-time account setup](#first-time-account-setup) and before [Going live](#going-live). The policy below names roles and repositories that only the first deploy creates. IAM allows that, since it doesn't check that a policy's resources exist. The `ai-gaussian-splatter-ci-deploy` role created below can't be Terraform-managed, since CI would need it to apply the config that creates it.
 
 ### Creating the OIDC provider and CI role
 
@@ -478,7 +449,7 @@ aws iam create-role --role-name ai-gaussian-splatter-ci-deploy \
 
 ### Granting deploy permissions
 
-Unlike a design that delegates through a separate bootstrap role, this role needs the AWS permissions `terraform apply` itself uses directly, since nothing else stands between it and the resources it manages. IAM permissions are scoped by resource-name prefix where the service supports it (this app's own resources are all named or tagged `ai-gaussian-splatter-*`); the networking/database/load-balancer/budgets services below mostly don't support resource-level permissions for their create/modify/delete actions at all, so those stay `Resource: "*"` the same way they would under any tool. Expect to refine this policy against real `AccessDenied` errors during the first live apply — it's a reasonable starting point, not a exhaustively verified minimal policy.
+Unlike a design that delegates through a separate bootstrap role, this role needs the AWS permissions `terraform apply` itself uses directly, since nothing else stands between it and the resources it manages. IAM permissions are scoped by resource-name prefix where the service supports it (this app's own resources are all named or tagged `ai-gaussian-splatter-*`); the networking/database/load-balancer/budgets services below mostly don't support resource-level permissions for their create/modify/delete actions at all, so those stay `Resource: "*"` the same way they would under any tool. It's a reasonable starting point, not an exhaustively verified minimal policy. Expect `AccessDenied` errors during the first deploy, which is the first time this role creates every resource rather than updating it. Add the missing action with the same `aws iam put-role-policy` call below, then rerun the job (`gh run rerun <run-id> --failed-jobs`).
 
 ```bash
 cat > ci-deploy-policy.json <<EOF
@@ -597,12 +568,12 @@ Set these as GitHub repository variables (Settings → Secrets and variables →
 - `ALERT_EMAIL`
 - `APP_PUBLIC_URL`
 - `WORKER_AMI_ID`
-- `WORKER_IMAGE_TAG` — same reasoning as `WORKER_AMI_ID`: GPU worker deployment stays manual, so this is set once (["Building and pushing the worker image"](#building-and-pushing-the-worker-image)) and only touched again when someone hand-pushes a new worker image, not on every deploy.
+- `WORKER_IMAGE_TAG` — same reasoning as `WORKER_AMI_ID`: GPU worker deployment stays manual, so this changes only when someone hand-pushes a new worker image (["Building and pushing the worker image"](#building-and-pushing-the-worker-image)), not on every deploy. Before the first worker image exists, any commit SHA passes validation.
 - `CLERK_PUBLISHABLE_KEY` (the `pk_live_...` key, not the secret one)
 
 Live re-resolution (`aws route53 list-hosted-zones-by-name`, etc.) was deliberately skipped for these in CI — one production environment, rarely-changing values, and a `vars.*` edit is itself a reviewable, logged event, unlike giving the CI role extra read permissions just to re-derive them every run.
 
-OIDC role and repository variables are in place. The `deploy` job is still off ([State / what's next](AGENTS.md#state--whats-next)), so keep shipping with ["Going live"](#going-live). After the job is re-enabled, a push to `main` is the deploy, and this section is only for a rollback or a `terraform plan` preview.
+With the role and repository variables in place, turn the job on under [Going live](#going-live).
 
 ## Fixing a bad migration
 
@@ -621,7 +592,9 @@ If the `deploy` job's migration step fails for an infra reason rather than a bad
 
 ## Tearing down
 
-`terraform destroy` removes everything in `infra/`'s state, including the 3 data S3 buckets (force-destroyed, contents and all) and the RDS instance (no final snapshot). It needs the same seven variable values as a deploy, resolved the same way ([Resolving variable values](#resolving-variable-values)) and exported as `TF_VAR_*` — a missing one fails before anything is destroyed, same as a missing value fails `apply`. Run it signed in the same way ([Signing in to AWS](#signing-in-to-aws)).
+`terraform destroy` removes everything in `infra/`'s state, including the 3 data S3 buckets (force-destroyed, contents and all) and the RDS instance (no final snapshot). It needs the same seven variable values as a deploy, resolved the same way ([Resolving variable values](#resolving-variable-values)) and exported as `TF_VAR_*` — a missing one fails before anything is destroyed, same as a missing value fails `apply`. Run it signed in, from an `infra/` initialized against the state bucket ([Running Terraform from a laptop](#running-terraform-from-a-laptop)).
+
+Turn the `deploy` job off first (`if: false && …` in `.github/workflows/ci.yml`) and land that on `main` before destroying. Otherwise the next push to `main` finds an empty state and deploys the whole stack again.
 
 ```bash
 cd "$(git rev-parse --show-toplevel)/infra"
