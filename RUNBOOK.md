@@ -563,7 +563,7 @@ aws iam put-role-policy --role-name ai-gaussian-splatter-ci-deploy \
 
 ### Setting GitHub repository variables
 
-Set these as GitHub repository variables (Settings → Secrets and variables → Actions → Variables). `.github/workflows/ci.yml`'s `deploy` job reads them as `vars.*`:
+Set these as GitHub repository variables (Settings → Secrets and variables → Actions → Variables). `.github/workflows/deploy.yml` reads them as `vars.*`:
 
 - `AWS_ACCOUNT_ID`
 - `HOSTED_ZONE_ID`
@@ -580,7 +580,7 @@ With the role and repository variables in place, turn the job on under [Going li
 
 ## Fixing a bad migration
 
-The only supported production apply is the `deploy` job in `.github/workflows/ci.yml`, which runs the `migrator` image (`web/Dockerfile`) as a one-off ECS task before rolling the service forward. That job is currently off ([State / what's next](AGENTS.md#state--whats-next)). There is no supported way to reach the database by hand instead: the RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway (`infra/network.tf`), reachable only from `aws_security_group.web` on port 5432, and no bastion exists in this infra. The migration task reaches it only because the `deploy` job launches it with the web service's own network configuration. Launching that task by hand with `aws ecs run-task` is possible, but it isn't a supported path.
+The only supported production apply is the `deploy` job (`.github/workflows/deploy.yml`), which runs the `migrator` image (`web/Dockerfile`) as a one-off ECS task before rolling the service forward. That job is currently off ([State / what's next](AGENTS.md#state--whats-next)). There is no supported way to reach the database by hand instead: the RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway (`infra/network.tf`), reachable only from `aws_security_group.web` on port 5432, and no bastion exists in this infra. The migration task reaches it only because the `deploy` job launches it with the web service's own network configuration. Launching that task by hand with `aws ecs run-task` is possible, but it isn't a supported path.
 
 Fix a bad migration the same way you'd fix any other bug: write a corrective migration following the expand/contract discipline in [Schema & migrations (Drizzle)](AGENTS.md#schema--migrations-drizzle) (edit `web/lib/server/db/schema.ts`, `pnpm db:generate`, review the emitted SQL in `web/drizzle/`), commit it, and land it through a normal PR to `main`. It applies when the `deploy` job is re-enabled and that commit reaches `main`.
 

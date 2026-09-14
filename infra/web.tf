@@ -86,9 +86,9 @@ locals {
   worker_subnet = values(aws_subnet.public)[0]
 }
 
-# The registry hostname web/lib/server/ec2Launcher.ts's user-data logs into before pulling — built from
-# account/region directly rather than parsed out of aws_ecr_repository.worker.repository_url, matching how
-# .github/workflows/ci.yml and RUNBOOK.md construct the same string for their own docker/podman logins.
+# The registry hostname web/lib/server/ec2Launcher.ts's user-data logs into before pulling — built from account/region
+# directly rather than parsed out of aws_ecr_repository.worker.repository_url, matching how .github/workflows/deploy.yml
+# and RUNBOOK.md construct the same string for their own docker/podman logins.
 locals {
   ecr_registry     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com"
   worker_image_uri = "${aws_ecr_repository.worker.repository_url}:${var.worker_image_tag}"

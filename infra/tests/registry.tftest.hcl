@@ -18,7 +18,7 @@ run "repository_is_fixed_name_immutable_and_force_deletable" {
 
   assert {
     condition     = aws_ecr_repository.web.name == "ai-gaussian-splatter"
-    error_message = "the repository name is a fixed literal other tooling (RUNBOOK.md, ci.yml) names directly"
+    error_message = "repository name is a fixed literal that RUNBOOK.md and .github/workflows/deploy.yml name directly"
   }
 
   assert {

@@ -20,8 +20,8 @@ locals {
   execution_role_name      = "ai-gaussian-splatter-execution"
   migration_task_role_name = "ai-gaussian-splatter-migrate-task"
 
-  # Named for the same reason: RUNBOOK.md and .github/workflows/ci.yml's deploy job name this family literally
-  # (`aws ecs run-task --task-definition ai-gaussian-splatter-migrate`) rather than looking it up.
+  # Named for the same reason: RUNBOOK.md and .github/workflows/deploy.yml name this family literally (`aws ecs run-task
+  # --task-definition ai-gaussian-splatter-migrate`) rather than looking it up.
   migration_task_family = "ai-gaussian-splatter-migrate"
 
   domain_zone_name = "orky.net"

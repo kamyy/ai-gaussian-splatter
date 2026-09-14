@@ -74,9 +74,9 @@ variable "web_image_tag" {
   }
 }
 
-# Not required like web_image_tag: it has a safe default (mirror the service's own tag), so a bare
-# `-var web_image_tag=` with no `-var migrate_image_tag=` keeps every existing manual RUNBOOK invocation
-# working unchanged. .github/workflows/ci.yml's deploy job diverges the two on purpose — see RUNBOOK.md.
+# Not required like web_image_tag: it has a safe default (mirror the service's own tag), so a bare `-var web_image_tag=`
+# with no `-var migrate_image_tag=` keeps every existing manual RUNBOOK invocation working unchanged.
+# .github/workflows/deploy.yml diverges the two on purpose — see RUNBOOK.md.
 variable "migrate_image_tag" {
   description = "Commit SHA for the migration task's image build. Empty (the default) mirrors web_image_tag."
   type        = string
