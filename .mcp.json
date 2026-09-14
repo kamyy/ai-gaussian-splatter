@@ -2,14 +2,14 @@
   "mcpServers": {
     "clerk": {
       "type": "stdio",
-      "command": "pnpm",
-      "args": ["exec", "clerk", "mcp", "run"],
+      "command": "./node_modules/.bin/clerk",
+      "args": ["mcp", "run"],
       "env": {}
     },
     "mui-mcp": {
       "type": "stdio",
-      "command": "pnpm",
-      "args": ["exec", "mcp"],
+      "command": "./node_modules/.bin/mcp",
+      "args": [],
       "env": {}
     }
   }
