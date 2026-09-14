@@ -9,7 +9,7 @@ description: Deploy the AWS Terraform config or ship a new web image to ECS. Use
 
 [`RUNBOOK.md` § "Deploying to production"](../../../RUNBOOK.md#deploying-to-production) holds the exact command blocks and is the single source for them. Read it before starting. This file is the order to run them in, the decisions along the way, and what bites afterwards.
 
-`.github/workflows/ci.yml`'s `deploy` job does every deploy, the first one into an empty account included. It is currently off ([State / what's next](../../../AGENTS.md#state--whats-next)). While it's off, nothing deploys. There is no hand-apply path for `infra/`.
+The `deploy` job (`.github/workflows/deploy.yml`) does every deploy, the first one into an empty account included. It is currently off ([State / what's next](../../../AGENTS.md#state--whats-next)). While it's off, nothing deploys. There is no hand-apply path for `infra/`.
 
 ## Pick the path first
 

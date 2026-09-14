@@ -16,8 +16,8 @@ variables {
 run "fixed_literal_names" {
   command = apply
 
-  # These are named directly in RUNBOOK.md and .github/workflows/ci.yml (e.g. `aws ecs run-task
-  # --task-definition ai-gaussian-splatter-migrate`) rather than looked up, so they must stay literal.
+  # These are named directly in RUNBOOK.md and .github/workflows/deploy.yml (e.g. `aws ecs run-task --task-definition
+  # ai-gaussian-splatter-migrate`) rather than looked up, so they must stay literal.
   assert {
     condition     = aws_ecs_cluster.main.name == "ai-gaussian-splatter"
     error_message = "cluster name is a fixed literal"

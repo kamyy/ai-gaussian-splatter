@@ -1,0 +1,219 @@
+name: Deploy
+
+# Builds, migrates, and deploys on every push to main. See ARCHITECTURE.md "Deployment" for why it's two terraform apply
+# calls around the migration rather than one, and RUNBOOK.md for the one-time OIDC role setup this job's AWS credentials
+# depend on. It runs only as .github/workflows/ci.yml's deploy job, so it starts after every check job passes. That
+# caller also holds the push-to-main gate and grants the id-token permission.
+on:
+  workflow_call:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # One at a time, queued rather than cancelled: two pushes close together would otherwise run overlapping deploy
+    # sequences against the same ECS service and Terraform state — racing `terraform apply` calls at best, or a
+    # service rollout starting before its own migration-then-rollout sequence actually finished at worst (Terraform's
+    # own state lock only protects concurrent applies from corrupting state, not from racing each other's ECS calls).
+    # cancel-in-progress: false so an in-flight migrate-then-deploy always runs to completion rather than being cut
+    # off mid-way.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      AWS_REGION: us-west-2
+      AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+      CLUSTER_NAME: ai-gaussian-splatter
+      SERVICE_NAME: ai-gaussian-splatter-web
+      MIGRATION_TASK_FAMILY: ai-gaussian-splatter-migrate
+      ECR_REPO: ai-gaussian-splatter
+      # Terraform reads TF_VAR_<name> for the matching variable automatically, so every `terraform apply` below
+      # needs no repeated `-var` flags — the two-phase deploy only ever overrides web/migrate image tags per step.
+      TF_VAR_hosted_zone_id: ${{ vars.HOSTED_ZONE_ID }}
+      TF_VAR_clerk_secret_key_arn: ${{ vars.CLERK_SECRET_KEY_ARN }}
+      TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
+      TF_VAR_app_public_url: ${{ vars.APP_PUBLIC_URL }}
+      TF_VAR_worker_ami_id: ${{ vars.WORKER_AMI_ID }}
+      # GPU worker deployment stays manual, so this changes only when someone hand-builds and pushes a new
+      # worker image (RUNBOOK.md), not on every push to main the way web/migrate_image_tag do.
+      TF_VAR_worker_image_tag: ${{ vars.WORKER_IMAGE_TAG }}
+      APP_PUBLIC_URL: ${{ vars.APP_PUBLIC_URL }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # First step, before anything is built or deployed: this value is compiled into the browser bundle
+      # (web/Dockerfile), so an unset variable produces an image whose every route 500s on clerkMiddleware() rejecting
+      # the empty key — surfacing only as a circuit-breaker rollback minutes into the second terraform apply below.
+      # The `pk_` test also catches a secret key pasted into this variable, which would bake sk_* into client-side JS.
+      - name: Check CLERK_PUBLISHABLE_KEY is a publishable key
+        env:
+          CLERK_PUBLISHABLE_KEY: ${{ vars.CLERK_PUBLISHABLE_KEY }}
+        run: |
+          case "$CLERK_PUBLISHABLE_KEY" in
+            pk_*) ;;
+            *) echo "::error::repository variable CLERK_PUBLISHABLE_KEY must be set to a pk_* key (RUNBOOK.md)"; exit 1 ;;
+          esac
+
+      # AWS_ACCOUNT_ID is interpolated into the next step's role ARN and into the state bucket name `terraform init`
+      # uses below. An undefined repository variable renders as "", which fails the assume-role on a malformed ARN
+      # that names nothing. Checked here so the error names the variable.
+      - name: Check AWS_ACCOUNT_ID is an account id
+        run: |
+          if [[ ! $AWS_ACCOUNT_ID =~ ^[0-9]{12}$ ]]; then
+            echo "::error::repository variable AWS_ACCOUNT_ID must be a 12-digit account id (RUNBOOK.md)"
+            exit 1
+          fi
+
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-gaussian-splatter-ci-deploy
+          aws-region: us-west-2
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.2
+          # The wrapper adds its own lines to a command's stdout, which would corrupt the state JSON captured below.
+          terraform_wrapper: false
+
+      - name: terraform init
+        working-directory: infra
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID" \
+            -backend-config="key=infra.tfstate" \
+            -backend-config="region=$AWS_REGION"
+
+      # Discovers what's live before touching anything, so the migration-only deploy below (which must leave the service
+      # alone) has a real value to pin it to. Terraform state, not an ECS lookup, decides whether this is the first
+      # deploy into an empty account. A failed state read fails this step, while a failed ECS lookup could pass for "no
+      # service yet" and roll the service forward before its migration ran.
+      - name: Resolve tags
+        working-directory: infra
+        run: |
+          NEW_TAG=$(git rev-parse --short HEAD)
+          echo "NEW_TAG=$NEW_TAG" >> "$GITHUB_ENV"
+          echo "REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com" >> "$GITHUB_ENV"
+          # `state pull` prints nothing and exits 0 when the state is empty.
+          STATE=$(terraform state pull)
+          HAS_SERVICE=false
+          if [ -n "$STATE" ]; then
+            HAS_SERVICE=$(jq 'any(.resources[]; .type == "aws_ecs_service" and .name == "web")' <<<"$STATE")
+          fi
+          if [ "$HAS_SERVICE" = false ]; then
+            # Nothing is serving yet, so there is no old image to keep the service on. With OLD_TAG equal to NEW_TAG,
+            # the first apply below creates the whole stack, service included.
+            echo "FIRST_DEPLOY=true" >> "$GITHUB_ENV"
+            echo "OLD_TAG=$NEW_TAG" >> "$GITHUB_ENV"
+          else
+            SERVICE_JSON=$(aws ecs describe-services --cluster "$CLUSTER_NAME" --services "$SERVICE_NAME")
+            OLD_TASK_DEF=$(jq -r '.services[0].deployments[] | select(.status=="PRIMARY") | .taskDefinition' <<<"$SERVICE_JSON")
+            # image is tagged "<sha>-web" (infra/web.tf appends the -web suffix); web_image_tag takes a bare commit
+            # SHA, so strip it back off.
+            OLD_TAG=$(aws ecs describe-task-definition --task-definition "$OLD_TASK_DEF" \
+              --query 'taskDefinition.containerDefinitions[0].image' --output text | awk -F: '{print $NF}')
+            echo "OLD_TAG=${OLD_TAG%-web}" >> "$GITHUB_ENV"
+          fi
+
+      # The first deploy has no repository to push into yet. Only the repository is applied here, because the service
+      # can't be created before the image it names has been pushed.
+      - name: terraform apply — ECR repository only (first deploy)
+        if: env.FIRST_DEPLOY == 'true'
+        working-directory: infra
+        env:
+          TF_VAR_web_image_tag: ${{ env.NEW_TAG }}
+        run: terraform apply -auto-approve -input=false -target=aws_ecr_repository.web -target=aws_ecr_lifecycle_policy.web
+
+      # Each tag is skipped if it is already in the repository: the repository is IMMUTABLE (infra/registry.tf), so
+      # re-running this job after a failure in any step below would otherwise abort here with ImageTagAlreadyExists —
+      # podman builds aren't bit-reproducible, so rebuilding the same commit produces a different digest. Skipping
+      # makes the whole job re-runnable. `batch-get-image` rather than `describe-images` because the CI role already
+      # grants it (RUNBOOK.md).
+      - name: Build and push images
+        working-directory: web
+        env:
+          CLERK_PUBLISHABLE_KEY: ${{ vars.CLERK_PUBLISHABLE_KEY }}
+        run: |
+          aws ecr get-login-password --region "$AWS_REGION" | podman login --username AWS --password-stdin "$REGISTRY"
+          # Only an unambiguous "found" skips the build — an error or empty reply falls through and builds, so a wrong
+          # answer costs a rebuild rather than deploying a tag that was never pushed.
+          pushed() {
+            [ "$(aws ecr batch-get-image --repository-name "$ECR_REPO" \
+              --image-ids imageTag="$1" --query 'length(images)' --output text 2>/dev/null || true)" = "1" ]
+          }
+          build_and_push() {
+            target=$1; tag_suffix=$2; shift 2
+            if pushed "${NEW_TAG}-${tag_suffix}"; then
+              echo "$ECR_REPO:${NEW_TAG}-${tag_suffix} already pushed — skipping build"
+            else
+              podman build --target "$target" -t "$REGISTRY/$ECR_REPO:${NEW_TAG}-${tag_suffix}" "$@" .
+              podman push "$REGISTRY/$ECR_REPO:${NEW_TAG}-${tag_suffix}"
+            fi
+          }
+          build_and_push web web --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="$CLERK_PUBLISHABLE_KEY"
+          build_and_push migrator migrate
+
+      # The two builds above are separate podman invocations, so one can be skipped or fail to push without the other
+      # noticing. `terraform apply` then registers a task definition naming an image that is not there, and nothing
+      # pulls the -migrate tag until `ecs run-task` does. Checked here, while the deploys below have not run yet.
+      - name: Verify both of this commit's images are in the repository
+        run: |
+          FOUND=$(aws ecr batch-get-image --repository-name "$ECR_REPO" \
+            --image-ids imageTag="$NEW_TAG-web" imageTag="$NEW_TAG-migrate" \
+            --query 'length(images)' --output text)
+          if [[ $FOUND != 2 ]]; then
+            echo "::error::expected $ECR_REPO:$NEW_TAG-web and :$NEW_TAG-migrate in ECR, found $FOUND of 2"
+            exit 1
+          fi
+
+      # Registers the migration task against NEW_TAG while pinning the service's own image to OLD_TAG — Terraform
+      # sees no diff for the service, so no rollout starts. This is the whole trick: it's the only way to get a
+      # runnable migration task definition for the new image without also moving the service forward before the
+      # migration exists. On the first deploy OLD_TAG is NEW_TAG, so this apply creates the whole stack and the service
+      # starts before its migration runs. Nothing older is serving yet for that to break.
+      - name: terraform apply — migration task only (service stays on OLD_TAG)
+        working-directory: infra
+        env:
+          TF_VAR_web_image_tag: ${{ env.OLD_TAG }}
+          TF_VAR_migrate_image_tag: ${{ env.NEW_TAG }}
+        run: terraform apply -auto-approve -input=false
+
+      - name: Run migration
+        run: |
+          # Looked up here rather than before the apply above, because on the first deploy that apply is what created
+          # the service.
+          aws ecs describe-services --cluster "$CLUSTER_NAME" --services "$SERVICE_NAME" \
+            | jq '.services[0].networkConfiguration' > network-config.json
+          TASK_ARN=$(aws ecs run-task --cluster "$CLUSTER_NAME" \
+            --task-definition "$MIGRATION_TASK_FAMILY" --launch-type FARGATE \
+            --network-configuration file://network-config.json \
+            --query 'tasks[0].taskArn' --output text)
+          aws ecs wait tasks-stopped --cluster "$CLUSTER_NAME" --tasks "$TASK_ARN"
+          EXIT_CODE=$(aws ecs describe-tasks --cluster "$CLUSTER_NAME" --tasks "$TASK_ARN" \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "::error::migration task exited $EXIT_CODE — stopping before the roll-forward apply"
+            exit 1
+          fi
+
+      # Only reached if the migration above exited 0. Now both tags match, so this apply includes the service's
+      # image change — Terraform rolls it out, and deployment_circuit_breaker(rollback) protects the rollout. On the
+      # first deploy there is nothing left to change, so this apply is a no-op.
+      - name: terraform apply — roll the service forward to NEW_TAG
+        working-directory: infra
+        env:
+          TF_VAR_web_image_tag: ${{ env.NEW_TAG }}
+          TF_VAR_migrate_image_tag: ${{ env.NEW_TAG }}
+        run: terraform apply -auto-approve -input=false
+
+      # /api/v1/healthz never touches the database (RUNBOOK.md), so it can't tell a working deploy from one that will
+      # 500 on every real request. A nonexistent splat id still round-trips a real DB query: a working deploy 404s
+      # ("no such row"), while a broken DB connection 500s. It waits for the rollout to settle first. On the first
+      # deploy no older task answers in the meantime, so the ALB returns 503 until the new task passes health checks.
+      - name: Smoke test (a real DB-backed route, not /healthz)
+        run: |
+          aws ecs wait services-stable --cluster "$CLUSTER_NAME" --services "$SERVICE_NAME"
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
+            "$APP_PUBLIC_URL/api/v1/public/splats/00000000-0000-0000-0000-000000000000")
+          if [ "$STATUS" != "404" ]; then
+            echo "::error::GET /api/v1/public/splats/<id> returned $STATUS (expected 404) after deploying $NEW_TAG"
+            exit 1
+          fi

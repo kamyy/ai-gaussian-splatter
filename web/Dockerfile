@@ -62,7 +62,7 @@ RUN pnpm run build
 
 
 # ======================================================================================================================
-# migrator — SHIPPED. ECS task that applies db migrations, run between the two terraform applies in ci.yml.
+# migrator — SHIPPED. ECS task that applies db migrations between .github/workflows/deploy.yml's two terraform applies.
 # ======================================================================================================================
 FROM node:24-alpine AS migrator
 
