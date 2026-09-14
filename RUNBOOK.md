@@ -237,7 +237,7 @@ curl -s http://localhost:8000/api/v1/healthz   # should be {"status":"ok"}
 
 ## Deploying to production
 
-CI's `deploy` job (`.github/workflows/ci.yml`) does every deploy, including the first one into an empty account. On a push to `main` it builds and pushes both web images, applies Terraform, runs the migration, and rolls the service forward. It's off while the account is torn down ([State / what's next](AGENTS.md#state--whats-next)).
+CI's `deploy` job (`.github/workflows/deploy.yml`) does every deploy, including the first one into an empty account. On a push to `main` it builds and pushes both web images, applies Terraform, runs the migration, and rolls the service forward. It's off while the account is torn down ([State / what's next](AGENTS.md#state--whats-next)).
 
 A human's part is one-time setup, in this order: [First-time account setup](#first-time-account-setup), [Configuring continuous deployment](#configuring-continuous-deployment), then [Going live](#going-live) to turn the job on. After that, a human only builds the worker image ([Building and pushing the worker image](#building-and-pushing-the-worker-image)) and runs Terraform for a `terraform plan` preview or a teardown ([Running Terraform from a laptop](#running-terraform-from-a-laptop)).
 
