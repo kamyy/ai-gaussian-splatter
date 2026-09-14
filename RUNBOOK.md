@@ -1,5 +1,27 @@
 # Runbook
 
+- [Dev AWS resources](#dev-aws-resources)
+- [Web (frontend + REST API)](#web-frontend--rest-api)
+- [Building and running the splat-web container locally](#building-and-running-the-splat-web-container-locally)
+- [Worker (local pipeline run)](#worker-local-pipeline-run)
+  - [One-time GPU passthrough setup](#one-time-gpu-passthrough-setup)
+  - [Capture](#capture)
+  - [Running the pipeline](#running-the-pipeline)
+  - [Triggering the worker from pnpm dev](#triggering-the-worker-from-pnpm-dev)
+- [Installing Terraform](#installing-terraform)
+- [Full test suite](#full-test-suite)
+- [Deploying to production](#deploying-to-production)
+  - [Signing in to AWS](#signing-in-to-aws)
+  - [First-time account setup](#first-time-account-setup)
+  - [Resolving variable values](#resolving-variable-values)
+  - [Configuring continuous deployment](#configuring-continuous-deployment)
+  - [Going live](#going-live)
+  - [Building and pushing the worker image](#building-and-pushing-the-worker-image)
+  - [Running Terraform from a laptop](#running-terraform-from-a-laptop)
+- [Fixing a bad migration](#fixing-a-bad-migration)
+- [Debugging a failed job](#debugging-a-failed-job)
+- [Tearing down](#tearing-down)
+
 ## Dev AWS resources
 
 The `infra/` config only describes production, so dev's uploads/splats buckets must be created and configured by hand. `web/lib/uploadPhotos.ts` PUTs to a presigned S3 URL and the worker reads/writes both buckets via boto3, so real buckets are needed.
@@ -42,6 +64,56 @@ aws iam put-user-policy --user-name ai-gaussian-splatter-dev \
 
 # Put the newly created key pair in web/.env and worker/.env as AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY.
 aws iam create-access-key --user-name ai-gaussian-splatter-dev
+```
+
+## Web (frontend + REST API)
+
+The REST API is served via route handlers in `web/app/api/v1/`, backed by Postgres via Drizzle.
+
+Start Postgres before running `pnpm dev`. `pnpm db:up` creates/starts the `splat-pg` container if needed before creating the empty `ai_gaussian_splatter` and `ai_gaussian_splatter_test` databases within it. `pnpm db:down` stops and removes the container and the `splat-pg-data` volume. Dev and test databases are then gone.
+
+```bash
+cd web && pnpm db:up
+```
+
+`pnpm dev` and `drizzle-kit` reach that container on `localhost:5432`, since they run on the host rather than in a container. The [`splat-web` container](#building-and-running-the-splat-web-container-locally) reaches it on `host.containers.internal:5432` instead — Podman's built-in alias for the host, no shared network needed. Data is stored at `/var/lib/postgresql`.
+
+One-time setup: create `web/.env` from [`web/.env.example`](web/.env.example), then fill in the Clerk keys, the dev IAM key pair, and the worker IDs. The `DATABASE_*` and bucket values already match the container above.
+
+```bash
+# Enable the restart helper once so splat-pg's --restart=always is honored after boot:
+systemctl --user enable --now podman-restart.service
+
+cd web          # make sure you're in the right folder
+pnpm install    # no codegen step — Drizzle's schema is plain TypeScript
+pnpm db:migrate # apply pending migrations (scripts/db-migrate.cjs)
+pnpm dev
+
+pnpm db:studio  # opens Drizzle Studio to browse/edit rows.
+```
+
+After editing `web/lib/server/db/schema.ts`, run `pnpm db:generate` to emit a migration into `web/drizzle/`, then `pnpm db:migrate` to apply it. The types update the moment you save the schema, so `tsc` will not catch a schema you forgot to generate a migration for.
+
+## Building and running the splat-web container locally
+
+Substitutes for `pnpm dev` to exercise the `splat-web` container that production runs. Uses the `splat-pg` container from above.
+
+```bash
+cd web # Make sure you're in the right folder
+
+# The Clerk publishable key is a --build-arg because it's inlined into the browser bundle at build time. Every route,
+# not just authenticated ones, 500s unless this is a real key.
+podman build --target web --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=<pk_test_...> -t splat-web:test .
+
+# .env supplies several important variables to the container. DATABASE_HOST, APP_PUBLIC_URL stay on the command line to
+# override variables in .env. host.containers.internal is Podman's built-in alias for the host, which is where
+# splat-pg (above) publishes its port — no shared network needed to reach it.
+podman run -d --name splat-web -p 8000:8000 --env-file .env \
+  -e DATABASE_HOST=host.containers.internal \
+  -e APP_PUBLIC_URL=http://localhost:8000 \
+  splat-web:test
+
+curl -s http://localhost:8000/api/v1/healthz   # should be {"status":"ok"}
 ```
 
 ## Worker (local pipeline run)
@@ -149,34 +221,6 @@ cd ../web && pnpm dev
 
 Upload photos and click Process in the browser as normal — the job goes through the same DB rows, callback token, and `/api/v1/internal/jobs/[jobId]/status` route a real EC2 run would use, so its status updates in the dashboard live. Leave `WORKER_LOCAL_LAUNCH` unset (or `false`) to go back to launching a real spot instance; `WORKER_AMI_ID` and the rest of that block stay unused either way.
 
-## Web (frontend + REST API)
-
-The REST API is served via route handlers in `web/app/api/v1/`, backed by Postgres via Drizzle.
-
-Start Postgres before running `pnpm dev`. `pnpm db:up` starts the `splat-pg` container if needed and creates the empty `ai_gaussian_splatter` and `ai_gaussian_splatter_test` databases in it. `pnpm db:down` stops and removes the container and the `splat-pg-data` volume. Dev and test databases are gone.
-
-```bash
-cd web && pnpm db:up
-```
-
-`pnpm dev` and `drizzle-kit` reach that container on `localhost:5432`, since they run natively rather than in a container. The `splat-web` container below reaches it on `host.containers.internal:5432` instead — Podman's built-in alias for the host, no shared network needed. Data is stored at `/var/lib/postgresql`.
-
-One-time setup: create `web/.env` from [`web/.env.example`](web/.env.example), then fill in the Clerk keys, the dev IAM key pair, and the worker IDs. The `DATABASE_*` and bucket values already match the container above.
-
-```bash
-# Enable the restart helper once so --restart=always is honored after boot:
-systemctl --user enable --now podman-restart.service
-
-cd web          # make sure you're in the right folder
-pnpm install    # no codegen step — Drizzle's schema is plain TypeScript
-pnpm db:migrate # apply pending migrations (scripts/db-migrate.cjs)
-pnpm dev
-
-pnpm db:studio  # opens Drizzle Studio to browse/edit rows.
-```
-
-After editing `web/lib/server/db/schema.ts`, run `pnpm db:generate` to emit a migration into `web/drizzle/`, then `pnpm db:migrate` to apply it. The types update the moment you save the schema, so `tsc` will not catch a schema you forgot to generate a migration for.
-
 ## Installing Terraform
 
 `infra/providers.tf` pins an exact `required_version`, so any other CLI version fails `terraform init`. Install that exact release as a standalone binary:
@@ -207,39 +251,27 @@ pnpm run infra:check
 
 Several of the tests `pnpm test` runs in `web/` need Postgres (rate limiting, `getOrCreateUser`, the worker callback token). They use `TEST_DATABASE_URL` from `web/.env` (`ai_gaussian_splatter_test` on `splat-pg`, created by `pnpm db:up`). `pnpm test` fails if that container is down or the variable is missing from `web/.env`. CI's `web` job in `.github/workflows/ci.yml` sets the same variable itself.
 
-`web/tests/migrate-test-db.ts` (Vitest `globalSetup`) applies `web/drizzle/` to that URL before those tests run. Local `pnpm db:migrate` still only hits `DATABASE_*` (dev).
-
-```bash
-cd web && pnpm test
-```
-
-## Building and running the splat-web container locally
-
-Substitutes for `pnpm dev` to exercise the `splat-web` container that production runs. Uses the `splat-pg` container from above.
-
-```bash
-cd web # Make sure you're in the right folder
-
-# The Clerk publishable key is a --build-arg because it's inlined into the browser bundle at build time. Every route,
-# not just authenticated ones, 500s unless this is a real key.
-podman build --target web --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=<pk_test_...> -t splat-web:test .
-
-# .env supplies several important variables to the container. DATABASE_HOST, APP_PUBLIC_URL stay on the command line to
-# override variables in .env. host.containers.internal is Podman's built-in alias for the host, which is where
-# splat-pg (above) publishes its port — no shared network needed to reach it.
-podman run -d --name splat-web -p 8000:8000 --env-file .env \
-  -e DATABASE_HOST=host.containers.internal \
-  -e APP_PUBLIC_URL=http://localhost:8000 \
-  splat-web:test
-
-curl -s http://localhost:8000/api/v1/healthz   # should be {"status":"ok"}
-```
+`web/tests/migrate-test-db.ts` migrates the test database at `TEST_DATABASE_URL` before those tests run.
 
 ## Deploying to production
 
-CI's `deploy` job (`.github/workflows/deploy.yml`) does every deploy, including the first one into an empty account. On a push to `main` it builds and pushes both web images, applies Terraform, runs the migration, and rolls the service forward. It's off while the account is torn down ([State / what's next](AGENTS.md#state--whats-next)).
+Required one-time manual setup, in this order:
 
-A human's part is one-time setup, in this order: [First-time account setup](#first-time-account-setup), [Configuring continuous deployment](#configuring-continuous-deployment), then [Going live](#going-live) to turn the job on. After that, a human only builds the worker image ([Building and pushing the worker image](#building-and-pushing-the-worker-image)) and runs Terraform for a `terraform plan` preview or a teardown ([Running Terraform from a laptop](#running-terraform-from-a-laptop)).
+1. [First-time account setup](#first-time-account-setup)
+2. [Configuring continuous deployment](#configuring-continuous-deployment)
+3. [Going live](#going-live) to turn the job on
+
+After that, a human only builds the worker image ([Building and pushing the worker image](#building-and-pushing-the-worker-image)) and runs Terraform for a `terraform plan` preview or a teardown ([Running Terraform from a laptop](#running-terraform-from-a-laptop)).
+
+CI's `deploy` job (`.github/workflows/deploy.yml`) does every deploy, including the first one into an empty account ([Going live](#going-live)):
+
+1. Creates the `ai-gaussian-splatter` ECR repository (`aws_ecr_repository.web` in `infra/registry.tf`) so the images have somewhere to go (first deploy only).
+2. Builds both web images (`<sha>-web` and `<sha>-migrate`) before pushing them into that repository.
+3. Applies the rest of the stack.
+4. Runs the migration.
+5. Rolls the service forward.
+
+The job is currently disabled ([State / what's next](AGENTS.md#state--whats-next)).
 
 ### Signing in to AWS
 
@@ -247,6 +279,55 @@ Run every `aws` and `terraform` command in this section as an admin IAM identity
 
 ```bash
 aws login # Needed again only after the session expires, up to 12 hours later.
+```
+
+### First-time account setup
+
+One-time per account. Complete all this before turning the `deploy` job on.
+
+Clerk secret is referenced, not created by this config. See `describe-secret` in ["Resolving variable values"](#resolving-variable-values) to retrieve the ARN for the value. To change the value later, update it directly in Secrets Manager, then force a new ECS deployment (`aws ecs update-service --force-new-deployment`) since ECS only resolves secrets at task start.
+
+```bash
+aws secretsmanager create-secret \
+  --region us-west-2 \
+  --name ai-gaussian-splatter/clerk-secret-key \
+  --description "clerk-secret-key" \
+  --secret-string <sk_live_...> \
+  --query ARN --output text
+```
+
+`AWSServiceRoleForEC2Spot` is also not created by this config. It's one account-wide role shared by every other Spot workload in the account. It has to exist before `ec2Launcher.ts`'s first `RunInstances` call. This app cannot auto-create it. Trying to create it a second time fails outright, hence the guard before  creating it:
+
+```bash
+aws iam get-role --role-name AWSServiceRoleForEC2Spot >/dev/null 2>&1 || \
+  aws iam create-service-linked-role --aws-service-name spot.amazonaws.com
+```
+
+To see current estimated month-to-date spend, Billing console → **Billing Home** shows it on the landing page; **Cost Explorer** breaks it down by service. To check the budget directly instead of hunting the console, `aws budgets describe-budgets --account-id $AWS_ACCOUNT_ID --region us-east-1` returns its `CalculatedSpend` — the Budgets API is `us-east-1`-only regardless of the resources it's tracking.
+
+The Terraform state bucket is created by hand once. `terraform init` (the `deploy` job's, or a laptop [plan](#running-terraform-from-a-laptop)) needs it before any apply. The name uses the signed-in account, the same way ["Resolving variable values"](#resolving-variable-values) sets `AWS_ACCOUNT_ID`.
+
+```bash
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+BUCKET="ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID"
+
+aws s3api create-bucket --bucket "$BUCKET" --region us-west-2 \
+  --create-bucket-configuration LocationConstraint=us-west-2
+
+aws s3api put-bucket-versioning --bucket "$BUCKET" --region us-west-2 \
+  --versioning-configuration Status=Enabled
+
+aws s3api put-bucket-encryption --bucket "$BUCKET" --region us-west-2 \
+  --server-side-encryption-configuration \
+  '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+
+aws s3api put-public-access-block --bucket "$BUCKET" --region us-west-2 \
+  --public-access-block-configuration \
+  BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+
+# Same Project tag the rest of infra/ gets from provider default_tags.
+aws s3api put-bucket-tagging --bucket "$BUCKET" --region us-west-2 \
+  --tagging '{"TagSet":[{"Key":"Project","Value":"ai-gaussian-splatter"}]}'
 ```
 
 ### Resolving variable values
@@ -312,107 +393,11 @@ export TF_VAR_hosted_zone_id=$(aws route53 list-hosted-zones-by-name \
   --output text | cut -d/ -f3)
 ```
 
-### First-time account setup
-
-One-time per account. Complete all this before turning the `deploy` job on.
-
-Clerk secret is referenced, not created by this config. See `describe-secret` in ["Resolving variable values"](#resolving-variable-values) to retrieve the ARN for the value. To change the value later, update it directly in Secrets Manager, then force a new ECS deployment (`aws ecs update-service --force-new-deployment`) since ECS only resolves secrets at task start.
-
-```bash
-aws secretsmanager create-secret \
-  --region us-west-2 \
-  --name ai-gaussian-splatter/clerk-secret-key \
-  --description "clerk-secret-key" \
-  --secret-string <sk_live_...> \
-  --query ARN --output text
-```
-
-`AWSServiceRoleForEC2Spot` is also not created by this config. It's one account-wide role shared by every other Spot workload in the account. It has to exist before `ec2Launcher.ts`'s first `RunInstances` call. This app cannot auto-create it. Trying to create it a second time fails outright, hence the guard before  creating it:
-
-```bash
-aws iam get-role --role-name AWSServiceRoleForEC2Spot >/dev/null 2>&1 || \
-  aws iam create-service-linked-role --aws-service-name spot.amazonaws.com
-```
-
-To see current estimated month-to-date spend, Billing console → **Billing Home** shows it on the landing page; **Cost Explorer** breaks it down by service. To check the budget directly instead of hunting the console, `aws budgets describe-budgets --account-id $AWS_ACCOUNT_ID --region us-east-1` returns its `CalculatedSpend` — the Budgets API is `us-east-1`-only regardless of the resources it's tracking.
-
-The Terraform state bucket is created by hand once. `terraform init` (the `deploy` job's, or a laptop [plan](#running-terraform-from-a-laptop)) needs it before any apply. The name uses the signed-in account, the same way ["Resolving variable values"](#resolving-variable-values) sets `AWS_ACCOUNT_ID`.
-
-```bash
-export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-BUCKET="ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID"
-
-aws s3api create-bucket --bucket "$BUCKET" --region us-west-2 \
-  --create-bucket-configuration LocationConstraint=us-west-2
-
-aws s3api put-bucket-versioning --bucket "$BUCKET" --region us-west-2 \
-  --versioning-configuration Status=Enabled
-
-aws s3api put-bucket-encryption --bucket "$BUCKET" --region us-west-2 \
-  --server-side-encryption-configuration \
-  '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
-
-aws s3api put-public-access-block --bucket "$BUCKET" --region us-west-2 \
-  --public-access-block-configuration \
-  BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
-
-# Same Project tag the rest of infra/ gets from provider default_tags.
-aws s3api put-bucket-tagging --bucket "$BUCKET" --region us-west-2 \
-  --tagging '{"TagSet":[{"Key":"Project","Value":"ai-gaussian-splatter"}]}'
-```
-
-### Going live
-
-Once [Configuring continuous deployment](#configuring-continuous-deployment) is done, turn the `deploy` job on: delete `false && ` from its `if:` in `.github/workflows/ci.yml` and land that through a PR. Merging it to `main` is the first deploy.
-
-The job finds no service in the Terraform state, so it treats the run as a first deploy. It applies the ECR repository on its own, pushes both images into it, then applies everything else on this commit's image. The service starts before the migration runs, so real routes 500 until the migration finishes. The first apply also waits on ACM DNS validation, which can take several minutes. ACM writes the validation record into the zone itself.
-
-`deployment_minimum_healthy_percent = 100` will keep any old task serving until the new one passes health checks. If the new image fails those checks, the circuit breaker rolls back to the previous task definition, which names its own still-present tag, so ECS re-pulls the build that was working. To roll back by hand, revert the change and push. A schema change gets a corrective migration instead ([Fixing a bad migration](#fixing-a-bad-migration)).
-
-Only the last few releases are kept (`local.releases_kept` in `infra/registry.tf`); older tags are expired and can no longer be rolled back to.
-
-A push that touches only `.md` files doesn't deploy. `.github/workflows/ci.yml`'s `paths-ignore` skips the whole workflow for it.
-
-### Building and pushing the worker image
-
-Unlike the web/migrate images, nothing builds or pushes this on its own — GPU worker deployment stays manual ([`ARCHITECTURE.md`](ARCHITECTURE.md)). Do this whenever `worker/` changes and you want a job to actually pick up the new build. Its repository, `aws_ecr_repository.worker`, comes from the first deploy. That deploy doesn't need an image in it yet, since `WORKER_IMAGE_URI` is just a string env var the web task carries, not something ECS itself tries to pull.
-
-```bash
-cd "$(git rev-parse --show-toplevel)"
-
-REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com
-REPO=$REGISTRY/ai-gaussian-splatter-worker
-
-aws ecr get-login-password --region us-west-2 | podman login --username AWS --password-stdin $REGISTRY
-
-podman build -t $REPO:$TF_VAR_worker_image_tag worker
-podman push $REPO:$TF_VAR_worker_image_tag
-```
-
-Then set the `WORKER_IMAGE_TAG` repository variable ([Setting GitHub repository variables](#setting-github-repository-variables)) to the tag just pushed. The next deploy passes it as `TF_VAR_worker_image_tag`, which points `WORKER_IMAGE_URI` on the web task definition at the new image. Until then, job launches keep using the old one.
-
-Only the last `local.worker_releases_kept` images are kept (`infra/registry.tf`) — far fewer than the web repository's `local.releases_kept`, since the ~19 GB worker image isn't part of any ECS rollback mechanism: `WORKER_IMAGE_URI` just names whatever tag `worker_image_tag` currently points at, with nothing to roll back to the way a task definition revision does. That makes a stale `WORKER_IMAGE_TAG` the risk. Once `local.worker_releases_kept` newer images exist, the lifecycle policy expires the tag it names, and every job launch then fails its pull and bills until the `WORKER_MAX_LIFETIME_MINUTES` shutdown.
-
-### Running Terraform from a laptop
-
-A `terraform plan` preview and a teardown are the only Terraform a human runs against `infra/`. Don't `apply` from here, because only the `deploy` job runs migrations before rolling the service. Sign in ([Signing in to AWS](#signing-in-to-aws)) and export the variables ([Resolving variable values](#resolving-variable-values)) first, then point `infra/` at the state bucket:
-
-```bash
-cd "$(git rev-parse --show-toplevel)/infra"
-
-terraform init \
-  -backend-config="bucket=ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID" \
-  -backend-config="key=infra.tfstate" \
-  -backend-config="region=us-west-2"
-
-terraform plan
-```
-
-## Configuring continuous deployment
+### Configuring continuous deployment
 
 One-time, after [First-time account setup](#first-time-account-setup) and before [Going live](#going-live). The policy below names roles and repositories that only the first deploy creates. IAM allows that, since it doesn't check that a policy's resources exist. The `ai-gaussian-splatter-ci-deploy` role created below can't be Terraform-managed, since CI would need it to apply the config that creates it.
 
-### Creating the OIDC provider and CI role
+#### Creating the OIDC provider and CI role
 
 ```bash
 # IAM allows only one OIDC provider per URL per account. Skip this call if `aws iam list-open-id-connect-providers`
@@ -450,7 +435,7 @@ aws iam create-role --role-name ai-gaussian-splatter-ci-deploy \
   --assume-role-policy-document file://trust-policy.json
 ```
 
-### Granting deploy permissions
+#### Granting deploy permissions
 
 Unlike a design that delegates through a separate bootstrap role, this role needs the AWS permissions `terraform apply` itself uses directly, since nothing else stands between it and the resources it manages. IAM permissions are scoped by resource-name prefix where the service supports it (this app's own resources are all named or tagged `ai-gaussian-splatter-*`); the networking/database/load-balancer/budgets services below mostly don't support resource-level permissions for their create/modify/delete actions at all, so those stay `Resource: "*"` the same way they would under any tool. It's a reasonable starting point, not an exhaustively verified minimal policy. Expect `AccessDenied` errors during the first deploy, which is the first time this role creates every resource rather than updating it. Add the missing action with the same `aws iam put-role-policy` call below, then rerun the job (`gh run rerun <run-id> --failed-jobs`).
 
@@ -561,7 +546,7 @@ aws iam put-role-policy --role-name ai-gaussian-splatter-ci-deploy \
 
 `ecs:DescribeTaskDefinition` and most of the networking/database/load-balancer/budgets actions above have no resource-level permissions to scope to, hence `Resource: "*"` — this is an AWS API limitation these services share regardless of which tool manages them. `ecs:RunTask`'s task-definition ARN uses the wildcard-revision form (`:*`), not a pinned revision. A pinned one would break on every new migration image push, since each push registers a new revision. The last statement grants read/write on the Terraform state bucket itself, without which `terraform init`/`apply` can't read or update state at all.
 
-### Setting GitHub repository variables
+#### Setting GitHub repository variables
 
 Set these as GitHub repository variables (Settings → Secrets and variables → Actions → Variables). `.github/workflows/deploy.yml` reads them as `vars.*`:
 
@@ -577,6 +562,53 @@ Set these as GitHub repository variables (Settings → Secrets and variables →
 Live re-resolution (`aws route53 list-hosted-zones-by-name`, etc.) was deliberately skipped for these in CI — one production environment, rarely-changing values, and a `vars.*` edit is itself a reviewable, logged event, unlike giving the CI role extra read permissions just to re-derive them every run.
 
 With the role and repository variables in place, turn the job on under [Going live](#going-live).
+
+### Going live
+
+Once [Configuring continuous deployment](#configuring-continuous-deployment) is done, turn the `deploy` job on: delete `false && ` from its `if:` in `.github/workflows/ci.yml` and land that through a PR. Merging it to `main` is the first deploy.
+
+The job finds no service in the Terraform state, so it treats the run as a first deploy. It applies the ECR repository on its own, pushes both images into it, then applies everything else on this commit's image. The service starts before the migration runs, so real routes 500 until the migration finishes. The first apply also waits on ACM DNS validation, which can take several minutes. ACM writes the validation record into the zone itself.
+
+`deployment_minimum_healthy_percent = 100` will keep any old task serving until the new one passes health checks. If the new image fails those checks, the circuit breaker rolls back to the previous task definition, which names its own still-present tag, so ECS re-pulls the build that was working. To roll back by hand, revert the change and push. A schema change gets a corrective migration instead ([Fixing a bad migration](#fixing-a-bad-migration)).
+
+Only the last few releases are kept (`local.releases_kept` in `infra/registry.tf`); older tags are expired and can no longer be rolled back to.
+
+A push that touches only `.md` files doesn't deploy. `.github/workflows/ci.yml`'s `paths-ignore` skips the whole workflow for it.
+
+### Building and pushing the worker image
+
+Unlike the web/migrate images, nothing builds or pushes this on its own — GPU worker deployment stays manual ([`ARCHITECTURE.md`](ARCHITECTURE.md)). Do this whenever `worker/` changes and you want a job to actually pick up the new build. Its repository, `aws_ecr_repository.worker`, comes from the first deploy. That deploy doesn't need an image in it yet, since `WORKER_IMAGE_URI` is just a string env var the web task carries, not something ECS itself tries to pull.
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+
+REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com
+REPO=$REGISTRY/ai-gaussian-splatter-worker
+
+aws ecr get-login-password --region us-west-2 | podman login --username AWS --password-stdin $REGISTRY
+
+podman build -t $REPO:$TF_VAR_worker_image_tag worker
+podman push $REPO:$TF_VAR_worker_image_tag
+```
+
+Then set the `WORKER_IMAGE_TAG` repository variable ([Setting GitHub repository variables](#setting-github-repository-variables)) to the tag just pushed. The next deploy passes it as `TF_VAR_worker_image_tag`, which points `WORKER_IMAGE_URI` on the web task definition at the new image. Until then, job launches keep using the old one.
+
+Only the last `local.worker_releases_kept` images are kept (`infra/registry.tf`) — far fewer than the web repository's `local.releases_kept`, since the ~19 GB worker image isn't part of any ECS rollback mechanism: `WORKER_IMAGE_URI` just names whatever tag `worker_image_tag` currently points at, with nothing to roll back to the way a task definition revision does. That makes a stale `WORKER_IMAGE_TAG` the risk. Once `local.worker_releases_kept` newer images exist, the lifecycle policy expires the tag it names, and every job launch then fails its pull and bills until the `WORKER_MAX_LIFETIME_MINUTES` shutdown.
+
+### Running Terraform from a laptop
+
+A `terraform plan` preview and a teardown are the only Terraform a human runs against `infra/`. Don't `apply` from here, because only the `deploy` job runs migrations before rolling the service. Sign in ([Signing in to AWS](#signing-in-to-aws)) and export the variables ([Resolving variable values](#resolving-variable-values)) first, then point `infra/` at the state bucket:
+
+```bash
+cd "$(git rev-parse --show-toplevel)/infra"
+
+terraform init \
+  -backend-config="bucket=ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID" \
+  -backend-config="key=infra.tfstate" \
+  -backend-config="region=us-west-2"
+
+terraform plan
+```
 
 ## Fixing a bad migration
 
