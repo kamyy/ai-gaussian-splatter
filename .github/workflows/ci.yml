@@ -31,6 +31,8 @@ jobs:
       # Single Biome invocation from repo root covers both scripts/*.js and web/ in one pass — Biome doesn't need web's
       # own node_modules to lint/format files, only its own binary.
       - run: pnpm biome:ci
+      # For shellcheck, which Biome doesn't cover. Its Biome pass over scripts/ repeats part of biome:ci's.
+      - run: pnpm run scripts:check
 
   worker:
     runs-on: ubuntu-latest
@@ -42,8 +44,8 @@ jobs:
           package_json_file: package.json
       - working-directory: worker
         run: uv sync --group dev
-      # worker:check (root package.json) is pure shell (cd worker && uv run ...) — no worker node_modules to install,
-      # just the pnpm CLI above to parse and run the script.
+      # worker:check (root package.json) is pure shell (`uv --directory worker run ...`). No worker node_modules to
+      # install, just the pnpm CLI above to parse and run the script.
       - run: pnpm run worker:check
       - working-directory: worker
         # No GPU/CUDA toolkit in CI runners — this is exactly the CI-cheap tier (fetch/export/status callbacks, mocked
@@ -116,8 +118,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # web:check also runs `next typegen` before `tsc --noEmit`, required on a clean checkout since CI has never run
       # `next dev`/`next build` to generate the App Router route types tsc needs (see AGENTS.md). It's a root package.json
-      # script, so this step overrides the job's default working-directory (web) back to the checkout root; the script
-      # itself `cd`s into web for everything it runs, including the `biome lint .` it runs first.
+      # script, so this step overrides the job's default working-directory (web) back to the checkout root. The script
+      # itself uses `--dir web` for everything it runs, including the `biome lint .` it runs first.
       - name: Check (lint + typecheck)
         working-directory: ${{ github.workspace }}
         run: pnpm run web:check
