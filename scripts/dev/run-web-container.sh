@@ -21,15 +21,17 @@ podman rm -f --ignore splat-web >/dev/null
 
 # web/.env supplies most variables. DATABASE_HOST and APP_PUBLIC_URL override its values. host.containers.internal is
 # Podman's built-in alias for the host, which is where splat-pg publishes its port, so no shared network is needed.
-podman run -d --name splat-web -p 8000:8000 --env-file "$ROOT/web/.env" \
+# The port is published on 127.0.0.1 only. The server listens on IPv4 alone (HOSTNAME in web/Dockerfile), so Podman
+# would otherwise accept a localhost connection over ::1 and then reset it. A refused one makes the client retry on
+# 127.0.0.1.
+podman run -d --name splat-web -p 127.0.0.1:8000:8000 --env-file "$ROOT/web/.env" \
   -e DATABASE_HOST=host.containers.internal \
   -e APP_PUBLIC_URL=http://localhost:8000 \
   splat-web:test >/dev/null
 
-# 127.0.0.1 rather than localhost, because the port is published on 0.0.0.0 and localhost can resolve to ::1 first.
 READY_TIMEOUT_SEC=30
 deadline=$((SECONDS + READY_TIMEOUT_SEC))
-until curl -fs http://127.0.0.1:8000/api/v1/healthz; do
+until curl -fs http://localhost:8000/api/v1/healthz; do
   if ((SECONDS >= deadline)); then
     echo "splat-web did not answer /api/v1/healthz within ${READY_TIMEOUT_SEC}s. See: podman logs splat-web" >&2
     exit 1
