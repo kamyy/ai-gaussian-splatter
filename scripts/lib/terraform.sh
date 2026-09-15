@@ -25,13 +25,6 @@ tf_bin() {
   printf '%s\n' "$bin"
 }
 
-require_local_terraform() {
-  if [[ -z ${TERRAFORM:-} || ! -x $TERRAFORM ]]; then
-    echo "Terraform is missing. Run scripts/prod/install-terraform.sh." >&2
-    exit 1
-  fi
-}
-
 # Prints the exact required_version in infra/providers.tf. scripts/prod/install-terraform.sh and CI's
 # hashicorp/setup-terraform both call this so the pin is not copied into .github/workflows/ci.yml or
 # .github/workflows/deploy.yml. A non-x.y.z value is refused because a blank terraform_version would make
@@ -120,8 +113,9 @@ load_tf_vars() {
 # .terraform from infra:check (no backend) or from a plan against a different account would otherwise make init try to
 # migrate state.
 tf_init() {
-  require_local_terraform
-  "$TERRAFORM" -chdir="$ROOT/infra" init -input=false -reconfigure \
+  local terraform
+  terraform=$(tf_bin)
+  "$terraform" -chdir="$ROOT/infra" init -input=false -reconfigure \
     -backend-config="bucket=ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID" \
     -backend-config="key=infra.tfstate" \
     -backend-config="region=us-west-2"
