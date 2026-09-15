@@ -29,7 +29,6 @@ infra/**/*.tfvars
 # Env / secrets
 .env
 .env.*
-!.env.example
 *.pem
 
 # Frontend (Vitest/Playwright output, Vercel CLI, TS incremental builds)
