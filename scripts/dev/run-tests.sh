@@ -17,5 +17,5 @@ pnpm --dir "$ROOT/web" test
 pnpm --dir "$ROOT/web" test:e2e
 uv --directory "$ROOT/worker" run pytest -v
 
-require_local_terraform
+TERRAFORM=$(tf_bin)
 "$TERRAFORM" -chdir="$ROOT/infra" test

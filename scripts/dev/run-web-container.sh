@@ -5,10 +5,11 @@
 set -euo pipefail
 
 ROOT=$(git rev-parse --show-toplevel)
+source "$ROOT/scripts/lib/env-files.sh"
 
 # The Clerk publishable key is a build arg because it's inlined into the browser bundle at build time. An empty or
 # malformed key makes clerkMiddleware() 500 every matched route. Use a Clerk test key (pk_test_...), not a live one.
-PUBLISHABLE_KEY=$(grep -oP '^NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=\K.*' "$ROOT/web/.env" || true)
+PUBLISHABLE_KEY=$(get_env_var "$ROOT/web/.env" NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)
 if [[ $PUBLISHABLE_KEY != pk_* ]]; then
   echo "Set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY in web/.env to a pk_test_... key." >&2
   exit 1

@@ -9,9 +9,10 @@ ROOT=$(git rev-parse --show-toplevel)
 source "$ROOT/scripts/lib/require-aws-login.sh"
 source "$ROOT/scripts/lib/confirm.sh"
 source "$ROOT/scripts/lib/env-files.sh"
-source "$ROOT/scripts/lib/project-tag.sh"
+source "$ROOT/scripts/lib/terraform.sh"
 
 DEV_USER=ai-gaussian-splatter-dev
+PROJECT_TAG=$(tf_local_var project_tag)
 
 require_aws_login
 

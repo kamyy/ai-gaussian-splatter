@@ -9,10 +9,11 @@ ROOT=$(git rev-parse --show-toplevel)
 source "$ROOT/scripts/lib/require-aws-login.sh"
 source "$ROOT/scripts/lib/confirm.sh"
 source "$ROOT/scripts/lib/github.sh"
-source "$ROOT/scripts/lib/project-tag.sh"
+source "$ROOT/scripts/lib/terraform.sh"
 
 ROLE=ai-gaussian-splatter-ci-deploy
 OIDC_HOST=token.actions.githubusercontent.com
+PROJECT_TAG=$(tf_local_var project_tag)
 
 require_aws_login
 require_gh_login

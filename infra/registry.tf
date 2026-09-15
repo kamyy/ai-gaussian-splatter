@@ -5,13 +5,13 @@
 # Each deploy pushes two immutable tags, $SHA-web and $SHA-migrate (see web/Dockerfile), capped by a lifecycle
 # rule per suffix so RELEASES_KEPT below is a count of releases rather than of images.
 resource "aws_ecr_repository" "web" {
-  name                 = "ai-gaussian-splatter"
-  image_tag_mutability = "IMMUTABLE"
+  name = "ai-gaussian-splatter"
 
-  # A tag, once pushed, can never be repointed. This is what makes the deployment circuit breaker's rollback
-  # mean anything: the previous task definition names a tag that still resolves to the image it was deployed
-  # with, so ECS re-pulls that rather than whatever was pushed most recently. Re-pushing a tag fails outright —
-  # rebuild under a new commit instead.
+  # A tag, once pushed, can never be repointed. This is what makes the deployment circuit breaker's rollback mean
+  # anything: the previous task definition names a tag that still resolves to the image it was deployed with, so ECS
+  # re-pulls that rather than whatever was pushed most recently. Re-pushing a tag fails outright. Rebuild under a new
+  # commit instead.
+  image_tag_mutability = "IMMUTABLE"
 
   # force_delete, not RETAIN: a full `terraform destroy` must not leave an orphaned repository under this fixed
   # name — an orphan would block the next apply with a plain "repository already exists" failure that no retry

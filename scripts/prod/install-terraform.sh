@@ -6,13 +6,13 @@
 set -euo pipefail
 
 ROOT=$(git rev-parse --show-toplevel)
+source "$ROOT/scripts/lib/terraform.sh"
 
 # HashiCorp's release signing key. The fingerprint is pinned here rather than trusting whatever the key URL serves, so
 # whoever could swap the zip can't also swap the key it's checked against.
 HASHICORP_KEY_FINGERPRINT=C874011F0AB405110D02105534365D9472D7468F
 
-# Read out of infra/providers.tf rather than repeated here.
-TF_VERSION=$(grep -oP 'required_version = "\K[^"]+' "$ROOT/infra/providers.tf")
+TF_VERSION=$(tf_required_version)
 BASE=https://releases.hashicorp.com/terraform/$TF_VERSION
 ZIP=terraform_${TF_VERSION}_linux_amd64.zip
 SUMS=terraform_${TF_VERSION}_SHA256SUMS
