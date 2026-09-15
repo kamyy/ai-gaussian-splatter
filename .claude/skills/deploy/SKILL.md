@@ -7,7 +7,7 @@ description: Deploy the AWS Terraform config or ship a new web image to ECS. Use
 
 **Deploying is outward-facing and spends money. Get the user's explicit go-ahead before turning the `deploy` job on, merging anything that triggers it, pushing an image, or running `terraform destroy`, and treat approval as covering that one action only.**
 
-[`RUNBOOK.md` § "Deploying to production"](../../../RUNBOOK.md#deploying-to-production) holds the exact command blocks and is the single source for them. Read it before starting. This file is the order to run them in, the decisions along the way, and what bites afterwards.
+[`RUNBOOK.md` § "Deploying to production"](../../../RUNBOOK.md#deploying-to-production) names the script in `scripts/prod/` that runs each step, and those scripts are the single source for the commands. Read it before starting. This file is the order to run them in, the decisions along the way, and what bites afterwards.
 
 The `deploy` job (`.github/workflows/deploy.yml`) does every deploy, the first one into an empty account included. It is currently off ([State / what's next](../../../AGENTS.md#state--whats-next)). While it's off, nothing deploys. There is no hand-apply path for `infra/`.
 
@@ -16,15 +16,15 @@ The `deploy` job (`.github/workflows/deploy.yml`) does every deploy, the first o
 | Situation | What to do |
 |---|---|
 | `web/` or `infra/*.tf` change, job on | Land it on `main` through a PR. The job builds, migrates, and rolls out. A push touching only `.md` files skips the whole workflow (`paths-ignore`). |
-| Fresh or torn-down account | [First-time account setup](../../../RUNBOOK.md#first-time-account-setup) (Clerk secret, then `AWSServiceRoleForEC2Spot` if missing, then the state bucket via that section's AWS CLI) → [Configuring continuous deployment](../../../RUNBOOK.md#configuring-continuous-deployment) (OIDC provider, CI role and policy, repository variables) → [Going live](../../../RUNBOOK.md#going-live) (turn the job on through a PR). After the first run, build and push the worker image. |
-| New worker image | [Building and pushing the worker image](../../../RUNBOOK.md#building-and-pushing-the-worker-image), then update `WORKER_IMAGE_TAG`. The next deploy points `WORKER_IMAGE_URI` at it. |
-| Preview a change | `terraform plan` from a laptop ([Running Terraform from a laptop](../../../RUNBOOK.md#running-terraform-from-a-laptop)). Never `apply` from there. Only the job runs migrations before rolling the service. |
+| Fresh or torn-down account | [First-time account setup](../../../RUNBOOK.md#first-time-account-setup) (`scripts/prod/first-time-account-setup.sh`) → [Configuring continuous deployment](../../../RUNBOOK.md#configuring-continuous-deployment) (`scripts/prod/configure-ci-role.sh`, then `scripts/prod/set-gh-repo-variables.sh`) → [Going live](../../../RUNBOOK.md#going-live) (turn the job on through a PR). After the first run, `scripts/prod/push-worker-image.sh`. |
+| New worker image | `scripts/prod/push-worker-image.sh` ([Building and pushing the worker image](../../../RUNBOOK.md#building-and-pushing-the-worker-image)). It also updates `WORKER_IMAGE_TAG`, and the next deploy points `WORKER_IMAGE_URI` at it. |
+| Preview a change | `scripts/prod/terraform-plan.sh` ([Running Terraform locally](../../../RUNBOOK.md#running-terraform-locally)). Never `apply` from there. Only the job runs migrations before rolling the service. |
 | Roll back | The circuit breaker rolls a bad image back on its own. To roll back by hand, revert the change and push. A schema change gets a corrective migration instead ([Fixing a bad migration](../../../RUNBOOK.md#fixing-a-bad-migration)). |
 | Tear down | Turn the job off first, or the next push redeploys everything into the empty state ([Tearing down](../../../RUNBOOK.md#tearing-down)). |
 
 ## Before turning the job on
 
-1. `aws` commands act on whatever account the signed-in credentials belong to. Confirm `aws sts get-caller-identity` names the account the user means before creating anything.
+1. `aws` commands act on whatever account the signed-in credentials belong to. Each script prints that account before creating anything. Confirm it's the account the user means before answering the script's prompt.
 2. Every repository variable must be set. An unset one arrives as `""`, which each Terraform variable's `validation` block rejects, so the job fails at its first apply rather than deploying a placeholder. On a fresh account no worker image exists for `WORKER_IMAGE_TAG` to name. Any commit SHA passes validation until one is pushed.
 3. Validation can't catch a well-formed wrong value, and `ALERT_EMAIL` is the one that stays silent about it. A mistyped address applies green with no subscription state to check, since the AWS Budget emails it directly. Confirm the address with the user rather than inferring one. Change `APP_PUBLIC_URL` only alongside `local.app_hostname` in `infra/locals.tf`.
 4. If job launches matter, confirm the AMI in `WORKER_AMI_ID` and the image under `WORKER_IMAGE_TAG` both exist. Their `validation` blocks check shape only.
@@ -32,7 +32,7 @@ The `deploy` job (`.github/workflows/deploy.yml`) does every deploy, the first o
 
 ## Before merging an `infra/` change
 
-Run `terraform plan` from a laptop and show the user what it says. RDS currently carries `deletion_protection = false` and `skip_final_snapshot = true` (no live data to protect yet, see `infra/data.tf`), so a replacing change is immediately destructive. It must never be a surprise. Treat any plan touching `aws_db_instance.main` or the 3 S3 buckets with extra care until those get `prevent_destroy` ([Tearing down](../../../RUNBOOK.md#tearing-down)).
+Run `scripts/prod/terraform-plan.sh` and show the user what it says. RDS currently carries `deletion_protection = false` and `skip_final_snapshot = true` (no live data to protect yet, see `infra/data.tf`), so a replacing change is immediately destructive. It must never be a surprise. Treat any plan touching `aws_db_instance.main` or the 3 S3 buckets with extra care until those get `prevent_destroy` ([Tearing down](../../../RUNBOOK.md#tearing-down)).
 
 ## After a deploy reports success
 
@@ -42,7 +42,7 @@ On the first deploy the service starts before its migration, so real routes 500 
 
 ## When it goes wrong
 
-- **`AccessDenied` on the first deploy.** It's the first time the CI role creates every resource rather than updating them, and its policy ([Granting deploy permissions](../../../RUNBOOK.md#granting-deploy-permissions)) is a starting point, not a verified minimum. Add the missing action with `aws iam put-role-policy`, then `gh run rerun <run-id> --failed-jobs`. The job is safe to rerun from any step.
+- **`AccessDenied` on the first deploy.** It's the first time the CI role creates every resource rather than updating them, and its policy ([Granting deploy permissions](../../../RUNBOOK.md#granting-deploy-permissions)) is a starting point, not a verified minimum. Add the missing action to `DEPLOY_POLICY` in `scripts/prod/configure-ci-role.sh`, re-run that script, then `gh run rerun <run-id> --failed-jobs`. The job is safe to rerun from any step.
 - **A bad image rolls back on its own.** The circuit breaker restores the previous task definition, which names its own still-present tag. Only `local.releases_kept` releases survive.
 - **`ImageTagAlreadyExists` pushing the worker image.** That commit was already built. The repository is immutable by design, so commit again rather than retagging.
 - **Intermittent 502s with nothing in the application logs.** The app never saw those requests. Check `KEEP_ALIVE_TIMEOUT` against the ALB idle timeout ([Networking & TLS](../../../AGENTS.md#networking--tls)).
