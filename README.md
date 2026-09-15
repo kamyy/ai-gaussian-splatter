@@ -38,7 +38,7 @@ cd web && pnpm install && pnpm test && pnpm dev
 cd worker && uv sync --group dev && uv run pytest
 
 # Infra
-cd infra && terraform init -backend=false && terraform validate && terraform test
+pnpm run infra:check && terraform -chdir=infra test
 ```
 
 ## License

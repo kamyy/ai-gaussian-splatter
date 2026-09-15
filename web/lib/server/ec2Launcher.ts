@@ -198,8 +198,9 @@ export function launchJobLocal(params: {
     throw new Error("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set to launch the worker locally");
   }
 
-  // repo-root/worker/jobdir/<jobId>, matching the manual run in RUNBOOK.md so a local automated run is still
-  // debuggable the same way: colmap/database.db, result.ply, and this container's own stdout/stderr all land here.
+  // repo-root/worker/jobdir/<jobId>, next to the worker/jobdir scripts/dev/worker-reconstruct.sh uses, so a local
+  // automated run is still debuggable the same way: colmap/database.db, result.ply, and this container's own
+  // stdout/stderr all land here.
   const jobDir = path.resolve(process.cwd(), "..", "worker", "jobdir", params.jobId);
   mkdirSync(jobDir, { recursive: true });
   const log = openSync(path.join(jobDir, "worker.log"), "a");
@@ -221,7 +222,7 @@ export function launchJobLocal(params: {
       "-e",
       `STAGE=${params.stage}`,
       // Inside the container "localhost" is the container itself, not the host running `next dev` — this is Podman's
-      // alias for the host, matching worker/.env's APP_PUBLIC_URL per worker/.env.example.
+      // alias for the host, matching the APP_PUBLIC_URL scripts/lib/worker.sh passes for its local runs.
       "-e",
       "APP_PUBLIC_URL=http://host.containers.internal:3000",
       "-e",

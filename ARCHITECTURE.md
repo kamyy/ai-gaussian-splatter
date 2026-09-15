@@ -162,7 +162,7 @@ Ops fallback: an AWS Budget (`infra/budgets.tf`) for spend the request path neve
 ## CI/CD
 
 - CI (`.github/workflows/deploy.yml`) builds, migrates, and rolls out the web service on every push to `main`, including the first deploy into an empty account. A human never applies `infra/` itself.
-- Creating the state bucket and tearing down stay on a laptop. CI can't `terraform init` against a bucket that doesn't exist yet. A teardown is too rare and too destructive to put behind a push.
+- Creating the state bucket and tearing down are done locally. CI can't `terraform init` against a bucket that doesn't exist yet. A teardown is too rare and too destructive to put behind a push.
 - No manual approval gate: there's no live traffic yet to protect, and this is the first real deploy (M9).
 - GPU worker deployment stays manual ([State / what's next](AGENTS.md#state--whats-next), gap 5): no ECR pull permissions yet.
 
@@ -192,7 +192,7 @@ Terraform stays the sole owner of "what's currently deployed" — nothing calls 
 
 The first deploy into an empty account skips this ordering. With no service in the Terraform state there is no older image to pin the service to, so the first apply creates it on the new image and the migration runs afterwards. Real routes 500 until the migration finishes. That costs nothing, because nothing was serving before.
 
-Rejected alternative: **running migrations from a human's laptop through a bastion.** The RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway and no security-group path for an ad hoc host, and no bastion exists in this infra. So there's no manual fallback: a bad migration is fixed the same way as any other bug, with a corrective migration through a normal PR (see [Fixing a bad migration](RUNBOOK.md#fixing-a-bad-migration)).
+Rejected alternative: **running migrations from a local machine through a bastion.** The RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway and no security-group path for an ad hoc host, and no bastion exists in this infra. So there's no manual fallback: a bad migration is fixed the same way as any other bug, with a corrective migration through a normal PR (see [Fixing a bad migration](RUNBOOK.md#fixing-a-bad-migration)).
 
 A rolled-back *service* deployment does not undo an already-applied migration. Rollback and "was the migration a good idea" are orthogonal once the migration has committed. This is why every migration has to follow the expand/contract discipline in [`AGENTS.md`](AGENTS.md), not an incidental style preference.
 

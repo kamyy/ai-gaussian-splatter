@@ -1,5 +1,7 @@
 # Runbook
 
+Most procedures below have you run a script from `scripts/dev/` (local) or `scripts/prod/` (the deployed AWS account). Each works from any directory in the checkout. A script that uses the AWS CLI exits straight away unless `aws sts get-caller-identity` succeeds. For AWS they also print the account they're about to act on. Scripts that create or delete anything ask for confirmation first.
+
 - [Dev AWS resources](#dev-aws-resources)
 - [Web (frontend + REST API)](#web-frontend--rest-api)
 - [Building and running the splat-web container locally](#building-and-running-the-splat-web-container-locally)
@@ -13,72 +15,35 @@
 - [Deploying to production](#deploying-to-production)
   - [Signing in to AWS](#signing-in-to-aws)
   - [First-time account setup](#first-time-account-setup)
-  - [Resolving variable values](#resolving-variable-values)
   - [Configuring continuous deployment](#configuring-continuous-deployment)
   - [Going live](#going-live)
   - [Building and pushing the worker image](#building-and-pushing-the-worker-image)
-  - [Running Terraform from a laptop](#running-terraform-from-a-laptop)
+  - [Running Terraform locally](#running-terraform-locally)
 - [Fixing a bad migration](#fixing-a-bad-migration)
 - [Debugging a failed job](#debugging-a-failed-job)
 - [Tearing down](#tearing-down)
 
 ## Dev AWS resources
 
-The `infra/` config only describes production, so dev's uploads/splats buckets must be created and configured by hand. `web/lib/uploadPhotos.ts` PUTs to a presigned S3 URL and the worker reads/writes both buckets via boto3, so real buckets are needed.
+The `infra/` config only describes production, so dev's uploads/splats buckets are created outside it. `web/lib/uploadPhotos.ts` PUTs to a presigned S3 URL and the worker reads/writes both buckets via boto3, so real buckets are needed. `scripts/dev/create-dev-resources.sh` creates the two buckets `web/.env` names in `UPLOADS_BUCKET` and `SPLATS_BUCKET`, plus an `ai-gaussian-splatter-dev` IAM user that can reach only those two buckets. Run it as an admin ([Signing in to AWS](#signing-in-to-aws)). It creates `web/.env` first when it's missing, and writes the user's key pair into it whenever it creates the user's access key. An existing `web/.env` is never replaced. S3 bucket names are unique across every AWS account, so if the default names are taken, change both variables and run it again.
 
 ```bash
-for b in ai-gaussian-splatter-dev-uploads ai-gaussian-splatter-dev-splats; do
-  aws s3api create-bucket --bucket "$b" --region us-west-2 \
-    --create-bucket-configuration LocationConstraint=us-west-2
-done
-
-# Without these rules the browser blocks both a cross-origin GET and PUT. The presigned URL is valid, so the failure
-# only shows up in the browser console, which distinguishes a CORS-rule 403 from an IAM-policy 403.
-#
-# localhost:3000 for pnpm dev. localhost:8000 for splat-web container on localhost
-aws s3api put-bucket-cors --bucket ai-gaussian-splatter-dev-uploads --cors-configuration '{
-  "CORSRules": [{"AllowedMethods": ["PUT"],
-                 "AllowedOrigins": ["http://localhost:3000", "http://localhost:8000"],
-                 "AllowedHeaders": ["*"]}]
-}'
-aws s3api put-bucket-cors --bucket ai-gaussian-splatter-dev-splats --cors-configuration '{
-  "CORSRules": [{"AllowedMethods": ["GET", "HEAD"],
-                 "AllowedOrigins": ["http://localhost:3000", "http://localhost:8000"],
-                 "AllowedHeaders": ["*"]}]
-}'
-
-# Create an IAM user called ai-gaussian-splatter-dev scoped to just those two buckets:
-aws iam create-user --user-name ai-gaussian-splatter-dev
-aws iam put-user-policy --user-name ai-gaussian-splatter-dev \
-  --policy-name dev-buckets --policy-document '{
-    "Version": "2012-10-17",
-    "Statement": [{
-      "Effect": "Allow",
-      "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject", "s3:ListBucket"],
-      "Resource": [
-        "arn:aws:s3:::ai-gaussian-splatter-dev-uploads", "arn:aws:s3:::ai-gaussian-splatter-dev-uploads/*",
-        "arn:aws:s3:::ai-gaussian-splatter-dev-splats", "arn:aws:s3:::ai-gaussian-splatter-dev-splats/*"
-      ]
-    }]
-  }'
-
-# Put the newly created key pair in web/.env and worker/.env as AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY.
-aws iam create-access-key --user-name ai-gaussian-splatter-dev
+scripts/dev/create-dev-resources.sh
 ```
 
 ## Web (frontend + REST API)
 
 The REST API is served via route handlers in `web/app/api/v1/`, backed by Postgres via Drizzle.
 
-Start Postgres before running `pnpm dev`. `pnpm db:up` creates/starts the `splat-pg` container if needed before creating the empty `ai_gaussian_splatter` and `ai_gaussian_splatter_test` databases within it. `pnpm db:down` stops and removes the container and the `splat-pg-data` volume. Dev and test databases are then gone.
+Start Postgres before running `pnpm dev`. `scripts/dev/db-up.sh` creates/starts the `splat-pg` container if needed before creating the empty `ai_gaussian_splatter` and `ai_gaussian_splatter_test` databases within it. `scripts/dev/db-down.sh` stops and removes the container and the `splat-pg-data` volume. Dev and test databases are then gone.
 
 ```bash
-cd web && pnpm db:up
+scripts/dev/db-up.sh
 ```
 
 `pnpm dev` and `drizzle-kit` reach that container on `localhost:5432`, since they run on the host rather than in a container. The [`splat-web` container](#building-and-running-the-splat-web-container-locally) reaches it on `host.containers.internal:5432` instead — Podman's built-in alias for the host, no shared network needed. Data is stored at `/var/lib/postgresql`.
 
-One-time setup: create `web/.env` from [`web/.env.example`](web/.env.example), then fill in the Clerk keys, the dev IAM key pair, and the worker IDs. The `DATABASE_*` and bucket values already match the container above.
+One-time setup: [Dev AWS resources](#dev-aws-resources) creates `web/.env` along with the dev buckets and IAM user. Fill in its Clerk keys. The `DATABASE_*` values already match the container above.
 
 ```bash
 # Enable the restart helper once so splat-pg's --restart=always is honored after boot:
@@ -99,21 +64,7 @@ After editing `web/lib/server/db/schema.ts`, run `pnpm db:generate` to emit a mi
 Substitutes for `pnpm dev` to exercise the `splat-web` container that production runs. Uses the `splat-pg` container from above.
 
 ```bash
-cd web # Make sure you're in the right folder
-
-# The Clerk publishable key is a --build-arg because it's inlined into the browser bundle at build time. Every route,
-# not just authenticated ones, 500s unless this is a real key.
-podman build --target web --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=<pk_test_...> -t splat-web:test .
-
-# .env supplies several important variables to the container. DATABASE_HOST, APP_PUBLIC_URL stay on the command line to
-# override variables in .env. host.containers.internal is Podman's built-in alias for the host, which is where
-# splat-pg (above) publishes its port — no shared network needed to reach it.
-podman run -d --name splat-web -p 8000:8000 --env-file .env \
-  -e DATABASE_HOST=host.containers.internal \
-  -e APP_PUBLIC_URL=http://localhost:8000 \
-  splat-web:test
-
-curl -s http://localhost:8000/api/v1/healthz   # should be {"status":"ok"}
+scripts/dev/run-web-container.sh
 ```
 
 ## Worker (local pipeline run)
@@ -123,21 +74,7 @@ A real Nvidia GPU is required. Run the pipeline using the [worker image](#runnin
 ### One-time GPU passthrough setup
 
 ```bash
-# nvidia-container-toolkit isn't in Fedora's repos or RPM Fusion's. RPM Fusion nonfree carries the NVIDIA GPU driver,
-# but not the toolkit.
-curl -fsSL https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo \
-  | sudo tee /etc/yum.repos.d/nvidia-container-toolkit.repo
-sudo dnf install -y nvidia-container-toolkit
-
-# Writes the CDI spec that podman resolves --device nvidia.com/gpu=all against. Generated as root into /etc/cdi even
-# though the containers run rootless.
-sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
-
-# Verify the passthrough against a stock CUDA image. nvidia-smi should report the host GPU and driver.
-# --security-opt=label=disable required on every GPU run, not just this check. Without it SELinux blocks access to the
-# device nodes and NVML fails with an insufficient permissions error.
-podman run --rm --security-opt=label=disable --device nvidia.com/gpu=all \
-  docker.io/nvidia/cuda:12.9.1-base-ubuntu24.04 nvidia-smi
+scripts/dev/setup-gpu-passthrough.sh
 ```
 
 ### Capture
@@ -158,61 +95,16 @@ When a set registers poorly, `worker/jobdir/colmap/database.db` says why — gue
 
 The pipeline can run standalone — nothing has to be listening at `APP_PUBLIC_URL`. `worker/pipeline/status.py` logs and swallows callback failures by design, and `terminate_self()` no-ops when IMDS doesn't answer.
 
+A run is two stages, one script each, and both rebuild the `splat-worker:dev` image before running. Both take the dev IAM key pair, region, and bucket names from `web/.env`, which [Dev AWS resources](#dev-aws-resources) fills in. Only those reach the container, never the rest of `web/.env`. `scripts/dev/worker-reconstruct.sh` uploads the photos under a new splat ID, runs COLMAP, and prints the command for the train stage.
+
 ```bash
-cd worker # Make sure you're in the right folder.
-
-# Build the image when anything here has changed. ./pipeline/ and ./run_job.py are copied in the final two layers, so a
-# code-only edit rebuilds in seconds; touching pyproject.toml or uv.lock re-runs uv sync as well. Only a cold build
-# downloads torch/CUDA.
-podman build -t splat-worker:dev . # ~19 GB cold
-
-# Create .env from worker/.env.example.
-export $(grep -E '^(AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|AWS_DEFAULT_REGION)=' .env)
-
-SPLAT_ID=$(uuidgen) # Needs to be different for every run.
-
-# Upload photo set to the dev uploads bucket. The AWS CLI reads the same AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and
-# AWS_DEFAULT_REGION the SDKs do, so exporting those out of .env is enough to run as the IAM user
-# ai-gaussian-splatter-dev.
-aws s3 sync ./photos "s3://ai-gaussian-splatter-dev-uploads/splats/$SPLAT_ID/photos/"
-
-# The rm -rf / mkdir is required to setup ./jobdir for a new run.
-rm -rf ./jobdir && mkdir ./jobdir
-
-# A full run is two container runs, one per STAGE, because in production each stage is its own spot instance and the
-# pause between them is where the user decides whether to pay for training. STAGE is passed with -e rather than living
-# in .env for the same reason SPLAT_ID is: it differs between the two runs.
-#
-# Pipeline output lands in ./jobdir and will persist after the container exits. The reconstruct stage leaves the COLMAP
-# workspace in ./jobdir/colmap and uploads the sparse model and point_cloud.ply under
-# s3://ai-gaussian-splatter-dev-splats/splats/$SPLAT_ID/.
-podman run --rm \
-  --security-opt=label=disable \
-  --device nvidia.com/gpu=all \
-  --env-file .env \
-  -e SPLAT_ID=$SPLAT_ID \
-  -e STAGE=reconstruct \
-  -v ./jobdir:/tmp/job \
-  splat-worker:dev
-
-# The train stage downloads the sparse model the reconstruct stage uploaded, so it needs nothing left in ./jobdir and
-# can run on a different machine or days later. Pass -e FAST_TEST_MODE=true to reduce training to 20 iterations. This
-# doesn't cut GPU memory. Every photo stays resident at full resolution whatever the iteration count, so a GPU smaller
-# than a 24GB A10G needs fewer or downscaled photos to even get through a smoke test.
-# Success leaves result.ply and thumbnail.png under s3://ai-gaussian-splatter-dev-splats/splats/$SPLAT_ID/.
-podman run --rm \
-  --security-opt=label=disable \
-  --device nvidia.com/gpu=all \
-  --env-file .env \
-  -e SPLAT_ID=$SPLAT_ID \
-  -e STAGE=train \
-  -v ./jobdir:/tmp/job \
-  splat-worker:dev
+scripts/dev/worker-reconstruct.sh              # photos from worker/photos, or pass another directory
+scripts/dev/worker-train.sh <splat-id>         # add --fast for a 20-iteration smoke test
 ```
 
 ### Triggering the worker from pnpm dev
 
-Set `WORKER_LOCAL_LAUNCH=true` in `web/.env` to make the web app's Process button run the worker on your own GPU instead of launching a real EC2 spot instance. `web/lib/server/ec2Launcher.ts`'s `launchJobLocal()` then does what the [Running the pipeline](#running-the-pipeline) command above does by hand: it shells out to `podman run` against the `splat-worker:dev` image, with output landing in `worker/jobdir/<jobId>/worker.log` for the same [registration debugging](#capture) the manual flow uses. Requires the same one-time [GPU passthrough setup](#one-time-gpu-passthrough-setup) and an image already built via `podman build` above — this path never builds it for you.
+Set `WORKER_LOCAL_LAUNCH=true` in `web/.env` to make the web app's Process button run the worker on your own GPU instead of launching a real EC2 spot instance. `web/lib/server/ec2Launcher.ts`'s `launchJobLocal()` then does what the [Running the pipeline](#running-the-pipeline) scripts do: it shells out to `podman run` against the `splat-worker:dev` image, with output landing in `worker/jobdir/<jobId>/worker.log` for the same [registration debugging](#capture) the manual flow uses. Requires the same one-time [GPU passthrough setup](#one-time-gpu-passthrough-setup) and an image already built, by either pipeline script or the `podman build` below. This path never builds it for you.
 
 ```bash
 cd worker && podman build -t splat-worker:dev . # once, and again after any worker code change
@@ -226,30 +118,16 @@ Upload photos and click Process in the browser as normal — the job goes throug
 `infra/providers.tf` pins an exact `required_version`, so any other CLI version fails `terraform init`. Install that exact release as a standalone binary:
 
 ```bash
-# Run from the repo root. The version is read out of infra/providers.tf rather than repeated here.
-TF_VERSION=$(grep -oP 'required_version = "\K[^"]+' infra/providers.tf)
-curl -fsSLO https://releases.hashicorp.com/terraform/$TF_VERSION/terraform_${TF_VERSION}_linux_amd64.zip
-unzip -o terraform_${TF_VERSION}_linux_amd64.zip terraform -d ~/.local/bin
-rm terraform_${TF_VERSION}_linux_amd64.zip
-terraform version
+scripts/prod/install-terraform.sh
 ```
 
 ## Full test suite
 
 ```bash
-pnpm biome:ci
-pnpm run scripts:check
-pnpm run web:check
-pnpm run worker:check
-pnpm run infra:check
-# Each line below runs in a subshell, so it starts from the repo root. A bare cd would leave the shell in web/ and the
-# next line would fail to find its folder.
-(cd web && pnpm test && pnpm test:e2e)
-(cd worker && uv run pytest -v)
-(cd infra && terraform test)
+scripts/dev/run-tests.sh
 ```
 
-Several of the tests `pnpm test` runs in `web/` need Postgres (rate limiting, `getOrCreateUser`, the worker callback token). They use `TEST_DATABASE_URL` from `web/.env` (`ai_gaussian_splatter_test` on `splat-pg`, created by `pnpm db:up`). `pnpm test` fails if that container is down or the variable is missing from `web/.env`. CI's `web` job in `.github/workflows/ci.yml` sets the same variable itself.
+Several of the tests `pnpm test` runs in `web/` need Postgres (rate limiting, `getOrCreateUser`, the worker callback token). They use `TEST_DATABASE_URL` from `web/.env` (`ai_gaussian_splatter_test` on `splat-pg`, created by `scripts/dev/db-up.sh`). `pnpm test` fails if that container is down or the variable is missing from `web/.env`. CI's `web` job in `.github/workflows/ci.yml` sets the same variable itself.
 
 `web/tests/migrate-test-db.ts` migrates the test database at `TEST_DATABASE_URL` before those tests run.
 
@@ -261,7 +139,7 @@ Required one-time manual setup, in this order:
 2. [Configuring continuous deployment](#configuring-continuous-deployment)
 3. [Going live](#going-live) to turn the job on
 
-After that, a human only builds the worker image ([Building and pushing the worker image](#building-and-pushing-the-worker-image)) and runs Terraform for a `terraform plan` preview or a teardown ([Running Terraform from a laptop](#running-terraform-from-a-laptop)).
+After that, a human only builds the worker image ([Building and pushing the worker image](#building-and-pushing-the-worker-image)) and runs Terraform for a `terraform plan` preview or a teardown ([Running Terraform locally](#running-terraform-locally)).
 
 CI's `deploy` job (`.github/workflows/deploy.yml`) does every deploy, including the first one into an empty account ([Going live](#going-live)):
 
@@ -275,7 +153,7 @@ The job is currently disabled ([State / what's next](AGENTS.md#state--whats-next
 
 ### Signing in to AWS
 
-Run every `aws` and `terraform` command in this section as an admin IAM identity signed in with `aws login`, which needs AWS CLI 2.32.0 or later. The `ai-gaussian-splatter-dev` user from [Dev AWS resources](#dev-aws-resources) can only reach the two dev buckets. The CI role from [Configuring continuous deployment](#configuring-continuous-deployment) can only be assumed by the `deploy` job itself.
+Run every script and command in this section as an admin IAM identity signed in with `aws login`, which needs AWS CLI 2.32.0 or later. The `ai-gaussian-splatter-dev` user from [Dev AWS resources](#dev-aws-resources) can only reach the two dev buckets. The CI role from [Configuring continuous deployment](#configuring-continuous-deployment) can only be assumed by the `deploy` job itself.
 
 ```bash
 aws login # Needed again only after the session expires, up to 12 hours later.
@@ -283,281 +161,58 @@ aws login # Needed again only after the session expires, up to 12 hours later.
 
 ### First-time account setup
 
-One-time per account. Complete all this before turning the `deploy` job on.
+One-time per account. Complete all this before turning the `deploy` job on. `scripts/prod/first-time-account-setup.sh` creates three things the root module never manages, and keeps any that already exist:
 
-Clerk secret is referenced, not created by this config. See `describe-secret` in ["Resolving variable values"](#resolving-variable-values) to retrieve the ARN for the value. To change the value later, update it directly in Secrets Manager, then force a new ECS deployment (`aws ecs update-service --force-new-deployment`) since ECS only resolves secrets at task start.
-
-```bash
-aws secretsmanager create-secret \
-  --region us-west-2 \
-  --name ai-gaussian-splatter/clerk-secret-key \
-  --description "clerk-secret-key" \
-  --secret-string <sk_live_...> \
-  --query ARN --output text
-```
-
-`AWSServiceRoleForEC2Spot` is also not created by this config. It's one account-wide role shared by every other Spot workload in the account. It has to exist before `ec2Launcher.ts`'s first `RunInstances` call. This app cannot auto-create it. Trying to create it a second time fails outright, hence the guard before  creating it:
+- **The Clerk secret**, `ai-gaussian-splatter/clerk-secret-key`. The script prompts for its `sk_live_...` value. `infra/` references it by ARN only ([Setting GitHub repository variables](#setting-github-repository-variables)). To change the value later, update it directly in Secrets Manager, then force a new ECS deployment (`aws ecs update-service --force-new-deployment`) since ECS only resolves secrets at task start.
+- **`AWSServiceRoleForEC2Spot`**. It's one account-wide role shared by every other Spot workload in the account. It has to exist before `web/lib/server/ec2Launcher.ts`'s first `RunInstances` call, and this app cannot auto-create it.
+- **The Terraform state bucket**, `ai-gaussian-splatter-tfstate-<account-id>`. `terraform init` (the `deploy` job's, or a local [plan](#running-terraform-locally)) needs it before any apply.
 
 ```bash
-aws iam get-role --role-name AWSServiceRoleForEC2Spot >/dev/null 2>&1 || \
-  aws iam create-service-linked-role --aws-service-name spot.amazonaws.com
+scripts/prod/first-time-account-setup.sh
 ```
 
-To see current estimated month-to-date spend, Billing console → **Billing Home** shows it on the landing page; **Cost Explorer** breaks it down by service. To check the budget directly instead of hunting the console, `aws budgets describe-budgets --account-id $AWS_ACCOUNT_ID --region us-east-1` returns its `CalculatedSpend` — the Budgets API is `us-east-1`-only regardless of the resources it's tracking.
-
-The Terraform state bucket is created by hand once. `terraform init` (the `deploy` job's, or a laptop [plan](#running-terraform-from-a-laptop)) needs it before any apply. The name uses the signed-in account, the same way ["Resolving variable values"](#resolving-variable-values) sets `AWS_ACCOUNT_ID`.
-
-```bash
-export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-BUCKET="ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID"
-
-aws s3api create-bucket --bucket "$BUCKET" --region us-west-2 \
-  --create-bucket-configuration LocationConstraint=us-west-2
-
-aws s3api put-bucket-versioning --bucket "$BUCKET" --region us-west-2 \
-  --versioning-configuration Status=Enabled
-
-aws s3api put-bucket-encryption --bucket "$BUCKET" --region us-west-2 \
-  --server-side-encryption-configuration \
-  '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
-
-aws s3api put-public-access-block --bucket "$BUCKET" --region us-west-2 \
-  --public-access-block-configuration \
-  BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
-
-# Same Project tag the rest of infra/ gets from provider default_tags.
-aws s3api put-bucket-tagging --bucket "$BUCKET" --region us-west-2 \
-  --tagging '{"TagSet":[{"Key":"Project","Value":"ai-gaussian-splatter"}]}'
-```
-
-### Resolving variable values
-
-Six of the seven values below become the `deploy` job's repository variables ([Setting GitHub repository variables](#setting-github-repository-variables)). The job sets `web_image_tag` itself. A laptop `terraform plan` or `destroy` needs all seven. Resolve them once per shell session and reuse them for everything that follows. Terraform reads a `TF_VAR_<name>` environment variable for the matching variable automatically, matching each name in `infra/variables.tf`, so once these are exported no invocation below needs a repeated `-var` flag. `AWS_ACCOUNT_ID` isn't a Terraform variable. It's used below to name the state bucket and the ECR registry host, and to build the CI role's policies. Read it from the signed-in session so a leftover placeholder cannot name those.
-
-```bash
-export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-```
-
-`TF_VAR_alert_email` is where the AWS Budget (`infra/budgets.tf`) sends spend alerts directly, with no subscription-confirmation step to check. Omitting it fails `terraform plan`/`apply` immediately, but nothing can tell a wrong address from a right one, and a wrong one applies green with the alerts never arriving. The only way to catch a typo is to watch for a real alert once spend crosses a threshold, or temporarily lower `monthly_budget_limit_usd` to force one.
-
-```bash
-export TF_VAR_alert_email=replace-with-your-email
-```
-
-`TF_VAR_app_public_url` is where the worker PATCHes job status back to, and what the ALB is aliased to. Keep it in step with `local.app_hostname` in `infra/locals.tf`, which is what the certificate and the Route 53 record are built from — nothing cross-checks the two, so a mismatch sends every status callback at a host that won't answer.
-
-```bash
-export TF_VAR_app_public_url=https://ai-gaussian-splatter.orky.net
-```
-
-`TF_VAR_worker_ami_id` is the AMI each job's spot instance boots. `ec2Launcher.ts`'s user data runs `aws ecr get-login-password` and `docker run --gpus all` with no provisioning of its own, so the image must already carry Docker, the NVIDIA driver and container toolkit, and the AWS CLI. AWS's Deep Learning Base GPU AMIs do; this lists them newest first:
-
-```bash
-aws ec2 describe-images --region us-west-2 --owners amazon \
-  --filters "Name=name,Values=Deep Learning Base*GPU AMI*Ubuntu*" \
-            "Name=architecture,Values=x86_64" \
-            "Name=state,Values=available" \
-  --query 'reverse(sort_by(Images,&CreationDate))[:5].{id:ImageId,name:Name,created:CreationDate}' \
-  --output table
-export TF_VAR_worker_ami_id=<ami-... from the table>
-```
-
-`TF_VAR_web_image_tag` is the build the service runs, as a bare commit SHA. `infra/variables.tf`'s validation block requires that shape. On a laptop, use the SHA the service is running, or `plan` shows an image change that isn't coming. `destroy` only needs a value of the right shape. `migrate_image_tag` defaults to `web_image_tag`, and only the `deploy` job sets the two apart.
-
-```bash
-export TF_VAR_web_image_tag=$(git rev-parse --short HEAD)
-```
-
-`TF_VAR_worker_image_tag` is the worker image's own build SHA. GPU worker deployment stays manual ([`ARCHITECTURE.md`](ARCHITECTURE.md)), so unlike `web_image_tag` this doesn't move on every release — it only changes when you actually build and push a new worker image (["Building and pushing the worker image"](#building-and-pushing-the-worker-image), below). Terraform can't verify the tag has actually been pushed, the same way it can't for `web_image_tag`; it only validates the shape. On a fresh account with nothing pushed yet, the current commit is a reasonable placeholder:
-
-```bash
-export TF_VAR_worker_image_tag=$(git rev-parse --short HEAD)
-```
-
-`TF_VAR_clerk_secret_key_arn` includes Secrets Manager's six-character suffix. ECS matches a task definition's `valueFrom` against that suffix, so a partial ARN applies clean and only fails at task start. This `describe-secret` call needs the Clerk secret to already exist, so only run this after creating the secret in ["First-time account setup"](#first-time-account-setup).
-
-```bash
-export TF_VAR_clerk_secret_key_arn=$(aws secretsmanager describe-secret \
-  --region us-west-2 \
-  --secret-id ai-gaussian-splatter/clerk-secret-key \
-  --query ARN \
-  --output text)
-```
-
-`TF_VAR_hosted_zone_id` is the orky.net zone for the ALB's DNS record and ACM validation. Omitting it fails `terraform plan`/`apply`. The zone is referenced only, not created — it must already exist. Terraform adds the app's A-alias and ACM's validation CNAME to it; nothing else in the zone is this app's concern.
-
-```bash
-export TF_VAR_hosted_zone_id=$(aws route53 list-hosted-zones-by-name \
-  --dns-name orky.net \
-  --query "HostedZones[?Name=='orky.net.' && Config.PrivateZone==\`false\`].Id | [0]" \
-  --output text | cut -d/ -f3)
-```
+To see current estimated month-to-date spend, Billing console → **Billing Home** shows it on the landing page; **Cost Explorer** breaks it down by service. To check the budget directly instead of hunting the console, `aws budgets describe-budgets --account-id "$(aws sts get-caller-identity --query Account --output text)" --region us-east-1` returns its `CalculatedSpend` — the Budgets API is `us-east-1`-only regardless of the resources it's tracking.
 
 ### Configuring continuous deployment
 
-One-time, after [First-time account setup](#first-time-account-setup) and before [Going live](#going-live). The policy below names roles and repositories that only the first deploy creates. IAM allows that, since it doesn't check that a policy's resources exist. The `ai-gaussian-splatter-ci-deploy` role created below can't be Terraform-managed, since CI would need it to apply the config that creates it.
+One-time, after [First-time account setup](#first-time-account-setup) and before [Going live](#going-live). The CI role's policy names roles and repositories that only the first deploy creates. IAM allows that, since it doesn't check that a policy's resources exist. The `ai-gaussian-splatter-ci-deploy` role created below can't be Terraform-managed, since CI would need it to apply the config that creates it.
 
 #### Creating the OIDC provider and CI role
 
+`scripts/prod/configure-ci-role.sh` creates GitHub's OIDC provider if the account doesn't have it yet, then creates the role and writes both of its policies. It rewrites both policies on every run.
+
 ```bash
-# IAM allows only one OIDC provider per URL per account. Skip this call if `aws iam list-open-id-connect-providers`
-# already lists token.actions.githubusercontent.com — another app in this account created it already, and a repeat
-# call fails with EntityAlreadyExists. Reuse that provider; only this app's role and its trust policy are new.
-aws iam create-open-id-connect-provider \
-  --url https://token.actions.githubusercontent.com \
-  --client-id-list sts.amazonaws.com
-# No --thumbprint-list: IAM validates GitHub's TLS cert against its own trusted root CA library first, since GitHub's
-# OIDC endpoint chains to a public CA, and only falls back to thumbprint matching when it doesn't.
-
-# {owner}/{repo} are gh's own placeholders, resolved from this checkout's origin remote — nothing to substitute by
-# hand, and unlike <owner>/<repo> they're not shell redirection operators if this line is pasted as-is.
-REPO_INFO=$(gh api repos/{owner}/{repo} --jq '[.owner.login, .name, .owner.id, .id] | @tsv')
-read -r OWNER REPO OWNER_ID REPO_ID <<< "$REPO_INFO"
-
-cat > trust-policy.json <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Principal": {"Federated": "arn:aws:iam::$AWS_ACCOUNT_ID:oidc-provider/token.actions.githubusercontent.com"},
-    "Action": "sts:AssumeRoleWithWebIdentity",
-    "Condition": {
-      "StringEquals": {
-        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-        "token.actions.githubusercontent.com:sub": "repo:$OWNER@$OWNER_ID/$REPO@$REPO_ID:ref:refs/heads/main"
-      }
-    }
-  }]
-}
-EOF
-
-aws iam create-role --role-name ai-gaussian-splatter-ci-deploy \
-  --assume-role-policy-document file://trust-policy.json
+scripts/prod/configure-ci-role.sh
 ```
 
 #### Granting deploy permissions
 
-Unlike a design that delegates through a separate bootstrap role, this role needs the AWS permissions `terraform apply` itself uses directly, since nothing else stands between it and the resources it manages. IAM permissions are scoped by resource-name prefix where the service supports it (this app's own resources are all named or tagged `ai-gaussian-splatter-*`); the networking/database/load-balancer/budgets services below mostly don't support resource-level permissions for their create/modify/delete actions at all, so those stay `Resource: "*"` the same way they would under any tool. It's a reasonable starting point, not an exhaustively verified minimal policy. Expect `AccessDenied` errors during the first deploy, which is the first time this role creates every resource rather than updating it. Add the missing action with the same `aws iam put-role-policy` call below, then rerun the job (`gh run rerun <run-id> --failed-jobs`).
+Unlike a design that delegates through a separate bootstrap role, this role needs the AWS permissions `terraform apply` itself uses directly, since nothing else stands between it and the resources it manages. IAM permissions are scoped by resource-name prefix where the service supports it (this app's own resources are all named or tagged `ai-gaussian-splatter-*`); the networking/database/load-balancer/budgets services in it mostly don't support resource-level permissions for their create/modify/delete actions at all, so those stay `Resource: "*"` the same way they would under any tool. It's a reasonable starting point, not an exhaustively verified minimal policy. Expect `AccessDenied` errors during the first deploy, which is the first time this role creates every resource rather than updating it. Add the missing action to `DEPLOY_POLICY` in `scripts/prod/configure-ci-role.sh`, re-run the script, then rerun the job (`gh run rerun <run-id> --failed-jobs`).
 
-```bash
-cat > ci-deploy-policy.json <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {"Effect": "Allow", "Action": "ecr:GetAuthorizationToken", "Resource": "*"},
-    {"Effect": "Allow", "Action": [
-        "ecr:BatchCheckLayerAvailability", "ecr:PutImage", "ecr:InitiateLayerUpload",
-        "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer",
-        "ecr:CreateRepository", "ecr:DeleteRepository", "ecr:DescribeRepositories",
-        "ecr:PutLifecyclePolicy", "ecr:GetLifecyclePolicy", "ecr:TagResource", "ecr:PutImageTagMutability"
-      ], "Resource": "arn:aws:ecr:us-west-2:$AWS_ACCOUNT_ID:repository/ai-gaussian-splatter*"},
-    {"Effect": "Allow", "Action": "ecs:RunTask", "Resource": [
-        "arn:aws:ecs:us-west-2:$AWS_ACCOUNT_ID:task-definition/ai-gaussian-splatter-migrate:*",
-        "arn:aws:ecs:us-west-2:$AWS_ACCOUNT_ID:cluster/ai-gaussian-splatter"
-      ]},
-    {"Effect": "Allow", "Action": ["ecs:DescribeTasks", "ecs:DescribeServices"], "Resource": "*",
-      "Condition": {"ArnEquals": {"ecs:cluster": "arn:aws:ecs:us-west-2:$AWS_ACCOUNT_ID:cluster/ai-gaussian-splatter"}}},
-    {"Effect": "Allow", "Action": [
-        "ecs:DescribeTaskDefinition", "ecs:RegisterTaskDefinition", "ecs:DeregisterTaskDefinition",
-        "ecs:CreateCluster", "ecs:DeleteCluster", "ecs:DescribeClusters", "ecs:PutClusterCapacityProviders",
-        "ecs:CreateService", "ecs:UpdateService", "ecs:DeleteService", "ecs:TagResource",
-        "ecs:PutAccountSetting", "ecs:ListTagsForResource"
-      ], "Resource": "*"},
-    {"Effect": "Allow", "Action": [
-        "application-autoscaling:RegisterScalableTarget", "application-autoscaling:DeregisterScalableTarget",
-        "application-autoscaling:PutScalingPolicy", "application-autoscaling:DeleteScalingPolicy",
-        "application-autoscaling:DescribeScalableTargets", "application-autoscaling:DescribeScalingPolicies"
-      ], "Resource": "*"},
-    {"Effect": "Allow", "Action": "iam:PassRole", "Resource": [
-        "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-gaussian-splatter-execution",
-        "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-gaussian-splatter-migrate-task",
-        "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-gaussian-splatter-task",
-        "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-gaussian-splatter-worker"
-      ]},
-    {"Effect": "Allow", "Action": [
-        "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:TagRole",
-        "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRolePolicy", "iam:ListRolePolicies",
-        "iam:CreateInstanceProfile", "iam:DeleteInstanceProfile", "iam:GetInstanceProfile",
-        "iam:AddRoleToInstanceProfile", "iam:RemoveRoleFromInstanceProfile"
-      ], "Resource": "arn:aws:iam::$AWS_ACCOUNT_ID:*/ai-gaussian-splatter-*"},
-    {"Effect": "Allow", "Action": [
-        "s3:CreateBucket", "s3:DeleteBucket*", "s3:ListBucket", "s3:GetBucket*", "s3:PutBucket*",
-        "s3:PutObject", "s3:GetObject", "s3:DeleteObject",
-        "s3:PutEncryptionConfiguration", "s3:GetEncryptionConfiguration",
-        "s3:PutLifecycleConfiguration", "s3:GetLifecycleConfiguration"
-      ], "Resource": [
-        "arn:aws:s3:::ai-gaussian-splatter-*", "arn:aws:s3:::ai-gaussian-splatter-*/*"
-      ]},
-    {"Effect": "Allow", "Action": [
-        "ec2:CreateVpc", "ec2:DeleteVpc", "ec2:DescribeVpcs", "ec2:ModifyVpcAttribute",
-        "ec2:CreateSubnet", "ec2:DeleteSubnet", "ec2:DescribeSubnets", "ec2:ModifySubnetAttribute",
-        "ec2:CreateInternetGateway", "ec2:DeleteInternetGateway", "ec2:AttachInternetGateway",
-        "ec2:DetachInternetGateway", "ec2:DescribeInternetGateways",
-        "ec2:CreateRouteTable", "ec2:DeleteRouteTable", "ec2:CreateRoute", "ec2:DeleteRoute",
-        "ec2:AssociateRouteTable", "ec2:DisassociateRouteTable", "ec2:DescribeRouteTables",
-        "ec2:CreateVpcEndpoint", "ec2:DeleteVpcEndpoints", "ec2:DescribeVpcEndpoints",
-        "ec2:CreateSecurityGroup", "ec2:DeleteSecurityGroup", "ec2:DescribeSecurityGroups",
-        "ec2:AuthorizeSecurityGroupIngress", "ec2:AuthorizeSecurityGroupEgress",
-        "ec2:RevokeSecurityGroupIngress", "ec2:RevokeSecurityGroupEgress",
-        "ec2:DescribeSecurityGroupRules", "ec2:UpdateSecurityGroupRuleDescriptionsIngress",
-        "ec2:UpdateSecurityGroupRuleDescriptionsEgress",
-        "ec2:CreateTags", "ec2:DeleteTags", "ec2:DescribeTags", "ec2:DescribeAvailabilityZones"
-      ], "Resource": "*"},
-    {"Effect": "Allow", "Action": [
-        "rds:CreateDBInstance", "rds:DeleteDBInstance", "rds:ModifyDBInstance", "rds:DescribeDBInstances",
-        "rds:CreateDBSubnetGroup", "rds:DeleteDBSubnetGroup", "rds:DescribeDBSubnetGroups",
-        "rds:AddTagsToResource", "rds:ListTagsForResource"
-      ], "Resource": "*"},
-    {"Effect": "Allow", "Action": [
-        "elasticloadbalancing:CreateLoadBalancer", "elasticloadbalancing:DeleteLoadBalancer",
-        "elasticloadbalancing:DescribeLoadBalancers", "elasticloadbalancing:ModifyLoadBalancerAttributes",
-        "elasticloadbalancing:CreateTargetGroup", "elasticloadbalancing:DeleteTargetGroup",
-        "elasticloadbalancing:DescribeTargetGroups", "elasticloadbalancing:ModifyTargetGroupAttributes",
-        "elasticloadbalancing:CreateListener", "elasticloadbalancing:DeleteListener",
-        "elasticloadbalancing:DescribeListeners", "elasticloadbalancing:ModifyListener",
-        "elasticloadbalancing:AddTags", "elasticloadbalancing:DescribeTags"
-      ], "Resource": "*"},
-    {"Effect": "Allow", "Action": [
-        "route53:ChangeResourceRecordSets", "route53:GetHostedZone", "route53:ListResourceRecordSets",
-        "route53:GetChange"
-      ], "Resource": "*"},
-    {"Effect": "Allow", "Action": [
-        "acm:RequestCertificate", "acm:DeleteCertificate", "acm:DescribeCertificate", "acm:AddTagsToCertificate"
-      ], "Resource": "*"},
-    {"Effect": "Allow", "Action": [
-        "budgets:ViewBudget", "budgets:ModifyBudget"
-      ], "Resource": "*"},
-    {"Effect": "Allow", "Action": [
-        "logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:DescribeLogGroups", "logs:PutRetentionPolicy",
-        "logs:TagResource"
-      ], "Resource": "arn:aws:logs:us-west-2:$AWS_ACCOUNT_ID:log-group:/ecs/ai-gaussian-splatter-*"},
-    {"Effect": "Allow", "Action": ["secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue"],
-      "Resource": "arn:aws:secretsmanager:us-west-2:$AWS_ACCOUNT_ID:secret:*"},
-    {"Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject", "s3:ListBucket"], "Resource": [
-        "arn:aws:s3:::ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID",
-        "arn:aws:s3:::ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID/*"
-      ]}
-  ]
-}
-EOF
-aws iam put-role-policy --role-name ai-gaussian-splatter-ci-deploy \
-  --policy-name deploy --policy-document file://ci-deploy-policy.json
-```
-
-`ecs:DescribeTaskDefinition` and most of the networking/database/load-balancer/budgets actions above have no resource-level permissions to scope to, hence `Resource: "*"` — this is an AWS API limitation these services share regardless of which tool manages them. `ecs:RunTask`'s task-definition ARN uses the wildcard-revision form (`:*`), not a pinned revision. A pinned one would break on every new migration image push, since each push registers a new revision. The last statement grants read/write on the Terraform state bucket itself, without which `terraform init`/`apply` can't read or update state at all.
+`ecs:DescribeTaskDefinition` and most of the networking/database/load-balancer/budgets actions in that policy have no resource-level permissions to scope to, hence `Resource: "*"` — this is an AWS API limitation these services share regardless of which tool manages them. `ecs:RunTask`'s task-definition ARN uses the wildcard-revision form (`:*`), not a pinned revision. A pinned one would break on every new migration image push, since each push registers a new revision. The last statement grants read/write on the Terraform state bucket itself, without which `terraform init`/`apply` can't read or update state at all. The role can't read any secret's value. Its only Secrets Manager grant is `CreateSecret` and `TagResource` on RDS's own `rds!` secrets, plus `kms:DescribeKey`, which RDS requires from whoever creates an instance with `manage_master_user_password`. Reading the Clerk and database secrets at runtime is the ECS execution and task roles' job (`infra/web.tf`).
 
 #### Setting GitHub repository variables
 
-Set these as GitHub repository variables (Settings → Secrets and variables → Actions → Variables). `.github/workflows/deploy.yml` reads them as `vars.*`:
+`.github/workflows/deploy.yml` reads its configuration from GitHub repository variables (`vars.*`). `scripts/prod/set-gh-repo-variables.sh` sets all of them. `scripts/prod/terraform-plan.sh` and `scripts/prod/terraform-destroy.sh` read the same ones back. It needs `gh` signed in with write access to the repository, and the Clerk secret from [First-time account setup](#first-time-account-setup).
 
-- `AWS_ACCOUNT_ID`
-- `HOSTED_ZONE_ID`
-- `CLERK_SECRET_KEY_ARN`
-- `ALERT_EMAIL`
-- `APP_PUBLIC_URL`
-- `WORKER_AMI_ID`
-- `WORKER_IMAGE_TAG` — same reasoning as `WORKER_AMI_ID`: GPU worker deployment stays manual, so this changes only when someone hand-pushes a new worker image (["Building and pushing the worker image"](#building-and-pushing-the-worker-image)), not on every deploy. Before the first worker image exists, any commit SHA passes validation.
-- `CLERK_PUBLISHABLE_KEY` (the `pk_live_...` key, not the secret one)
+```bash
+scripts/prod/set-gh-repo-variables.sh
+```
+
+It looks these up rather than asking:
+
+- `AWS_ACCOUNT_ID` is the signed-in account. The deploy job builds the CI role's ARN and the state bucket name from it.
+- `HOSTED_ZONE_ID` is the `orky.net` zone for the ALB's DNS record and ACM validation. The zone is referenced only, not created, so it must already exist. Terraform adds the app's A-alias and ACM's validation CNAME to it; nothing else in the zone is this app's concern.
+- `CLERK_SECRET_KEY_ARN` is the full ARN, including Secrets Manager's six-character suffix. ECS matches a task definition's `valueFrom` against that suffix, so a partial ARN applies clean and only fails at task start.
+- `APP_PUBLIC_URL` is where the worker PATCHes job status back to, and what the ALB is aliased to. It's read from `local.app_hostname` in `infra/locals.tf`, which the certificate and the Route 53 record are built from too.
+
+It asks for these, defaulting to each one's current value:
+
+- `ALERT_EMAIL` is where the AWS Budget (`infra/budgets.tf`) sends spend alerts directly, with no subscription-confirmation step to check. Nothing can tell a wrong address from a right one, and a wrong one applies green with the alerts never arriving. The only way to catch a typo is to watch for a real alert once spend crosses a threshold, or temporarily lower `monthly_budget_limit_usd` to force one.
+- `CLERK_PUBLISHABLE_KEY` is the `pk_live_...` key, not the secret one.
+- `WORKER_AMI_ID` is the AMI each job's spot instance boots. `web/lib/server/ec2Launcher.ts`'s user data runs `aws ecr get-login-password` and `docker run --gpus all` with no provisioning of its own, so the image must already carry Docker, the NVIDIA driver and container toolkit, and the AWS CLI. AWS's Deep Learning Base GPU AMIs do, and the script lists the newest five before asking.
+
+`WORKER_IMAGE_TAG` is set to the current commit only while it's unset. GPU worker deployment stays manual ([`ARCHITECTURE.md`](ARCHITECTURE.md)), so after that it changes only through [Building and pushing the worker image](#building-and-pushing-the-worker-image). Terraform can't verify the tag has been pushed. Its validation checks only the shape.
 
 Live re-resolution (`aws route53 list-hosted-zones-by-name`, etc.) was deliberately skipped for these in CI — one production environment, rarely-changing values, and a `vars.*` edit is itself a reviewable, logged event, unlike giving the CI role extra read permissions just to re-derive them every run.
 
@@ -579,35 +234,22 @@ A push that touches only `.md` files doesn't deploy. `.github/workflows/ci.yml`'
 
 Unlike the web/migrate images, nothing builds or pushes this on its own — GPU worker deployment stays manual ([`ARCHITECTURE.md`](ARCHITECTURE.md)). Do this whenever `worker/` changes and you want a job to actually pick up the new build. Its repository, `aws_ecr_repository.worker`, comes from the first deploy. That deploy doesn't need an image in it yet, since `WORKER_IMAGE_URI` is just a string env var the web task carries, not something ECS itself tries to pull.
 
+The image is tagged with the current commit, so commit any `worker/` changes first.
+
 ```bash
-cd "$(git rev-parse --show-toplevel)"
-
-REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com
-REPO=$REGISTRY/ai-gaussian-splatter-worker
-
-aws ecr get-login-password --region us-west-2 | podman login --username AWS --password-stdin $REGISTRY
-
-podman build -t $REPO:$TF_VAR_worker_image_tag worker
-podman push $REPO:$TF_VAR_worker_image_tag
+scripts/prod/push-worker-image.sh
 ```
 
-Then set the `WORKER_IMAGE_TAG` repository variable ([Setting GitHub repository variables](#setting-github-repository-variables)) to the tag just pushed. The next deploy passes it as `TF_VAR_worker_image_tag`, which points `WORKER_IMAGE_URI` on the web task definition at the new image. Until then, job launches keep using the old one.
+After the push, the script sets the `WORKER_IMAGE_TAG` repository variable ([Setting GitHub repository variables](#setting-github-repository-variables)) to the new tag. The next deploy passes it as `TF_VAR_worker_image_tag`, which points `WORKER_IMAGE_URI` on the web task definition at the new image. Until then, job launches keep using the old one.
 
 Only the last `local.worker_releases_kept` images are kept (`infra/registry.tf`) — far fewer than the web repository's `local.releases_kept`, since the ~19 GB worker image isn't part of any ECS rollback mechanism: `WORKER_IMAGE_URI` just names whatever tag `worker_image_tag` currently points at, with nothing to roll back to the way a task definition revision does. That makes a stale `WORKER_IMAGE_TAG` the risk. Once `local.worker_releases_kept` newer images exist, the lifecycle policy expires the tag it names, and every job launch then fails its pull and bills until the `WORKER_MAX_LIFETIME_MINUTES` shutdown.
 
-### Running Terraform from a laptop
+### Running Terraform locally
 
-A `terraform plan` preview and a teardown are the only Terraform a human runs against `infra/`. Don't `apply` from here, because only the `deploy` job runs migrations before rolling the service. Sign in ([Signing in to AWS](#signing-in-to-aws)) and export the variables ([Resolving variable values](#resolving-variable-values)) first, then point `infra/` at the state bucket:
+A `terraform plan` preview and a teardown are the only Terraform a human runs against `infra/`. Don't `apply` from here, because only the `deploy` job runs migrations before rolling the service. `scripts/prod/terraform-plan.sh` needs you signed in ([Signing in to AWS](#signing-in-to-aws)) to the account the `AWS_ACCOUNT_ID` repository variable names. It takes every Terraform variable from the repository variables ([Setting GitHub repository variables](#setting-github-repository-variables)) except `web_image_tag`. That one comes from the task definition the service is running, or the plan would show an image change that isn't coming.
 
 ```bash
-cd "$(git rev-parse --show-toplevel)/infra"
-
-terraform init \
-  -backend-config="bucket=ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID" \
-  -backend-config="key=infra.tfstate" \
-  -backend-config="region=us-west-2"
-
-terraform plan
+scripts/prod/terraform-plan.sh
 ```
 
 ## Fixing a bad migration
@@ -627,14 +269,12 @@ If the `deploy` job's migration step fails for an infra reason rather than a bad
 
 ## Tearing down
 
-`terraform destroy` removes everything in `infra/`'s state, including the 3 data S3 buckets (force-destroyed, contents and all) and the RDS instance (no final snapshot). It needs the same seven variable values as a deploy, resolved the same way ([Resolving variable values](#resolving-variable-values)) and exported as `TF_VAR_*` — a missing one fails before anything is destroyed, same as a missing value fails `apply`. Run it signed in, from an `infra/` initialized against the state bucket ([Running Terraform from a laptop](#running-terraform-from-a-laptop)).
+`scripts/prod/terraform-destroy.sh` removes everything in `infra/`'s state, including the 3 data S3 buckets (force-destroyed, contents and all) and the RDS instance (no final snapshot). It reads its variables the same way as [Running Terraform locally](#running-terraform-locally). `scripts/prod/delete-tf-state-bucket.sh` below checks the `AWS_ACCOUNT_ID` one against the signed-in account. Delete the repository variables only after both have finished.
 
-Turn the `deploy` job off first (`if: false && …` in `.github/workflows/ci.yml`) and land that on `main` before destroying. Otherwise the next push to `main` finds an empty state and deploys the whole stack again.
+Turn the `deploy` job off first (`if: false && …` in `.github/workflows/ci.yml`) and land that on `main` before destroying. Otherwise the next push to `main` finds an empty state and deploys the whole stack again. The script refuses to run until `origin/main` has the job off.
 
 ```bash
-cd "$(git rev-parse --show-toplevel)/infra"
-
-terraform destroy
+scripts/prod/terraform-destroy.sh
 ```
 
 **This is a full, unconditional teardown** — unlike some infrastructure-as-code setups that protect data resources from deletion by default, nothing here does, because there's no real data yet to protect (see `infra/data.tf`'s comments on `force_destroy`/`skip_final_snapshot`). Revisit this before a real deploy holds real uploads or splats: add `lifecycle { prevent_destroy = true }` to the 3 buckets and `aws_db_instance.main`, and drop `force_destroy`/`skip_final_snapshot`, so a `terraform destroy` run by mistake fails loudly on those resources instead of quietly deleting user data.
@@ -643,18 +283,8 @@ The ECR repository (`infra/registry.tf`) is destroyed too — `force_delete = tr
 
 Resources this config never owned — hand-created in [First-time account setup](#first-time-account-setup) and [Configuring continuous deployment](#configuring-continuous-deployment) — are untouched by `terraform destroy` and need their own manual cleanup, if you want them gone too: the Clerk secret (`ai-gaussian-splatter/clerk-secret-key`), the `ai-gaussian-splatter-ci-deploy` IAM role and its inline policy, the GitHub OIDC provider (skip if another app in the account still uses it), the `orky.net` Route 53 hosted zone (referenced only — this app never owned it), `AWSServiceRoleForEC2Spot` (account-wide, shared with any other Spot workload), the GitHub repository variables, and the state bucket itself. None of these cost anything meaningful to leave in place, and several (the OIDC provider, the Spot service-linked role, the hosted zone) are shared or reused, so deleting them isn't a like-for-like undo of `terraform apply`.
 
-Only delete the state bucket after `infra/`'s own destroy has finished with it. Versioning is on, so empty current objects and old versions before `delete-bucket`. The name uses the signed-in account. `delete-objects` takes at most 1000 keys, but the CLI merges every page of `list-object-versions` into one result. `--no-paginate` keeps each listing to a single S3 page of at most 1000 versions and delete markers combined, so the loop repeats until a page has no keys. `--max-items` can't replace it, because it counts only `Versions` and lets delete markers through uncounted.
+Only delete the state bucket after `scripts/prod/terraform-destroy.sh` has finished with it. The script refuses while the state still tracks any resource.
 
 ```bash
-export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-BUCKET="ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID"
-while :; do
-  OBJECTS=$(aws s3api list-object-versions --bucket "$BUCKET" --region us-west-2 --no-paginate \
-    --output json --query '{Objects: [Versions[], DeleteMarkers[]][].{Key:Key,VersionId:VersionId}}')
-  if ! printf '%s' "$OBJECTS" | grep -q '"Key"'; then
-    break
-  fi
-  aws s3api delete-objects --bucket "$BUCKET" --region us-west-2 --delete "$OBJECTS" || break
-done
-aws s3api delete-bucket --bucket "$BUCKET" --region us-west-2
+scripts/prod/delete-tf-state-bucket.sh
 ```

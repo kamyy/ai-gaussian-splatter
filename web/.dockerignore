@@ -1,38 +1,47 @@
-# Without this, the `COPY . .` in the builder stage overwrites the deps stage's cleanly-installed
-# node_modules with the host's — which may hold packages built for a different platform — and bakes
-# local .env files into an image layer.
-node_modules
-.next
-.env
-.env.*
-# Local CA/certs (RDS bundle is ADDed in the Dockerfile, not copied from the host).
-*.pem
+# An allowlist. Everything stays out of the build context except what's re-included below, so `COPY . .` in the builder
+# stage can't sweep in local files. Those include .env files and other credentials, a database dump, the host's
+# node_modules (which may hold packages built for another platform), and the Clerk development secret in
+# .clerk/.tmp/keyless.json.
+*
 
-# Tool state written into the working tree. `.clerk/.tmp/keyless.json` holds a Clerk development secret
-# key, which `COPY . .` would put in a builder layer. The final image never sees it (web copies only
-# build output), but it still has no business in the build context.
-.clerk
-.cursor
-.vercel
+# Root-level source and config, by type rather than by name, so a Next.js convention file added later is picked up
+# automatically. proxy.ts is one. Leaving it out would stop clerkMiddleware() from running, and the build would still
+# pass.
+!*.ts
+!*.tsx
+!*.mjs
+!*.js
+!package.json
+!pnpm-lock.yaml
+!tsconfig.json
 
-e2e
-test
-test-results
-playwright-report
-coverage
+# Whole directories. A new directory of code that isn't listed here fails the build loudly as soon as something imports
+# it. A non-code file the app reads at runtime, outside these directories, needs its own line.
+!app/
+!components/
+!lib/
+!drizzle/
+!scripts/
+!public/
+
+# Everything below is re-excluded after the allowlist above lets it back in. next-env.d.ts is generated, and next build
+# writes its own.
+next-env.d.ts
 playwright.config.ts
-vitest.config.mts
-# `**/` is required: a bare `*.test.ts` matches root-level paths only, which leaves nested tests in
-# the context while `test/` — holding the setup file their matcher types come from — is excluded, and
-# `next build` type-checks them and fails.
+# `**/` is required: a bare `*.test.ts` matches root-level paths only. That leaves nested tests in the context while
+# tests/, holding the setup file their matcher types come from, stays out, and `next build` type-checks them and fails.
 **/*.test.ts
 **/*.test.tsx
 
-.git
-.gitignore
-Dockerfile
-.dockerignore
-README.md
-AGENTS.md
-CLAUDE.md
-tsconfig.tsbuildinfo
+# Credentials, at any depth, including inside the directories allowed above. Patterns match from the context root, not
+# at every level the way .gitignore's do, so each needs the **/ prefix.
+**/.env
+**/.env.*
+**/.npmrc
+**/.aws/
+**/.ssh/
+**/id_rsa*
+**/*.key
+**/*.p12
+# Local CA/certs (the RDS bundle is ADDed in the Dockerfile, not copied from the host).
+**/*.pem

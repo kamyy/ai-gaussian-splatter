@@ -1,22 +1,28 @@
 #!/usr/bin/env bash
 # Starts the splat-pg Postgres container if needed, then creates the empty dev and test databases. Does not migrate.
 # Vitest's globalSetup (web/tests/migrate-test-db.ts) applies web/drizzle/ to TEST_DATABASE_URL.
+
 set -euo pipefail
 
 CONTAINER=splat-pg
 VOLUME=splat-pg-data
+DEV_DB=ai_gaussian_splatter
 TEST_DB=ai_gaussian_splatter_test
 
-if podman container exists "$CONTAINER"; then
-  podman start "$CONTAINER" >/dev/null
-else
+if ! podman container exists "$CONTAINER"; then
   podman run -d --name "$CONTAINER" --restart=always \
     -p 5432:5432 \
     -v "$VOLUME":/var/lib/postgresql \
     -e POSTGRES_USER=postgres \
     -e POSTGRES_PASSWORD=postgres \
-    -e POSTGRES_DB=ai_gaussian_splatter \
-    postgres:18
+    -e POSTGRES_DB="$DEV_DB" \
+    postgres:18 >/dev/null
+  echo "Created the $CONTAINER container. Its data, including the $DEV_DB database, lives in $VOLUME."
+elif [[ $(podman container inspect -f '{{.State.Running}}' "$CONTAINER") == true ]]; then
+  echo "$CONTAINER is already running."
+else
+  podman start "$CONTAINER" >/dev/null
+  echo "Started the existing $CONTAINER container."
 fi
 
 # pg_isready, psql, and createdb are in the postgres:18 image. Assume the host has no Postgres client.
@@ -31,8 +37,14 @@ until podman exec "$CONTAINER" pg_isready -h 127.0.0.1 -U postgres >/dev/null; d
   fi
   sleep 0.2
 done
+echo "Postgres is accepting connections on localhost:5432."
 
-if ! podman exec "$CONTAINER" psql -U postgres -d postgres -tAc \
-  "SELECT datname FROM pg_database WHERE datname='${TEST_DB}'" | grep -qx "$TEST_DB"; then
-  podman exec "$CONTAINER" createdb -U postgres "$TEST_DB"
-fi
+for db in "$DEV_DB" "$TEST_DB"; do
+  if podman exec "$CONTAINER" psql -U postgres -d postgres -tAc \
+    "SELECT datname FROM pg_database WHERE datname='${db}'" | grep -qx "$db"; then
+    echo "The $db database already exists."
+  else
+    podman exec "$CONTAINER" createdb -U postgres "$db"
+    echo "Created the $db database."
+  fi
+done
