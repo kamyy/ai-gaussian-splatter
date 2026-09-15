@@ -1,21 +1,17 @@
-# Not a build-time optimization: podman reads context files lazily per COPY, so
-# a warm rebuild takes the same ~3.5s with or without this file. What it buys is
-# that `.env` — real AWS credentials — and the 5 GB `.venv` stay outside the
-# context, so a future broad `COPY . .` can't sweep them into the image the way
-# the current selective COPY lines happen not to. RUNBOOK.md's local pipeline run
-# leaves `photos/` and `jobdir/` here between rebuilds for the same reason.
-#
-# Patterns match paths relative to this directory and are not applied at every
-# level the way .gitignore's are, so anything that can appear inside pipeline/
-# needs the `**/` prefix — `__pycache__/` alone would let COPY pipeline/ ship it.
-.venv/
+# An allowlist. Everything stays out of the build context except what the Dockerfile copies, so .env (real AWS
+# credentials), the 5 GB .venv, and the photos/ and jobdir/ that scripts/dev/worker-reconstruct.sh leaves here can't
+# reach an image, even through a future broad COPY. A file the Dockerfile needs but this list leaves out fails its COPY
+# line outright, so a gap can't pass silently.
+*
+!pyproject.toml
+!uv.lock
+!pipeline/
+!run_job.py
+
+# Re-excluded inside pipeline/, which the allowlist above lets back in whole. Patterns match from the context root, not
+# at every level the way .gitignore's do, so each needs the **/ prefix.
 **/__pycache__/
-.mypy_cache/
-.pytest_cache/
-.ruff_cache/
-.vscode/
-.env
-.env.*
-tests/
-jobdir/
-photos/
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
