@@ -7,7 +7,7 @@ set -euo pipefail
 ROOT=$(git rev-parse --show-toplevel)
 source "$ROOT/scripts/lib/terraform.sh"
 
-require_local_terraform
+TERRAFORM=$(tf_bin)
 
 "$TERRAFORM" -chdir="$ROOT/infra" fmt -check -recursive
 "$TERRAFORM" -chdir="$ROOT/infra" init -backend=false -input=false

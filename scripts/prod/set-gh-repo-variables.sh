@@ -11,6 +11,7 @@ ROOT=$(git rev-parse --show-toplevel)
 source "$ROOT/scripts/lib/require-aws-login.sh"
 source "$ROOT/scripts/lib/confirm.sh"
 source "$ROOT/scripts/lib/github.sh"
+source "$ROOT/scripts/lib/terraform.sh"
 
 # Prints a repository variable's current value, or nothing when it's unset.
 current() {
@@ -34,11 +35,7 @@ ask() {
 require_aws_login
 require_gh_login
 
-ZONE_NAME=$(grep -oP 'domain_zone_name\s*=\s*"\K[^"]+' "$ROOT/infra/locals.tf" || true)
-if [[ -z $ZONE_NAME ]]; then
-  echo "Can't read local.domain_zone_name from infra/locals.tf." >&2
-  exit 1
-fi
+ZONE_NAME=$(tf_local_var domain_zone_name)
 # The API returns the ID as /hostedzone/<id>, and var.hosted_zone_id takes the bare ID.
 HOSTED_ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name "$ZONE_NAME" \
   --query "HostedZones[?Name=='$ZONE_NAME.' && Config.PrivateZone==\`false\`].Id | [0]" \
@@ -56,13 +53,7 @@ fi
 
 # The certificate and Route 53 record are built from local.app_hostname too, so reading it here keeps the worker's
 # status callbacks aimed at a host that answers.
-APP_HOSTNAME=$(grep -oP 'app_hostname\s*=\s*"\K[^"]+' "$ROOT/infra/locals.tf" || true)
-# shellcheck disable=SC2016 # The single quotes match Terraform's own ${...} literally.
-APP_HOSTNAME=${APP_HOSTNAME//'${local.domain_zone_name}'/$ZONE_NAME}
-if [[ -z $APP_HOSTNAME || $APP_HOSTNAME == *\$\{* ]]; then
-  echo "Can't resolve local.app_hostname in infra/locals.tf: $APP_HOSTNAME" >&2
-  exit 1
-fi
+APP_HOSTNAME=$(tf_app_hostname "$ZONE_NAME")
 APP_PUBLIC_URL=https://$APP_HOSTNAME
 
 ALERT_EMAIL=$(ask "Budget alert email" "$(current ALERT_EMAIL)")

@@ -7,7 +7,7 @@ set -euo pipefail
 ROOT=$(git rev-parse --show-toplevel)
 source "$ROOT/scripts/lib/require-aws-login.sh"
 source "$ROOT/scripts/lib/confirm.sh"
-source "$ROOT/scripts/lib/project-tag.sh"
+source "$ROOT/scripts/lib/terraform.sh"
 
 # Reads a secret from the terminal and prints a * per character, so a paste is visible as a mask.
 # Backspace removes one character. Ctrl-U clears the line.
@@ -45,6 +45,7 @@ read_masked() {
 }
 
 SECRET_NAME=ai-gaussian-splatter/clerk-secret-key
+PROJECT_TAG=$(tf_local_var project_tag)
 
 require_aws_login
 BUCKET="ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID"

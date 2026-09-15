@@ -13,6 +13,7 @@ require_aws_login
 require_gh_login
 require_aws_deploy_account
 
+TERRAFORM=$(tf_bin)
 load_tf_vars
 tf_init
 "$TERRAFORM" -chdir="$ROOT/infra" plan "$@"

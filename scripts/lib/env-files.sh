@@ -1,6 +1,6 @@
 # shellcheck shell=bash
-# Sourced by scripts/dev/create-dev-resources.sh and scripts/lib/worker.sh. web/.env isn't committed, so the template
-# below is the only record of what it holds. Not meant to be run directly.
+# Sourced by scripts/dev/create-dev-resources.sh, scripts/lib/worker.sh, and scripts/dev/run-web-container.sh.
+# web/.env isn't committed, so the template below is the only record of what it holds. Not meant to be run directly.
 
 # Usage: create_env_file <path> <template-function>
 #

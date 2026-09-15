@@ -14,6 +14,7 @@ require_aws_login
 require_gh_login
 require_aws_deploy_account
 BUCKET="ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID"
+TERRAFORM=$(tf_bin)
 
 # Refuses while the state still tracks anything, for example after a destroy that failed partway. Deleting it then would
 # leave those resources with nothing that can remove them, and their fixed names would block the next deploy.
