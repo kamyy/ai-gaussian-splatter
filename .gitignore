@@ -46,10 +46,9 @@ next-env.d.ts
 worker/local_data/
 worker/*.ply
 worker/*.splat
-# The bind mount and photo source in RUNBOOK.md's "Running the pipeline", both
-# created in worker/. Path-anchored, so web/app/api/v1/splats/[splatId]/photos/
-# stays tracked. worker/.dockerignore repeats them to keep them out of the
-# build context.
+# The bind mount and default photo source of scripts/dev/worker-reconstruct.sh, both in worker/. Path-anchored, so
+# web/app/api/v1/splats/[splatId]/photos/ stays tracked. worker/.dockerignore repeats them to keep them out of the build
+# context.
 worker/jobdir/
 worker/photos/
 
