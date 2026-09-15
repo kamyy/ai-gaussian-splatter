@@ -126,7 +126,7 @@ jobs:
       # re-running this job after a failure in any step below would otherwise abort here with ImageTagAlreadyExists —
       # podman builds aren't bit-reproducible, so rebuilding the same commit produces a different digest. Skipping
       # makes the whole job re-runnable. `batch-get-image` rather than `describe-images` because the CI role already
-      # grants it (RUNBOOK.md).
+      # grants it (scripts/prod/configure-ci-role.sh).
       - name: Build and push images
         working-directory: web
         env:

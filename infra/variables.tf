@@ -37,8 +37,8 @@ variable "hosted_zone_id" {
   description = "Route 53 hosted zone id for orky.net. Only records are added here; the zone itself is never created or destroyed by this config."
   type        = string
 
-  # Catches the empty string CI sends for an unset repository variable (AGENTS.md), or the `/hostedzone/`-prefixed
-  # form the Route 53 API returns, which RUNBOOK.md's lookup strips.
+  # Catches the empty string CI sends for an unset repository variable (AGENTS.md), or the `/hostedzone/`-prefixed form
+  # the Route 53 API returns, which scripts/prod/set-gh-repo-variables.sh strips.
   validation {
     condition     = can(regex("^Z[0-9A-Z]+$", var.hosted_zone_id))
     error_message = "hosted_zone_id must be a bare Route 53 zone ID like Z0123456789ABCDEFGHIJ, without the /hostedzone/ prefix (see RUNBOOK.md)."
