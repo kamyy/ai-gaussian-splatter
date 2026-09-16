@@ -15,7 +15,7 @@ The `deploy` job (`.github/workflows/deploy.yml`) does every deploy, the first o
 
 | Situation | What to do |
 |---|---|
-| `web/` or `infra/*.tf` change, job on | Land it on `main` through a PR. The job builds, migrates, and rolls out. A push touching only `.md` files skips the whole workflow (`paths-ignore`). |
+| `web/` or `infra/*.tf` change, job on | Land it on `main` through a PR. The job builds, migrates, and rolls out. A push touching only `.md` files or `LICENSE` skips the whole workflow (`paths-ignore`). |
 | Fresh or torn-down account | [Creating account prerequisites](../../../RUNBOOK.md#creating-account-prerequisites) (`scripts/prod/create-account-prereqs.sh`) → [Configuring continuous deployment](../../../RUNBOOK.md#configuring-continuous-deployment) (`scripts/prod/configure-ci-role.sh`, then `scripts/prod/set-gh-repo-variables.sh`) → [Going live](../../../RUNBOOK.md#going-live) (`gh variable set DEPLOY_ENABLED --body true`). After the first run, `scripts/prod/worker-push-image.sh`. |
 | New worker image | `scripts/prod/worker-push-image.sh` ([Building and pushing the worker image](../../../RUNBOOK.md#building-and-pushing-the-worker-image)). It also updates `WORKER_IMAGE_TAG`, and the next deploy points `WORKER_IMAGE_URI` at it. |
 | Preview a change | `scripts/prod/terraform-plan.sh` ([Running Terraform locally](../../../RUNBOOK.md#running-terraform-locally)). Never `apply` from there. Only the job runs migrations before rolling the service. |
