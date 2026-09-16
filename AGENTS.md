@@ -11,13 +11,24 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
   - This file is what breaks if you don't know it: gotchas, conventions, and current state. Where a gotcha needs its rationale, name the other file instead of restating it.
 - **Docs and code comments describe current behavior only** — not prior libraries, old version numbers, or "this used to fail with X." Use `git log` for this instead.
 - **Be human readable — fact plus the non-obvious reason.** Shortest accurate statement; no walkthrough of alternatives or restating the same point from multiple angles.
+- **Cut anything the reader wouldn't act on differently.**
+  - A sentence that only reassures — that nothing goes wrong, or that a service accepts what the code already does — costs the reader attention and changes nothing they do.
+  - Mechanism a reader never invokes themselves costs the same: name the requirement it implies and drop the mechanism.
+- **When asked why something is the way it is, answer in the conversation rather than by growing the doc.** Edit the doc only when the answer is a fact a reader needs at that spot, and then write the shortest version of it.
 - **Write comments as real sentences, not em-dash-fused fragments.**
   - Each independent clause gets its own sentence with a period; don't join two of them with ` — ` where a period would do.
   - An em dash is fine for a single aside inside one sentence, not as a substitute for ending it.
 - **One idea per sentence.**
   - When a comment has two reasons, two caveats, or a reason plus a caveat, give each its own sentence rather than nesting one inside the other's clause.
   - A sentence stacking multiple qualifiers is harder to parse than the same content split, even when every word is accurate.
+- **Keep parallel facts in parallel shapes, and prefer positive verbs.**
+  - Several facts hung off one subject only read cleanly when they're the same kind of fact. A failure condition, an action, and a conditional action need their own sentences.
+  - Don't coordinate a negated verb with a positive one, as in "won't run unless you're signed in, and prints the account". The reader has to work out that the second half applies in the case the first half rules out.
 - **Reference files by their full package-relative path, not a bare filename** — `web/proxy.ts`, not `proxy.ts`. Do this every time the file is named, even right next to an earlier mention that already gave the full path; don't rely on the reader having seen that earlier sentence.
+- **Name the subject instead of pointing at it.** The full-path rule applies to every subject, not just files.
+  - "the root module", "this app", and "this config" all make the reader work out which thing is meant, and each one goes stale the moment that thing is renamed or split. Write `infra/`, or the ECS task, or whichever it is.
+  - A bare "one" or "the AWS ones" standing in for a noun from an earlier sentence has the same problem. Repeat the noun.
+  - A demonstrative pointing at the immediately preceding noun in the same sentence is fine.
 - **When prose names another section — in the same doc or a different one — link it, don't just quote or bold the name.**
   - Use `[Section name](#section-name)` for a same-file reference and `[Section name](OTHER.md#section-name)` across files, with the anchor GitHub/VS Code derive from the heading (lowercase, spaces to hyphens, punctuation stripped).
   - A plain quoted or bolded name silently goes stale the moment the target heading is renamed; a broken link is easier to spot in review.
@@ -30,7 +41,7 @@ Monorepo, three independent packages:
 
 - `web/` — Next.js 16 (App Router) + MUI + SWR + Zustand + react-three-fiber, **and** the REST API as Route Handlers under `app/api/v1/` backed by Drizzle.
 - `worker/` — COLMAP + gsplat pipeline, runs on an EC2 GPU spot instance per job.
-- `infra/` — Terraform. One root module (network, registry, data, worker IAM, web, budgets in separate `.tf` files, one state).
+- `infra/` — Terraform. Network, registry, data, worker IAM, web, and budgets in separate `.tf` files, one state.
 
 Server-only code lives in `web/lib/server/` — never import it from a `"use client"` file. The one shared client-safe module is `web/lib/types.ts` (status-value tuples for Drizzle `pgEnum`s); import runs types → schema, never the reverse.
 
@@ -55,7 +66,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - **Use the Clerk MCP `clerk_sdk_snippet` tool before writing or answering Clerk SDK questions, not a raw docs fetch.** Same reasoning as the MUI MCP tools above: training data lags the API and the MCP is already scoped to this project's installed SDK.
   - Call it with one feature slug (`use-user`, `use-auth`). Never pass a bundle (`b2b-saas`, `custom-flows`, `organizations`, `auth-basics`, `server-side`).
   - Skip `list_clerk_sdk_snippets` when the slug is known. A bundle is a whole guide. Fetching one is how these servers exhaust the context window.
-- **Set `NEXT_PUBLIC_CLERK_SIGN_IN_URL` and `NEXT_PUBLIC_CLERK_SIGN_UP_URL` at build time**, or Clerk sends users to its hosted Account Portal instead of this app.
+- **Set `NEXT_PUBLIC_CLERK_SIGN_IN_URL` and `NEXT_PUBLIC_CLERK_SIGN_UP_URL` at build time**, or Clerk sends users to its hosted Account Portal instead of the app's own sign-in pages.
   - The paths never change, so `web/Dockerfile` bakes them in as `ENV`.
   - Both pages need an optional catch-all (`web/app/(public)/sign-in/[[...sign-in]]/page.tsx`) because Clerk puts verification and SSO steps on sub-paths; a plain `page.tsx` 404s mid-sign-in.
 - **A dummy Clerk publishable key still has to look like a real one.** `clerkMiddleware()` parses the key and rejects a malformed string. CI uses `pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk` (base64 of `"example.clerk.accounts.dev$"`), which parses without contacting Clerk.
@@ -80,7 +91,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - **There is deliberately no `start` script — `next start` is unsupported under `output: "standalone"`.**
   - Next says so and then serves anyway, so a re-added `pnpm start` looks like it works.
   - `next build` emits `.next/standalone/server.js` (the container's `CMD`), which omits `.next/static`, so running it by hand serves pages with no CSS or JS unless that directory is copied in as `web/Dockerfile` does. Run the container instead ([`RUNBOOK.md`](RUNBOOK.md)).
-- **Server Components reading request-time data need `export const dynamic = "force-dynamic"`**, or `next build` statically prerenders them. They call `web/lib/server/data.ts` directly — not this app's HTTP API.
+- **Server Components reading request-time data need `export const dynamic = "force-dynamic"`**, or `next build` statically prerenders them. They call `web/lib/server/data.ts` directly — not the Route Handlers under `web/app/api/v1/`.
 - **Playwright `page.route()` can't intercept SSR** (different Node process). Share pages read the DB via `web/lib/server/data.ts`, so HTTP mocks don't help. Seed a test DB instead; see Known gaps.
 
 ## MUI & React Server Components
@@ -155,8 +166,8 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 ### Structure & state
 
-- **One root module, one state.** `infra/`'s six logical areas (network, registry, data, worker IAM, web, budgets) live in separate `.tf` files for readability, not separate Terraform states — there's no CloudFormation-style cross-stack export/import to keep in sync, so moving a resource between files or renaming one of the six areas is a file-organization change only.
-- **Never add the state bucket as a resource in `infra/`.** Skip creating it ([First-time account setup](RUNBOOK.md#first-time-account-setup)) and `terraform init` fails.
+- **All of `infra/` shares one state.** Its six logical areas (network, registry, data, worker IAM, web, budgets) live in separate `.tf` files for readability, not separate Terraform states — there's no CloudFormation-style cross-stack export/import to keep in sync, so moving a resource between files or renaming one of the six areas is a file-organization change only.
+- **Never add the state bucket as a resource in `infra/`.** Skip creating it ([Creating account prerequisites](RUNBOOK.md#creating-account-prerequisites)) and `terraform init` fails.
 - **`infra/tests/*.tftest.hcl` run fully offline via `mock_provider "aws" {}`.**
   - Every file needs two `mock_provider "aws"` blocks — one default, one `alias = "billing"` — since a bare `mock_provider "aws" {}` only covers the unaliased provider configuration and `providers.tf` declares a second one for `us-east-1`.
 - **Terraform reads `aws login` credentials only through a recent AWS provider.**

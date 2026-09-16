@@ -18,8 +18,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           <ClerkProvider
             localization={{
               // Clerk's default sign-in header ("Sign in to ai-gaussian-splatter") uses the instance's raw
-              // kebab-case application name from the Clerk dashboard, not this app's display name.
-              // title/titleCombined cover both the separate-pages flow this app uses and Clerk's combined
+              // kebab-case application name from the Clerk dashboard, not a human-readable one.
+              // title/titleCombined cover both the separate sign-in/sign-up pages and Clerk's combined
               // sign-in/sign-up variant, in case that's ever enabled.
               signIn: {
                 start: {

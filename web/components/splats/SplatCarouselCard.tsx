@@ -21,8 +21,8 @@ interface SplatCarouselCardProps {
 // PhotoFilmstrip.tsx, this card has no scroll to absorb a wider photo, so the thumbnail fills the card's content
 // width and grows or shrinks in height to match, at its own aspect ratio. No cropping and no letterboxing.
 
-// This file is "use client" (unlike the Server Component restriction AGENTS.md documents), so `component={Link}` is
-// fine here — same pattern the old dashboard card used.
+// This file is "use client", so the Server Component restriction AGENTS.md documents doesn't apply and
+// `component={Link}` works here.
 export function SplatCarouselCard({ splat }: SplatCarouselCardProps) {
   const isActive = useActiveSplatId() === splat.id;
 

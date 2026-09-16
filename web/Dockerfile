@@ -92,8 +92,7 @@ COPY --chown=app:app scripts/db-migrate.cjs ./scripts/db-migrate.cjs
 #
 # Deliberately NOT paired with `ENV DATABASE_SSL_CA=...` here: that would make every run of this image demand TLS,
 # breaking a local container pointed at a plain Postgres with "The server does not support SSL connections". Using the
-# bundle is a deployment decision, so infra/web.tf sets DATABASE_SSL_CA. Keep the two paths in step if this one ever
-# moves.
+# bundle is a deployment decision, so infra/web.tf sets DATABASE_SSL_CA. Keep the two in step if /app/certs ever moves.
 RUN mkdir -p /app/certs \
   && wget -qO /app/certs/rds-global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
   && echo "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3  /app/certs/rds-global-bundle.pem" \

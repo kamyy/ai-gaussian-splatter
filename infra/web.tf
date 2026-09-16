@@ -28,8 +28,8 @@ resource "aws_iam_role" "execution" {
 #
 # Deliberately not the AmazonECSTaskExecutionRolePolicy managed policy: it grants the logs actions at
 # Resource: "*" (every log group in the account) and the image-pull actions at Resource: "*" too (read access to
-# every ECR repo in the account). Reconstructed below instead: the logs actions scoped to this config's own two
-# log groups, and the pull actions scoped to this one repository (ecr:GetAuthorizationToken stays account-wide —
+# every ECR repo in the account). Reconstructed below instead: the logs actions scoped to the app's own two
+# log groups, and the pull actions scoped to its one ECR repository (ecr:GetAuthorizationToken stays account-wide —
 # it has no resource-level permissions to scope to).
 resource "aws_iam_role_policy" "execution" {
   role = aws_iam_role.execution.id
@@ -201,7 +201,7 @@ resource "aws_iam_role_policy" "task" {
       # instance carries the worker tag (web/lib/server/ec2Launcher.ts tags ResourceType "instance"), so
       # aws:RequestTag is absent from the request context for the rest. A single statement conditioned on that
       # key would evaluate false for them and deny the whole call. Hence the split: the tag constrains what can
-      # be launched (the RunInstancesTagged statement below), this one only names what it is launched from and
+      # be launched (the RunInstancesTagged statement below), this statement only names what it is launched from and
       # into.
       {
         Sid    = "RunInstances"
@@ -210,7 +210,7 @@ resource "aws_iam_role_policy" "task" {
         Resource = [
           # AMIs are not account-scoped, hence the empty account segment.
           "arn:aws:ec2:${var.aws_region}::image/*",
-          # The worker only ever launches into this one subnet and this one security group (both passed as env
+          # The worker only ever launches into one subnet and one security group (both passed as env
           # vars by web/lib/server/ec2Launcher.ts), so both are scoped to the exact resource rather than every
           # subnet or security group in the account.
           local.worker_subnet.arn,
@@ -323,7 +323,7 @@ resource "aws_lb" "web" {
   drop_invalid_header_fields = true
 
   # Without this the app's own logs would be the only record of who called, and those cover only requests its
-  # handlers actually received, not the ones the ALB rejected or redirected first.
+  # handlers actually received, not the requests the ALB rejected or redirected first.
   access_logs {
     bucket  = aws_s3_bucket.access_logs.id
     enabled = true

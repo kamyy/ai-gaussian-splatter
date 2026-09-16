@@ -197,7 +197,7 @@ run "migration_task_keeps_the_static_password" {
 run "migration_task_role_carries_no_grants" {
   command = apply
 
-  # There is no aws_iam_role_policy resource anywhere in this config attached to aws_iam_role.migration_task —
+  # There is no aws_iam_role_policy resource anywhere in infra/ attached to aws_iam_role.migration_task —
   # that's a config-level fact (the migration task role appears only in its own aws_iam_role declaration),
   # not something re-checked at plan time here. The container only opens a TCP connection to RDS; every AWS
   # API call the migration flow needs (ECR pull, DB secret read) runs under execution_role instead.
@@ -396,7 +396,7 @@ run "rejects_a_clerk_secret_arn_from_a_different_account" {
 
 # mock_provider fills computed attributes with plausible-looking scalars, but leaves computed
 # lists/sets empty by default and doesn't know about format-validated fields (ARNs). These overrides
-# give the handful of computed values other resources in this config actually depend on (or validate
+# give the handful of computed values other resources in infra/ actually depend on (or validate
 # the shape of) something usable, so the whole plan resolves offline.
 override_resource {
   target = aws_db_instance.main

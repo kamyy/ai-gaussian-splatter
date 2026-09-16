@@ -60,10 +60,10 @@ resource "aws_iam_role_policy" "worker" {
   })
 }
 
-# AWSServiceRoleForEC2Spot is not managed here: it's one account-wide role shared by every other Spot workload,
-# so creating it fails outright in an account that already has one, and Terraform deleting it on this config's
-# behalf would break those other workloads. It has to exist before web/lib/server/ec2Launcher.ts's first
-# RunInstances call — see RUNBOOK.md for the one-time setup.
+# AWSServiceRoleForEC2Spot is not managed here: it's one account-wide role shared by every other Spot workload, so
+# creating it fails outright in an account that already has one, and Terraform deleting it would break those other
+# workloads. It has to exist before web/lib/server/ec2Launcher.ts's first RunInstances call — see RUNBOOK.md for the
+# one-time setup.
 resource "aws_iam_instance_profile" "worker" {
   name = "ai-gaussian-splatter-worker"
   role = aws_iam_role.worker.name
