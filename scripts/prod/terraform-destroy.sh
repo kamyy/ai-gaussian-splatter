@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Destroys everything in infra/'s state. Refuses while the deploy job is on in origin/main, because the next push to
-# main would find an empty state and deploy the whole stack again.
+# Destroys everything in infra/'s state. Refuses while DEPLOY_ENABLED is true, because the next push to main would
+# find an empty state and deploy the whole stack again. An unreadable variable is refused too, rather than treated as
+# off. An unfinished CI run on main is refused too, because that run may still deploy after destroy.
 
 set -euo pipefail
 
@@ -10,15 +11,27 @@ source "$ROOT/scripts/lib/confirm.sh"
 source "$ROOT/scripts/lib/github.sh"
 source "$ROOT/scripts/lib/terraform.sh"
 
-git fetch --quiet origin main
-CI_WORKFLOW=$(git show origin/main:.github/workflows/ci.yml)
-if [[ $CI_WORKFLOW != *'if: false &&'* ]]; then
-  echo "The deploy job is still on in origin/main. Land if: false && ... in .github/workflows/ci.yml first." >&2
+require_aws_login
+require_gh_login
+
+if ! deploy_enabled=$(gh variable get DEPLOY_ENABLED); then
+  echo "Could not read DEPLOY_ENABLED. If it is unset, run: gh variable set DEPLOY_ENABLED --body false" >&2
+  exit 1
+fi
+if [[ $deploy_enabled == true ]]; then
+  echo "The deploy job is still on. Run: gh variable set DEPLOY_ENABLED --body false" >&2
   exit 1
 fi
 
-require_aws_login
-require_gh_login
+for status in in_progress queued waiting; do
+  count=$(gh run list --workflow=ci.yml --branch main --status "$status" --limit 1 --json databaseId --jq 'length')
+  if [[ $count != 0 ]]; then
+    echo "A CI run on main is still ${status}. Wait for it to finish before destroying." >&2
+    gh run list --workflow=ci.yml --branch main --status "$status" >&2
+    exit 1
+  fi
+done
+
 require_aws_deploy_account
 
 confirm "Destroy every resource in infra/'s state in account $AWS_ACCOUNT_ID, data buckets and database included?"

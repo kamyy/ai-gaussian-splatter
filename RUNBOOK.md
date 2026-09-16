@@ -145,7 +145,7 @@ CI's `deploy` job (`.github/workflows/deploy.yml`) does every deploy, including 
 4. Runs the migration.
 5. Rolls the service forward.
 
-The job is currently disabled ([State / what's next](AGENTS.md#state--whats-next)).
+The job is currently off ([State / what's next](AGENTS.md#state--whats-next)).
 
 ### Signing in to AWS
 
@@ -216,7 +216,13 @@ With the role and repository variables in place, turn the job on under [Going li
 
 ### Going live
 
-Once [Configuring continuous deployment](#configuring-continuous-deployment) is done, turn the `deploy` job on: delete `false && ` from its `if:` in `.github/workflows/ci.yml` and land that through a PR. Merging it to `main` is the first deploy.
+Once [Configuring continuous deployment](#configuring-continuous-deployment) is done, turn the `deploy` job on by setting the `DEPLOY_ENABLED` repository variable. Setting the variable does not start a run. The first deploy is the next push to `main` that is not only `.md` files or `LICENSE`.
+
+```bash
+gh variable set DEPLOY_ENABLED --body true
+```
+
+Only the exact string `true` turns it on, and `scripts/prod/set-gh-repo-variables.sh` deliberately leaves this one alone, so going live stays a separate deliberate act. Nothing in the repository records whether it is set: `gh variable get DEPLOY_ENABLED` is the only way to tell.
 
 The service starts before the migration runs, so real routes 500 until the migration finishes. The first apply also waits on ACM DNS validation, which can take several minutes.
 
@@ -224,7 +230,7 @@ The service starts before the migration runs, so real routes 500 until the migra
 
 Only the last few releases are kept (`local.releases_kept` in `infra/registry.tf`); older tags are expired and can no longer be rolled back to.
 
-A push that touches only `.md` files doesn't deploy. `.github/workflows/ci.yml`'s `paths-ignore` skips the whole workflow for it.
+A push that touches only `.md` files or `LICENSE` doesn't deploy. `.github/workflows/ci.yml`'s `paths-ignore` skips the whole workflow for it.
 
 ### Building and pushing the worker image
 
@@ -267,7 +273,11 @@ If the `deploy` job's migration step fails for an infra reason rather than a bad
 
 `scripts/prod/terraform-destroy.sh` removes everything in `infra/`'s state, including the 3 data S3 buckets (force-destroyed, contents and all) and the RDS instance (no final snapshot). It reads its variables the same way as [Running Terraform locally](#running-terraform-locally). `scripts/prod/delete-tf-state-bucket.sh` below checks the `AWS_ACCOUNT_ID` one against the signed-in account. Delete the repository variables only after both have finished.
 
-Turn the `deploy` job off first (`if: false && …` in `.github/workflows/ci.yml`) and land that on `main` before destroying. Otherwise the next push to `main` finds an empty state and deploys the whole stack again. The script refuses to run until `origin/main` has the job off.
+Turn the `deploy` job off first, or the next push to `main` finds an empty state and deploys the whole stack again. `scripts/prod/terraform-destroy.sh` refuses to run while the variable is `true` or unreadable, so the `false` set below is required even if deploys were never turned on. Then wait until no CI run is still going on `main`. A run that started while the variable was `true` keeps that value, and `.github/workflows/deploy.yml` will not cancel it (`cancel-in-progress: false`). The script refuses while one is in progress, queued, or waiting.
+
+```bash
+gh variable set DEPLOY_ENABLED --body false
+```
 
 ```bash
 scripts/prod/terraform-destroy.sh

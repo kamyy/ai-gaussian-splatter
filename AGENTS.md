@@ -308,9 +308,10 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 Scaffolding (three packages + CI) is in place. Host-run `next dev` can 500 with `ECONNREFUSED ::1` in sandboxes that block loopback to the Next proxy process — use the container (own netns); not an app bug.
 
-- **CI's `deploy` job is disabled** (`if: false && …` in `.github/workflows/ci.yml`) while the AWS account is torn down.
+- **CI's `deploy` job is off** while the AWS account is torn down: the `DEPLOY_ENABLED` repository variable is unset, and `.github/workflows/ci.yml` runs the job only when it reads exactly `true`.
   - Nothing it deploys to exists: no state bucket, no CI role, no stack.
-  - Re-enable it by deleting `false && ` only after redoing [Creating account prerequisites](RUNBOOK.md#creating-account-prerequisites) and [Configuring continuous deployment](RUNBOOK.md#configuring-continuous-deployment), including the `WORKER_IMAGE_TAG` repository variable. [Going live](RUNBOOK.md#going-live) covers the switch.
+  - The gate lives in the repository's variables rather than in a committed file, so `.github/workflows/ci.yml` reads the same either way and `gh variable get DEPLOY_ENABLED` is what answers whether deploys are live.
+  - Set it only after redoing [Creating account prerequisites](RUNBOOK.md#creating-account-prerequisites) and [Configuring continuous deployment](RUNBOOK.md#configuring-continuous-deployment), including the `WORKER_IMAGE_TAG` repository variable. [Going live](RUNBOOK.md#going-live) covers the switch.
   - The job's first run deploys the whole stack, and the worker image is pushed after that ([Building and pushing the worker image](RUNBOOK.md#building-and-pushing-the-worker-image)).
 
 Known gaps, priority order:

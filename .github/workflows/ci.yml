@@ -191,9 +191,9 @@ jobs:
   # Runs .github/workflows/deploy.yml once every check job above has passed.
   deploy:
     needs: [lint-format, worker, web, infra]
-    # Disabled while the AWS account is torn down, since nothing it deploys to exists. Re-enable by deleting
-    # `false && ` once AGENTS.md's current-state prerequisites are done.
-    if: false && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Deploying is off until the DEPLOY_ENABLED repository variable is set to true (RUNBOOK.md). An unset variable
+    # renders as "", so a fresh fork or a torn-down account deploys nothing until someone turns it on deliberately.
+    if: vars.DEPLOY_ENABLED == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     # Granted here rather than in .github/workflows/deploy.yml, because a called workflow can only narrow its caller's
     # permissions and this repo's default token is read-only.
     permissions:
