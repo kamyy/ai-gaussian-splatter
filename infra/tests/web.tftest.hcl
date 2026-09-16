@@ -151,7 +151,9 @@ run "web_container_wiring" {
   }
 
   # The override_resource blocks below give each ECR repository its own URL, and worker_image_tag differs from
-  # web_image_tag. So this fails if WORKER_IMAGE_URI names the web repository or the web tag.
+  # web_image_tag. So this fails if WORKER_IMAGE_URI names the web repository or the web tag. The us-west-2 in both
+  # this assertion and the ECR_REGISTRY one below is var.aws_region's default: if that default moves, the right fix
+  # is to move these too, not to stop asserting the region.
   assert {
     condition = anytrue([
       for e in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].environment :

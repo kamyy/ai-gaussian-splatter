@@ -16,34 +16,42 @@ PROJECT_TAG=$(tf_local_var project_tag)
 
 require_aws_login
 
-# The buckets are whatever web/.env names, so the file is created first.
-create_env_file "$ROOT/web/.env" web_env_template
+# The buckets and the region are whatever web/.env names, so the file is created first. A new one is seeded from
+# var.aws_region's default, and an existing one keeps whatever region it already holds, because that is the region
+# web/lib/server/env.ts signs the app's upload URLs for.
+create_env_file "$ROOT/web/.env" web_env_template "$AWS_ACCOUNT_ID" "$(tf_aws_region)"
 UPLOADS=$(get_env_var "$ROOT/web/.env" UPLOADS_BUCKET)
 SPLATS=$(get_env_var "$ROOT/web/.env" SPLATS_BUCKET)
+REGION=$(get_env_var "$ROOT/web/.env" AWS_REGION)
 
-confirm "Create or update the $UPLOADS and $SPLATS buckets and the $DEV_USER IAM user in account $AWS_ACCOUNT_ID?"
+confirm "Create or update the $UPLOADS and $SPLATS buckets and the $DEV_USER IAM user in $REGION, account $AWS_ACCOUNT_ID?"
+
+# us-east-1 is the one region create-bucket rejects a LocationConstraint for, because it is the API's own default.
+CREATE_BUCKET_ARGS=()
+if [[ $REGION != us-east-1 ]]; then
+  CREATE_BUCKET_ARGS=(--create-bucket-configuration "LocationConstraint=$REGION")
+fi
 
 for bucket in "$UPLOADS" "$SPLATS"; do
-  if aws s3api head-bucket --bucket "$bucket" --region us-west-2 2>/dev/null; then
+  if aws s3api head-bucket --bucket "$bucket" --region "$REGION" 2>/dev/null; then
     echo "Bucket $bucket already exists. Keeping it and rewriting its tags."
   else
-    aws s3api create-bucket --bucket "$bucket" --region us-west-2 \
-      --create-bucket-configuration LocationConstraint=us-west-2 >/dev/null
+    aws s3api create-bucket --bucket "$bucket" --region "$REGION" "${CREATE_BUCKET_ARGS[@]}" >/dev/null
     echo "Created bucket $bucket."
   fi
-  aws s3api put-bucket-tagging --bucket "$bucket" --region us-west-2 \
+  aws s3api put-bucket-tagging --bucket "$bucket" --region "$REGION" \
     --tagging "{\"TagSet\":[{\"Key\":\"Project\",\"Value\":\"$PROJECT_TAG\"}]}"
 done
 
 # Without these rules the browser blocks both a cross-origin GET and PUT. The presigned URL is valid, so the failure
 # only shows up in the browser console, which distinguishes a CORS-rule 403 from an IAM-policy 403. localhost:3000 is
 # `pnpm dev` and localhost:8000 is scripts/dev/run-web-container.sh.
-aws s3api put-bucket-cors --bucket "$UPLOADS" --region us-west-2 --cors-configuration '{
+aws s3api put-bucket-cors --bucket "$UPLOADS" --region "$REGION" --cors-configuration '{
   "CORSRules": [{"AllowedMethods": ["PUT"],
                  "AllowedOrigins": ["http://localhost:3000", "http://localhost:8000"],
                  "AllowedHeaders": ["*"]}]
 }'
-aws s3api put-bucket-cors --bucket "$SPLATS" --region us-west-2 --cors-configuration '{
+aws s3api put-bucket-cors --bucket "$SPLATS" --region "$REGION" --cors-configuration '{
   "CORSRules": [{"AllowedMethods": ["GET", "HEAD"],
                  "AllowedOrigins": ["http://localhost:3000", "http://localhost:8000"],
                  "AllowedHeaders": ["*"]}]

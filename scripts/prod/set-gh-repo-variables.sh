@@ -13,6 +13,8 @@ source "$ROOT/scripts/lib/confirm.sh"
 source "$ROOT/scripts/lib/github.sh"
 source "$ROOT/scripts/lib/terraform.sh"
 
+REGION=$(tf_aws_region)
+
 # Prints a repository variable's current value, or nothing when it's unset.
 current() {
   gh variable get "$1" 2>/dev/null || true
@@ -45,7 +47,7 @@ if [[ $HOSTED_ZONE_ID != Z* ]]; then
   exit 1
 fi
 
-if ! CLERK_SECRET_KEY_ARN=$(aws secretsmanager describe-secret --region us-west-2 \
+if ! CLERK_SECRET_KEY_ARN=$(aws secretsmanager describe-secret --region "$REGION" \
   --secret-id ai-gaussian-splatter/clerk-secret-key --query ARN --output text); then
   echo "Create the Clerk secret with scripts/prod/first-time-account-setup.sh first." >&2
   exit 1
@@ -65,7 +67,7 @@ if [[ $CLERK_PUBLISHABLE_KEY != pk_live_* ]]; then
 fi
 
 echo "Newest Deep Learning Base GPU AMIs:"
-AMIS=$(aws ec2 describe-images --region us-west-2 --owners amazon \
+AMIS=$(aws ec2 describe-images --region "$REGION" --owners amazon \
   --filters "Name=name,Values=Deep Learning Base*GPU AMI*Ubuntu*" \
   "Name=architecture,Values=x86_64" \
   "Name=state,Values=available" \

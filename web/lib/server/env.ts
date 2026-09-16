@@ -16,7 +16,10 @@ const envSchema = z
 
     UPLOADS_BUCKET: z.string().min(1),
     SPLATS_BUCKET: z.string().min(1),
-    AWS_REGION: z.string().min(1).default("us-west-2"),
+    // No default: every path that runs this app sets it (infra/web.tf for ECS, web/.env for local dev and the
+    // container, .github/workflows/ci.yml for tests), and a default would quietly sign against the wrong region
+    // for a deploy that moved.
+    AWS_REGION: z.string().min(1),
 
     WORKER_AMI_ID: z.string().min(1),
     WORKER_INSTANCE_TYPE: z.string().min(1).default("g5.xlarge"),

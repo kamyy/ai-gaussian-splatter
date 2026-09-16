@@ -67,10 +67,11 @@ tf_app_hostname() {
 # uses when a service exists. Any SHA-shaped value when nothing is serving, or the plan shows an image change that isn't
 # coming.
 tf_live_web_image_tag() {
-  local task_def image
+  local task_def image region
+  region=$(tf_aws_region)
 
   # shellcheck disable=SC2016 # The backticks are a JMESPath literal, not command substitution.
-  if ! task_def=$(aws ecs describe-services --region us-west-2 \
+  if ! task_def=$(aws ecs describe-services --region "$region" \
     --cluster ai-gaussian-splatter --services ai-gaussian-splatter-web \
     --query 'services[0].deployments[?status==`PRIMARY`].taskDefinition | [0]' --output text 2>&1); then
     # A missing cluster means no service yet. A missing service in an existing cluster isn't an error at all, and the
@@ -87,7 +88,7 @@ tf_live_web_image_tag() {
     return
   fi
 
-  image=$(aws ecs describe-task-definition --region us-west-2 --task-definition "$task_def" \
+  image=$(aws ecs describe-task-definition --region "$region" --task-definition "$task_def" \
     --query 'taskDefinition.containerDefinitions[0].image' --output text) || return 1
   # The image is tagged "<sha>-web" (infra/web.tf), but web_image_tag takes the bare SHA.
   image=${image##*:}
@@ -118,5 +119,5 @@ tf_init() {
   "$terraform" -chdir="$ROOT/infra" init -input=false -reconfigure \
     -backend-config="bucket=ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID" \
     -backend-config="key=infra.tfstate" \
-    -backend-config="region=us-west-2"
+    -backend-config="region=$(tf_aws_region)"
 }

@@ -1,3 +1,5 @@
+# Editing this default on a live account has an order to it. Tear the stack down first, while the default still names
+# the region the stack is deployed in (AGENTS.md).
 variable "aws_region" {
   description = "Primary region for every resource except the budgets provider (us-east-1, fixed — see providers.tf)."
   type        = string

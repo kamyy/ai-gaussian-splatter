@@ -14,6 +14,7 @@ source "$ROOT/scripts/lib/terraform.sh"
 ROLE=ai-gaussian-splatter-ci-deploy
 OIDC_HOST=token.actions.githubusercontent.com
 PROJECT_TAG=$(tf_local_var project_tag)
+REGION=$(tf_aws_region)
 
 require_aws_login
 require_gh_login
@@ -79,14 +80,14 @@ DEPLOY_POLICY=$(
         "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer",
         "ecr:CreateRepository", "ecr:DeleteRepository", "ecr:DescribeRepositories",
         "ecr:PutLifecyclePolicy", "ecr:GetLifecyclePolicy", "ecr:TagResource", "ecr:PutImageTagMutability"
-      ], "Resource": "arn:aws:ecr:us-west-2:$AWS_ACCOUNT_ID:repository/ai-gaussian-splatter*"},
+      ], "Resource": "arn:aws:ecr:$REGION:$AWS_ACCOUNT_ID:repository/ai-gaussian-splatter*"},
     {"Effect": "Allow", "Action": "ecs:RunTask", "Resource": [
-        "arn:aws:ecs:us-west-2:$AWS_ACCOUNT_ID:task-definition/ai-gaussian-splatter-migrate:*",
-        "arn:aws:ecs:us-west-2:$AWS_ACCOUNT_ID:cluster/ai-gaussian-splatter"
+        "arn:aws:ecs:$REGION:$AWS_ACCOUNT_ID:task-definition/ai-gaussian-splatter-migrate:*",
+        "arn:aws:ecs:$REGION:$AWS_ACCOUNT_ID:cluster/ai-gaussian-splatter"
       ]},
     {"Effect": "Allow", "Action": ["ecs:DescribeTasks", "ecs:DescribeServices"], "Resource": "*",
       "Condition": {"ArnEquals": {
-        "ecs:cluster": "arn:aws:ecs:us-west-2:$AWS_ACCOUNT_ID:cluster/ai-gaussian-splatter"
+        "ecs:cluster": "arn:aws:ecs:$REGION:$AWS_ACCOUNT_ID:cluster/ai-gaussian-splatter"
       }}},
     {"Effect": "Allow", "Action": [
         "ecs:DescribeTaskDefinition", "ecs:RegisterTaskDefinition", "ecs:DeregisterTaskDefinition",
@@ -110,7 +111,10 @@ DEPLOY_POLICY=$(
         "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRolePolicy", "iam:ListRolePolicies",
         "iam:CreateInstanceProfile", "iam:DeleteInstanceProfile", "iam:GetInstanceProfile",
         "iam:AddRoleToInstanceProfile", "iam:RemoveRoleFromInstanceProfile"
-      ], "Resource": "arn:aws:iam::$AWS_ACCOUNT_ID:*/ai-gaussian-splatter-*"},
+      ], "Resource": [
+        "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-gaussian-splatter-*",
+        "arn:aws:iam::$AWS_ACCOUNT_ID:instance-profile/ai-gaussian-splatter-*"
+      ]},
     {"Effect": "Allow", "Action": [
         "s3:CreateBucket", "s3:DeleteBucket*", "s3:ListBucket", "s3:GetBucket*", "s3:PutBucket*",
         "s3:PutObject", "s3:GetObject", "s3:DeleteObject",
@@ -161,10 +165,10 @@ DEPLOY_POLICY=$(
     {"Effect": "Allow", "Action": [
         "logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:DescribeLogGroups", "logs:PutRetentionPolicy",
         "logs:TagResource"
-      ], "Resource": "arn:aws:logs:us-west-2:$AWS_ACCOUNT_ID:log-group:/ecs/ai-gaussian-splatter-*"},
+      ], "Resource": "arn:aws:logs:$REGION:$AWS_ACCOUNT_ID:log-group:/ecs/ai-gaussian-splatter-*"},
     {"Effect": "Allow", "Action": ["secretsmanager:CreateSecret", "secretsmanager:TagResource"],
-      "Resource": "arn:aws:secretsmanager:us-west-2:$AWS_ACCOUNT_ID:secret:rds!*"},
-    {"Effect": "Allow", "Action": "kms:DescribeKey", "Resource": "arn:aws:kms:us-west-2:$AWS_ACCOUNT_ID:key/*"},
+      "Resource": "arn:aws:secretsmanager:$REGION:$AWS_ACCOUNT_ID:secret:rds!*"},
+    {"Effect": "Allow", "Action": "kms:DescribeKey", "Resource": "arn:aws:kms:$REGION:$AWS_ACCOUNT_ID:key/*"},
     {"Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject", "s3:ListBucket"], "Resource": [
         "arn:aws:s3:::ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID",
         "arn:aws:s3:::ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID/*"

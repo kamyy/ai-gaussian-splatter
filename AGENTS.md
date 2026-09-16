@@ -176,7 +176,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 ### Networking & TLS
 
-- **The ACM cert (`infra/web.tf`) takes no explicit `provider`**, so it inherits the default provider's `us-west-2` — required, since an ALB can only reference a certificate in its own region.
+- **The ACM cert (`infra/web.tf`) takes no explicit `provider`**, so it inherits the default provider's `var.aws_region` — required, since an ALB can only reference a certificate in its own region.
   - Same hostname in another region is normal (certs are free).
 - **Set the HTTPS listener's `ssl_policy` explicitly** (`ELBSecurityPolicy-TLS13-1-2-2021-06`). Leaving it unset defaults to the weak `ELBSecurityPolicy-2016-08` (TLS 1.0/1.1), not the console's strong default.
 - **The Route 53 zone is referenced by ID only (`var.hosted_zone_id`), never looked up with a `data "aws_route53_zone"` block.** This config only ever adds records to the zone; it never manages the zone itself, so there's nothing a lookup would add beyond an extra API call on every plan.
@@ -223,6 +223,11 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - `terraform validate` and `terraform test` (`mock_provider`) never touch real AWS, so required variables (`worker_ami_id`, `alert_email`, `hosted_zone_id`, `clerk_secret_key_arn`, `web_image_tag`, `worker_image_tag`) simply have no default in `infra/variables.tf`. CI's `infra` job never has to supply one.
   - A real `terraform plan`/`apply` fails immediately when one is unset.
   - `.github/workflows/deploy.yml` maps each from a GitHub repository variable, though, and an unset repository variable arrives as `""`, which Terraform accepts as a value. There only a `validation` block catches it, so every required variable has one that rejects `""`. Give any new required variable one too.
+- **`var.aws_region`'s default in `infra/variables.tf` is the only place the region is written.** `scripts/lib/terraform.sh`'s `tf_aws_region` reads it, and every AWS CLI call in `scripts/` plus the `Resolve region` step in `.github/workflows/deploy.yml` take it from there.
+  - Two places keep their own copy, neither of which reaches AWS. `scripts/dev/create-dev-resources.sh` uses `web/.env`'s own `AWS_REGION`, so the dev buckets match the region `web/lib/server/env.ts` signs upload URLs for; a new `web/.env` is seeded from the same default. `.github/workflows/ci.yml`'s web job sets it as a fixture beside `AWS_ACCESS_KEY_ID: testing`.
+  - The Budgets provider (`infra/budgets.tf`) stays pinned to `us-east-1` — see [Stack construction](#stack-construction).
+  - Moving the region means a teardown, then the whole of [Deploying to production](RUNBOOK.md#deploying-to-production) again. Nothing migrates an ALB, an RDS instance, or an ECR repository across regions. The state bucket, the Clerk secret, the CI role's ARNs, and `WORKER_AMI_ID` are region-specific as well.
+  - Tear down before editing the default. `terraform init` looks for the state bucket in whatever the default currently says, so an edited default points `scripts/prod/terraform-destroy.sh` at a bucket that doesn't exist while the old stack keeps billing.
 - **The account id used to build IAM/ARN resources comes from `data.aws_caller_identity.current`**, evaluated fresh on every real plan or apply.
   - `.github/workflows/deploy.yml` still validates its own `AWS_ACCOUNT_ID` repository variable, but only to build the CI role's ARN and the state bucket name — nothing in `infra/` itself reads that environment variable.
 - **The state bucket name (`ai-gaussian-splatter-tfstate-<account-id>`) is passed to `terraform init` via `-backend-config`, never hardcoded in `infra/providers.tf`.**
