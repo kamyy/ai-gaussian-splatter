@@ -145,7 +145,7 @@ CI's `deploy` job (`.github/workflows/deploy.yml`) does every deploy, including 
 4. Runs the migration.
 5. Rolls the service forward.
 
-The job is currently off ([State / what's next](AGENTS.md#state--whats-next)).
+Whether the job is on is `gh variable get DEPLOY_ENABLED` ([Going live](#going-live)).
 
 ### Signing in to AWS
 
@@ -216,13 +216,13 @@ With the role and repository variables in place, turn the job on under [Going li
 
 ### Going live
 
-Once [Configuring continuous deployment](#configuring-continuous-deployment) is done, turn the `deploy` job on by setting the `DEPLOY_ENABLED` repository variable. Setting the variable does not start a run. The first deploy is the next push to `main` that is not only `.md` files or `LICENSE`.
+Once [Configuring continuous deployment](#configuring-continuous-deployment) is done, turn the `deploy` job on by setting the `DEPLOY_ENABLED` repository variable. The first deploy is the next push to `main` that is not only `.md` files or `LICENSE`. A CI run already under way on `main` can reach its deploy job too, so set the variable when nothing is running if the order matters.
 
 ```bash
 gh variable set DEPLOY_ENABLED --body true
 ```
 
-Only the exact string `true` turns it on, and `scripts/prod/set-gh-repo-variables.sh` deliberately leaves this one alone, so going live stays a separate deliberate act. Nothing in the repository records whether it is set: `gh variable get DEPLOY_ENABLED` is the only way to tell.
+Any spelling of `true` turns it on, since the comparison in `.github/workflows/ci.yml` ignores case. `scripts/prod/set-gh-repo-variables.sh` deliberately leaves this variable alone, so going live stays a separate deliberate act. Nothing in the repository records whether it is set: `gh variable get DEPLOY_ENABLED` is the only way to tell.
 
 The service starts before the migration runs, so real routes 500 until the migration finishes. The first apply also waits on ACM DNS validation, which can take several minutes.
 
@@ -256,9 +256,9 @@ scripts/prod/terraform-plan.sh
 
 ## Fixing a bad migration
 
-The only supported production apply is the `deploy` job (`.github/workflows/deploy.yml`), which runs the `migrator` image (`web/Dockerfile`) as a one-off ECS task before rolling the service forward. That job is currently off ([State / what's next](AGENTS.md#state--whats-next)). There is no supported way to reach the database by hand: the RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway and no bastion, reachable only from `aws_security_group.web` on port 5432, which is how the migration task gets to it.
+The only supported production apply is the `deploy` job (`.github/workflows/deploy.yml`), which runs the `migrator` image (`web/Dockerfile`) as a one-off ECS task before rolling the service forward. There is no supported way to reach the database by hand: the RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway and no bastion, reachable only from `aws_security_group.web` on port 5432, which is how the migration task gets to it.
 
-Fix a bad migration the same way you'd fix any other bug: write a corrective migration following the expand/contract discipline in [Schema & migrations (Drizzle)](AGENTS.md#schema--migrations-drizzle) (edit `web/lib/server/db/schema.ts`, `pnpm db:generate`, review the emitted SQL in `web/drizzle/`), commit it, and land it through a normal PR to `main`. It applies when the `deploy` job is re-enabled and that commit reaches `main`.
+Fix a bad migration the same way you'd fix any other bug: write a corrective migration following the expand/contract discipline in [Schema & migrations (Drizzle)](AGENTS.md#schema--migrations-drizzle) (edit `web/lib/server/db/schema.ts`, `pnpm db:generate`, review the emitted SQL in `web/drizzle/`), commit it, and land it through a normal PR to `main`. It applies when `DEPLOY_ENABLED` is `true` and that commit reaches `main` ([Going live](#going-live)).
 
 If the `deploy` job's migration step fails for an infra reason rather than a bad migration (a transient AWS error, a placement failure), retry the whole job rather than reaching for manual AWS commands — it's idempotent end to end: `gh run rerun <run-id> --failed-jobs`.
 
@@ -273,7 +273,7 @@ If the `deploy` job's migration step fails for an infra reason rather than a bad
 
 `scripts/prod/terraform-destroy.sh` removes everything in `infra/`'s state, including the 3 data S3 buckets (force-destroyed, contents and all) and the RDS instance (no final snapshot). It reads its variables the same way as [Running Terraform locally](#running-terraform-locally). `scripts/prod/delete-tf-state-bucket.sh` below checks the `AWS_ACCOUNT_ID` one against the signed-in account. Delete the repository variables only after both have finished.
 
-Turn the `deploy` job off first, or the next push to `main` finds an empty state and deploys the whole stack again. `scripts/prod/terraform-destroy.sh` refuses to run while the variable is `true` or unreadable, so the `false` set below is required even if deploys were never turned on. Then wait until no CI run is still going on `main`. A run that started while the variable was `true` keeps that value, and `.github/workflows/deploy.yml` will not cancel it (`cancel-in-progress: false`). The script refuses while one is in progress, queued, or waiting.
+Turn the `deploy` job off first, or the next push to `main` finds an empty state and deploys the whole stack again. `scripts/prod/terraform-destroy.sh` refuses to run while the variable is `true` or unreadable, so the `false` set below is required even if deploys were never turned on. Then wait until no CI run is still going on `main`, since a run already under way can still reach its deploy job. The script refuses while one is unfinished.
 
 ```bash
 gh variable set DEPLOY_ENABLED --body false

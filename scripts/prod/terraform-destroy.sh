@@ -14,16 +14,15 @@ source "$ROOT/scripts/lib/terraform.sh"
 require_aws_login
 require_gh_login
 
-if ! deploy_enabled=$(gh variable get DEPLOY_ENABLED); then
-  echo "Could not read DEPLOY_ENABLED. If it is unset, run: gh variable set DEPLOY_ENABLED --body false" >&2
-  exit 1
-fi
-if [[ $deploy_enabled == true ]]; then
+deploy_enabled=$(gh_repo_var DEPLOY_ENABLED "Run: gh variable set DEPLOY_ENABLED --body false")
+# Lowercased first, because a GitHub Actions `==` comparison ignores case. True and TRUE arm the job in
+# .github/workflows/ci.yml just as true does.
+if [[ ${deploy_enabled,,} == true ]]; then
   echo "The deploy job is still on. Run: gh variable set DEPLOY_ENABLED --body false" >&2
   exit 1
 fi
 
-for status in in_progress queued waiting; do
+for status in in_progress queued waiting requested pending; do
   count=$(gh run list --workflow=ci.yml --branch main --status "$status" --limit 1 --json databaseId --jq 'length')
   if [[ $count != 0 ]]; then
     echo "A CI run on main is still ${status}. Wait for it to finish before destroying." >&2

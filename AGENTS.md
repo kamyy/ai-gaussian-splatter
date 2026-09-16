@@ -123,6 +123,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - List: `gh api repos/kamyy/ai-gaussian-splatter/branches/main/protection`.
 - **The deploy steps live in `.github/workflows/deploy.yml`, a `workflow_call` workflow run only by `.github/workflows/ci.yml`'s `deploy` job.**
   - That caller keeps the `needs` on the check jobs, the `if:` gate, and the `id-token: write` grant.
+  - The `if:` is `vars.DEPLOY_ENABLED == 'true'`. Git does not record whether that variable is set ([CI/CD](ARCHITECTURE.md#cicd)). `gh variable get DEPLOY_ENABLED` is the check ([Going live](RUNBOOK.md#going-live)).
   - The grant can't move into `.github/workflows/deploy.yml`, because a called workflow can only narrow its caller's permissions and this repo's default token is read-only.
   - A job run through a called workflow reports its check as `<caller job> / <called job>`, so moving a required one (`lint-format`, `worker`, `web`, `infra`) into its own file is a rename as far as branch protection is concerned.
 - **Biome does not format Markdown, YAML, Dockerfiles, or shell scripts** (`@biomejs/biome@2.5.10`, pinned in both root and `web/`). Keep those consistent by hand.
@@ -308,10 +309,8 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 Scaffolding (three packages + CI) is in place. Host-run `next dev` can 500 with `ECONNREFUSED ::1` in sandboxes that block loopback to the Next proxy process — use the container (own netns); not an app bug.
 
-- **CI's `deploy` job is off** while the AWS account is torn down: the `DEPLOY_ENABLED` repository variable is unset, and `.github/workflows/ci.yml` runs the job only when it reads exactly `true`.
-  - Nothing it deploys to exists: no state bucket, no CI role, no stack.
-  - The gate lives in the repository's variables rather than in a committed file, so `.github/workflows/ci.yml` reads the same either way and `gh variable get DEPLOY_ENABLED` is what answers whether deploys are live.
-  - Set it only after redoing [Creating account prerequisites](RUNBOOK.md#creating-account-prerequisites) and [Configuring continuous deployment](RUNBOOK.md#configuring-continuous-deployment), including the `WORKER_IMAGE_TAG` repository variable. [Going live](RUNBOOK.md#going-live) covers the switch.
+- **The AWS account is torn down.** Nothing the `deploy` job deploys to exists: no state bucket, no CI role, no stack.
+  - Turn the job on only after redoing [Creating account prerequisites](RUNBOOK.md#creating-account-prerequisites) and [Configuring continuous deployment](RUNBOOK.md#configuring-continuous-deployment), including the `WORKER_IMAGE_TAG` repository variable. [Going live](RUNBOOK.md#going-live) covers the switch.
   - The job's first run deploys the whole stack, and the worker image is pushed after that ([Building and pushing the worker image](RUNBOOK.md#building-and-pushing-the-worker-image)).
 
 Known gaps, priority order:

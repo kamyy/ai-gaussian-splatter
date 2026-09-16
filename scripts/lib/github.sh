@@ -10,11 +10,12 @@ require_gh_login() {
   fi
 }
 
-# Prints a GitHub repository variable, or exits naming it when it's unset.
+# Prints a GitHub repository variable, or exits naming it when it's unset. The second argument replaces the
+# remediation line, for a variable scripts/prod/set-gh-repo-variables.sh doesn't set.
 gh_repo_var() {
   local value
   if ! value=$(gh variable get "$1") || [[ -z $value ]]; then
-    echo "Repository variable $1 is not set. Run scripts/prod/set-gh-repo-variables.sh." >&2
+    echo "Repository variable $1 is not set. ${2:-Run scripts/prod/set-gh-repo-variables.sh.}" >&2
     exit 1
   fi
 

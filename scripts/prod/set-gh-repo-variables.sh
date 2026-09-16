@@ -82,6 +82,7 @@ WORKER_AMI_ID=$(ask "Worker AMI" "${CURRENT_AMI:-${AMIS%%$'\t'*}}")
 WORKER_IMAGE_TAG=$(current WORKER_IMAGE_TAG)
 WORKER_IMAGE_TAG=${WORKER_IMAGE_TAG:-$(git rev-parse --short HEAD)}
 
+# DEPLOY_ENABLED is deliberately absent. Going live is a separate `gh variable set` (RUNBOOK.md).
 NAMES=(AWS_ACCOUNT_ID DOMAIN_ZONE_NAME HOSTED_ZONE_ID CLERK_SECRET_KEY_ARN ALERT_EMAIL WORKER_AMI_ID
   WORKER_IMAGE_TAG CLERK_PUBLISHABLE_KEY)
 echo "The app will serve from https://$(tf_app_hostname "$DOMAIN_ZONE_NAME")."
