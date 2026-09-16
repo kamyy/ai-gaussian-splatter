@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Creates web/.env when it's missing, then the uploads and splats buckets it names and the ai-gaussian-splatter-dev IAM
-# user scoped to just those two buckets. Writes the user's access key into web/.env when it creates one. Safe to re-run.
+# Creates web/.env from web/.env.example when it's missing, then the uploads and splats buckets it names and the
+# ai-gaussian-splatter-dev IAM user scoped to just those two buckets. Writes the user's access key into web/.env when it
+# creates one. Safe to re-run.
 # Existing buckets and the existing user are kept, and their CORS rules, tags, and policy are rewritten.
 
 set -euo pipefail
@@ -19,7 +20,7 @@ aws_require_login
 # The buckets and the region are whatever web/.env names, so the file is created first. A new one is seeded from
 # var.aws_region's default, and an existing one keeps whatever region it already holds, because that is the region
 # web/lib/server/env.ts signs the app's upload URLs for.
-env_create_file "$ROOT/web/.env" web_env_template "$AWS_ACCOUNT_ID" "$(tf_get_aws_region)"
+env_create_file "$ROOT/web/.env" "$AWS_ACCOUNT_ID" "$(tf_get_aws_region)"
 UPLOADS=$(env_get "$ROOT/web/.env" UPLOADS_BUCKET)
 SPLATS=$(env_get "$ROOT/web/.env" SPLATS_BUCKET)
 REGION=$(env_get "$ROOT/web/.env" AWS_REGION)

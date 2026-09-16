@@ -25,7 +25,7 @@ Most procedures below run a script from `scripts/dev/` or `scripts/prod/`, and e
 
 ## Dev AWS resources
 
-`infra/` only describes production, so dev's uploads/splats buckets are created outside it. `scripts/dev/create-resources.sh` creates the two buckets `web/.env` names in `UPLOADS_BUCKET` and `SPLATS_BUCKET`, plus an `ai-gaussian-splatter-dev` IAM user that can reach only those two buckets. Run it as an admin ([Signing in to AWS](#signing-in-to-aws)). It creates `web/.env` first when it's missing, and writes the IAM user's key pair into it whenever it creates the user's access key. An existing `web/.env` is never replaced. The default bucket names end in the AWS account id, because one S3 bucket namespace spans every account.
+`infra/` only describes production, so dev's uploads/splats buckets are created outside it. `scripts/dev/create-resources.sh` creates the two buckets `web/.env` names in `UPLOADS_BUCKET` and `SPLATS_BUCKET`, plus an `ai-gaussian-splatter-dev` IAM user that can reach only those two buckets. Run it as an admin ([Signing in to AWS](#signing-in-to-aws)). It copies `web/.env.example` to `web/.env` first when that's missing, and writes the IAM user's key pair into it whenever it creates the user's access key. An existing `web/.env` is never replaced. The default bucket names end in the AWS account id, because one S3 bucket namespace spans every account.
 
 ```bash
 scripts/dev/create-resources.sh

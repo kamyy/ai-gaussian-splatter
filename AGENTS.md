@@ -70,7 +70,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - The paths never change, so `web/Dockerfile` bakes them in as `ENV`.
   - Both pages need an optional catch-all (`web/app/(public)/sign-in/[[...sign-in]]/page.tsx`) because Clerk puts verification and SSO steps on sub-paths; a plain `page.tsx` 404s mid-sign-in.
 - **A dummy Clerk publishable key still has to look like a real one.** `clerkMiddleware()` parses the key and rejects a malformed string. CI uses `pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk` (base64 of `"example.clerk.accounts.dev$"`), which parses without contacting Clerk.
-- **Turn off telemetry with `NEXT_PUBLIC_CLERK_TELEMETRY_DISABLED`** (set in `.github/workflows/ci.yml`, `web/Dockerfile`, and the `web/.env` template in `scripts/lib/env.sh`).
+- **Turn off telemetry with `NEXT_PUBLIC_CLERK_TELEMETRY_DISABLED`** (set in `.github/workflows/ci.yml`, `web/Dockerfile`, and `web/.env.example`).
   - The package reads that name on the server and also bakes it into the browser bundle. `CLERK_TELEMETRY_DISABLED` (no `NEXT_PUBLIC_`) only covers the server collector.
   - `isCI()` hides the console notice; it does not stop reporting.
   - A `pk_test_*` key still reports from CI and local container builds; a `pk_live_*` key does not.

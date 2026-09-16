@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jq -r '.tool_input.file_path // empty' | { read -r f; case \"$f\" in */scripts/lib/env-files.sh) printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"scripts/lib/env-files.sh was just edited. Its template only reaches a newly created web/.env, so review web/.env and make the same change there if the edited section applies to it, unless the divergence is intentional: web/.env is kept identical to its template apart from its values.\"}}';; esac; } 2>/dev/null || true",
+            "command": "jq -r '.tool_input.file_path // empty' | { read -r f; case \"$f\" in */web/.env.example) printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"web/.env.example was just edited. It only reaches a newly created web/.env, so review web/.env and make the same change there if the edited section applies to it, unless the divergence is intentional: web/.env is kept identical to web/.env.example apart from its values.\"}}';; esac; } 2>/dev/null || true",
             "statusMessage": "Checking .env sync"
           }
         ]
