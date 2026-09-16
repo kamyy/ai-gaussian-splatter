@@ -308,7 +308,7 @@ Scaffolding (three packages + CI) is in place. Host-run `next dev` can 500 with 
 
 - **CI's `deploy` job is disabled** (`if: false && …` in `.github/workflows/ci.yml`) while the AWS account is torn down.
   - Nothing it deploys to exists: no state bucket, no CI role, no stack.
-  - Re-enable it by deleting `false && ` only after redoing [First-time account setup](RUNBOOK.md#first-time-account-setup) and [Configuring continuous deployment](RUNBOOK.md#configuring-continuous-deployment), including the `WORKER_IMAGE_TAG` repository variable. [Going live](RUNBOOK.md#going-live) covers the switch.
+  - Re-enable it by deleting `false && ` only after redoing [Creating account prerequisites](RUNBOOK.md#creating-account-prerequisites) and [Configuring continuous deployment](RUNBOOK.md#configuring-continuous-deployment), including the `WORKER_IMAGE_TAG` repository variable. [Going live](RUNBOOK.md#going-live) covers the switch.
   - The job's first run deploys the whole stack, and the worker image is pushed after that ([Building and pushing the worker image](RUNBOOK.md#building-and-pushing-the-worker-image)).
 
 Known gaps, priority order:

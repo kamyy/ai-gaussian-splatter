@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Resolves every repository variable .github/workflows/deploy.yml reads and sets them with `gh variable set`.
 # scripts/prod/terraform-plan.sh and scripts/prod/terraform-destroy.sh read the same variables back. Run it after
-# scripts/prod/first-time-account-setup.sh, since it looks up the Clerk secret that script creates. Safe to re-run. Each
+# scripts/prod/create-account-prereqs.sh, since it looks up the Clerk secret that script creates. Safe to re-run. Each
 # prompt defaults to the variable's current value.
 
 # shellcheck disable=SC2034 # Each value is read back through ${!name} at the end.
@@ -49,7 +49,7 @@ fi
 
 if ! CLERK_SECRET_KEY_ARN=$(aws secretsmanager describe-secret --region "$REGION" \
   --secret-id ai-gaussian-splatter/clerk-secret-key --query ARN --output text); then
-  echo "Create the Clerk secret with scripts/prod/first-time-account-setup.sh first." >&2
+  echo "Create the Clerk secret with scripts/prod/create-account-prereqs.sh first." >&2
   exit 1
 fi
 

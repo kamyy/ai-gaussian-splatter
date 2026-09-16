@@ -14,7 +14,7 @@ Most procedures below run a script from `scripts/dev/` or `scripts/prod/`, and e
 - [Full test suite](#full-test-suite)
 - [Deploying to production](#deploying-to-production)
   - [Signing in to AWS](#signing-in-to-aws)
-  - [First-time account setup](#first-time-account-setup)
+  - [Creating account prerequisites](#creating-account-prerequisites)
   - [Configuring continuous deployment](#configuring-continuous-deployment)
   - [Going live](#going-live)
   - [Building and pushing the worker image](#building-and-pushing-the-worker-image)
@@ -131,7 +131,7 @@ Several of the tests `pnpm test` runs in `web/` need Postgres. They use `TEST_DA
 
 Required one-time manual setup, in this order:
 
-1. [First-time account setup](#first-time-account-setup)
+1. [Creating account prerequisites](#creating-account-prerequisites)
 2. [Configuring continuous deployment](#configuring-continuous-deployment)
 3. [Going live](#going-live) to turn the job on
 
@@ -155,23 +155,23 @@ Run every script and command in this section as an admin IAM identity signed in 
 aws login # Needed again only after the session expires, up to 12 hours later.
 ```
 
-### First-time account setup
+### Creating account prerequisites
 
-One-time per account. Complete all this before turning the `deploy` job on. `scripts/prod/first-time-account-setup.sh` creates three things the root module never manages, and keeps any that already exist:
+One-time per account. Complete all this before turning the `deploy` job on. `scripts/prod/create-account-prereqs.sh` creates three things `infra/` never manages, and keeps any that already exist:
 
 - **The Clerk secret**, `ai-gaussian-splatter/clerk-secret-key`. The script prompts for its `sk_live_...` value. `infra/` references it by ARN only ([Setting GitHub repository variables](#setting-github-repository-variables)). To change the value later, update it directly in Secrets Manager, then force a new ECS deployment (`aws ecs update-service --force-new-deployment`) since ECS only resolves secrets at task start.
 - **`AWSServiceRoleForEC2Spot`**. Account-wide role shared with every other Spot workload, so `infra/` leaves it alone (`infra/worker_iam.tf` says why). The first `RunInstances` call fails without it.
 - **The Terraform state bucket**, `ai-gaussian-splatter-tfstate-<account-id>`. `terraform init` (the `deploy` job's, or a local [plan](#running-terraform-locally)) needs it before any apply.
 
 ```bash
-scripts/prod/first-time-account-setup.sh
+scripts/prod/create-account-prereqs.sh
 ```
 
 To check month-to-date spend: Billing console → **Billing Home**, or **Cost Explorer** for a per-service breakdown. `aws budgets describe-budgets --account-id "$(aws sts get-caller-identity --query Account --output text)" --region us-east-1` returns the budget's `CalculatedSpend`.
 
 ### Configuring continuous deployment
 
-One-time, after [First-time account setup](#first-time-account-setup) and before [Going live](#going-live). The CI role's policy names roles and repositories that only the first deploy creates. IAM allows that, since it doesn't check that a policy's resources exist. The `ai-gaussian-splatter-ci-deploy` role created below can't be Terraform-managed, since CI would need it to apply the config that creates it.
+One-time, after [Creating account prerequisites](#creating-account-prerequisites) and before [Going live](#going-live). The `ai-gaussian-splatter-ci-deploy` role created below can't be Terraform-managed, since CI would need it to apply the `infra/` config that creates it.
 
 #### Creating the OIDC provider and CI role
 
@@ -277,7 +277,7 @@ scripts/prod/terraform-destroy.sh
 
 The ECR repository (`infra/registry.tf`) is destroyed too — `force_delete = true` means every image in it goes as well.
 
-Resources this config never owned — hand-created in [First-time account setup](#first-time-account-setup) and [Configuring continuous deployment](#configuring-continuous-deployment) — are untouched by `terraform destroy` and need their own manual cleanup, if you want them gone too: the Clerk secret (`ai-gaussian-splatter/clerk-secret-key`), the `ai-gaussian-splatter-ci-deploy` IAM role and its inline policy, the GitHub OIDC provider (skip if another app in the account still uses it), the `orky.net` Route 53 hosted zone (referenced only — this app never owned it), `AWSServiceRoleForEC2Spot` (account-wide, shared with any other Spot workload), the GitHub repository variables, and the state bucket itself. None of these cost anything meaningful to leave in place, and several (the OIDC provider, the Spot service-linked role, the hosted zone) are shared or reused, so deleting them isn't a like-for-like undo of `terraform apply`.
+Resources `infra/` never owned — hand-created in [Creating account prerequisites](#creating-account-prerequisites) and [Configuring continuous deployment](#configuring-continuous-deployment) — are untouched by `terraform destroy` and need their own manual cleanup, if you want them gone too: the Clerk secret (`ai-gaussian-splatter/clerk-secret-key`), the `ai-gaussian-splatter-ci-deploy` IAM role and its inline policy, the GitHub OIDC provider (skip if another app in the account still uses it), the Route 53 hosted zone `DOMAIN_ZONE_NAME` names, `AWSServiceRoleForEC2Spot`, the GitHub repository variables, and the state bucket itself. None cost anything meaningful to leave in place, and the OIDC provider, the Spot service-linked role, and the hosted zone are shared with anything else in the account.
 
 Only delete the state bucket after `scripts/prod/terraform-destroy.sh` has finished with it. The script refuses while the state still tracks any resource.
 
