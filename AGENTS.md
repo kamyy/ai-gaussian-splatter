@@ -170,6 +170,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - **Never add the state bucket as a resource in `infra/`.** Skip creating it ([Creating account prerequisites](RUNBOOK.md#creating-account-prerequisites)) and `terraform init` fails.
 - **`infra/tests/*.tftest.hcl` run fully offline via `mock_provider "aws" {}`.**
   - Every file needs two `mock_provider "aws"` blocks — one default, one `alias = "billing"` — since a bare `mock_provider "aws" {}` only covers the unaliased provider configuration and `providers.tf` declares a second one for `us-east-1`.
+  - An assertion that a value follows a variable has to run against a second value of that variable, in a `run` block with its own `variables {}`. Written against the file-level fixture, `"ai-gaussian-splatter.${var.domain_zone_name}"` and `"ai-gaussian-splatter.example.com"` are the same string, so the assertion passes whether the resource reads `local.app_hostname` or hardcodes the hostname. `hostnames_follow_the_zone_variable` (`infra/tests/web.tftest.hcl`) and `cors_origins_follow_the_zone_variable` (`infra/tests/data.tftest.hcl`) are the runs that own that fact.
 - **Terraform reads `aws login` credentials only through a recent AWS provider.**
   - An older `hashicorp/aws` fails at the first `plan` with `No valid credential sources found`, even though `terraform init` succeeds, because the S3 backend reads the credentials itself.
   - `terraform version` in `infra/` names the provider version actually installed.
@@ -298,6 +299,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 - `scripts/dev/run-tests.sh` runs every lint, typecheck, and test suite.
   - Postgres-dependent web tests need `TEST_DATABASE_URL` (see [`RUNBOOK.md`](RUNBOOK.md#full-test-suite)). Run the relevant subset of its commands after changes.
+- `scripts:check` also runs `scripts/dev/test-terraform-lib.sh`, which checks the HCL scrapers in `scripts/lib/terraform.sh` against `infra/`'s real files and against fixtures. `.github/workflows/deploy.yml` signs with `tf_aws_region` and smoke-tests the origin `tf_app_hostname` builds, so a spelling in `infra/variables.tf` or `infra/locals.tf` that they no longer read breaks a deploy rather than a plan.
 - `pnpm biome:ci` is a single workspace-wide command (root's `biome.json` covers `scripts/*.js`, `web/**`, and `infra/`'s own config files in one pass), used by CI's `lint-format` job and by the pre-commit hook.
   - `web:check`/`worker:check`/`infra:check` are root package.json scripts, one per package — the same scripts CI's `web`/`worker`/`infra` jobs call. `infra:check` runs `scripts/dev/terraform-check.sh` so it uses the pinned CLI in `scripts/lib/terraform.sh`, not whichever `terraform` is first on PATH.
   - The pre-commit hook runs `biome:ci` plus these three (`scripts:check` included), so `web`'s and `scripts/`'s Biome checks run twice there — harmless, and worth it since `biome:ci` is what actually reaches `infra/`'s and root's own config files, which none of the per-package scripts cover.

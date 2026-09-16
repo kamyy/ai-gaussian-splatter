@@ -257,11 +257,6 @@ run "certificate_and_dns" {
   command = apply
 
   assert {
-    condition     = aws_acm_certificate.web.domain_name == "ai-gaussian-splatter.example.com"
-    error_message = "certificate must cover the app's own hostname"
-  }
-
-  assert {
     condition     = aws_acm_certificate.web.validation_method == "DNS"
     error_message = "must validate via DNS against the imported zone, not email"
   }
@@ -274,6 +269,37 @@ run "certificate_and_dns" {
   assert {
     condition     = aws_lb_listener.https.ssl_policy == "ELBSecurityPolicy-TLS13-1-2-2021-06"
     error_message = "an unset ssl_policy on the AWS side defaults to the weak 2016-08 policy — this must be explicit"
+  }
+}
+
+# Every hostname the deploy touches has to follow var.domain_zone_name. Asserting that against the fixture's own zone
+# can't tell local.app_hostname apart from a literal spelling of the same string, so this run supplies a second zone.
+# A hardcoded hostname passes everywhere else and only shows up in production: the certificate covers a name the A
+# record doesn't serve, so ACM validation never completes and the worker PATCHes status to an origin the ALB doesn't
+# answer on.
+run "hostnames_follow_the_zone_variable" {
+  command = apply
+
+  variables {
+    domain_zone_name = "other.test"
+  }
+
+  assert {
+    condition     = aws_acm_certificate.web.domain_name == "ai-gaussian-splatter.other.test"
+    error_message = "the certificate must cover local.app_hostname, which follows var.domain_zone_name"
+  }
+
+  assert {
+    condition     = aws_route53_record.web.name == "ai-gaussian-splatter.other.test"
+    error_message = "the A-alias record must name local.app_hostname, the hostname the certificate covers"
+  }
+
+  assert {
+    condition = anytrue([
+      for e in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].environment :
+      e.name == "APP_PUBLIC_URL" && e.value == "https://ai-gaussian-splatter.other.test"
+    ])
+    error_message = "APP_PUBLIC_URL must be local.app_origin, the same hostname the certificate and A record use"
   }
 }
 

@@ -88,6 +88,21 @@ jobs:
           role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-gaussian-splatter-ci-deploy
           aws-region: ${{ env.AWS_REGION }}
 
+      # scripts/prod/set-gh-repo-variables.sh looks HOSTED_ZONE_ID up from DOMAIN_ZONE_NAME, but either variable can be
+      # edited on its own afterwards. The two then name different zones, and the ACM validation record lands in a zone
+      # that doesn't serve the hostname, which stalls the first apply until ACM's own validation timeout gives up.
+      - name: Check HOSTED_ZONE_ID serves DOMAIN_ZONE_NAME
+        run: |
+          if ! zone=$(aws route53 get-hosted-zone --id "$TF_VAR_hosted_zone_id" \
+            --query HostedZone.Name --output text); then
+            echo "::error::repository variable HOSTED_ZONE_ID names no zone in this account (RUNBOOK.md)"
+            exit 1
+          fi
+          if [[ ${zone%.} != "$TF_VAR_domain_zone_name" ]]; then
+            echo "::error::HOSTED_ZONE_ID serves ${zone%.}, not DOMAIN_ZONE_NAME's $TF_VAR_domain_zone_name (RUNBOOK.md)"
+            exit 1
+          fi
+
       - id: terraform-version
         run: |
           source scripts/lib/terraform.sh

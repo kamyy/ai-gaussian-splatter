@@ -2,6 +2,7 @@
 # Sourced by scripts/prod/install-terraform.sh, scripts/prod/terraform-plan.sh, scripts/prod/terraform-destroy.sh,
 # scripts/prod/delete-tf-state-bucket.sh, scripts/prod/set-gh-repo-variables.sh, scripts/prod/configure-ci-role.sh,
 # scripts/prod/create-account-prereqs.sh, scripts/dev/terraform-check.sh, scripts/dev/run-tests.sh,
+# scripts/dev/test-terraform-lib.sh (which checks the HCL scrapers below),
 # scripts/dev/create-dev-resources.sh, and the hashicorp/setup-terraform steps in .github/workflows/ci.yml and
 # .github/workflows/deploy.yml. Callers that run terraform assign TERRAFORM=$(tf_bin). load_tf_vars needs
 # scripts/lib/github.sh's gh_repo_var, so source that first when calling it. Not meant to be run directly.

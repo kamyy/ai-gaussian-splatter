@@ -62,14 +62,6 @@ run "bucket_cors_matches_the_app_origin" {
 
   assert {
     condition = anytrue([
-      for r in aws_s3_bucket_cors_configuration.uploads.cors_rule :
-      contains(tolist(r.allowed_origins), "https://ai-gaussian-splatter.example.com")
-    ])
-    error_message = "a trailing slash on app_public_url must be stripped before it reaches the CORS origin"
-  }
-
-  assert {
-    condition = anytrue([
       for r in aws_s3_bucket_cors_configuration.splats.cors_rule : toset(r.allowed_methods) == toset(["GET", "HEAD"])
     ])
     error_message = "splats bucket must allow GET+HEAD only"
@@ -80,6 +72,33 @@ run "bucket_cors_matches_the_app_origin" {
       for r in aws_s3_bucket_cors_configuration.uploads.cors_rule : !contains(tolist(r.allowed_origins), "*")
     ])
     error_message = "CORS origin must never be *, or a leaked splat/upload URL is readable cross-origin"
+  }
+}
+
+# Both buckets' origins have to follow var.domain_zone_name. The fixture's own zone can't tell local.app_origin apart
+# from a literal spelling of it, so this run supplies a second zone. A hardcoded origin reaches production as a CORS
+# rule naming a host the browser never sends, which fails every direct-to-S3 upload and splat fetch.
+run "cors_origins_follow_the_zone_variable" {
+  command = apply
+
+  variables {
+    domain_zone_name = "other.test"
+  }
+
+  assert {
+    condition = anytrue([
+      for r in aws_s3_bucket_cors_configuration.uploads.cors_rule :
+      toset(r.allowed_origins) == toset(["https://ai-gaussian-splatter.other.test"])
+    ])
+    error_message = "the uploads bucket's CORS origin must be local.app_origin, which follows var.domain_zone_name"
+  }
+
+  assert {
+    condition = anytrue([
+      for r in aws_s3_bucket_cors_configuration.splats.cors_rule :
+      toset(r.allowed_origins) == toset(["https://ai-gaussian-splatter.other.test"])
+    ])
+    error_message = "the splats bucket's CORS origin must be local.app_origin, which follows var.domain_zone_name"
   }
 }
 
