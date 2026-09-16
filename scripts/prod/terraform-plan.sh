@@ -5,15 +5,15 @@
 set -euo pipefail
 
 ROOT=$(git rev-parse --show-toplevel)
-source "$ROOT/scripts/lib/require-aws-login.sh"
+source "$ROOT/scripts/lib/aws.sh"
 source "$ROOT/scripts/lib/github.sh"
 source "$ROOT/scripts/lib/terraform.sh"
 
-require_aws_login
-require_gh_login
-require_aws_deploy_account
+aws_require_login
+gh_require_login
+gh_require_aws_deploy_account
 
-TERRAFORM=$(tf_bin)
-export_tf_vars
+TERRAFORM=$(tf_get_bin)
+tf_export_vars
 tf_init
 "$TERRAFORM" -chdir="$ROOT/infra" plan "$@"

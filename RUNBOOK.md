@@ -25,10 +25,10 @@ Most procedures below run a script from `scripts/dev/` or `scripts/prod/`, and e
 
 ## Dev AWS resources
 
-`infra/` only describes production, so dev's uploads/splats buckets are created outside it. `scripts/dev/create-dev-resources.sh` creates the two buckets `web/.env` names in `UPLOADS_BUCKET` and `SPLATS_BUCKET`, plus an `ai-gaussian-splatter-dev` IAM user that can reach only those two buckets. Run it as an admin ([Signing in to AWS](#signing-in-to-aws)). It creates `web/.env` first when it's missing, and writes the IAM user's key pair into it whenever it creates the user's access key. An existing `web/.env` is never replaced. The default bucket names end in the AWS account id, because one S3 bucket namespace spans every account.
+`infra/` only describes production, so dev's uploads/splats buckets are created outside it. `scripts/dev/create-resources.sh` creates the two buckets `web/.env` names in `UPLOADS_BUCKET` and `SPLATS_BUCKET`, plus an `ai-gaussian-splatter-dev` IAM user that can reach only those two buckets. Run it as an admin ([Signing in to AWS](#signing-in-to-aws)). It creates `web/.env` first when it's missing, and writes the IAM user's key pair into it whenever it creates the user's access key. An existing `web/.env` is never replaced. The default bucket names end in the AWS account id, because one S3 bucket namespace spans every account.
 
 ```bash
-scripts/dev/create-dev-resources.sh
+scripts/dev/create-resources.sh
 ```
 
 ## Web (frontend + REST API)
@@ -116,7 +116,7 @@ Upload photos and click Process in the browser as normal. The job goes through t
 `infra/providers.tf` pins an exact `required_version`, so any other CLI version fails `terraform init`. Install that exact release as a standalone binary:
 
 ```bash
-scripts/prod/install-terraform.sh
+scripts/dev/terraform-install.sh
 ```
 
 ## Full test suite
@@ -239,7 +239,7 @@ Nothing builds or pushes this image on its own — GPU worker deployment stays m
 The image is tagged with the current commit, so commit any `worker/` changes first.
 
 ```bash
-scripts/prod/push-worker-image.sh
+scripts/prod/worker-push-image.sh
 ```
 
 After the push, the script sets the `WORKER_IMAGE_TAG` repository variable ([Setting GitHub repository variables](#setting-github-repository-variables)) to the new tag. The next deploy passes it as `TF_VAR_worker_image_tag`, which points `WORKER_IMAGE_URI` on the web task definition at the new image. Until then, job launches keep using the old one.
@@ -271,7 +271,7 @@ If the `deploy` job's migration step fails for an infra reason rather than a bad
 
 ## Tearing down
 
-`scripts/prod/terraform-destroy.sh` removes everything in `infra/`'s state, including the 3 data S3 buckets (force-destroyed, contents and all) and the RDS instance (no final snapshot). It reads its variables the same way as [Running Terraform locally](#running-terraform-locally). `scripts/prod/delete-tf-state-bucket.sh` below checks the `AWS_ACCOUNT_ID` one against the signed-in account. Delete the repository variables only after both have finished.
+`scripts/prod/terraform-destroy.sh` removes everything in `infra/`'s state, including the 3 data S3 buckets (force-destroyed, contents and all) and the RDS instance (no final snapshot). It reads its variables the same way as [Running Terraform locally](#running-terraform-locally). `scripts/prod/terraform-delete-state-bucket.sh` below checks the `AWS_ACCOUNT_ID` one against the signed-in account. Delete the repository variables only after both have finished.
 
 Turn the `deploy` job off first, or the next push to `main` finds an empty state and deploys the whole stack again. `scripts/prod/terraform-destroy.sh` refuses to run while the variable is `true` or unreadable, so the `false` set below is required even if deploys were never turned on. Then wait until no CI run is still going on `main`, since a run already under way can still reach its deploy job. The script refuses while one is unfinished.
 
@@ -292,5 +292,5 @@ Resources `infra/` never owned — hand-created in [Creating account prerequisit
 Only delete the state bucket after `scripts/prod/terraform-destroy.sh` has finished with it. The script refuses while the state still tracks any resource.
 
 ```bash
-scripts/prod/delete-tf-state-bucket.sh
+scripts/prod/terraform-delete-state-bucket.sh
 ```

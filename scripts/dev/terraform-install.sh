@@ -12,7 +12,7 @@ source "$ROOT/scripts/lib/terraform.sh"
 # whoever could swap the zip can't also swap the key it's checked against.
 HASHICORP_KEY_FINGERPRINT=C874011F0AB405110D02105534365D9472D7468F
 
-TF_VERSION=$(tf_required_version)
+TF_VERSION=$(tf_get_required_version)
 BASE=https://releases.hashicorp.com/terraform/$TF_VERSION
 ZIP=terraform_${TF_VERSION}_linux_amd64.zip
 SUMS=terraform_${TF_VERSION}_SHA256SUMS

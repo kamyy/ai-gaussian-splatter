@@ -5,13 +5,13 @@
 set -euo pipefail
 
 ROOT=$(git rev-parse --show-toplevel)
-source "$ROOT/scripts/lib/require-aws-login.sh"
+source "$ROOT/scripts/lib/aws.sh"
 source "$ROOT/scripts/lib/confirm.sh"
 source "$ROOT/scripts/lib/github.sh"
 source "$ROOT/scripts/lib/terraform.sh"
 
 REPO=ai-gaussian-splatter-worker
-REGION=$(tf_aws_region)
+REGION=$(tf_get_aws_region)
 
 # The tag is the commit SHA and the repository is IMMUTABLE, so an image of uncommitted changes would stay stuck under a
 # SHA that doesn't describe it.
@@ -21,12 +21,12 @@ if [[ -n $(git -C "$ROOT" status --porcelain -- worker) ]]; then
 fi
 TAG=$(git rev-parse --short HEAD)
 
-require_aws_login
-require_gh_login
+aws_require_login
+gh_require_login
 
 # Every deploy reads WORKER_IMAGE_TAG, so a push to any other account would point production at an image it doesn't
 # have.
-require_aws_deploy_account
+gh_require_aws_deploy_account
 REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
 
 # Both checks run before a ~19 GB build that would otherwise only fail at the push. Each reads only its own not-found

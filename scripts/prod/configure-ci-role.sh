@@ -6,18 +6,18 @@
 set -euo pipefail
 
 ROOT=$(git rev-parse --show-toplevel)
-source "$ROOT/scripts/lib/require-aws-login.sh"
+source "$ROOT/scripts/lib/aws.sh"
 source "$ROOT/scripts/lib/confirm.sh"
 source "$ROOT/scripts/lib/github.sh"
 source "$ROOT/scripts/lib/terraform.sh"
 
 ROLE=ai-gaussian-splatter-ci-deploy
 OIDC_HOST=token.actions.githubusercontent.com
-PROJECT_TAG=$(tf_local project_tag)
-REGION=$(tf_aws_region)
+PROJECT_TAG=$(tf_get_local project_tag)
+REGION=$(tf_get_aws_region)
 
-require_aws_login
-require_gh_login
+aws_require_login
+gh_require_login
 
 # {owner}/{repo} are gh's own placeholders, resolved from this checkout's origin remote.
 REPO_NAME=$(gh api 'repos/{owner}/{repo}' --jq .full_name)

@@ -6,15 +6,15 @@
 set -euo pipefail
 
 ROOT=$(git rev-parse --show-toplevel)
-source "$ROOT/scripts/lib/require-aws-login.sh"
+source "$ROOT/scripts/lib/aws.sh"
 source "$ROOT/scripts/lib/confirm.sh"
 source "$ROOT/scripts/lib/github.sh"
 source "$ROOT/scripts/lib/terraform.sh"
 
-require_aws_login
-require_gh_login
+aws_require_login
+gh_require_login
 
-deploy_enabled=$(gh_repo_var DEPLOY_ENABLED "Run: gh variable set DEPLOY_ENABLED --body false")
+deploy_enabled=$(gh_get_repo_var DEPLOY_ENABLED "Run: gh variable set DEPLOY_ENABLED --body false")
 # Lowercased first, because a GitHub Actions `==` comparison ignores case. True and TRUE arm the job in
 # .github/workflows/ci.yml just as true does.
 if [[ ${deploy_enabled,,} == true ]]; then
@@ -31,11 +31,11 @@ for status in in_progress queued waiting requested pending; do
   fi
 done
 
-require_aws_deploy_account
+gh_require_aws_deploy_account
 
 confirm "Destroy every resource in infra/'s state in account $AWS_ACCOUNT_ID, data buckets and database included?"
 
-TERRAFORM=$(tf_bin)
-export_tf_vars
+TERRAFORM=$(tf_get_bin)
+tf_export_vars
 tf_init
 "$TERRAFORM" -chdir="$ROOT/infra" destroy

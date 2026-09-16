@@ -70,7 +70,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - The paths never change, so `web/Dockerfile` bakes them in as `ENV`.
   - Both pages need an optional catch-all (`web/app/(public)/sign-in/[[...sign-in]]/page.tsx`) because Clerk puts verification and SSO steps on sub-paths; a plain `page.tsx` 404s mid-sign-in.
 - **A dummy Clerk publishable key still has to look like a real one.** `clerkMiddleware()` parses the key and rejects a malformed string. CI uses `pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk` (base64 of `"example.clerk.accounts.dev$"`), which parses without contacting Clerk.
-- **Turn off telemetry with `NEXT_PUBLIC_CLERK_TELEMETRY_DISABLED`** (set in `.github/workflows/ci.yml`, `web/Dockerfile`, and the `web/.env` template in `scripts/lib/env-files.sh`).
+- **Turn off telemetry with `NEXT_PUBLIC_CLERK_TELEMETRY_DISABLED`** (set in `.github/workflows/ci.yml`, `web/Dockerfile`, and the `web/.env` template in `scripts/lib/env.sh`).
   - The package reads that name on the server and also bakes it into the browser bundle. `CLERK_TELEMETRY_DISABLED` (no `NEXT_PUBLIC_`) only covers the server collector.
   - `isCI()` hides the console notice; it does not stop reporting.
   - A `pk_test_*` key still reports from CI and local container builds; a `pk_live_*` key does not.
@@ -133,14 +133,24 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - Markdown *prose* is the exception: no max width, since GitHub reflows paragraphs and fixed wraps only add diff noise. One line per paragraph/list item.
 - **Operational scripts in `scripts/dev/` (local) and `scripts/prod/` (the deployed account) are committed executable (`100755`); helpers in `scripts/lib/` are sourced, so they stay `100644`.**
   - Each helper starts with `# shellcheck shell=bash` in place of a shebang.
-  - A script that uses the AWS CLI as a signed-in admin sources `scripts/lib/require-aws-login.sh`, and calls `require_aws_login` before any other AWS CLI invocation.
-  - A script that tags the AWS resources it creates sources `scripts/lib/terraform.sh` and assigns `PROJECT_TAG=$(tf_local project_tag)`. That reads `local.project_tag` from `infra/locals.tf` so the tag matches `infra/providers.tf`'s `default_tags`.
+  - Executables that share a subject use topic-then-action kebab-case (`terraform-*`, `worker-*`, `db-*`).
+  - A one-off procedure stays verb-object (`create-account-prereqs`, `configure-ci-role`).
+  - Lib files are a domain: `scripts/lib/aws.sh`, `scripts/lib/github.sh`, `scripts/lib/terraform.sh`, `scripts/lib/env.sh`, `scripts/lib/worker.sh`.
+  - `scripts/lib/confirm.sh` is named after its one function.
+  - Lib functions take that file's prefix (`aws_`, `gh_`, `tf_`, `env_`, `worker_`) then a verb.
+  - Fail-fast helpers are `*_require_*`.
+  - A function that exists only inside one executable has no prefix.
+  - Assign each positional argument to a named variable before using it, so a later `$1` doesn't leave the reader guessing which argument it is.
+  - That assignment is `local` inside a function and an ordinary variable at script top, where `local` is invalid.
+  - `"$@"` is only for leftover arguments forwarded to another command.
+  - A script that uses the AWS CLI as a signed-in admin sources `scripts/lib/aws.sh`, and calls `aws_require_login` before any other AWS CLI invocation.
+  - A script that tags the AWS resources it creates sources `scripts/lib/terraform.sh` and assigns `PROJECT_TAG=$(tf_get_local project_tag)`. That reads `local.project_tag` from `infra/locals.tf` so the tag matches `infra/providers.tf`'s `default_tags`.
   - The Spot service-linked role and GitHub OIDC provider are account-wide and stay untagged.
   - A script that creates or deletes anything sources `scripts/lib/confirm.sh` and calls `confirm` first.
-  - A script that uses the GitHub CLI sources `scripts/lib/github.sh` and calls `require_gh_login` before its first `gh` call. Otherwise a logged-out `gh` reads the same as an unset repository variable.
-  - `scripts/prod/terraform-plan.sh`, `scripts/prod/terraform-destroy.sh`, `scripts/prod/delete-tf-state-bucket.sh`, and `scripts/prod/push-worker-image.sh` act on the deployed account, so they also call `require_aws_deploy_account`, which checks the signed-in account against the `AWS_ACCOUNT_ID` repository variable.
-  - The worker scripts run as the dev IAM user from `web/.env` instead, so `use_dev_aws_env` in `scripts/lib/worker.sh` checks those keys.
-  - Local Terraform is `$HOME/.local/bin/terraform` (`scripts/prod/install-terraform.sh`). Scripts that run it assign `TERRAFORM=$(tf_bin)`, which prefers that path over PATH, because a different CLI earlier on PATH still satisfies `command -v terraform`. CI has no copy there: `hashicorp/setup-terraform` in `.github/workflows/ci.yml` and `.github/workflows/deploy.yml` installs whatever `tf_required_version` reads from `infra/providers.tf`.
+  - A script that uses the GitHub CLI sources `scripts/lib/github.sh` and calls `gh_require_login` before its first `gh` call. Otherwise a logged-out `gh` reads the same as an unset repository variable.
+  - `scripts/prod/terraform-plan.sh`, `scripts/prod/terraform-destroy.sh`, `scripts/prod/terraform-delete-state-bucket.sh`, and `scripts/prod/worker-push-image.sh` act on the deployed account, so they also call `gh_require_aws_deploy_account`, which checks the signed-in account against the `AWS_ACCOUNT_ID` repository variable.
+  - The worker scripts run as the dev IAM user from `web/.env` instead, so `worker_use_dev_aws` in `scripts/lib/worker.sh` checks those keys.
+  - Local Terraform is `$HOME/.local/bin/terraform` (`scripts/dev/terraform-install.sh`). Scripts that run it assign `TERRAFORM=$(tf_get_bin)`, which prefers that path over PATH, because a different CLI earlier on PATH still satisfies `command -v terraform`. CI has no copy there: `hashicorp/setup-terraform` in `.github/workflows/ci.yml` and `.github/workflows/deploy.yml` installs whatever `tf_get_required_version` reads from `infra/providers.tf`.
   - `scripts:check` (run by the pre-commit hook and CI's `lint-format` job) shellchecks them with `scripts/dev/shellcheck.sh`, which runs shellcheck's container image.
   - The image is pinned by digest, so neither a new shellcheck release nor a re-pushed tag can change the result for an unchanged tree.
   - The repo is mounted read-only with `--security-opt label=disable`, because a `:Z` mount relabels the whole checkout for SELinux.
@@ -225,8 +235,8 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - `terraform validate` and `terraform test` (`mock_provider`) never touch real AWS, so required variables (`worker_ami_id`, `alert_email`, `domain_zone_name`, `hosted_zone_id`, `clerk_secret_key_arn`, `web_image_tag`, `worker_image_tag`) simply have no default in `infra/variables.tf`. CI's `infra` job never has to supply one.
   - A real `terraform plan`/`apply` fails immediately when one is unset.
   - `.github/workflows/deploy.yml` maps each from a GitHub repository variable, though, and an unset repository variable arrives as `""`, which Terraform accepts as a value. There only a `validation` block catches it, so every required variable has one that rejects `""`. Give any new required variable one too.
-- **`var.aws_region`'s default in `infra/variables.tf` is the only place the region is written.** `scripts/lib/terraform.sh`'s `tf_aws_region` reads it, and every AWS CLI call in `scripts/` plus the `Resolve region` step in `.github/workflows/deploy.yml` take it from there.
-  - Two places keep their own copy, neither of which reaches AWS. `scripts/dev/create-dev-resources.sh` uses `web/.env`'s own `AWS_REGION`, so the dev buckets match the region `web/lib/server/env.ts` signs upload URLs for; a new `web/.env` is seeded from the same default. `.github/workflows/ci.yml`'s web job sets it as a fixture beside `AWS_ACCESS_KEY_ID: testing`.
+- **`var.aws_region`'s default in `infra/variables.tf` is the only place the region is written.** `scripts/lib/terraform.sh`'s `tf_get_aws_region` reads it, and every AWS CLI call in `scripts/` plus the `Resolve region` step in `.github/workflows/deploy.yml` take it from there.
+  - Two places keep their own copy, neither of which reaches AWS. `scripts/dev/create-resources.sh` uses `web/.env`'s own `AWS_REGION`, so the dev buckets match the region `web/lib/server/env.ts` signs upload URLs for; a new `web/.env` is seeded from the same default. `.github/workflows/ci.yml`'s web job sets it as a fixture beside `AWS_ACCESS_KEY_ID: testing`.
   - The Budgets provider (`infra/budgets.tf`) stays pinned to `us-east-1` — see [Stack construction](#stack-construction).
   - Moving the region means a teardown, then the whole of [Deploying to production](RUNBOOK.md#deploying-to-production) again. Nothing migrates an ALB, an RDS instance, or an ECR repository across regions. The state bucket, the Clerk secret, the CI role's ARNs, and `WORKER_AMI_ID` are region-specific as well.
   - Tear down before editing the default. `terraform init` looks for the state bucket in whatever the default currently says, so an edited default points `scripts/prod/terraform-destroy.sh` at a bucket that doesn't exist while the old stack keeps billing.
@@ -300,7 +310,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 - `scripts/dev/run-tests.sh` runs every lint, typecheck, and test suite.
   - Postgres-dependent web tests need `TEST_DATABASE_URL` (see [`RUNBOOK.md`](RUNBOOK.md#full-test-suite)). Run the relevant subset of its commands after changes.
-- `scripts:check` also runs `scripts/dev/test-terraform-lib.sh`, which checks the HCL scrapers in `scripts/lib/terraform.sh` against `infra/`'s real files and against fixtures. `.github/workflows/deploy.yml` signs with `tf_aws_region` and smoke-tests the origin `tf_app_hostname` builds, so a spelling in `infra/variables.tf` or `infra/locals.tf` that they no longer read breaks a deploy rather than a plan.
+- `scripts:check` also runs `scripts/dev/terraform-test-lib.sh`, which checks the HCL scrapers in `scripts/lib/terraform.sh` against `infra/`'s real files and against fixtures. `.github/workflows/deploy.yml` signs with `tf_get_aws_region` and smoke-tests the origin `tf_get_app_hostname` builds, so a spelling in `infra/variables.tf` or `infra/locals.tf` that they no longer read breaks a deploy rather than a plan.
 - `pnpm biome:ci` is a single workspace-wide command (root's `biome.json` covers `scripts/*.js`, `web/**`, and `infra/`'s own config files in one pass), used by CI's `lint-format` job and by the pre-commit hook.
   - `web:check`/`worker:check`/`infra:check` are root package.json scripts, one per package — the same scripts CI's `web`/`worker`/`infra` jobs call. `infra:check` runs `scripts/dev/terraform-check.sh` so it uses the pinned CLI in `scripts/lib/terraform.sh`, not whichever `terraform` is first on PATH.
   - The pre-commit hook runs `biome:ci` plus these three (`scripts:check` included), so `web`'s and `scripts/`'s Biome checks run twice there — harmless, and worth it since `biome:ci` is what actually reaches `infra/`'s and root's own config files, which none of the per-package scripts cover.

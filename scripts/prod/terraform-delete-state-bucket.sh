@@ -5,18 +5,18 @@
 set -euo pipefail
 
 ROOT=$(git rev-parse --show-toplevel)
-source "$ROOT/scripts/lib/require-aws-login.sh"
+source "$ROOT/scripts/lib/aws.sh"
 source "$ROOT/scripts/lib/confirm.sh"
 source "$ROOT/scripts/lib/github.sh"
 source "$ROOT/scripts/lib/terraform.sh"
 
-REGION=$(tf_aws_region)
+REGION=$(tf_get_aws_region)
 
-require_aws_login
-require_gh_login
-require_aws_deploy_account
+aws_require_login
+gh_require_login
+gh_require_aws_deploy_account
 BUCKET="ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID"
-TERRAFORM=$(tf_bin)
+TERRAFORM=$(tf_get_bin)
 
 # Refuses while the state still tracks anything, for example after a destroy that failed partway. Deleting it then would
 # leave those resources with nothing that can remove them, and their fixed names would block the next deploy.

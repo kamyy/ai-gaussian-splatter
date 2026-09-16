@@ -1,59 +1,59 @@
 # shellcheck shell=bash
-# Sourced by scripts/dev/create-dev-resources.sh, scripts/lib/worker.sh, and scripts/dev/run-web-container.sh.
+# Sourced by scripts/dev/create-resources.sh, scripts/lib/worker.sh, and scripts/dev/run-web-container.sh.
 # web/.env isn't committed, so the template below is the only record of what it holds. Not meant to be run directly.
 
-# Usage: create_env_file <path> <template-function> [template-arg...]
+# Usage: env_create_file <env-file> <template-function> [template-arg...]
 #
-# Writes the template to the path only when nothing is there yet, so a re-run never replaces values filled in by hand.
+# Writes the template to the file only when nothing is there yet, so a re-run never replaces values filled in by hand.
 # The file is readable only by its owner, because it ends up holding the dev user's secret key.
-create_env_file() {
-  local file=$1 template=$2
+env_create_file() {
+  local env_file=$1 template=$2
   shift 2
-  if [[ -f $file ]]; then
-    echo "$file already exists. Keeping it."
+  if [[ -f $env_file ]]; then
+    echo "$env_file already exists. Keeping it."
     return
   fi
 
-  (umask 077 && "$template" "$@" >"$file")
-  echo "Created $file."
+  (umask 077 && "$template" "$@" >"$env_file")
+  echo "Created $env_file."
 }
 
-# Usage: set_env_var <path> <name> <value>
+# Usage: env_set <env-file> <env-var> <env-val>
 #
-# Replaces the file's NAME= line, or appends one when there isn't any. The value reaches awk through the environment
+# Replaces that variable's line, or appends one when there isn't any. The value reaches awk through the environment
 # rather than inside an awk or sed expression, because AWS secret keys can contain / and +.
-set_env_var() {
-  local file=$1 name=$2 value=$3 tmp
-  if ! grep -q "^$name=" "$file"; then
-    # Without a final newline, the appended line would be glued onto the file's last one.
-    if [[ -s $file && -n $(tail -c1 "$file") ]]; then
-      printf '\n' >> "$file"
+env_set() {
+  local env_file=$1 env_var=$2 env_val=$3 tmp
+  if ! grep -q "^$env_var=" "$env_file"; then
+    if [[ -s $env_file && -n $(tail -c1 "$env_file") ]]; then
+      # Without a final newline, the appended line would be glued onto the file's last one.
+      printf '\n' >> "$env_file"
     fi
-    printf '%s=%s\n' "$name" "$value" >>"$file"
+    printf '%s=%s\n' "$env_var" "$env_val" >>"$env_file"
     return
   fi
 
   tmp=$(mktemp)
-  NAME=$name VALUE=$value awk '
-    index($0, ENVIRON["NAME"] "=") == 1 { $0 = ENVIRON["NAME"] "=" ENVIRON["VALUE"] }
-    { print }' "$file" >"$tmp"
+  ENV_VAR=$env_var ENV_VAL=$env_val awk '
+    index($0, ENVIRON["ENV_VAR"] "=") == 1 { $0 = ENVIRON["ENV_VAR"] "=" ENVIRON["ENV_VAL"] }
+    { print }' "$env_file" >"$tmp"
   # Copied back rather than moved, so the file keeps its own permissions.
-  cat "$tmp" >"$file"
+  cat "$tmp" >"$env_file"
   rm -f "$tmp"
 }
 
-# Usage: get_env_var <path> <name>
+# Usage: env_get <env-file> <env-var>
 #
-# Prints the file's NAME= value, or exits naming the file and variable when it's missing or empty.
-get_env_var() {
-  local file=$1 name=$2 value
-  value=$(grep -oP -m1 "^$name=\K.*" "$file" || true)
-  if [[ -z $value ]]; then
-    echo "$file has no $name value." >&2
+# Prints that variable's value, or exits naming the file and variable when it's missing or empty.
+env_get() {
+  local env_file=$1 env_var=$2 env_val
+  env_val=$(grep -oP -m1 "^$env_var=\K.*" "$env_file" || true)
+  if [[ -z $env_val ]]; then
+    echo "$env_file has no $env_var value." >&2
     exit 1
   fi
 
-  printf '%s\n' "$value"
+  printf '%s\n' "$env_val"
 }
 
 # Usage: web_env_template <aws-account-id> <aws-region>
@@ -64,7 +64,7 @@ web_env_template() {
   local account_id=$1 region=$2
   cat <<EOF
 # Local dev config for the web app. scripts/lib/worker.sh also reads its AWS keys, region, and buckets for local worker
-# runs. scripts/dev/create-dev-resources.sh writes this file when web/.env is missing, and never replaces an existing
+# runs. scripts/dev/create-resources.sh writes this file when web/.env is missing, and never replaces an existing
 # one. Fill in the Clerk keys. Read by web/lib/server/env.ts unless noted otherwise.
 
 # The two dev buckets from "Dev AWS resources" in RUNBOOK.md. One S3 bucket namespace spans every AWS account, so the
@@ -80,7 +80,7 @@ AWS_REGION=$region
 EOF
   cat <<'EOF'
 
-# The dev IAM user scoped to those two buckets. scripts/dev/create-dev-resources.sh writes its key pair here when it
+# The dev IAM user scoped to those two buckets. scripts/dev/create-resources.sh writes its key pair here when it
 # creates the user's access key. Kept here rather than in ~/.aws/credentials because `next dev` loads this file, and
 # because the SDK's env provider tests these for truthiness: an empty value counts as absent and the chain falls through
 # to ~/.aws/credentials, signing upload URLs with whatever profile is configured there. The placeholders are non-empty

@@ -7,7 +7,7 @@
     "prepare": "husky",
     "format-staged": "node scripts/format-staged.js",
     "biome:ci": "biome ci .",
-    "scripts:check": "biome lint scripts && scripts/dev/shellcheck.sh && scripts/dev/test-terraform-lib.sh",
+    "scripts:check": "biome lint scripts && scripts/dev/shellcheck.sh && scripts/dev/terraform-test-lib.sh",
     "web:check": "pnpm --dir web exec biome lint . && pnpm --dir web exec next typegen && pnpm --dir web exec tsc --noEmit",
     "worker:check": "uv --directory worker run ruff check . && uv --directory worker run ruff format --check . && uv --directory worker run mypy pipeline",
     "infra:check": "scripts/dev/terraform-check.sh"

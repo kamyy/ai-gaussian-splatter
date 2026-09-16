@@ -5,7 +5,7 @@
 set -euo pipefail
 
 ROOT=$(git rev-parse --show-toplevel)
-source "$ROOT/scripts/lib/require-aws-login.sh"
+source "$ROOT/scripts/lib/aws.sh"
 source "$ROOT/scripts/lib/confirm.sh"
 source "$ROOT/scripts/lib/terraform.sh"
 
@@ -45,10 +45,10 @@ read_masked() {
 }
 
 SECRET_NAME=ai-gaussian-splatter/clerk-secret-key
-PROJECT_TAG=$(tf_local project_tag)
-REGION=$(tf_aws_region)
+PROJECT_TAG=$(tf_get_local project_tag)
+REGION=$(tf_get_aws_region)
 
-require_aws_login
+aws_require_login
 BUCKET="ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID"
 
 confirm "Create the Clerk secret, the Spot service-linked role, and $BUCKET in $REGION, account $AWS_ACCOUNT_ID?"

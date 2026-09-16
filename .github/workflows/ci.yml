@@ -173,7 +173,7 @@ jobs:
       - id: terraform-version
         run: |
           source scripts/lib/terraform.sh
-          version=$(tf_required_version)
+          version=$(tf_get_required_version)
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - uses: hashicorp/setup-terraform@v3
         with:
