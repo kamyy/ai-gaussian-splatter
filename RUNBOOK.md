@@ -25,10 +25,10 @@ Most procedures below run a script from `scripts/dev/` or `scripts/prod/`, and e
 
 ## Dev AWS resources
 
-`infra/` only describes production, so dev's uploads/splats buckets are created outside it. `scripts/dev/create-dev-resources.sh` creates the two buckets `web/.env` names in `UPLOADS_BUCKET` and `SPLATS_BUCKET`, plus an `ai-gaussian-splatter-dev` IAM user that can reach only those two buckets. Run it as an admin ([Signing in to AWS](#signing-in-to-aws)). It creates `web/.env` first when it's missing, and writes the IAM user's key pair into it whenever it creates the user's access key. An existing `web/.env` is never replaced. The default bucket names end in the AWS account id, because one S3 bucket namespace spans every account.
+`infra/` only describes production, so dev's uploads/splats buckets are created outside it. `scripts/dev/create-resources.sh` creates the two buckets `web/.env` names in `UPLOADS_BUCKET` and `SPLATS_BUCKET`, plus an `ai-gaussian-splatter-dev` IAM user that can reach only those two buckets. Run it as an admin ([Signing in to AWS](#signing-in-to-aws)). It copies `web/.env.example` to `web/.env` first when that's missing, and writes the IAM user's key pair into it whenever it creates the user's access key. An existing `web/.env` is never replaced. The default bucket names end in the AWS account id, because one S3 bucket namespace spans every account.
 
 ```bash
-scripts/dev/create-dev-resources.sh
+scripts/dev/create-resources.sh
 ```
 
 ## Web (frontend + REST API)
@@ -116,7 +116,7 @@ Upload photos and click Process in the browser as normal. The job goes through t
 `infra/providers.tf` pins an exact `required_version`, so any other CLI version fails `terraform init`. Install that exact release as a standalone binary:
 
 ```bash
-scripts/prod/install-terraform.sh
+scripts/dev/terraform-install.sh
 ```
 
 ## Full test suite
@@ -145,7 +145,7 @@ CI's `deploy` job (`.github/workflows/deploy.yml`) does every deploy, including 
 4. Runs the migration.
 5. Rolls the service forward.
 
-The job is currently disabled ([State / what's next](AGENTS.md#state--whats-next)).
+Whether the job is on is `gh variable get DEPLOY_ENABLED` ([Going live](#going-live)).
 
 ### Signing in to AWS
 
@@ -216,7 +216,13 @@ With the role and repository variables in place, turn the job on under [Going li
 
 ### Going live
 
-Once [Configuring continuous deployment](#configuring-continuous-deployment) is done, turn the `deploy` job on: delete `false && ` from its `if:` in `.github/workflows/ci.yml` and land that through a PR. Merging it to `main` is the first deploy.
+Once [Configuring continuous deployment](#configuring-continuous-deployment) is done, turn the `deploy` job on by setting the `DEPLOY_ENABLED` repository variable. The first deploy is the next push to `main` that is not only `.md` files or `LICENSE`. A CI run already under way on `main` can reach its deploy job too, so set the variable when nothing is running if the order matters.
+
+```bash
+gh variable set DEPLOY_ENABLED --body true
+```
+
+Any spelling of `true` turns it on, since the comparison in `.github/workflows/ci.yml` ignores case. `scripts/prod/set-gh-repo-variables.sh` deliberately leaves this variable alone, so going live stays a separate deliberate act. Nothing in the repository records whether it is set: `gh variable get DEPLOY_ENABLED` is the only way to tell.
 
 The service starts before the migration runs, so real routes 500 until the migration finishes. The first apply also waits on ACM DNS validation, which can take several minutes.
 
@@ -224,7 +230,7 @@ The service starts before the migration runs, so real routes 500 until the migra
 
 Only the last few releases are kept (`local.releases_kept` in `infra/registry.tf`); older tags are expired and can no longer be rolled back to.
 
-A push that touches only `.md` files doesn't deploy. `.github/workflows/ci.yml`'s `paths-ignore` skips the whole workflow for it.
+A push that touches only `.md` files or `LICENSE` doesn't deploy. `.github/workflows/ci.yml`'s `paths-ignore` skips the whole workflow for it.
 
 ### Building and pushing the worker image
 
@@ -233,7 +239,7 @@ Nothing builds or pushes this image on its own — GPU worker deployment stays m
 The image is tagged with the current commit, so commit any `worker/` changes first.
 
 ```bash
-scripts/prod/push-worker-image.sh
+scripts/prod/worker-push-image.sh
 ```
 
 After the push, the script sets the `WORKER_IMAGE_TAG` repository variable ([Setting GitHub repository variables](#setting-github-repository-variables)) to the new tag. The next deploy passes it as `TF_VAR_worker_image_tag`, which points `WORKER_IMAGE_URI` on the web task definition at the new image. Until then, job launches keep using the old one.
@@ -250,9 +256,9 @@ scripts/prod/terraform-plan.sh
 
 ## Fixing a bad migration
 
-The only supported production apply is the `deploy` job (`.github/workflows/deploy.yml`), which runs the `migrator` image (`web/Dockerfile`) as a one-off ECS task before rolling the service forward. That job is currently off ([State / what's next](AGENTS.md#state--whats-next)). There is no supported way to reach the database by hand: the RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway and no bastion, reachable only from `aws_security_group.web` on port 5432, which is how the migration task gets to it.
+The only supported production apply is the `deploy` job (`.github/workflows/deploy.yml`), which runs the `migrator` image (`web/Dockerfile`) as a one-off ECS task before rolling the service forward. There is no supported way to reach the database by hand: the RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway and no bastion, reachable only from `aws_security_group.web` on port 5432, which is how the migration task gets to it.
 
-Fix a bad migration the same way you'd fix any other bug: write a corrective migration following the expand/contract discipline in [Schema & migrations (Drizzle)](AGENTS.md#schema--migrations-drizzle) (edit `web/lib/server/db/schema.ts`, `pnpm db:generate`, review the emitted SQL in `web/drizzle/`), commit it, and land it through a normal PR to `main`. It applies when the `deploy` job is re-enabled and that commit reaches `main`.
+Fix a bad migration the same way you'd fix any other bug: write a corrective migration following the expand/contract discipline in [Schema & migrations (Drizzle)](AGENTS.md#schema--migrations-drizzle) (edit `web/lib/server/db/schema.ts`, `pnpm db:generate`, review the emitted SQL in `web/drizzle/`), commit it, and land it through a normal PR to `main`. It applies when `DEPLOY_ENABLED` is `true` and that commit reaches `main` ([Going live](#going-live)).
 
 If the `deploy` job's migration step fails for an infra reason rather than a bad migration (a transient AWS error, a placement failure), retry the whole job rather than reaching for manual AWS commands — it's idempotent end to end: `gh run rerun <run-id> --failed-jobs`.
 
@@ -265,9 +271,13 @@ If the `deploy` job's migration step fails for an infra reason rather than a bad
 
 ## Tearing down
 
-`scripts/prod/terraform-destroy.sh` removes everything in `infra/`'s state, including the 3 data S3 buckets (force-destroyed, contents and all) and the RDS instance (no final snapshot). It reads its variables the same way as [Running Terraform locally](#running-terraform-locally). `scripts/prod/delete-tf-state-bucket.sh` below checks the `AWS_ACCOUNT_ID` one against the signed-in account. Delete the repository variables only after both have finished.
+`scripts/prod/terraform-destroy.sh` removes everything in `infra/`'s state, including the 3 data S3 buckets (force-destroyed, contents and all) and the RDS instance (no final snapshot). It reads its variables the same way as [Running Terraform locally](#running-terraform-locally). `scripts/prod/terraform-delete-state-bucket.sh` below checks the `AWS_ACCOUNT_ID` one against the signed-in account. Delete the repository variables only after both have finished.
 
-Turn the `deploy` job off first (`if: false && …` in `.github/workflows/ci.yml`) and land that on `main` before destroying. Otherwise the next push to `main` finds an empty state and deploys the whole stack again. The script refuses to run until `origin/main` has the job off.
+Turn the `deploy` job off first, or the next push to `main` finds an empty state and deploys the whole stack again. `scripts/prod/terraform-destroy.sh` refuses to run while the variable is `true` or unreadable, so the `false` set below is required even if deploys were never turned on. Then wait until no CI run is still going on `main`, since a run already under way can still reach its deploy job. The script refuses while one is unfinished.
+
+```bash
+gh variable set DEPLOY_ENABLED --body false
+```
 
 ```bash
 scripts/prod/terraform-destroy.sh
@@ -282,5 +292,5 @@ Resources `infra/` never owned — hand-created in [Creating account prerequisit
 Only delete the state bucket after `scripts/prod/terraform-destroy.sh` has finished with it. The script refuses while the state still tracks any resource.
 
 ```bash
-scripts/prod/delete-tf-state-bucket.sh
+scripts/prod/terraform-delete-state-bucket.sh
 ```

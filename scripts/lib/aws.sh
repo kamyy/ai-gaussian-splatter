@@ -4,7 +4,7 @@
 
 # Fails fast when no AWS credentials are active, and exports AWS_ACCOUNT_ID for the caller. GetCallerIdentity needs no
 # IAM permission, so this works for the dev IAM user as well as an admin signed in with `aws login`.
-require_aws_login() {
+aws_require_login() {
   local identity arn
   if ! identity=$(aws sts get-caller-identity --query '[Account, Arn]' --output text 2>/dev/null); then
     echo "Not signed in to AWS. Run: aws login" >&2

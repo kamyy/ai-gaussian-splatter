@@ -16,7 +16,7 @@ export default async function setup(): Promise<void> {
   const databaseUrl = process.env.TEST_DATABASE_URL;
   if (!databaseUrl) {
     throw new Error(
-      "TEST_DATABASE_URL is unset. Run scripts/dev/create-dev-resources.sh to create web/.env with it. " +
+      "TEST_DATABASE_URL is unset. Run scripts/dev/create-resources.sh to create web/.env with it. " +
         "Then start Postgres with scripts/dev/db-up.sh.",
     );
   }

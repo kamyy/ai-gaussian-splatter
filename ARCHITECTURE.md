@@ -163,6 +163,7 @@ Ops fallback: an AWS Budget (`infra/budgets.tf`) for spend the request path neve
 ## CI/CD
 
 - CI (`.github/workflows/deploy.yml`) builds, migrates, and rolls out the web service on every push to `main`, including the first deploy into an empty account. A human never applies `infra/` itself.
+- Whether that job runs is a repository variable (`DEPLOY_ENABLED` on `.github/workflows/ci.yml`'s deploy job), not a committed `if:` in the workflow file. A committed flag makes going live and tearing down a workflow edit. The file would then differ between "the account exists" and "the account is gone" for a one-bit operational state. An unset variable is `""`. A fork or a torn-down account deploys nothing until someone sets it to `true` ([Going live](RUNBOOK.md#going-live)).
 - Creating the state bucket and tearing down are done locally. CI can't `terraform init` against a bucket that doesn't exist yet. A teardown is too rare and too destructive to put behind a push.
 - No manual approval gate: there's no live traffic yet to protect, and this is the first real deploy (M9).
 - GPU worker deployment stays manual ([State / what's next](AGENTS.md#state--whats-next), gap 5): no ECR pull permissions yet.

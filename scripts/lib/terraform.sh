@@ -1,18 +1,18 @@
 # shellcheck shell=bash
-# Sourced by scripts/prod/install-terraform.sh, scripts/prod/terraform-plan.sh, scripts/prod/terraform-destroy.sh,
-# scripts/prod/delete-tf-state-bucket.sh, scripts/prod/set-gh-repo-variables.sh, scripts/prod/configure-ci-role.sh,
-# scripts/prod/create-account-prereqs.sh, scripts/dev/terraform-check.sh, scripts/dev/run-tests.sh,
-# scripts/dev/test-terraform-lib.sh (which checks the HCL scrapers below),
-# scripts/dev/create-dev-resources.sh, and the hashicorp/setup-terraform steps in .github/workflows/ci.yml and
-# .github/workflows/deploy.yml. Callers that run terraform assign TERRAFORM=$(tf_bin). load_tf_vars needs
-# scripts/lib/github.sh's gh_repo_var, so source that first when calling it. Not meant to be run directly.
+# Sourced by scripts/dev/terraform-install.sh, scripts/prod/terraform-plan.sh, scripts/prod/terraform-destroy.sh,
+# scripts/prod/terraform-delete-state-bucket.sh, scripts/prod/set-gh-repo-variables.sh,
+# scripts/prod/configure-ci-role.sh, scripts/prod/create-account-prereqs.sh, scripts/dev/terraform-check.sh,
+# scripts/dev/run-tests.sh, scripts/dev/terraform-test-lib.sh (which checks the HCL scrapers below),
+# scripts/dev/create-resources.sh, and the hashicorp/setup-terraform steps in .github/workflows/ci.yml and
+# .github/workflows/deploy.yml. Callers that run terraform assign TERRAFORM=$(tf_get_bin). tf_export_vars needs
+# scripts/lib/github.sh's gh_get_repo_var, so source that first when calling it. Not meant to be run directly.
 
 ROOT=$(git rev-parse --show-toplevel)
 
-# Prints the Terraform CLI to run. Prefers the binary scripts/prod/install-terraform.sh writes, because a terraform
+# Prints the Terraform CLI to run. Prefers the binary scripts/dev/terraform-install.sh writes, because a terraform
 # earlier on PATH can be a different version than infra/providers.tf pins. CI has no copy there:
-# hashicorp/setup-terraform installs whatever tf_required_version reads, so that is the fallback.
-tf_bin() {
+# hashicorp/setup-terraform installs whatever tf_get_required_version reads, so that is the fallback.
+tf_get_bin() {
   local bin
   if [[ -x $HOME/.local/bin/terraform ]]; then
     bin=$HOME/.local/bin/terraform
@@ -20,17 +20,17 @@ tf_bin() {
     bin=$(command -v terraform || true)
   fi
   if [[ -z $bin || ! -x $bin ]]; then
-    echo "Terraform is missing. Run scripts/prod/install-terraform.sh." >&2
+    echo "Terraform is missing. Run scripts/dev/terraform-install.sh." >&2
     return 1
   fi
   printf '%s\n' "$bin"
 }
 
-# Prints the exact required_version in infra/providers.tf. scripts/prod/install-terraform.sh and CI's
+# Prints the exact required_version in infra/providers.tf. scripts/dev/terraform-install.sh and CI's
 # hashicorp/setup-terraform both call this so the pin is not copied into .github/workflows/ci.yml or
 # .github/workflows/deploy.yml. A non-x.y.z value is refused because a blank terraform_version would make
 # setup-terraform install latest.
-tf_required_version() {
+tf_get_required_version() {
   local version
   version=$(grep -oP 'required_version = "\K[^"]+' "$ROOT/infra/providers.tf" || true)
   if [[ ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -41,40 +41,40 @@ tf_required_version() {
 }
 
 # Prints a quoted local variable from infra/locals.tf.
-tf_local_var() {
-  local name=$1 value
-  value=$(grep -oP "$name\\s*=\\s*\"\\K[^\"]+" "$ROOT/infra/locals.tf" || true)
-  if [[ -z $value ]]; then
-    echo "Can't read local.$name from infra/locals.tf." >&2
+tf_get_local() {
+  local local_var=$1 local_val
+  local_val=$(grep -oP "$local_var\\s*=\\s*\"\\K[^\"]+" "$ROOT/infra/locals.tf" || true)
+  if [[ -z $local_val ]]; then
+    echo "Can't read local.$local_var from infra/locals.tf." >&2
     return 1
   fi
-  printf '%s\n' "$value"
+  printf '%s\n' "$local_val"
 }
 
 # Prints a variable's quoted default from infra/variables.tf. Only string defaults are read, which is all the scripts
 # need. It exists so the AWS CLI calls in scripts/ and the region .github/workflows/deploy.yml signs with resolve to
 # the same value Terraform itself plans with, rather than each carrying its own copy of the region.
-tf_var_default() {
-  local name=$1 value
+tf_get_var_default() {
+  local var_name=$1 var_val
   # depth tracks nesting so a validation block's own closing brace does not end the search before the default line.
-  value=$(awk -v name="$name" '
-    !inblock && $1 == "variable" && $2 == "\"" name "\"" { inblock = 1; depth = 1; next }
+  var_val=$(awk -v var_name="$var_name" '
+    !inblock && $1 == "variable" && $2 == "\"" var_name "\"" { inblock = 1; depth = 1; next }
     inblock && depth == 1 && $1 == "default" && $2 == "=" { sub(/^[^"]*"/, ""); sub(/".*$/, ""); print; exit }
     inblock { depth += gsub(/{/, "{") - gsub(/}/, "}"); if (depth <= 0) { exit } }
   ' "$ROOT/infra/variables.tf")
-  if [[ -z $value ]]; then
-    echo "Can't read var.$name's default from infra/variables.tf." >&2
+  if [[ -z $var_val ]]; then
+    echo "Can't read var.$var_name's default from infra/variables.tf." >&2
     return 1
   fi
-  printf '%s\n' "$value"
+  printf '%s\n' "$var_val"
 }
 
 # The region every AWS CLI call in scripts/ targets. infra/providers.tf configures the AWS provider from the same
 # variable, so changing var.aws_region's default moves the deploy and the scripts together.
-tf_aws_region() {
+tf_get_aws_region() {
   local region
-  region=$(tf_var_default aws_region) || return 1
-  # The default is parsed out of HCL by tf_var_default, so a reformatted or unquoted default could yield a stray
+  region=$(tf_get_var_default aws_region) || return 1
+  # The default is parsed out of HCL by tf_get_var_default, so a reformatted or unquoted default could yield a stray
   # token rather than nothing. .github/workflows/deploy.yml signs with whatever this prints, so the shape is checked
   # here instead of surfacing as an unrelated AWS error several steps later.
   if [[ ! $region =~ ^[a-z]{2}(-[a-z]+)+-[0-9]+$ ]]; then
@@ -86,9 +86,9 @@ tf_aws_region() {
 
 # Resolves ${var.domain_zone_name} inside local.app_hostname using the zone name passed in. Reading the local rather
 # than rebuilding the hostname here keeps the project-name prefix defined in infra/locals.tf alone.
-tf_app_hostname() {
+tf_get_app_hostname() {
   local zone_name=$1 hostname
-  hostname=$(tf_local_var app_hostname)
+  hostname=$(tf_get_local app_hostname)
   # shellcheck disable=SC2016 # The single quotes match Terraform's own ${...} literally.
   hostname=${hostname//'${var.domain_zone_name}'/$zone_name}
   if [[ -z $hostname || $hostname == *\$\{* ]]; then
@@ -101,9 +101,9 @@ tf_app_hostname() {
 # The tag the running service's PRIMARY task definition names, the same ECS lookup the deploy job's "Resolve tags" step
 # uses when a service exists. Any SHA-shaped value when nothing is serving, or the plan shows an image change that isn't
 # coming.
-tf_live_web_image_tag() {
+tf_get_live_web_image_tag() {
   local task_def image region
-  region=$(tf_aws_region)
+  region=$(tf_get_aws_region)
 
   # shellcheck disable=SC2016 # The backticks are a JMESPath literal, not command substitution.
   if ! task_def=$(aws ecs describe-services --region "$region" \
@@ -132,14 +132,14 @@ tf_live_web_image_tag() {
 
 # Exports every TF_VAR_* infra/ requires. They come from the same repository variables
 # .github/workflows/deploy.yml applies with, except web_image_tag, which that job sets itself.
-load_tf_vars() {
-  TF_VAR_hosted_zone_id=$(gh_repo_var HOSTED_ZONE_ID)
-  TF_VAR_clerk_secret_key_arn=$(gh_repo_var CLERK_SECRET_KEY_ARN)
-  TF_VAR_alert_email=$(gh_repo_var ALERT_EMAIL)
-  TF_VAR_domain_zone_name=$(gh_repo_var DOMAIN_ZONE_NAME)
-  TF_VAR_worker_ami_id=$(gh_repo_var WORKER_AMI_ID)
-  TF_VAR_worker_image_tag=$(gh_repo_var WORKER_IMAGE_TAG)
-  TF_VAR_web_image_tag=$(tf_live_web_image_tag)
+tf_export_vars() {
+  TF_VAR_hosted_zone_id=$(gh_get_repo_var HOSTED_ZONE_ID)
+  TF_VAR_clerk_secret_key_arn=$(gh_get_repo_var CLERK_SECRET_KEY_ARN)
+  TF_VAR_alert_email=$(gh_get_repo_var ALERT_EMAIL)
+  TF_VAR_domain_zone_name=$(gh_get_repo_var DOMAIN_ZONE_NAME)
+  TF_VAR_worker_ami_id=$(gh_get_repo_var WORKER_AMI_ID)
+  TF_VAR_worker_image_tag=$(gh_get_repo_var WORKER_IMAGE_TAG)
+  TF_VAR_web_image_tag=$(tf_get_live_web_image_tag)
 
   export TF_VAR_hosted_zone_id TF_VAR_clerk_secret_key_arn TF_VAR_alert_email TF_VAR_domain_zone_name \
     TF_VAR_worker_ami_id TF_VAR_worker_image_tag TF_VAR_web_image_tag
@@ -150,9 +150,9 @@ load_tf_vars() {
 # migrate state.
 tf_init() {
   local terraform
-  terraform=$(tf_bin)
+  terraform=$(tf_get_bin)
   "$terraform" -chdir="$ROOT/infra" init -input=false -reconfigure \
     -backend-config="bucket=ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID" \
     -backend-config="key=infra.tfstate" \
-    -backend-config="region=$(tf_aws_region)"
+    -backend-config="region=$(tf_get_aws_region)"
 }

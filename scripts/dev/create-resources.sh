@@ -1,28 +1,29 @@
 #!/usr/bin/env bash
-# Creates web/.env when it's missing, then the uploads and splats buckets it names and the ai-gaussian-splatter-dev IAM
-# user scoped to just those two buckets. Writes the user's access key into web/.env when it creates one. Safe to re-run.
+# Creates web/.env from web/.env.example when it's missing, then the uploads and splats buckets it names and the
+# ai-gaussian-splatter-dev IAM user scoped to just those two buckets. Writes the user's access key into web/.env when it
+# creates one. Safe to re-run.
 # Existing buckets and the existing user are kept, and their CORS rules, tags, and policy are rewritten.
 
 set -euo pipefail
 
 ROOT=$(git rev-parse --show-toplevel)
-source "$ROOT/scripts/lib/require-aws-login.sh"
+source "$ROOT/scripts/lib/aws.sh"
 source "$ROOT/scripts/lib/confirm.sh"
-source "$ROOT/scripts/lib/env-files.sh"
+source "$ROOT/scripts/lib/env.sh"
 source "$ROOT/scripts/lib/terraform.sh"
 
 DEV_USER=ai-gaussian-splatter-dev
-PROJECT_TAG=$(tf_local_var project_tag)
+PROJECT_TAG=$(tf_get_local project_tag)
 
-require_aws_login
+aws_require_login
 
 # The buckets and the region are whatever web/.env names, so the file is created first. A new one is seeded from
 # var.aws_region's default, and an existing one keeps whatever region it already holds, because that is the region
 # web/lib/server/env.ts signs the app's upload URLs for.
-create_env_file "$ROOT/web/.env" web_env_template "$AWS_ACCOUNT_ID" "$(tf_aws_region)"
-UPLOADS=$(get_env_var "$ROOT/web/.env" UPLOADS_BUCKET)
-SPLATS=$(get_env_var "$ROOT/web/.env" SPLATS_BUCKET)
-REGION=$(get_env_var "$ROOT/web/.env" AWS_REGION)
+env_create_file "$ROOT/web/.env" "$AWS_ACCOUNT_ID" "$(tf_get_aws_region)"
+UPLOADS=$(env_get "$ROOT/web/.env" UPLOADS_BUCKET)
+SPLATS=$(env_get "$ROOT/web/.env" SPLATS_BUCKET)
+REGION=$(env_get "$ROOT/web/.env" AWS_REGION)
 
 confirm "Create or update the $UPLOADS and $SPLATS buckets and the $DEV_USER IAM user in $REGION, account $AWS_ACCOUNT_ID?"
 
@@ -87,8 +88,8 @@ if [[ $KEY_COUNT == 0 ]]; then
   read -r key_id secret <<<"$keys"
   # A web/.env that already existed keeps its own mode, so it's locked down before the secret goes in.
   chmod 600 "$ROOT/web/.env"
-  set_env_var "$ROOT/web/.env" AWS_ACCESS_KEY_ID "$key_id"
-  set_env_var "$ROOT/web/.env" AWS_SECRET_ACCESS_KEY "$secret"
+  env_set "$ROOT/web/.env" AWS_ACCESS_KEY_ID "$key_id"
+  env_set "$ROOT/web/.env" AWS_SECRET_ACCESS_KEY "$secret"
   echo "Created an access key for $DEV_USER and wrote it into web/.env."
 elif grep -q '^AWS_ACCESS_KEY_ID=replace-with-dev-user-key$' "$ROOT/web/.env"; then
   echo "$DEV_USER already has an access key, but web/.env still holds the placeholder pair." >&2

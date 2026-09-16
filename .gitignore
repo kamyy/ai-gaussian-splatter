@@ -26,9 +26,10 @@ infra/**/override.tf*
 infra/**/*.tfvars
 !infra/**/*.tfvars.example
 
-# Env / secrets
+# Env / secrets. web/.env.example is the committed template scripts/dev/create-resources.sh copies to web/.env.
 .env
 .env.*
+!.env.example
 *.pem
 
 # Frontend (Vitest/Playwright output, Vercel CLI, TS incremental builds)

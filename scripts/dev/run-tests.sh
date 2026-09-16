@@ -17,5 +17,5 @@ pnpm --dir "$ROOT/web" test
 pnpm --dir "$ROOT/web" test:e2e
 uv --directory "$ROOT/worker" run pytest -v
 
-TERRAFORM=$(tf_bin)
+TERRAFORM=$(tf_get_bin)
 "$TERRAFORM" -chdir="$ROOT/infra" test

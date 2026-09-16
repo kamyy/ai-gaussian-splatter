@@ -9,7 +9,8 @@
 set -euo pipefail
 
 ROOT=$(git rev-parse --show-toplevel)
-PHOTOS=$(realpath -e "${1:-$ROOT/worker/photos}")
+photos_dir=${1:-$ROOT/worker/photos}
+PHOTOS=$(realpath -e "$photos_dir")
 source "$ROOT/scripts/lib/worker.sh"
 source "$ROOT/scripts/lib/confirm.sh"
 
@@ -19,8 +20,8 @@ if [[ -e "$ROOT/worker/jobdir" ]]; then
   confirm "Delete worker/jobdir, including any Process-button job folders in it?"
 fi
 
-use_dev_aws_credentials
-build_worker_image
+worker_use_dev_aws
+worker_build_image
 
 # Needs to be different for every run.
 SPLAT_ID=$(uuidgen)
@@ -31,6 +32,6 @@ mkdir "$ROOT/worker/jobdir"
 
 # Leaves the COLMAP workspace in worker/jobdir/colmap and uploads the sparse model and point_cloud.ply under
 # splats/$SPLAT_ID/ in web/.env's SPLATS_BUCKET.
-run_worker_stage "$SPLAT_ID" reconstruct
+worker_run_stage "$SPLAT_ID" reconstruct
 
 echo "Reconstructed splat $SPLAT_ID. Train it with: scripts/dev/worker-train.sh $SPLAT_ID"

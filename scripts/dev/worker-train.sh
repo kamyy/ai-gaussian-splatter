@@ -24,8 +24,9 @@ if [[ $# -lt 1 || $# -gt 2 ]]; then
 fi
 
 SPLAT_ID=$1
+flag=${2:-}
 extra_args=()
-case ${2:-} in
+case $flag in
   "") ;;
   --fast) extra_args=(-e FAST_TEST_MODE=true) ;;
   *) usage ;;
@@ -33,8 +34,8 @@ esac
 
 # The pipeline's AWS calls happen inside the container. Checking the web/.env key pair on the host first fails in
 # seconds rather than after the image build.
-use_dev_aws_credentials
-build_worker_image
+worker_use_dev_aws
+worker_build_image
 
 mkdir -p "$ROOT/worker/jobdir"
-run_worker_stage "$SPLAT_ID" train "${extra_args[@]}"
+worker_run_stage "$SPLAT_ID" train "${extra_args[@]}"

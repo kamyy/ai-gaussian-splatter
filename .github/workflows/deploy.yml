@@ -78,8 +78,8 @@ jobs:
           source scripts/lib/terraform.sh
           # Assigned first: inside the echo the helpers' non-zero exits would be discarded, and the job would sign
           # with an empty region and fail several steps later naming neither this step nor infra/variables.tf.
-          region=$(tf_aws_region)
-          hostname=$(tf_app_hostname "$TF_VAR_domain_zone_name")
+          region=$(tf_get_aws_region)
+          hostname=$(tf_get_app_hostname "$TF_VAR_domain_zone_name")
           echo "AWS_REGION=$region" >> "$GITHUB_ENV"
           echo "APP_PUBLIC_URL=https://$hostname" >> "$GITHUB_ENV"
 
@@ -106,7 +106,7 @@ jobs:
       - id: terraform-version
         run: |
           source scripts/lib/terraform.sh
-          version=$(tf_required_version)
+          version=$(tf_get_required_version)
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - uses: hashicorp/setup-terraform@v3

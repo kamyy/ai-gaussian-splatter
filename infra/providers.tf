@@ -2,8 +2,8 @@
 # here. The bucket is created by hand once in Creating account prerequisites. Its name is account-specific.
 # use_lockfile is Terraform's native S3 state locking (>= 1.10). No separate DynamoDB table is needed.
 terraform {
-  # Exact, not a floor. A range would let a newer local CLI plan. scripts/lib/terraform.sh's tf_required_version reads
-  # this string for local install and for hashicorp/setup-terraform in .github/workflows/ci.yml and
+  # Exact, not a floor. A range would let a newer local CLI plan. scripts/lib/terraform.sh's tf_get_required_version
+  # reads this string for local install and for hashicorp/setup-terraform in .github/workflows/ci.yml and
   # .github/workflows/deploy.yml.
   required_version = "1.16.2"
 
