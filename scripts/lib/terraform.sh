@@ -1,7 +1,8 @@
 # shellcheck shell=bash
 # Sourced by scripts/prod/install-terraform.sh, scripts/prod/terraform-plan.sh, scripts/prod/terraform-destroy.sh,
 # scripts/prod/delete-tf-state-bucket.sh, scripts/prod/set-gh-repo-variables.sh, scripts/prod/configure-ci-role.sh,
-# scripts/prod/first-time-account-setup.sh, scripts/dev/terraform-check.sh, scripts/dev/run-tests.sh,
+# scripts/prod/create-account-prereqs.sh, scripts/dev/terraform-check.sh, scripts/dev/run-tests.sh,
+# scripts/dev/test-terraform-lib.sh (which checks the HCL scrapers below),
 # scripts/dev/create-dev-resources.sh, and the hashicorp/setup-terraform steps in .github/workflows/ci.yml and
 # .github/workflows/deploy.yml. Callers that run terraform assign TERRAFORM=$(tf_bin). load_tf_vars needs
 # scripts/lib/github.sh's gh_repo_var, so source that first when calling it. Not meant to be run directly.
@@ -50,12 +51,46 @@ tf_local_var() {
   printf '%s\n' "$value"
 }
 
-# Resolves ${local.domain_zone_name} inside local.app_hostname using the zone name already read.
+# Prints a variable's quoted default from infra/variables.tf. Only string defaults are read, which is all the scripts
+# need. It exists so the AWS CLI calls in scripts/ and the region .github/workflows/deploy.yml signs with resolve to
+# the same value Terraform itself plans with, rather than each carrying its own copy of the region.
+tf_var_default() {
+  local name=$1 value
+  # depth tracks nesting so a validation block's own closing brace does not end the search before the default line.
+  value=$(awk -v name="$name" '
+    !inblock && $1 == "variable" && $2 == "\"" name "\"" { inblock = 1; depth = 1; next }
+    inblock && depth == 1 && $1 == "default" && $2 == "=" { sub(/^[^"]*"/, ""); sub(/".*$/, ""); print; exit }
+    inblock { depth += gsub(/{/, "{") - gsub(/}/, "}"); if (depth <= 0) { exit } }
+  ' "$ROOT/infra/variables.tf")
+  if [[ -z $value ]]; then
+    echo "Can't read var.$name's default from infra/variables.tf." >&2
+    return 1
+  fi
+  printf '%s\n' "$value"
+}
+
+# The region every AWS CLI call in scripts/ targets. infra/providers.tf configures the AWS provider from the same
+# variable, so changing var.aws_region's default moves the deploy and the scripts together.
+tf_aws_region() {
+  local region
+  region=$(tf_var_default aws_region) || return 1
+  # The default is parsed out of HCL by tf_var_default, so a reformatted or unquoted default could yield a stray
+  # token rather than nothing. .github/workflows/deploy.yml signs with whatever this prints, so the shape is checked
+  # here instead of surfacing as an unrelated AWS error several steps later.
+  if [[ ! $region =~ ^[a-z]{2}(-[a-z]+)+-[0-9]+$ ]]; then
+    echo "var.aws_region's default in infra/variables.tf is not a region name: $region" >&2
+    return 1
+  fi
+  printf '%s\n' "$region"
+}
+
+# Resolves ${var.domain_zone_name} inside local.app_hostname using the zone name passed in. Reading the local rather
+# than rebuilding the hostname here keeps the project-name prefix defined in infra/locals.tf alone.
 tf_app_hostname() {
   local zone_name=$1 hostname
   hostname=$(tf_local_var app_hostname)
   # shellcheck disable=SC2016 # The single quotes match Terraform's own ${...} literally.
-  hostname=${hostname//'${local.domain_zone_name}'/$zone_name}
+  hostname=${hostname//'${var.domain_zone_name}'/$zone_name}
   if [[ -z $hostname || $hostname == *\$\{* ]]; then
     echo "Can't resolve local.app_hostname in infra/locals.tf: $hostname" >&2
     return 1
@@ -67,10 +102,11 @@ tf_app_hostname() {
 # uses when a service exists. Any SHA-shaped value when nothing is serving, or the plan shows an image change that isn't
 # coming.
 tf_live_web_image_tag() {
-  local task_def image
+  local task_def image region
+  region=$(tf_aws_region)
 
   # shellcheck disable=SC2016 # The backticks are a JMESPath literal, not command substitution.
-  if ! task_def=$(aws ecs describe-services --region us-west-2 \
+  if ! task_def=$(aws ecs describe-services --region "$region" \
     --cluster ai-gaussian-splatter --services ai-gaussian-splatter-web \
     --query 'services[0].deployments[?status==`PRIMARY`].taskDefinition | [0]' --output text 2>&1); then
     # A missing cluster means no service yet. A missing service in an existing cluster isn't an error at all, and the
@@ -87,7 +123,7 @@ tf_live_web_image_tag() {
     return
   fi
 
-  image=$(aws ecs describe-task-definition --region us-west-2 --task-definition "$task_def" \
+  image=$(aws ecs describe-task-definition --region "$region" --task-definition "$task_def" \
     --query 'taskDefinition.containerDefinitions[0].image' --output text) || return 1
   # The image is tagged "<sha>-web" (infra/web.tf), but web_image_tag takes the bare SHA.
   image=${image##*:}
@@ -100,12 +136,12 @@ load_tf_vars() {
   TF_VAR_hosted_zone_id=$(gh_repo_var HOSTED_ZONE_ID)
   TF_VAR_clerk_secret_key_arn=$(gh_repo_var CLERK_SECRET_KEY_ARN)
   TF_VAR_alert_email=$(gh_repo_var ALERT_EMAIL)
-  TF_VAR_app_public_url=$(gh_repo_var APP_PUBLIC_URL)
+  TF_VAR_domain_zone_name=$(gh_repo_var DOMAIN_ZONE_NAME)
   TF_VAR_worker_ami_id=$(gh_repo_var WORKER_AMI_ID)
   TF_VAR_worker_image_tag=$(gh_repo_var WORKER_IMAGE_TAG)
   TF_VAR_web_image_tag=$(tf_live_web_image_tag)
 
-  export TF_VAR_hosted_zone_id TF_VAR_clerk_secret_key_arn TF_VAR_alert_email TF_VAR_app_public_url \
+  export TF_VAR_hosted_zone_id TF_VAR_clerk_secret_key_arn TF_VAR_alert_email TF_VAR_domain_zone_name \
     TF_VAR_worker_ami_id TF_VAR_worker_image_tag TF_VAR_web_image_tag
 }
 
@@ -118,5 +154,5 @@ tf_init() {
   "$terraform" -chdir="$ROOT/infra" init -input=false -reconfigure \
     -backend-config="bucket=ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID" \
     -backend-config="key=infra.tfstate" \
-    -backend-config="region=us-west-2"
+    -backend-config="region=$(tf_aws_region)"
 }

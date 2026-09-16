@@ -24,8 +24,13 @@ locals {
   # --task-definition ai-gaussian-splatter-migrate`) rather than looking it up.
   migration_task_family = "ai-gaussian-splatter-migrate"
 
-  domain_zone_name = "orky.net"
-  app_hostname     = "ai-gaussian-splatter.${local.domain_zone_name}"
+  app_hostname = "ai-gaussian-splatter.${var.domain_zone_name}"
+
+  # Derived from the hostname above rather than passed in separately, so the certificate, the DNS record, and the
+  # origin the worker PATCHes status back to cannot disagree. It carries no trailing slash, because both consumers
+  # append to it: worker/pipeline/status.py would double-slash its callback path, and the S3 CORS rules in data.tf
+  # are matched against the browser's Origin header exactly.
+  app_origin = "https://${local.app_hostname}"
 
   database_name = "ai_gaussian_splatter"
 

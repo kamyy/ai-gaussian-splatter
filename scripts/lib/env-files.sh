@@ -2,18 +2,19 @@
 # Sourced by scripts/dev/create-dev-resources.sh, scripts/lib/worker.sh, and scripts/dev/run-web-container.sh.
 # web/.env isn't committed, so the template below is the only record of what it holds. Not meant to be run directly.
 
-# Usage: create_env_file <path> <template-function>
+# Usage: create_env_file <path> <template-function> [template-arg...]
 #
 # Writes the template to the path only when nothing is there yet, so a re-run never replaces values filled in by hand.
 # The file is readable only by its owner, because it ends up holding the dev user's secret key.
 create_env_file() {
   local file=$1 template=$2
+  shift 2
   if [[ -f $file ]]; then
     echo "$file already exists. Keeping it."
     return
   fi
 
-  (umask 077 && "$template" >"$file")
+  (umask 077 && "$template" "$@" >"$file")
   echo "Created $file."
 }
 
@@ -55,15 +56,29 @@ get_env_var() {
   printf '%s\n' "$value"
 }
 
+# Usage: web_env_template <aws-account-id> <aws-region>
+#
+# The account id and region are interpolated, so the template is split in two: this half expands, and the rest is
+# quoted so its backticks and dollar signs stay literal.
 web_env_template() {
-  cat <<'EOF'
+  local account_id=$1 region=$2
+  cat <<EOF
 # Local dev config for the web app. scripts/lib/worker.sh also reads its AWS keys, region, and buckets for local worker
 # runs. scripts/dev/create-dev-resources.sh writes this file when web/.env is missing, and never replaces an existing
 # one. Fill in the Clerk keys. Read by web/lib/server/env.ts unless noted otherwise.
 
-# The two dev buckets from "Dev AWS resources" in RUNBOOK.md.
-UPLOADS_BUCKET=ai-gaussian-splatter-dev-uploads
-SPLATS_BUCKET=ai-gaussian-splatter-dev-splats
+# The two dev buckets from "Dev AWS resources" in RUNBOOK.md. One S3 bucket namespace spans every AWS account, so the
+# account id is what keeps these names from colliding with someone else's.
+UPLOADS_BUCKET=ai-gaussian-splatter-dev-uploads-$account_id
+SPLATS_BUCKET=ai-gaussian-splatter-dev-splats-$account_id
+
+# The AWS region the buckets and credentials below are used against. web/lib/server/env.ts reads it and hands it to
+# every S3 and EC2 client explicitly. The worker gets the same value as AWS_DEFAULT_REGION (scripts/lib/worker.sh,
+# web/lib/server/ec2Launcher.ts), because boto3 reads only AWS_DEFAULT_REGION and the AWS SDK for JavaScript reads only
+# AWS_REGION. Seeded from var.aws_region's default in infra/variables.tf so dev and production agree.
+AWS_REGION=$region
+EOF
+  cat <<'EOF'
 
 # The dev IAM user scoped to those two buckets. scripts/dev/create-dev-resources.sh writes its key pair here when it
 # creates the user's access key. Kept here rather than in ~/.aws/credentials because `next dev` loads this file, and
@@ -72,11 +87,6 @@ SPLATS_BUCKET=ai-gaussian-splatter-dev-splats
 # so an unedited .env fails with a 403 instead of quietly using an admin profile.
 AWS_ACCESS_KEY_ID=replace-with-dev-user-key
 AWS_SECRET_ACCESS_KEY=replace-with-dev-user-secret
-
-# The AWS region the buckets and credentials above are used against. web/lib/server/env.ts reads it and hands it to
-# every S3 and EC2 client explicitly. The worker gets the same value as AWS_DEFAULT_REGION (scripts/lib/worker.sh,
-# web/lib/server/ec2Launcher.ts), because boto3 reads only that name and the AWS SDK for JavaScript reads only this one.
-AWS_REGION=us-west-2
 
 # Where the worker PATCHes job status back to, and the origin the web app hands the worker at launch. Inside the worker
 # container localhost is the container itself, so local worker runs get http://host.containers.internal:3000 instead —

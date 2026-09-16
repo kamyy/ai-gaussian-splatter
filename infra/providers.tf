@@ -1,5 +1,5 @@
 # Bucket/key/region are supplied via `-backend-config` at `terraform init` (see RUNBOOK.md), not hardcoded
-# here. The bucket is created by hand once in First-time account setup. Its name is account-specific.
+# here. The bucket is created by hand once in Creating account prerequisites. Its name is account-specific.
 # use_lockfile is Terraform's native S3 state locking (>= 1.10). No separate DynamoDB table is needed.
 terraform {
   # Exact, not a floor. A range would let a newer local CLI plan. scripts/lib/terraform.sh's tf_required_version reads

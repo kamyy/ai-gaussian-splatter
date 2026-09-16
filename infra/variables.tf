@@ -1,3 +1,5 @@
+# Editing this default on a live account has an order to it. Tear the stack down first, while the default still names
+# the region the stack is deployed in (AGENTS.md).
 variable "aws_region" {
   description = "Primary region for every resource except the budgets provider (us-east-1, fixed — see providers.tf)."
   type        = string
@@ -32,9 +34,25 @@ variable "alert_email" {
   }
 }
 
-# The orky.net hosted zone, referenced for the ALB's alias record and ACM's validation record — see AGENTS.md.
+# The DNS zone the app's own hostname sits under. local.app_hostname prefixes it with the project name, and the
+# ACM certificate, the Route 53 record, the S3 CORS origins, and the worker's callback URL all derive from that
+# one local, so this is the only place the domain is named.
+variable "domain_zone_name" {
+  description = "Public DNS zone the app's hostname sits under, e.g. example.com. The zone itself is never created or destroyed by this config."
+  type        = string
+
+  # Catches the empty string CI sends for an unset repository variable (AGENTS.md), and a value pasted with a
+  # scheme, a trailing dot, or a path. It checks shape only, not that a zone by that name exists.
+  validation {
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", var.domain_zone_name))
+    error_message = "domain_zone_name must be a bare DNS zone name like example.com, with no scheme, trailing dot, or path (see RUNBOOK.md)."
+  }
+}
+
+# The hosted zone var.domain_zone_name names, referenced for the ALB's alias record and ACM's validation record
+# — see AGENTS.md. scripts/prod/set-gh-repo-variables.sh looks the id up from that name.
 variable "hosted_zone_id" {
-  description = "Route 53 hosted zone id for orky.net. Only records are added here; the zone itself is never created or destroyed by this config."
+  description = "Route 53 hosted zone id for var.domain_zone_name. Only records are added here; the zone itself is never created or destroyed by this config."
   type        = string
 
   # Catches the empty string CI sends for an unset repository variable (AGENTS.md), or the `/hostedzone/`-prefixed form
@@ -101,19 +119,6 @@ variable "worker_image_tag" {
   }
 }
 
-# Where the GPU worker PATCHes job status back to. A stable custom domain, so there is no chicken-and-egg with
-# the ALB this config creates: the ALB is aliased to this name rather than the name being read off the ALB.
-variable "app_public_url" {
-  description = "Public HTTPS origin the app is reachable at. Must match local.app_hostname or status callbacks silently fail."
-  type        = string
-  default     = "https://ai-gaussian-splatter.orky.net"
-
-  validation {
-    condition     = startswith(var.app_public_url, "https://")
-    error_message = "app_public_url must be an https:// URL."
-  }
-}
-
 variable "monthly_budget_limit_usd" {
   description = "AWS Budget threshold. Must stay above the stack's own fixed monthly cost (~$35) or both notifications fire every month regardless of usage."
   type        = number
@@ -121,10 +126,5 @@ variable "monthly_budget_limit_usd" {
 }
 
 locals {
-  # Normalized here, not at either use, because both consumers append to it and neither tolerates a trailing
-  # slash: worker/pipeline/status.py's callback URL would double-slash, and the S3 CORS rules in data.tf match
-  # the browser's Origin header exactly.
-  app_origin = trimsuffix(var.app_public_url, "/")
-
   migrate_image_tag = var.migrate_image_tag != "" ? var.migrate_image_tag : var.web_image_tag
 }

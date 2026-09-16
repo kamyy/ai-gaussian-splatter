@@ -72,7 +72,7 @@ M10's baked AMI therefore attacks the smaller half — fixed overhead, not train
 
 ## Postgres connectivity & TLS
 
-- TLS is required only where RDS enforces it (`rds.force_ssl = 1`), not by this app's own client code.
+- TLS is required only where RDS enforces it (`rds.force_ssl = 1`), not by `web/lib/server/databaseUrl.ts`.
 - `databaseSsl()`/`resolveDatabaseUrl()` (`web/lib/server/databaseUrl.ts`) make TLS conditional on `DATABASE_SSL_CA` being set.
 - Local dev and CI run a plain, un-TLS'd Postgres.
 - CI's Postgres starts as a plain `podman run` step (`.github/workflows/ci.yml`'s `web` job), not GitHub Actions' declarative `services:` block. The migrator-image test ([CI/CD](#cicd), below) needs to reach it by container name from a sibling podman container, and a Docker-managed `services:` container isn't reachable that way.
@@ -91,7 +91,7 @@ The migration task (`web/scripts/db-migrate.cjs`) keeps the old static-env-var b
 
 ## Infra
 
-- Infra: **Terraform**. One root module (`infra/`) holding one state. The S3 bucket that state lives in is created by hand ([First-time account setup](RUNBOOK.md#first-time-account-setup)). `terraform init` needs the bucket before any apply. Managing it inside `infra/` would store state in a bucket this config also owns. A second Terraform module with its own local state was rejected.
+- Infra: **Terraform**. One configuration (`infra/`) holding one state. The S3 bucket that state lives in is created by hand ([Creating account prerequisites](RUNBOOK.md#creating-account-prerequisites)). `terraform init` needs the bucket before any apply. Managing it inside `infra/` would store state in a bucket `infra/` also owns. A second Terraform module with its own local state was rejected.
 - Six logical areas, one per `.tf` file rather than one per CloudFormation-style stack — a single state resolves the dependencies between them directly, so there's no cross-stack export/import to keep in sync:
   - **network** — VPC, subnets, security groups.
   - **data** — RDS, S3.
@@ -124,14 +124,15 @@ The web app runs on **Fargate** behind an **Application Load Balancer** (`infra/
 
 ### TLS & DNS
 
-- TLS terminates at the ALB (ACM cert for `ai-gaussian-splatter.orky.net`; 80→443).
+- TLS terminates at the ALB (ACM cert for `local.app_hostname`, the project name under `var.domain_zone_name`; 80→443).
 - The cert is declared in `infra/web.tf` so it lands in the ALB's region — ALBs can't use out-of-region certs.
-- For ACM specifically, `us-east-1` only matters for CloudFront, which this app doesn't use — the cert stays in the ALB's own region. `us-east-1` does matter elsewhere in this config, for an unrelated reason: the Budgets API (`infra/budgets.tf`) only operates there.
-- Route 53 zone is referenced by ID only (`var.hosted_zone_id`), never looked up or created — this config only ever adds records to an existing zone.
+- For ACM specifically, `us-east-1` only matters for CloudFront, which this app doesn't use — the cert stays in the ALB's own region. `us-east-1` does matter elsewhere in `infra/`, for an unrelated reason: the Budgets API (`infra/budgets.tf`) only operates there.
+- Route 53 zone is referenced by ID only (`var.hosted_zone_id`), never looked up or created — `infra/` only ever adds records to an existing zone.
+- The app's public origin is derived (`local.app_origin`), not passed in. Taking the hostname and the callback origin as two separate inputs let them drift apart, and a mismatch shows up only as the worker's status callbacks failing against a host that doesn't answer.
 
 ### Image tags
 
-- The web image is tagged per release with the commit SHA, in an ECR repository this app owns (`infra/registry.tf`). The tag travels as a Terraform variable (`web_image_tag`).
+- The web image is tagged per release with the commit SHA, in an ECR repository `infra/` owns (`infra/registry.tf`). The tag travels as a Terraform variable (`web_image_tag`).
 - A moving tag like `latest` would be simpler to push, but it leaves every release sharing one task definition. That disarms the deployment circuit breaker: rollback restarts the previous deployment against that same string, so Fargate re-pulls whatever was pushed most recently — the image that just failed.
 - Per-release tags make each deploy its own task definition instead. The repository is also `IMMUTABLE`, so a pushed tag can never be repointed.
 - Costs of this approach:
@@ -142,10 +143,10 @@ The web app runs on **Fargate** behind an **Application Load Balancer** (`infra/
 ### Clerk secret
 
 - The Clerk secret is referenced by its complete ARN (`var.clerk_secret_key_arn`), not created.
-- A Terraform-created secret comes up holding a value this config would have to generate and never actually use. ECS resolves secrets at task start, not on live update, so putting the real key in afterward would cost a second rollout on every fresh environment.
+- A Terraform-created secret comes up holding a value `infra/` would have to generate and never actually use. ECS resolves secrets at task start, not on live update, so putting the real key in afterward would cost a second rollout on every fresh environment.
 - Creating it would also claim the secret's name, making a hand-created secret collide as an out-of-band `ResourceExistsException` on the next apply.
 - Complete ARN, not just the secret name, because ECS matches a task definition's `valueFrom` on the six-character suffix Secrets Manager assigns.
-- Cost: a second required variable on every `terraform apply`, and a credential whose lifecycle nothing in this config owns.
+- Cost: a second required variable on every `terraform apply`, and a credential whose lifecycle nothing in `infra/` owns.
 
 ## Abuse protection
 
@@ -192,7 +193,7 @@ Terraform stays the sole owner of "what's currently deployed" — nothing calls 
 
 The first deploy into an empty account skips this ordering. With no service in the Terraform state there is no older image to pin the service to, so the first apply creates it on the new image and the migration runs afterwards. Real routes 500 until the migration finishes. That costs nothing, because nothing was serving before.
 
-Rejected alternative: **running migrations from a local machine through a bastion.** The RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway and no security-group path for an ad hoc host, and no bastion exists in this infra. So there's no manual fallback: a bad migration is fixed the same way as any other bug, with a corrective migration through a normal PR (see [Fixing a bad migration](RUNBOOK.md#fixing-a-bad-migration)).
+Rejected alternative: **running migrations from a local machine through a bastion.** The RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway and no security-group path for an ad hoc host, and no bastion exists in `infra/`. So there's no manual fallback: a bad migration is fixed the same way as any other bug, with a corrective migration through a normal PR (see [Fixing a bad migration](RUNBOOK.md#fixing-a-bad-migration)).
 
 A rolled-back *service* deployment does not undo an already-applied migration. Rollback and "was the migration a good idea" are orthogonal once the migration has committed. This is why every migration has to follow the expand/contract discipline in [`AGENTS.md`](AGENTS.md), not an incidental style preference.
 
@@ -200,7 +201,7 @@ A rolled-back *service* deployment does not undo an already-applied migration. R
 
 - CI authenticates to AWS via **GitHub OIDC**, not static IAM access keys — no long-lived credential to leak or rotate.
 - The identity token's `sub` claim scopes it specifically to `repo:<owner>@<ownerId>/<repo>@<repoId>:ref:refs/heads/main`, so PRs and forks can't assume the role.
-- That role, `ai-gaussian-splatter-ci-deploy`, is created by hand once ([Creating the OIDC provider and CI role](RUNBOOK.md#creating-the-oidc-provider-and-ci-role)), not by this config, because it's chicken-and-egg: CI can't apply the config that grants CI its own apply permission.
+- That role, `ai-gaussian-splatter-ci-deploy`, is created by hand once ([Creating the OIDC provider and CI role](RUNBOOK.md#creating-the-oidc-provider-and-ci-role)), not by `infra/`, because it's chicken-and-egg: CI can't apply the config that grants CI its own apply permission.
 - Unlike a design that delegates through a separate bootstrap role, this role holds the AWS permissions `terraform apply` itself needs directly — ec2, ecr, rds, s3, iam, ecs, elasticloadbalancing, route53, acm, budgets, logs, secretsmanager — scoped by resource-name prefix where a service supports it. Same reasoning that already keeps the Clerk secret, the state bucket, and `AWSServiceRoleForEC2Spot` as hand-run, RUNBOOK-documented one-time setup rather than Terraform-managed resources: whoever can grant broad infrastructure permissions to a CI role is a step this repo keeps out of any automated apply.
 
 ## Testing

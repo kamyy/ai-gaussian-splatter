@@ -10,6 +10,8 @@ source "$ROOT/scripts/lib/confirm.sh"
 source "$ROOT/scripts/lib/github.sh"
 source "$ROOT/scripts/lib/terraform.sh"
 
+REGION=$(tf_aws_region)
+
 require_aws_login
 require_gh_login
 require_aws_deploy_account
@@ -35,14 +37,14 @@ confirm "Delete $BUCKET and every version of every object in it?"
 # listing to a single S3 page of at most 1000 versions and delete markers combined, so the loop repeats until a page has
 # no keys. --max-items can't replace it, because it counts only Versions and lets delete markers through uncounted.
 while :; do
-  OBJECTS=$(aws s3api list-object-versions --bucket "$BUCKET" --region us-west-2 --no-paginate \
+  OBJECTS=$(aws s3api list-object-versions --bucket "$BUCKET" --region "$REGION" --no-paginate \
     --output json --query '{Objects: [Versions[], DeleteMarkers[]][].{Key:Key,VersionId:VersionId}}')
   if [[ $OBJECTS != *'"Key"'* ]]; then
     break
   fi
   # delete-objects exits 0 even when some keys fail, and lists them under Errors. Stopping on them keeps the next
   # listing from returning the same keys forever.
-  ERRORS=$(aws s3api delete-objects --bucket "$BUCKET" --region us-west-2 --delete "$OBJECTS" \
+  ERRORS=$(aws s3api delete-objects --bucket "$BUCKET" --region "$REGION" --delete "$OBJECTS" \
     --query 'Errors' --output json)
   if [[ $ERRORS != null && $ERRORS != '[]' ]]; then
     echo "S3 refused to delete some objects in $BUCKET:" >&2
@@ -51,5 +53,5 @@ while :; do
   fi
 done
 
-aws s3api delete-bucket --bucket "$BUCKET" --region us-west-2
+aws s3api delete-bucket --bucket "$BUCKET" --region "$REGION"
 echo "Deleted $BUCKET."

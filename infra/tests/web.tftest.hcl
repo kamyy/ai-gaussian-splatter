@@ -8,6 +8,7 @@ variables {
   worker_ami_id        = "ami-0123456789abcdef0"
   alert_email          = "test@example.com"
   hosted_zone_id       = "Z00000000000000000000"
+  domain_zone_name     = "example.com"
   clerk_secret_key_arn = "arn:aws:secretsmanager:us-west-2:000000000000:secret:ai-gaussian-splatter/clerk-secret-key-AAAAAA"
   web_image_tag        = "0123abc"
   worker_image_tag     = "4567def"
@@ -151,7 +152,9 @@ run "web_container_wiring" {
   }
 
   # The override_resource blocks below give each ECR repository its own URL, and worker_image_tag differs from
-  # web_image_tag. So this fails if WORKER_IMAGE_URI names the web repository or the web tag.
+  # web_image_tag. So this fails if WORKER_IMAGE_URI names the web repository or the web tag. The us-west-2 in both
+  # this assertion and the ECR_REGISTRY one below is var.aws_region's default: if that default moves, the right fix
+  # is to move these too, not to stop asserting the region.
   assert {
     condition = anytrue([
       for e in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].environment :
@@ -178,6 +181,16 @@ run "web_container_wiring" {
     ])
     error_message = "AWS_REGION must be set explicitly so the app's AWS SDK clients target the right region"
   }
+
+  # worker/pipeline/status.py builds its callback as f"{app_public_url}/api/v1/...", so a trailing slash here is a
+  # silent 404 on every status update rather than anything Terraform would reject.
+  assert {
+    condition = anytrue([
+      for e in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].environment :
+      e.name == "APP_PUBLIC_URL" && !endswith(e.value, "/")
+    ])
+    error_message = "APP_PUBLIC_URL must carry no trailing slash, or the worker's status callbacks 404"
+  }
 }
 
 run "migration_task_keeps_the_static_password" {
@@ -197,7 +210,7 @@ run "migration_task_keeps_the_static_password" {
 run "migration_task_role_carries_no_grants" {
   command = apply
 
-  # There is no aws_iam_role_policy resource anywhere in this config attached to aws_iam_role.migration_task —
+  # There is no aws_iam_role_policy resource anywhere in infra/ attached to aws_iam_role.migration_task —
   # that's a config-level fact (the migration task role appears only in its own aws_iam_role declaration),
   # not something re-checked at plan time here. The container only opens a TCP connection to RDS; every AWS
   # API call the migration flow needs (ECR pull, DB secret read) runs under execution_role instead.
@@ -244,11 +257,6 @@ run "certificate_and_dns" {
   command = apply
 
   assert {
-    condition     = aws_acm_certificate.web.domain_name == "ai-gaussian-splatter.orky.net"
-    error_message = "certificate must cover the app's own hostname"
-  }
-
-  assert {
     condition     = aws_acm_certificate.web.validation_method == "DNS"
     error_message = "must validate via DNS against the imported zone, not email"
   }
@@ -261,6 +269,37 @@ run "certificate_and_dns" {
   assert {
     condition     = aws_lb_listener.https.ssl_policy == "ELBSecurityPolicy-TLS13-1-2-2021-06"
     error_message = "an unset ssl_policy on the AWS side defaults to the weak 2016-08 policy — this must be explicit"
+  }
+}
+
+# Every hostname the deploy touches has to follow var.domain_zone_name. Asserting that against the fixture's own zone
+# can't tell local.app_hostname apart from a literal spelling of the same string, so this run supplies a second zone.
+# A hardcoded hostname passes everywhere else and only shows up in production: the certificate covers a name the A
+# record doesn't serve, so ACM validation never completes and the worker PATCHes status to an origin the ALB doesn't
+# answer on.
+run "hostnames_follow_the_zone_variable" {
+  command = apply
+
+  variables {
+    domain_zone_name = "other.test"
+  }
+
+  assert {
+    condition     = aws_acm_certificate.web.domain_name == "ai-gaussian-splatter.other.test"
+    error_message = "the certificate must cover local.app_hostname, which follows var.domain_zone_name"
+  }
+
+  assert {
+    condition     = aws_route53_record.web.name == "ai-gaussian-splatter.other.test"
+    error_message = "the A-alias record must name local.app_hostname, the hostname the certificate covers"
+  }
+
+  assert {
+    condition = anytrue([
+      for e in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].environment :
+      e.name == "APP_PUBLIC_URL" && e.value == "https://ai-gaussian-splatter.other.test"
+    ])
+    error_message = "APP_PUBLIC_URL must be local.app_origin, the same hostname the certificate and A record use"
   }
 }
 
@@ -344,14 +383,45 @@ run "rejects_a_prefixed_hosted_zone_id" {
   expect_failures = [var.hosted_zone_id]
 }
 
-run "rejects_a_non_https_app_public_url" {
+run "rejects_an_empty_domain_zone_name" {
   command = plan
 
   variables {
-    app_public_url = "http://ai-gaussian-splatter.orky.net"
+    domain_zone_name = ""
   }
 
-  expect_failures = [var.app_public_url]
+  expect_failures = [var.domain_zone_name]
+}
+
+run "rejects_a_domain_zone_name_with_a_scheme" {
+  command = plan
+
+  variables {
+    domain_zone_name = "https://example.com"
+  }
+
+  expect_failures = [var.domain_zone_name]
+}
+
+# The Route 53 console spells a zone name with a trailing dot, and its API returns one. Both are what a human pastes.
+run "rejects_a_domain_zone_name_with_a_trailing_dot" {
+  command = plan
+
+  variables {
+    domain_zone_name = "example.com."
+  }
+
+  expect_failures = [var.domain_zone_name]
+}
+
+run "rejects_an_uppercase_domain_zone_name" {
+  command = plan
+
+  variables {
+    domain_zone_name = "Example.com"
+  }
+
+  expect_failures = [var.domain_zone_name]
 }
 
 run "rejects_a_non_email_alert_email" {
@@ -396,7 +466,7 @@ run "rejects_a_clerk_secret_arn_from_a_different_account" {
 
 # mock_provider fills computed attributes with plausible-looking scalars, but leaves computed
 # lists/sets empty by default and doesn't know about format-validated fields (ARNs). These overrides
-# give the handful of computed values other resources in this config actually depend on (or validate
+# give the handful of computed values other resources in infra/ actually depend on (or validate
 # the shape of) something usable, so the whole plan resolves offline.
 override_resource {
   target = aws_db_instance.main
@@ -414,8 +484,8 @@ override_resource {
   values = {
     arn = "arn:aws:acm:us-west-2:000000000000:certificate/mock-cert-id"
     domain_validation_options = [{
-      domain_name           = "ai-gaussian-splatter.orky.net"
-      resource_record_name  = "_mock.ai-gaussian-splatter.orky.net."
+      domain_name           = "ai-gaussian-splatter.example.com"
+      resource_record_name  = "_mock.ai-gaussian-splatter.example.com."
       resource_record_type  = "CNAME"
       resource_record_value = "_mock.acm-validations.aws."
     }]

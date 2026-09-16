@@ -134,7 +134,7 @@ resource "aws_s3_bucket_policy" "splats" {
 
 # ALB access logs are written by the ELB service rather than by the app, so no CORS rule is needed. Without
 # this bucket the ALB would keep no record of who called — the app's own logs cover only requests its handlers
-# actually received, not the ones the ALB rejected or redirected first (web.tf). 90 days is how far back an
+# actually received, not the requests the ALB rejected or redirected first (web.tf). 90 days is how far back an
 # abuse investigation is likely to reach.
 resource "aws_s3_bucket" "access_logs" {
   bucket_prefix = "ai-gaussian-splatter-access-logs-"

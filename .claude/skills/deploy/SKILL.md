@@ -16,7 +16,7 @@ The `deploy` job (`.github/workflows/deploy.yml`) does every deploy, the first o
 | Situation | What to do |
 |---|---|
 | `web/` or `infra/*.tf` change, job on | Land it on `main` through a PR. The job builds, migrates, and rolls out. A push touching only `.md` files skips the whole workflow (`paths-ignore`). |
-| Fresh or torn-down account | [First-time account setup](../../../RUNBOOK.md#first-time-account-setup) (`scripts/prod/first-time-account-setup.sh`) → [Configuring continuous deployment](../../../RUNBOOK.md#configuring-continuous-deployment) (`scripts/prod/configure-ci-role.sh`, then `scripts/prod/set-gh-repo-variables.sh`) → [Going live](../../../RUNBOOK.md#going-live) (turn the job on through a PR). After the first run, `scripts/prod/push-worker-image.sh`. |
+| Fresh or torn-down account | [Creating account prerequisites](../../../RUNBOOK.md#creating-account-prerequisites) (`scripts/prod/create-account-prereqs.sh`) → [Configuring continuous deployment](../../../RUNBOOK.md#configuring-continuous-deployment) (`scripts/prod/configure-ci-role.sh`, then `scripts/prod/set-gh-repo-variables.sh`) → [Going live](../../../RUNBOOK.md#going-live) (turn the job on through a PR). After the first run, `scripts/prod/push-worker-image.sh`. |
 | New worker image | `scripts/prod/push-worker-image.sh` ([Building and pushing the worker image](../../../RUNBOOK.md#building-and-pushing-the-worker-image)). It also updates `WORKER_IMAGE_TAG`, and the next deploy points `WORKER_IMAGE_URI` at it. |
 | Preview a change | `scripts/prod/terraform-plan.sh` ([Running Terraform locally](../../../RUNBOOK.md#running-terraform-locally)). Never `apply` from there. Only the job runs migrations before rolling the service. |
 | Roll back | The circuit breaker rolls a bad image back on its own. To roll back by hand, revert the change and push. A schema change gets a corrective migration instead ([Fixing a bad migration](../../../RUNBOOK.md#fixing-a-bad-migration)). |
@@ -25,10 +25,10 @@ The `deploy` job (`.github/workflows/deploy.yml`) does every deploy, the first o
 ## Before turning the job on
 
 1. `aws` commands act on whatever account the signed-in credentials belong to. Each script prints that account before creating anything. Confirm it's the account the user means before answering the script's prompt.
-2. Every repository variable must be set. An unset one arrives as `""`, which each Terraform variable's `validation` block rejects, so the job fails at its first apply rather than deploying a placeholder. On a fresh account no worker image exists for `WORKER_IMAGE_TAG` to name. Any commit SHA passes validation until one is pushed.
-3. Validation can't catch a well-formed wrong value, and `ALERT_EMAIL` is the one that stays silent about it. A mistyped address applies green with no subscription state to check, since the AWS Budget emails it directly. Confirm the address with the user rather than inferring one. Change `APP_PUBLIC_URL` only alongside `local.app_hostname` in `infra/locals.tf`.
+2. Every repository variable must be set. An unset one arrives as `""`, which each Terraform variable's `validation` block rejects, so the job fails at its first apply rather than deploying a placeholder. `DOMAIN_ZONE_NAME` also gets an earlier check step, because the job builds an image before its first apply. On a fresh account no worker image exists for `WORKER_IMAGE_TAG` to name. Any commit SHA passes validation until one is pushed.
+3. Validation can't catch a well-formed wrong value, and `ALERT_EMAIL` is the one that stays silent about it. A mistyped address applies green with no subscription state to check, since the AWS Budget emails it directly. Confirm the address with the user rather than inferring one. `DOMAIN_ZONE_NAME` is the only place the app's domain is set; the hostname, certificate, DNS record, CORS origins, and the deploy job's smoke-check origin are all derived from it.
 4. If job launches matter, confirm the AMI in `WORKER_AMI_ID` and the image under `WORKER_IMAGE_TAG` both exist. Their `validation` blocks check shape only.
-5. The state bucket must already exist ([First-time account setup](../../../RUNBOOK.md#first-time-account-setup)). Skip it and the job's `terraform init` fails.
+5. The state bucket must already exist ([Creating account prerequisites](../../../RUNBOOK.md#creating-account-prerequisites)). Skip it and the job's `terraform init` fails.
 
 ## Before merging an `infra/` change
 

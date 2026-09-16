@@ -20,7 +20,6 @@ jobs:
       group: deploy-production
       cancel-in-progress: false
     env:
-      AWS_REGION: us-west-2
       AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
       CLUSTER_NAME: ai-gaussian-splatter
       SERVICE_NAME: ai-gaussian-splatter-web
@@ -31,12 +30,11 @@ jobs:
       TF_VAR_hosted_zone_id: ${{ vars.HOSTED_ZONE_ID }}
       TF_VAR_clerk_secret_key_arn: ${{ vars.CLERK_SECRET_KEY_ARN }}
       TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
-      TF_VAR_app_public_url: ${{ vars.APP_PUBLIC_URL }}
+      TF_VAR_domain_zone_name: ${{ vars.DOMAIN_ZONE_NAME }}
       TF_VAR_worker_ami_id: ${{ vars.WORKER_AMI_ID }}
       # GPU worker deployment stays manual, so this changes only when someone hand-builds and pushes a new
       # worker image (RUNBOOK.md), not on every push to main the way web/migrate_image_tag do.
       TF_VAR_worker_image_tag: ${{ vars.WORKER_IMAGE_TAG }}
-      APP_PUBLIC_URL: ${{ vars.APP_PUBLIC_URL }}
     steps:
       - uses: actions/checkout@v7
 
@@ -63,10 +61,47 @@ jobs:
             exit 1
           fi
 
+      # Terraform's own validation would catch an unset DOMAIN_ZONE_NAME, but only at the first apply, after the
+      # image build. Checked here so an unset variable costs seconds instead of most of a deploy.
+      - name: Check DOMAIN_ZONE_NAME is a DNS zone name
+        run: |
+          if [[ ! $TF_VAR_domain_zone_name =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]]; then
+            echo "::error::repository variable DOMAIN_ZONE_NAME must be a bare DNS zone name like example.com (RUNBOOK.md)"
+            exit 1
+          fi
+
+      # AWS_REGION is read from var.aws_region's default and APP_PUBLIC_URL from local.app_hostname, so the region
+      # this job signs with and the origin it smoke-tests are the ones Terraform deploys, not second copies that can
+      # drift from them. The credential step below reads AWS_REGION too.
+      - name: Resolve region and origin
+        run: |
+          source scripts/lib/terraform.sh
+          # Assigned first: inside the echo the helpers' non-zero exits would be discarded, and the job would sign
+          # with an empty region and fail several steps later naming neither this step nor infra/variables.tf.
+          region=$(tf_aws_region)
+          hostname=$(tf_app_hostname "$TF_VAR_domain_zone_name")
+          echo "AWS_REGION=$region" >> "$GITHUB_ENV"
+          echo "APP_PUBLIC_URL=https://$hostname" >> "$GITHUB_ENV"
+
       - uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-gaussian-splatter-ci-deploy
-          aws-region: us-west-2
+          aws-region: ${{ env.AWS_REGION }}
+
+      # scripts/prod/set-gh-repo-variables.sh looks HOSTED_ZONE_ID up from DOMAIN_ZONE_NAME, but either variable can be
+      # edited on its own afterwards. The two then name different zones, and the ACM validation record lands in a zone
+      # that doesn't serve the hostname, which stalls the first apply until ACM's own validation timeout gives up.
+      - name: Check HOSTED_ZONE_ID serves DOMAIN_ZONE_NAME
+        run: |
+          if ! zone=$(aws route53 get-hosted-zone --id "$TF_VAR_hosted_zone_id" \
+            --query HostedZone.Name --output text); then
+            echo "::error::repository variable HOSTED_ZONE_ID names no zone in this account (RUNBOOK.md)"
+            exit 1
+          fi
+          if [[ ${zone%.} != "$TF_VAR_domain_zone_name" ]]; then
+            echo "::error::HOSTED_ZONE_ID serves ${zone%.}, not DOMAIN_ZONE_NAME's $TF_VAR_domain_zone_name (RUNBOOK.md)"
+            exit 1
+          fi
 
       - id: terraform-version
         run: |

@@ -10,6 +10,7 @@ variables {
   worker_ami_id        = "ami-0123456789abcdef0"
   alert_email          = "test@example.com"
   hosted_zone_id       = "Z00000000000000000000"
+  domain_zone_name     = "example.com"
   clerk_secret_key_arn = "arn:aws:secretsmanager:us-west-2:000000000000:secret:ai-gaussian-splatter/clerk-secret-key-AAAAAA"
   web_image_tag        = "0123abc"
   worker_image_tag     = "0123abc"
@@ -18,7 +19,7 @@ variables {
 run "no_nat_gateway_or_extra_public_ingress" {
   command = apply
 
-  # There is no aws_nat_gateway/aws_eip resource anywhere in this config by design (see network.tf) — nothing
+  # There is no aws_nat_gateway/aws_eip resource anywhere in infra/ by design (see network.tf) — nothing
   # to assert at runtime for their absence, since the plan simply never contains one.
 
   assert {
@@ -71,7 +72,7 @@ run "s3_gateway_endpoint_covers_both_route_tables" {
 
 # mock_provider fills computed attributes with plausible-looking scalars, but leaves computed
 # lists/sets empty by default and doesn't know about format-validated fields (ARNs). These overrides
-# give the handful of computed values other resources in this config actually depend on (or validate
+# give the handful of computed values other resources in infra/ actually depend on (or validate
 # the shape of) something usable, so the whole plan resolves offline.
 override_resource {
   target = aws_db_instance.main
@@ -89,8 +90,8 @@ override_resource {
   values = {
     arn = "arn:aws:acm:us-west-2:000000000000:certificate/mock-cert-id"
     domain_validation_options = [{
-      domain_name           = "ai-gaussian-splatter.orky.net"
-      resource_record_name  = "_mock.ai-gaussian-splatter.orky.net."
+      domain_name           = "ai-gaussian-splatter.example.com"
+      resource_record_name  = "_mock.ai-gaussian-splatter.example.com."
       resource_record_type  = "CNAME"
       resource_record_value = "_mock.acm-validations.aws."
     }]

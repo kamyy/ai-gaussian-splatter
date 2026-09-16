@@ -8,10 +8,10 @@ variables {
   worker_ami_id        = "ami-0123456789abcdef0"
   alert_email          = "test@example.com"
   hosted_zone_id       = "Z00000000000000000000"
+  domain_zone_name     = "example.com"
   clerk_secret_key_arn = "arn:aws:secretsmanager:us-west-2:000000000000:secret:ai-gaussian-splatter/clerk-secret-key-AAAAAA"
   web_image_tag        = "0123abc"
   worker_image_tag     = "0123abc"
-  app_public_url       = "https://ai-gaussian-splatter.orky.net/"
 }
 
 run "database_config" {
@@ -48,7 +48,7 @@ run "database_config" {
   }
 }
 
-run "bucket_cors_matches_app_origin_and_trims_trailing_slash" {
+run "bucket_cors_matches_the_app_origin" {
   command = apply
 
   # cors_rule (and its nested attributes) come back as sets, whose elements have no addressable index — iterate
@@ -58,14 +58,6 @@ run "bucket_cors_matches_app_origin_and_trims_trailing_slash" {
       for r in aws_s3_bucket_cors_configuration.uploads.cors_rule : toset(r.allowed_methods) == toset(["PUT"])
     ])
     error_message = "uploads bucket must allow PUT only"
-  }
-
-  assert {
-    condition = anytrue([
-      for r in aws_s3_bucket_cors_configuration.uploads.cors_rule :
-      contains(tolist(r.allowed_origins), "https://ai-gaussian-splatter.orky.net")
-    ])
-    error_message = "a trailing slash on app_public_url must be stripped before it reaches the CORS origin"
   }
 
   assert {
@@ -80,6 +72,33 @@ run "bucket_cors_matches_app_origin_and_trims_trailing_slash" {
       for r in aws_s3_bucket_cors_configuration.uploads.cors_rule : !contains(tolist(r.allowed_origins), "*")
     ])
     error_message = "CORS origin must never be *, or a leaked splat/upload URL is readable cross-origin"
+  }
+}
+
+# Both buckets' origins have to follow var.domain_zone_name. The fixture's own zone can't tell local.app_origin apart
+# from a literal spelling of it, so this run supplies a second zone. A hardcoded origin reaches production as a CORS
+# rule naming a host the browser never sends, which fails every direct-to-S3 upload and splat fetch.
+run "cors_origins_follow_the_zone_variable" {
+  command = apply
+
+  variables {
+    domain_zone_name = "other.test"
+  }
+
+  assert {
+    condition = anytrue([
+      for r in aws_s3_bucket_cors_configuration.uploads.cors_rule :
+      toset(r.allowed_origins) == toset(["https://ai-gaussian-splatter.other.test"])
+    ])
+    error_message = "the uploads bucket's CORS origin must be local.app_origin, which follows var.domain_zone_name"
+  }
+
+  assert {
+    condition = anytrue([
+      for r in aws_s3_bucket_cors_configuration.splats.cors_rule :
+      toset(r.allowed_origins) == toset(["https://ai-gaussian-splatter.other.test"])
+    ])
+    error_message = "the splats bucket's CORS origin must be local.app_origin, which follows var.domain_zone_name"
   }
 }
 
@@ -99,7 +118,7 @@ run "buckets_force_destroy_and_block_public_access" {
 
 # mock_provider fills computed attributes with plausible-looking scalars, but leaves computed
 # lists/sets empty by default and doesn't know about format-validated fields (ARNs). These overrides
-# give the handful of computed values other resources in this config actually depend on (or validate
+# give the handful of computed values other resources in infra/ actually depend on (or validate
 # the shape of) something usable, so the whole plan resolves offline.
 override_resource {
   target = aws_db_instance.main
@@ -117,8 +136,8 @@ override_resource {
   values = {
     arn = "arn:aws:acm:us-west-2:000000000000:certificate/mock-cert-id"
     domain_validation_options = [{
-      domain_name           = "ai-gaussian-splatter.orky.net"
-      resource_record_name  = "_mock.ai-gaussian-splatter.orky.net."
+      domain_name           = "ai-gaussian-splatter.example.com"
+      resource_record_name  = "_mock.ai-gaussian-splatter.example.com."
       resource_record_type  = "CNAME"
       resource_record_value = "_mock.acm-validations.aws."
     }]
