@@ -8,6 +8,7 @@ variables {
   worker_ami_id        = "ami-0123456789abcdef0"
   alert_email          = "test@example.com"
   hosted_zone_id       = "Z00000000000000000000"
+  domain_zone_name     = "example.com"
   clerk_secret_key_arn = "arn:aws:secretsmanager:us-west-2:000000000000:secret:ai-gaussian-splatter/clerk-secret-key-AAAAAA"
   web_image_tag        = "0123abc"
   worker_image_tag     = "4567def"
@@ -180,6 +181,16 @@ run "web_container_wiring" {
     ])
     error_message = "AWS_REGION must be set explicitly so the app's AWS SDK clients target the right region"
   }
+
+  # worker/pipeline/status.py builds its callback as f"{app_public_url}/api/v1/...", so a trailing slash here is a
+  # silent 404 on every status update rather than anything Terraform would reject.
+  assert {
+    condition = anytrue([
+      for e in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].environment :
+      e.name == "APP_PUBLIC_URL" && !endswith(e.value, "/")
+    ])
+    error_message = "APP_PUBLIC_URL must carry no trailing slash, or the worker's status callbacks 404"
+  }
 }
 
 run "migration_task_keeps_the_static_password" {
@@ -246,7 +257,7 @@ run "certificate_and_dns" {
   command = apply
 
   assert {
-    condition     = aws_acm_certificate.web.domain_name == "ai-gaussian-splatter.orky.net"
+    condition     = aws_acm_certificate.web.domain_name == "ai-gaussian-splatter.example.com"
     error_message = "certificate must cover the app's own hostname"
   }
 
@@ -346,14 +357,45 @@ run "rejects_a_prefixed_hosted_zone_id" {
   expect_failures = [var.hosted_zone_id]
 }
 
-run "rejects_a_non_https_app_public_url" {
+run "rejects_an_empty_domain_zone_name" {
   command = plan
 
   variables {
-    app_public_url = "http://ai-gaussian-splatter.orky.net"
+    domain_zone_name = ""
   }
 
-  expect_failures = [var.app_public_url]
+  expect_failures = [var.domain_zone_name]
+}
+
+run "rejects_a_domain_zone_name_with_a_scheme" {
+  command = plan
+
+  variables {
+    domain_zone_name = "https://example.com"
+  }
+
+  expect_failures = [var.domain_zone_name]
+}
+
+# The Route 53 console spells a zone name with a trailing dot, and its API returns one. Both are what a human pastes.
+run "rejects_a_domain_zone_name_with_a_trailing_dot" {
+  command = plan
+
+  variables {
+    domain_zone_name = "example.com."
+  }
+
+  expect_failures = [var.domain_zone_name]
+}
+
+run "rejects_an_uppercase_domain_zone_name" {
+  command = plan
+
+  variables {
+    domain_zone_name = "Example.com"
+  }
+
+  expect_failures = [var.domain_zone_name]
 }
 
 run "rejects_a_non_email_alert_email" {
@@ -416,8 +458,8 @@ override_resource {
   values = {
     arn = "arn:aws:acm:us-west-2:000000000000:certificate/mock-cert-id"
     domain_validation_options = [{
-      domain_name           = "ai-gaussian-splatter.orky.net"
-      resource_record_name  = "_mock.ai-gaussian-splatter.orky.net."
+      domain_name           = "ai-gaussian-splatter.example.com"
+      resource_record_name  = "_mock.ai-gaussian-splatter.example.com."
       resource_record_type  = "CNAME"
       resource_record_value = "_mock.acm-validations.aws."
     }]

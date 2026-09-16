@@ -199,14 +199,14 @@ scripts/prod/set-gh-repo-variables.sh
 
 It looks these up rather than asking:
 
-- `AWS_ACCOUNT_ID` is the signed-in account. The deploy job builds the CI role's ARN and the state bucket name from it.
-- `HOSTED_ZONE_ID` is the `orky.net` zone for the ALB's DNS record and ACM validation. The zone is referenced only, not created, so it must already exist. Terraform adds the app's A-alias and ACM's validation CNAME to it; nothing else in the zone is this app's concern.
-- `CLERK_SECRET_KEY_ARN` is the full ARN, including Secrets Manager's six-character suffix. ECS matches a task definition's `valueFrom` against that suffix, so a partial ARN applies clean and only fails at task start.
-- `APP_PUBLIC_URL` is where the worker PATCHes job status back to, and what the ALB is aliased to. It's read from `local.app_hostname` in `infra/locals.tf`, which the certificate and the Route 53 record are built from too.
+- `AWS_ACCOUNT_ID` is the signed-in account.
+- `HOSTED_ZONE_ID` is the public zone named by `DOMAIN_ZONE_NAME`, used for the ALB's DNS record and ACM validation. The zone is referenced only, not created, so it must already exist.
+- `CLERK_SECRET_KEY_ARN` is the full ARN, including Secrets Manager's six-character suffix.
 
 It asks for these, defaulting to each one's current value:
 
-- `ALERT_EMAIL` is where the AWS Budget (`infra/budgets.tf`) sends spend alerts directly, with no subscription-confirmation step to check. Nothing can tell a wrong address from a right one, and a wrong one applies green with the alerts never arriving. The only way to catch a typo is to watch for a real alert once spend crosses a threshold, or temporarily lower `monthly_budget_limit_usd` to force one.
+- `DOMAIN_ZONE_NAME` is the public DNS zone the app is served from, e.g. `orky.net`. Everything carrying the app's public name is built from it: the hostname, the ACM certificate, the Route 53 record, the S3 CORS origins, the origin the worker PATCHes status back to, and the origin `.github/workflows/deploy.yml` smoke-checks after a rollout. A trailing dot or uppercase is normalized away before the variable is set.
+- `ALERT_EMAIL` is where the AWS Budget (`infra/budgets.tf`) sends spend alerts. A typo'd but well-formed address deploys green with the alerts never arriving, and nothing can catch that at apply time ([State / what's next](AGENTS.md#state--whats-next)).
 - `CLERK_PUBLISHABLE_KEY` is the `pk_live_...` key, not the secret one.
 - `WORKER_AMI_ID` is the AMI each job's spot instance boots. User data does no provisioning of its own, so the image must already carry Docker, the NVIDIA driver and container toolkit, and the AWS CLI. AWS's Deep Learning Base GPU AMIs do, and the script lists the newest five before asking.
 

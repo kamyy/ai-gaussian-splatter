@@ -37,13 +37,18 @@ ask() {
 require_aws_login
 require_gh_login
 
-ZONE_NAME=$(tf_local_var domain_zone_name)
+DOMAIN_ZONE_NAME=$(ask "Public DNS zone the app is served from" "$(current DOMAIN_ZONE_NAME)")
+# A zone name copied from the Route 53 console arrives as "example.com.", and the lookup below matches the API's own
+# lowercase spelling exactly. var.domain_zone_name's validation rejects both forms, so they are normalized here rather
+# than left to fail at the first apply.
+DOMAIN_ZONE_NAME=${DOMAIN_ZONE_NAME%.}
+DOMAIN_ZONE_NAME=${DOMAIN_ZONE_NAME,,}
 # The API returns the ID as /hostedzone/<id>, and var.hosted_zone_id takes the bare ID.
-HOSTED_ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name "$ZONE_NAME" \
-  --query "HostedZones[?Name=='$ZONE_NAME.' && Config.PrivateZone==\`false\`].Id | [0]" \
+HOSTED_ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name "$DOMAIN_ZONE_NAME" \
+  --query "HostedZones[?Name=='$DOMAIN_ZONE_NAME.' && Config.PrivateZone==\`false\`].Id | [0]" \
   --output text | cut -d/ -f3)
 if [[ $HOSTED_ZONE_ID != Z* ]]; then
-  echo "No public hosted zone named $ZONE_NAME in account $AWS_ACCOUNT_ID." >&2
+  echo "No public hosted zone named $DOMAIN_ZONE_NAME in account $AWS_ACCOUNT_ID." >&2
   exit 1
 fi
 
@@ -52,11 +57,6 @@ if ! CLERK_SECRET_KEY_ARN=$(aws secretsmanager describe-secret --region "$REGION
   echo "Create the Clerk secret with scripts/prod/create-account-prereqs.sh first." >&2
   exit 1
 fi
-
-# The certificate and Route 53 record are built from local.app_hostname too, so reading it here keeps the worker's
-# status callbacks aimed at a host that answers.
-APP_HOSTNAME=$(tf_app_hostname "$ZONE_NAME")
-APP_PUBLIC_URL=https://$APP_HOSTNAME
 
 ALERT_EMAIL=$(ask "Budget alert email" "$(current ALERT_EMAIL)")
 
@@ -82,8 +82,9 @@ WORKER_AMI_ID=$(ask "Worker AMI" "${CURRENT_AMI:-${AMIS%%$'\t'*}}")
 WORKER_IMAGE_TAG=$(current WORKER_IMAGE_TAG)
 WORKER_IMAGE_TAG=${WORKER_IMAGE_TAG:-$(git rev-parse --short HEAD)}
 
-NAMES=(AWS_ACCOUNT_ID HOSTED_ZONE_ID CLERK_SECRET_KEY_ARN ALERT_EMAIL APP_PUBLIC_URL WORKER_AMI_ID WORKER_IMAGE_TAG
-  CLERK_PUBLISHABLE_KEY)
+NAMES=(AWS_ACCOUNT_ID DOMAIN_ZONE_NAME HOSTED_ZONE_ID CLERK_SECRET_KEY_ARN ALERT_EMAIL WORKER_AMI_ID
+  WORKER_IMAGE_TAG CLERK_PUBLISHABLE_KEY)
+echo "The app will serve from https://$(tf_app_hostname "$DOMAIN_ZONE_NAME")."
 echo
 for name in "${NAMES[@]}"; do
   printf '  %-22s %s\n' "$name" "${!name}"
@@ -93,3 +94,10 @@ confirm "Set these repository variables on $(gh repo view --json nameWithOwner -
 for name in "${NAMES[@]}"; do
   gh variable set "$name" --body "${!name}"
 done
+
+# .github/workflows/deploy.yml builds the app's origin from local.app_hostname, so an APP_PUBLIC_URL repository
+# variable feeds nothing. Removed rather than left in the list reading as live configuration.
+if [[ -n $(current APP_PUBLIC_URL) ]]; then
+  gh variable delete APP_PUBLIC_URL
+  echo "Deleted APP_PUBLIC_URL, which nothing reads."
+fi

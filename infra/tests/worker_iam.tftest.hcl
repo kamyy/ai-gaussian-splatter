@@ -8,6 +8,7 @@ variables {
   worker_ami_id        = "ami-0123456789abcdef0"
   alert_email          = "test@example.com"
   hosted_zone_id       = "Z00000000000000000000"
+  domain_zone_name     = "example.com"
   clerk_secret_key_arn = "arn:aws:secretsmanager:us-west-2:000000000000:secret:ai-gaussian-splatter/clerk-secret-key-AAAAAA"
   web_image_tag        = "0123abc"
   worker_image_tag     = "0123abc"
@@ -82,8 +83,8 @@ override_resource {
   values = {
     arn = "arn:aws:acm:us-west-2:000000000000:certificate/mock-cert-id"
     domain_validation_options = [{
-      domain_name           = "ai-gaussian-splatter.orky.net"
-      resource_record_name  = "_mock.ai-gaussian-splatter.orky.net."
+      domain_name           = "ai-gaussian-splatter.example.com"
+      resource_record_name  = "_mock.ai-gaussian-splatter.example.com."
       resource_record_type  = "CNAME"
       resource_record_value = "_mock.acm-validations.aws."
     }]

@@ -50,12 +50,46 @@ tf_local_var() {
   printf '%s\n' "$value"
 }
 
-# Resolves ${local.domain_zone_name} inside local.app_hostname using the zone name already read.
+# Prints a variable's quoted default from infra/variables.tf. Only string defaults are read, which is all the scripts
+# need. It exists so the AWS CLI calls in scripts/ and the region .github/workflows/deploy.yml signs with resolve to
+# the same value Terraform itself plans with, rather than each carrying its own copy of the region.
+tf_var_default() {
+  local name=$1 value
+  # depth tracks nesting so a validation block's own closing brace does not end the search before the default line.
+  value=$(awk -v name="$name" '
+    !inblock && $1 == "variable" && $2 == "\"" name "\"" { inblock = 1; depth = 1; next }
+    inblock && depth == 1 && $1 == "default" && $2 == "=" { sub(/^[^"]*"/, ""); sub(/".*$/, ""); print; exit }
+    inblock { depth += gsub(/{/, "{") - gsub(/}/, "}"); if (depth <= 0) { exit } }
+  ' "$ROOT/infra/variables.tf")
+  if [[ -z $value ]]; then
+    echo "Can't read var.$name's default from infra/variables.tf." >&2
+    return 1
+  fi
+  printf '%s\n' "$value"
+}
+
+# The region every AWS CLI call in scripts/ targets. infra/providers.tf configures the AWS provider from the same
+# variable, so changing var.aws_region's default moves the deploy and the scripts together.
+tf_aws_region() {
+  local region
+  region=$(tf_var_default aws_region) || return 1
+  # The default is parsed out of HCL by tf_var_default, so a reformatted or unquoted default could yield a stray
+  # token rather than nothing. .github/workflows/deploy.yml signs with whatever this prints, so the shape is checked
+  # here instead of surfacing as an unrelated AWS error several steps later.
+  if [[ ! $region =~ ^[a-z]{2}(-[a-z]+)+-[0-9]+$ ]]; then
+    echo "var.aws_region's default in infra/variables.tf is not a region name: $region" >&2
+    return 1
+  fi
+  printf '%s\n' "$region"
+}
+
+# Resolves ${var.domain_zone_name} inside local.app_hostname using the zone name passed in. Reading the local rather
+# than rebuilding the hostname here keeps the project-name prefix defined in infra/locals.tf alone.
 tf_app_hostname() {
   local zone_name=$1 hostname
   hostname=$(tf_local_var app_hostname)
   # shellcheck disable=SC2016 # The single quotes match Terraform's own ${...} literally.
-  hostname=${hostname//'${local.domain_zone_name}'/$zone_name}
+  hostname=${hostname//'${var.domain_zone_name}'/$zone_name}
   if [[ -z $hostname || $hostname == *\$\{* ]]; then
     echo "Can't resolve local.app_hostname in infra/locals.tf: $hostname" >&2
     return 1
@@ -101,12 +135,12 @@ load_tf_vars() {
   TF_VAR_hosted_zone_id=$(gh_repo_var HOSTED_ZONE_ID)
   TF_VAR_clerk_secret_key_arn=$(gh_repo_var CLERK_SECRET_KEY_ARN)
   TF_VAR_alert_email=$(gh_repo_var ALERT_EMAIL)
-  TF_VAR_app_public_url=$(gh_repo_var APP_PUBLIC_URL)
+  TF_VAR_domain_zone_name=$(gh_repo_var DOMAIN_ZONE_NAME)
   TF_VAR_worker_ami_id=$(gh_repo_var WORKER_AMI_ID)
   TF_VAR_worker_image_tag=$(gh_repo_var WORKER_IMAGE_TAG)
   TF_VAR_web_image_tag=$(tf_live_web_image_tag)
 
-  export TF_VAR_hosted_zone_id TF_VAR_clerk_secret_key_arn TF_VAR_alert_email TF_VAR_app_public_url \
+  export TF_VAR_hosted_zone_id TF_VAR_clerk_secret_key_arn TF_VAR_alert_email TF_VAR_domain_zone_name \
     TF_VAR_worker_ami_id TF_VAR_worker_image_tag TF_VAR_web_image_tag
 }
 

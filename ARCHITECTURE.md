@@ -124,10 +124,11 @@ The web app runs on **Fargate** behind an **Application Load Balancer** (`infra/
 
 ### TLS & DNS
 
-- TLS terminates at the ALB (ACM cert for `ai-gaussian-splatter.orky.net`; 80→443).
+- TLS terminates at the ALB (ACM cert for `local.app_hostname`, the project name under `var.domain_zone_name`; 80→443).
 - The cert is declared in `infra/web.tf` so it lands in the ALB's region — ALBs can't use out-of-region certs.
-- For ACM specifically, `us-east-1` only matters for CloudFront, which this app doesn't use — the cert stays in the ALB's own region. `us-east-1` does matter elsewhere in this config, for an unrelated reason: the Budgets API (`infra/budgets.tf`) only operates there.
-- Route 53 zone is referenced by ID only (`var.hosted_zone_id`), never looked up or created — this config only ever adds records to an existing zone.
+- For ACM specifically, `us-east-1` only matters for CloudFront, which this app doesn't use — the cert stays in the ALB's own region. `us-east-1` does matter elsewhere in `infra/`, for an unrelated reason: the Budgets API (`infra/budgets.tf`) only operates there.
+- Route 53 zone is referenced by ID only (`var.hosted_zone_id`), never looked up or created — `infra/` only ever adds records to an existing zone.
+- The app's public origin is derived (`local.app_origin`), not passed in. Taking the hostname and the callback origin as two separate inputs let them drift apart, and a mismatch shows up only as the worker's status callbacks failing against a host that doesn't answer.
 
 ### Image tags
 
