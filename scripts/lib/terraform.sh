@@ -4,7 +4,7 @@
 # scripts/prod/create-account-prereqs.sh, scripts/dev/terraform-check.sh, scripts/dev/run-tests.sh,
 # scripts/dev/test-terraform-lib.sh (which checks the HCL scrapers below),
 # scripts/dev/create-dev-resources.sh, and the hashicorp/setup-terraform steps in .github/workflows/ci.yml and
-# .github/workflows/deploy.yml. Callers that run terraform assign TERRAFORM=$(tf_bin). load_tf_vars needs
+# .github/workflows/deploy.yml. Callers that run terraform assign TERRAFORM=$(tf_bin). export_tf_vars needs
 # scripts/lib/github.sh's gh_repo_var, so source that first when calling it. Not meant to be run directly.
 
 ROOT=$(git rev-parse --show-toplevel)
@@ -41,7 +41,7 @@ tf_required_version() {
 }
 
 # Prints a quoted local variable from infra/locals.tf.
-tf_local_var() {
+tf_local() {
   local name=$1 value
   value=$(grep -oP "$name\\s*=\\s*\"\\K[^\"]+" "$ROOT/infra/locals.tf" || true)
   if [[ -z $value ]]; then
@@ -88,7 +88,7 @@ tf_aws_region() {
 # than rebuilding the hostname here keeps the project-name prefix defined in infra/locals.tf alone.
 tf_app_hostname() {
   local zone_name=$1 hostname
-  hostname=$(tf_local_var app_hostname)
+  hostname=$(tf_local app_hostname)
   # shellcheck disable=SC2016 # The single quotes match Terraform's own ${...} literally.
   hostname=${hostname//'${var.domain_zone_name}'/$zone_name}
   if [[ -z $hostname || $hostname == *\$\{* ]]; then
@@ -132,7 +132,7 @@ tf_live_web_image_tag() {
 
 # Exports every TF_VAR_* infra/ requires. They come from the same repository variables
 # .github/workflows/deploy.yml applies with, except web_image_tag, which that job sets itself.
-load_tf_vars() {
+export_tf_vars() {
   TF_VAR_hosted_zone_id=$(gh_repo_var HOSTED_ZONE_ID)
   TF_VAR_clerk_secret_key_arn=$(gh_repo_var CLERK_SECRET_KEY_ARN)
   TF_VAR_alert_email=$(gh_repo_var ALERT_EMAIL)

@@ -19,7 +19,7 @@ if [[ -e "$ROOT/worker/jobdir" ]]; then
   confirm "Delete worker/jobdir, including any Process-button job folders in it?"
 fi
 
-use_dev_aws_credentials
+use_dev_aws_env
 build_worker_image
 
 # Needs to be different for every run.

@@ -134,12 +134,12 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - **Operational scripts in `scripts/dev/` (local) and `scripts/prod/` (the deployed account) are committed executable (`100755`); helpers in `scripts/lib/` are sourced, so they stay `100644`.**
   - Each helper starts with `# shellcheck shell=bash` in place of a shebang.
   - A script that uses the AWS CLI as a signed-in admin sources `scripts/lib/require-aws-login.sh`, and calls `require_aws_login` before any other AWS CLI invocation.
-  - A script that tags the AWS resources it creates sources `scripts/lib/terraform.sh` and assigns `PROJECT_TAG=$(tf_local_var project_tag)`. That reads `local.project_tag` from `infra/locals.tf` so the tag matches `infra/providers.tf`'s `default_tags`.
+  - A script that tags the AWS resources it creates sources `scripts/lib/terraform.sh` and assigns `PROJECT_TAG=$(tf_local project_tag)`. That reads `local.project_tag` from `infra/locals.tf` so the tag matches `infra/providers.tf`'s `default_tags`.
   - The Spot service-linked role and GitHub OIDC provider are account-wide and stay untagged.
   - A script that creates or deletes anything sources `scripts/lib/confirm.sh` and calls `confirm` first.
   - A script that uses the GitHub CLI sources `scripts/lib/github.sh` and calls `require_gh_login` before its first `gh` call. Otherwise a logged-out `gh` reads the same as an unset repository variable.
   - `scripts/prod/terraform-plan.sh`, `scripts/prod/terraform-destroy.sh`, `scripts/prod/delete-tf-state-bucket.sh`, and `scripts/prod/push-worker-image.sh` act on the deployed account, so they also call `require_aws_deploy_account`, which checks the signed-in account against the `AWS_ACCOUNT_ID` repository variable.
-  - The worker scripts run as the dev IAM user from `web/.env` instead, so `use_dev_aws_credentials` in `scripts/lib/worker.sh` checks those keys.
+  - The worker scripts run as the dev IAM user from `web/.env` instead, so `use_dev_aws_env` in `scripts/lib/worker.sh` checks those keys.
   - Local Terraform is `$HOME/.local/bin/terraform` (`scripts/prod/install-terraform.sh`). Scripts that run it assign `TERRAFORM=$(tf_bin)`, which prefers that path over PATH, because a different CLI earlier on PATH still satisfies `command -v terraform`. CI has no copy there: `hashicorp/setup-terraform` in `.github/workflows/ci.yml` and `.github/workflows/deploy.yml` installs whatever `tf_required_version` reads from `infra/providers.tf`.
   - `scripts:check` (run by the pre-commit hook and CI's `lint-format` job) shellchecks them with `scripts/dev/shellcheck.sh`, which runs shellcheck's container image.
   - The image is pinned by digest, so neither a new shellcheck release nor a re-pushed tag can change the result for an unchanged tree.

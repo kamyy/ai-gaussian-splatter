@@ -33,7 +33,7 @@ esac
 
 # The pipeline's AWS calls happen inside the container. Checking the web/.env key pair on the host first fails in
 # seconds rather than after the image build.
-use_dev_aws_credentials
+use_dev_aws_env
 build_worker_image
 
 mkdir -p "$ROOT/worker/jobdir"

@@ -53,21 +53,21 @@ check_fails() {
 }
 
 # The helpers read $ROOT, which they set themselves when sourced. Reassigning it points them at a fixture.
-use_fixture() {
+point_root_at_fixture() {
   ROOT=$FIXTURE
 }
 
-use_repo() {
+point_root_at_repo() {
   ROOT=$REPO_ROOT
 }
 
-use_repo
+point_root_at_repo
 check_matches "tf_aws_region reads infra/variables.tf" '^[a-z]{2}(-[a-z]+)+-[0-9]+$' "$(tf_aws_region)"
 check_matches "tf_app_hostname reads infra/locals.tf" '^[a-z0-9][a-z0-9-]*\.example\.com$' \
   "$(tf_app_hostname example.com)"
-check_equals "tf_local_var reads infra/locals.tf" "ai-gaussian-splatter" "$(tf_local_var project_tag)"
+check_equals "tf_local reads infra/locals.tf" "ai-gaussian-splatter" "$(tf_local project_tag)"
 
-use_fixture
+point_root_at_fixture
 
 # A default sitting after a validation block, which is the shape terraform fmt leaves behind for a variable that has
 # both.
@@ -134,7 +134,7 @@ locals {
 HCL
 check_fails "tf_app_hostname refuses a hostname that isn't a string literal" tf_app_hostname example.com
 
-use_repo
+point_root_at_repo
 if ((failures > 0)); then
   echo "$failures check(s) failed." >&2
   exit 1

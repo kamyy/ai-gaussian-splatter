@@ -36,6 +36,6 @@ require_aws_deploy_account
 confirm "Destroy every resource in infra/'s state in account $AWS_ACCOUNT_ID, data buckets and database included?"
 
 TERRAFORM=$(tf_bin)
-load_tf_vars
+export_tf_vars
 tf_init
 "$TERRAFORM" -chdir="$ROOT/infra" destroy

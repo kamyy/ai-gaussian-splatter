@@ -13,7 +13,7 @@ source "$ROOT/scripts/lib/terraform.sh"
 
 ROLE=ai-gaussian-splatter-ci-deploy
 OIDC_HOST=token.actions.githubusercontent.com
-PROJECT_TAG=$(tf_local_var project_tag)
+PROJECT_TAG=$(tf_local project_tag)
 REGION=$(tf_aws_region)
 
 require_aws_login

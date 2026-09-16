@@ -16,7 +16,7 @@ source "$ROOT/scripts/lib/terraform.sh"
 REGION=$(tf_aws_region)
 
 # Prints a repository variable's current value, or nothing when it's unset.
-current() {
+current_repo_var() {
   gh variable get "$1" 2>/dev/null || true
 }
 
@@ -37,7 +37,7 @@ ask() {
 require_aws_login
 require_gh_login
 
-DOMAIN_ZONE_NAME=$(ask "Public DNS zone the app is served from" "$(current DOMAIN_ZONE_NAME)")
+DOMAIN_ZONE_NAME=$(ask "Public DNS zone the app is served from" "$(current_repo_var DOMAIN_ZONE_NAME)")
 # A zone name copied from the Route 53 console arrives as "example.com.", and the lookup below matches the API's own
 # lowercase spelling exactly. var.domain_zone_name's validation rejects both forms, so they are normalized here rather
 # than left to fail at the first apply.
@@ -58,9 +58,9 @@ if ! CLERK_SECRET_KEY_ARN=$(aws secretsmanager describe-secret --region "$REGION
   exit 1
 fi
 
-ALERT_EMAIL=$(ask "Budget alert email" "$(current ALERT_EMAIL)")
+ALERT_EMAIL=$(ask "Budget alert email" "$(current_repo_var ALERT_EMAIL)")
 
-CLERK_PUBLISHABLE_KEY=$(ask "Clerk publishable key (pk_live_...)" "$(current CLERK_PUBLISHABLE_KEY)")
+CLERK_PUBLISHABLE_KEY=$(ask "Clerk publishable key (pk_live_...)" "$(current_repo_var CLERK_PUBLISHABLE_KEY)")
 if [[ $CLERK_PUBLISHABLE_KEY != pk_live_* ]]; then
   echo "That isn't the production instance's pk_live_* key. A pk_test_* key doesn't match the live secret key." >&2
   exit 1
@@ -74,12 +74,12 @@ AMIS=$(aws ec2 describe-images --region "$REGION" --owners amazon \
   --query 'reverse(sort_by(Images,&CreationDate))[:5].[ImageId,CreationDate,Name]' \
   --output text)
 printf '%s\n' "$AMIS"
-CURRENT_AMI=$(current WORKER_AMI_ID)
+CURRENT_AMI=$(current_repo_var WORKER_AMI_ID)
 WORKER_AMI_ID=$(ask "Worker AMI" "${CURRENT_AMI:-${AMIS%%$'\t'*}}")
 
 # scripts/prod/push-worker-image.sh owns this once a worker image exists. Until then any SHA-shaped value passes
 # validation.
-WORKER_IMAGE_TAG=$(current WORKER_IMAGE_TAG)
+WORKER_IMAGE_TAG=$(current_repo_var WORKER_IMAGE_TAG)
 WORKER_IMAGE_TAG=${WORKER_IMAGE_TAG:-$(git rev-parse --short HEAD)}
 
 # DEPLOY_ENABLED is deliberately absent. Going live is a separate `gh variable set` (RUNBOOK.md).
@@ -98,7 +98,7 @@ done
 
 # .github/workflows/deploy.yml builds the app's origin from local.app_hostname, so an APP_PUBLIC_URL repository
 # variable feeds nothing. Removed rather than left in the list reading as live configuration.
-if [[ -n $(current APP_PUBLIC_URL) ]]; then
+if [[ -n $(current_repo_var APP_PUBLIC_URL) ]]; then
   gh variable delete APP_PUBLIC_URL
   echo "Deleted APP_PUBLIC_URL, which nothing reads."
 fi
