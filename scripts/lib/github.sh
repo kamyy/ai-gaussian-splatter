@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Sourced by the scripts in scripts/prod/ that call the GitHub CLI. Not meant to be run directly.
+# Not meant to be run directly.
 
 # Fails fast when the GitHub CLI has no working login. Without it, a failed gh call looks the same as an unset
 # repository variable.

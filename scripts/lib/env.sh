@@ -1,5 +1,4 @@
 # shellcheck shell=bash
-# Sourced by scripts/dev/create-resources.sh, scripts/lib/worker.sh, and scripts/dev/run-web-container.sh.
 # web/.env isn't committed. web/.env.example is the record of what it holds. Not meant to be run directly.
 
 # Usage: env_create_file <env-file> <aws-account-id> <aws-region>
