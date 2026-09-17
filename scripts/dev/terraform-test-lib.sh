@@ -2,10 +2,10 @@
 # Checks the HCL scrapers in scripts/lib/terraform.sh. The root package.json's scripts:check calls it, from the
 # pre-commit hook and CI's lint-format job.
 #
-# .github/workflows/deploy.yml signs its AWS credentials with tf_get_aws_region and smoke-tests the origin
-# tf_get_app_hostname builds, so a spelling in infra/variables.tf or infra/locals.tf that these no longer read breaks a
-# deploy rather than a plan. The checks against the real files are shape-only, since asserting the region or the
-# hostname literally would write each a second time. The fixtures below own their inputs, so those assert exact output.
+# .github/workflows/deploy.yml signs its AWS credentials with tf_get_aws_region, so a spelling in infra/variables.tf
+# that this no longer reads breaks a deploy rather than a plan. The check against the real file is shape-only, since
+# asserting the region literally would write it a second time. The fixtures below own their inputs, so those assert
+# exact output. tf_get_app_hostname does not read infra/: it prefixes the zone name with ai-gaussian-splatter.
 
 set -euo pipefail
 
@@ -39,8 +39,8 @@ check_matches() {
   fi
 }
 
-# A scraper that can't read its value must exit non-zero. Printing a partial or stray value instead is what would
-# reach AWS as a region or a hostname.
+# A helper that can't produce its value must exit non-zero. A partial or stray value printed instead is what would
+# reach AWS as a region, or .github/workflows/deploy.yml's smoke test as a hostname.
 check_fails() {
   local label=$1 output
   shift
@@ -63,9 +63,9 @@ point_root_at_repo() {
 
 point_root_at_repo
 check_matches "tf_get_aws_region reads infra/variables.tf" '^[a-z]{2}(-[a-z]+)+-[0-9]+$' "$(tf_get_aws_region)"
-check_matches "tf_get_app_hostname reads infra/locals.tf" '^[a-z0-9][a-z0-9-]*\.example\.com$' \
+check_equals "tf_get_app_hostname appends the zone name" "ai-gaussian-splatter.example.com" \
   "$(tf_get_app_hostname example.com)"
-check_equals "tf_get_local reads infra/locals.tf" "ai-gaussian-splatter" "$(tf_get_local project_tag)"
+check_fails "tf_get_app_hostname refuses an empty zone name" tf_get_app_hostname ""
 
 point_root_at_fixture
 
@@ -111,28 +111,6 @@ variable "aws_region" {
 }
 HCL
 check_fails "tf_get_aws_region refuses a default it can't read as a region" tf_get_aws_region
-
-cat > "$FIXTURE/infra/locals.tf" <<'HCL'
-locals {
-  app_hostname = "splat.${var.domain_zone_name}"
-}
-HCL
-check_equals "tf_get_app_hostname substitutes the zone name" "splat.example.com" "$(tf_get_app_hostname example.com)"
-
-# Only ${var.domain_zone_name} is substituted, so any other interpolation would survive into a URL.
-cat > "$FIXTURE/infra/locals.tf" <<'HCL'
-locals {
-  app_hostname = "${local.project_tag}.${var.domain_zone_name}"
-}
-HCL
-check_fails "tf_get_app_hostname refuses a hostname it only partly resolved" tf_get_app_hostname example.com
-
-cat > "$FIXTURE/infra/locals.tf" <<'HCL'
-locals {
-  app_hostname = format("%s.%s", local.project_tag, var.domain_zone_name)
-}
-HCL
-check_fails "tf_get_app_hostname refuses a hostname that isn't a string literal" tf_get_app_hostname example.com
 
 point_root_at_repo
 if ((failures > 0)); then
