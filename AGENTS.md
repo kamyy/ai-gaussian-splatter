@@ -144,7 +144,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - That assignment is `local` inside a function and an ordinary variable at script top, where `local` is invalid.
   - `"$@"` is only for leftover arguments forwarded to another command.
   - A script that uses the AWS CLI as a signed-in admin sources `scripts/lib/aws.sh`, and calls `aws_require_login` before any other AWS CLI invocation.
-  - A script that tags the AWS resources it creates sources `scripts/lib/terraform.sh` and assigns `PROJECT_TAG=$(tf_get_local project_tag)`. That reads `local.project_tag` from `infra/locals.tf` so the tag matches `infra/providers.tf`'s `default_tags`.
+  - A script that tags the AWS resources it creates sets `Project` to `ai-gaussian-splatter`, the same string as `local.project_tag` in `infra/locals.tf` (`infra/providers.tf`'s `default_tags`). The name does not change, so the scripts do not scrape it.
   - The Spot service-linked role and GitHub OIDC provider are account-wide and stay untagged.
   - A script that creates or deletes anything sources `scripts/lib/confirm.sh` and calls `confirm` first.
   - A script that uses the GitHub CLI sources `scripts/lib/github.sh` and calls `gh_require_login` before its first `gh` call. Otherwise a logged-out `gh` reads the same as an unset repository variable.
@@ -310,7 +310,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 - `scripts/dev/run-tests.sh` runs every lint, typecheck, and test suite.
   - Postgres-dependent web tests need `TEST_DATABASE_URL` (see [`RUNBOOK.md`](RUNBOOK.md#full-test-suite)). Run the relevant subset of its commands after changes.
-- `scripts:check` also runs `scripts/dev/terraform-test-lib.sh`, which checks the HCL scrapers in `scripts/lib/terraform.sh` against `infra/`'s real files and against fixtures. `.github/workflows/deploy.yml` signs with `tf_get_aws_region` and smoke-tests the origin `tf_get_app_hostname` builds, so a spelling in `infra/variables.tf` or `infra/locals.tf` that they no longer read breaks a deploy rather than a plan.
+- `scripts:check` also runs `scripts/dev/terraform-test-lib.sh`, which checks the HCL scrapers in `scripts/lib/terraform.sh` against `infra/variables.tf` and against fixtures. `.github/workflows/deploy.yml` signs with `tf_get_aws_region`, so a spelling in `infra/variables.tf` that it no longer reads breaks a deploy rather than a plan.
 - `pnpm biome:ci` is a single workspace-wide command (root's `biome.json` covers `scripts/*.js`, `web/**`, and `infra/`'s own config files in one pass), used by CI's `lint-format` job and by the pre-commit hook.
   - `web:check`/`worker:check`/`infra:check` are root package.json scripts, one per package — the same scripts CI's `web`/`worker`/`infra` jobs call. `infra:check` runs `scripts/dev/terraform-check.sh` so it uses the pinned CLI in `scripts/lib/terraform.sh`, not whichever `terraform` is first on PATH.
   - The pre-commit hook runs `biome:ci` plus these three (`scripts:check` included), so `web`'s and `scripts/`'s Biome checks run twice there — harmless, and worth it since `biome:ci` is what actually reaches `infra/`'s and root's own config files, which none of the per-package scripts cover.

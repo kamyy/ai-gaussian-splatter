@@ -45,7 +45,7 @@ read_masked() {
 }
 
 SECRET_NAME=ai-gaussian-splatter/clerk-secret-key
-PROJECT_TAG=$(tf_get_local project_tag)
+PROJECT_TAG=ai-gaussian-splatter
 REGION=$(tf_get_aws_region)
 
 aws_require_login

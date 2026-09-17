@@ -35,17 +35,6 @@ tf_get_required_version() {
   printf '%s\n' "$version"
 }
 
-# Prints a quoted local variable from infra/locals.tf.
-tf_get_local() {
-  local local_var=$1 local_val
-  local_val=$(grep -oP "$local_var\\s*=\\s*\"\\K[^\"]+" "$ROOT/infra/locals.tf" || true)
-  if [[ -z $local_val ]]; then
-    echo "Can't read local.$local_var from infra/locals.tf." >&2
-    return 1
-  fi
-  printf '%s\n' "$local_val"
-}
-
 # Prints a variable's quoted default from infra/variables.tf. Only string defaults are read, which is all the scripts
 # need. It exists so the AWS CLI calls in scripts/ and the region .github/workflows/deploy.yml signs with resolve to
 # the same value Terraform itself plans with, rather than each carrying its own copy of the region.
@@ -79,18 +68,15 @@ tf_get_aws_region() {
   printf '%s\n' "$region"
 }
 
-# Resolves ${var.domain_zone_name} inside local.app_hostname using the zone name passed in. Reading the local rather
-# than rebuilding the hostname here keeps the project-name prefix defined in infra/locals.tf alone.
+# Prints the app hostname for the given DNS zone. The prefix matches local.app_hostname in infra/locals.tf and does
+# not change, so this does not scrape that file.
 tf_get_app_hostname() {
-  local zone_name=$1 hostname
-  hostname=$(tf_get_local app_hostname)
-  # shellcheck disable=SC2016 # The single quotes match Terraform's own ${...} literally.
-  hostname=${hostname//'${var.domain_zone_name}'/$zone_name}
-  if [[ -z $hostname || $hostname == *\$\{* ]]; then
-    echo "Can't resolve local.app_hostname in infra/locals.tf: $hostname" >&2
+  local zone_name=${1-}
+  if [[ -z $zone_name ]]; then
+    echo "A DNS zone name is required." >&2
     return 1
   fi
-  printf '%s\n' "$hostname"
+  printf '%s\n' "ai-gaussian-splatter.$zone_name"
 }
 
 # The tag the running service's PRIMARY task definition names, the same ECS lookup the deploy job's "Resolve tags" step

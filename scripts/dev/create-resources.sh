@@ -13,7 +13,7 @@ source "$ROOT/scripts/lib/env.sh"
 source "$ROOT/scripts/lib/terraform.sh"
 
 DEV_USER=ai-gaussian-splatter-dev
-PROJECT_TAG=$(tf_get_local project_tag)
+PROJECT_TAG=ai-gaussian-splatter
 
 aws_require_login
 

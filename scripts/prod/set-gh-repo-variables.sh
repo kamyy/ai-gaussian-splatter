@@ -97,8 +97,8 @@ for repo_var in "${REPO_VARS[@]}"; do
   gh variable set "$repo_var" --body "${!repo_var}"
 done
 
-# .github/workflows/deploy.yml builds the app's origin from local.app_hostname, so an APP_PUBLIC_URL repository
-# variable feeds nothing. Removed rather than left in the list reading as live configuration.
+# .github/workflows/deploy.yml builds the app's origin as https://ai-gaussian-splatter.<DOMAIN_ZONE_NAME>, so an
+# APP_PUBLIC_URL repository variable feeds nothing. Removed rather than left in the list reading as live configuration.
 if [[ -n $(current_repo_var APP_PUBLIC_URL) ]]; then
   gh variable delete APP_PUBLIC_URL
   echo "Deleted APP_PUBLIC_URL, which nothing reads."

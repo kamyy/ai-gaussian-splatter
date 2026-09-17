@@ -70,9 +70,9 @@ jobs:
             exit 1
           fi
 
-      # AWS_REGION is read from var.aws_region's default and APP_PUBLIC_URL from local.app_hostname, so the region
-      # this job signs with and the origin it smoke-tests are the ones Terraform deploys, not second copies that can
-      # drift from them. The credential step below reads AWS_REGION too.
+      # AWS_REGION is read from var.aws_region's default, so the region this job signs with is the one Terraform
+      # deploys, not a second copy that can drift. APP_PUBLIC_URL is https://ai-gaussian-splatter.<DOMAIN_ZONE_NAME>,
+      # the same hostname local.app_hostname builds. The credential step below reads AWS_REGION too.
       - name: Resolve region and origin
         run: |
           source scripts/lib/terraform.sh
