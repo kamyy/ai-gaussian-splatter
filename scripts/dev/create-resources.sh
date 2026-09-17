@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Creates web/.env from web/.env.example when it's missing, then the uploads and splats buckets it names and an IAM user
-# named from local.project_tag with -dev appended, scoped to just those two buckets. Writes the user's access key into
-# web/.env when it creates one. Safe to re-run.
+# Creates web/.env from web/.env.example when it's missing, then the uploads and splats buckets it names and the
+# ai-gaussian-splatter-dev IAM user scoped to just those two buckets. Writes the user's access key into web/.env when it
+# creates one. Safe to re-run.
 # Existing buckets and the existing user are kept, and their CORS rules, tags, and policy are rewritten.
 
 set -euo pipefail
@@ -12,8 +12,8 @@ source "$ROOT/scripts/lib/confirm.sh"
 source "$ROOT/scripts/lib/env.sh"
 source "$ROOT/scripts/lib/terraform.sh"
 
+DEV_USER=ai-gaussian-splatter-dev
 PROJECT_TAG=$(tf_get_local project_tag)
-DEV_USER=${PROJECT_TAG}-dev
 
 aws_require_login
 
