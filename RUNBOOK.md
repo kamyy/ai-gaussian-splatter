@@ -1,6 +1,6 @@
 # Runbook
 
-Most procedures below run a script from `scripts/dev/` or `scripts/prod/`, and each works from any directory in the checkout. A script that uses the AWS CLI needs you signed in, and prints the account it's about to act on. A script that creates or deletes anything asks you to confirm first.
+Most procedures below run a script from `scripts/dev/` or `scripts/prod/`, and each works from any directory in the checkout. A script that uses the AWS CLI needs you signed in. It will then print the account it's about to act on. A script that creates or deletes anything asks you to confirm first.
 
 - [Dev AWS resources](#dev-aws-resources)
 - [Web (frontend + REST API)](#web-frontend--rest-api)
@@ -216,13 +216,13 @@ With the role and repository variables in place, turn the job on under [Going li
 
 ### Going live
 
-Once [Configuring continuous deployment](#configuring-continuous-deployment) is done, turn the `deploy` job on by setting the `DEPLOY_ENABLED` repository variable. The first deploy is the next push to `main` that is not only `.md` files or `LICENSE`. A CI run already under way on `main` can reach its deploy job too, so set the variable when nothing is running if the order matters.
+Once [Configuring continuous deployment](#configuring-continuous-deployment) is done, turn the `deploy` job on. The first deploy is the next push to `main` that is not only `.md` files or `LICENSE`.
 
 ```bash
-gh variable set DEPLOY_ENABLED --body true
+scripts/prod/set-deploy-enabled.sh true
 ```
 
-Any spelling of `true` turns it on, since the comparison in `.github/workflows/ci.yml` ignores case. `scripts/prod/set-gh-repo-variables.sh` deliberately leaves this variable alone, so going live stays a separate deliberate act. Nothing in the repository records whether it is set: `gh variable get DEPLOY_ENABLED` is the only way to tell.
+The script refuses while a CI run on `main` is unfinished ([CI/CD](ARCHITECTURE.md#cicd)).
 
 The service starts before the migration runs, so real routes 500 until the migration finishes. The first apply also waits on ACM DNS validation, which can take several minutes.
 
@@ -273,10 +273,10 @@ If the `deploy` job's migration step fails for an infra reason rather than a bad
 
 `scripts/prod/terraform-destroy.sh` removes everything in `infra/`'s state, including the 3 data S3 buckets (force-destroyed, contents and all) and the RDS instance (no final snapshot). It reads its variables the same way as [Running Terraform locally](#running-terraform-locally). `scripts/prod/terraform-delete-state-bucket.sh` below checks the `AWS_ACCOUNT_ID` one against the signed-in account. Delete the repository variables only after both have finished.
 
-Turn the `deploy` job off first, or the next push to `main` finds an empty state and deploys the whole stack again. `scripts/prod/terraform-destroy.sh` refuses to run while the variable is `true` or unreadable, so the `false` set below is required even if deploys were never turned on. Then wait until no CI run is still going on `main`, since a run already under way can still reach its deploy job. The script refuses while one is unfinished.
+Turn the `deploy` job off first, or the next push to `main` finds an empty state and deploys the whole stack again. Run the `false` set below even if deploys were never turned on. Both scripts refuse while a CI run on `main` is unfinished ([CI/CD](ARCHITECTURE.md#cicd)).
 
 ```bash
-gh variable set DEPLOY_ENABLED --body false
+scripts/prod/set-deploy-enabled.sh false
 ```
 
 ```bash
