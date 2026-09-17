@@ -16,7 +16,7 @@ gh_get_repo_var() {
   local repo_var=$1 repo_val
   local remediation=${2:-Run scripts/prod/set-gh-repo-variables.sh.}
   if ! repo_val=$(gh variable get "$repo_var") || [[ -z $repo_val ]]; then
-    echo "Repository variable $repo_var is not set. $remediation" >&2
+    echo "GitHub repository variable $repo_var is not set. $remediation" >&2
     exit 1
   fi
 
@@ -33,6 +33,32 @@ gh_require_aws_deploy_account() {
   if [[ $gh_repo_aws_account_id != "$AWS_ACCOUNT_ID" ]]; then
     echo "Signed in to account $AWS_ACCOUNT_ID," \
       "but GitHub repository variable AWS_ACCOUNT_ID is $gh_repo_aws_account_id." >&2
+    exit 1
+  fi
+}
+
+# Prints the status of an unfinished ci.yml run on main, or nothing when every run has finished. Only a run on main
+# reaches the deploy job in .github/workflows/ci.yml, so a run on another branch is not worth reporting.
+gh_get_running_ci_status() {
+  local status count
+  for status in in_progress queued waiting requested pending; do
+    count=$(gh run list --workflow=ci.yml --branch main --status "$status" --limit 1 --json databaseId --jq 'length')
+    if [[ $count != 0 ]]; then
+      printf '%s\n' "$status"
+      return
+    fi
+  done
+}
+
+# Exits while a ci.yml run on main is unfinished. scripts/prod/set-deploy-enabled.sh calls it because a run whose
+# capture-deploy-enabled job has not been dispatched yet still reads DEPLOY_ENABLED live, so a write would reach it.
+# scripts/prod/terraform-destroy.sh calls it because a run that captured true deploys into the state it just emptied.
+gh_require_no_ci() {
+  local status
+  status=$(gh_get_running_ci_status)
+  if [[ -n $status ]]; then
+    echo "A CI run on main is still ${status}. Wait for it to finish." >&2
+    gh run list --workflow=ci.yml --branch main --status "$status" >&2
     exit 1
   fi
 }

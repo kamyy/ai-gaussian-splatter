@@ -119,11 +119,12 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 - **Renaming/removing a CI job blocks merges until branch protection is updated too.**
   - Required checks name jobs (`lint-format`, `worker`, `web`, `infra`); a missing context leaves PRs unmergeable — `enforce_admins` is on, so `--admin` does not override either.
+  - `capture-deploy-enabled` is not one of them. It only runs on push to `main`. Making it required would block every PR.
   - Rules live in GitHub Settings → Branches, not `.github/workflows/ci.yml`.
   - List: `gh api repos/kamyy/ai-gaussian-splatter/branches/main/protection`.
 - **The deploy steps live in `.github/workflows/deploy.yml`, a `workflow_call` workflow run only by `.github/workflows/ci.yml`'s `deploy` job.**
-  - That caller keeps the `needs` on the check jobs, the `if:` gate, and the `id-token: write` grant.
-  - The `if:` is `vars.DEPLOY_ENABLED == 'true'`. Git does not record whether that variable is set ([CI/CD](ARCHITECTURE.md#cicd)). `gh variable get DEPLOY_ENABLED` is the check ([Going live](RUNBOOK.md#going-live)).
+  - That caller keeps the `needs` on the check jobs plus `capture-deploy-enabled`, the `if:` gate, and the `id-token: write` grant.
+  - The `if:` reads `needs.capture-deploy-enabled.outputs.enabled`, not live `vars.DEPLOY_ENABLED`. `scripts/prod/set-deploy-enabled.sh` is the switch ([Going live](RUNBOOK.md#going-live)). Git does not record whether that variable is set ([CI/CD](ARCHITECTURE.md#cicd)).
   - The grant can't move into `.github/workflows/deploy.yml`, because a called workflow can only narrow its caller's permissions and this repo's default token is read-only.
   - A job run through a called workflow reports its check as `<caller job> / <called job>`, so moving a required one (`lint-format`, `worker`, `web`, `infra`) into its own file is a rename as far as branch protection is concerned.
 - **Biome does not format Markdown, YAML, Dockerfiles, or shell scripts** (`@biomejs/biome@2.5.10`, pinned in both root and `web/`). Keep those consistent by hand.

@@ -188,12 +188,26 @@ jobs:
         working-directory: infra
         run: terraform test
 
+  # Records DEPLOY_ENABLED shortly after this run starts, once a runner picks this job up. The deploy job's if:
+  # reads this output, not live vars when that job starts. Not a required check. It only runs on push to main.
+  capture-deploy-enabled:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.gate.outputs.enabled }}
+    steps:
+      - id: gate
+        env:
+          DEPLOY_ENABLED: ${{ vars.DEPLOY_ENABLED }}
+        run: echo "enabled=$DEPLOY_ENABLED" >> "$GITHUB_OUTPUT"
+
   # Runs .github/workflows/deploy.yml once every check job above has passed.
   deploy:
-    needs: [lint-format, worker, web, infra]
+    needs: [lint-format, worker, web, infra, capture-deploy-enabled]
     # Deploying is off until the DEPLOY_ENABLED repository variable is set to true (RUNBOOK.md). An unset variable
     # renders as "", so a fresh fork or a torn-down account deploys nothing until someone turns it on deliberately.
-    if: vars.DEPLOY_ENABLED == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # The value is the one capture-deploy-enabled recorded shortly after this run started, not live vars now.
+    if: needs.capture-deploy-enabled.outputs.enabled == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     # Granted here rather than in .github/workflows/deploy.yml, because a called workflow can only narrow its caller's
     # permissions and this repo's default token is read-only.
     permissions:
