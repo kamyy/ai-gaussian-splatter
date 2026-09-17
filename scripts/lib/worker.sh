@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Sourced by scripts/dev/worker-reconstruct.sh and scripts/dev/worker-train.sh. Not meant to be run directly.
+# Not meant to be run directly.
 
 ROOT=$(git rev-parse --show-toplevel)
 source "$ROOT/scripts/lib/env.sh"
