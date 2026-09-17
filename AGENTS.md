@@ -222,7 +222,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - A pushed tag can never be repointed, so rebuilding an already-pushed commit fails at `podman push` with `ImageTagAlreadyExists`. Commit again rather than retagging.
   - Both exist to keep the deployment circuit breaker's rollback meaningful: with a moving tag every release shares one task definition, and a rollback re-pulls the image that just failed.
 - **Two separate image-tag variables, one default.**
-  - `web_image_tag` is the Fargate service's own image; `migrate_image_tag` is the migration task definition's, and falls back to `web_image_tag` when left empty (`infra/variables.tf`'s `local.migrate_image_tag`).
+  - `web_image_tag` is the Fargate service's own image; `migrate_image_tag` is the migration task definition's, and falls back to `web_image_tag` when left empty (`infra/locals.tf`'s `local.migrate_image_tag`).
   - Every existing `terraform apply -var web_image_tag=$SHA` invocation with no `migrate_image_tag` keeps deploying one build that serves both roles.
   - `.github/workflows/deploy.yml` is the one caller that ever diverges the two — see [`ARCHITECTURE.md`](ARCHITECTURE.md) for why.
   - `ai-gaussian-splatter-migrate` (task family), `ai-gaussian-splatter-migrate-task` (migration task role), and `ai-gaussian-splatter-execution` (execution role) are fixed literal names for the same reason `CLUSTER_NAME`/`SERVICE_NAME` are: rotating the Clerk secret is a write plus `aws ecs update-service --force-new-deployment`, not a `terraform apply`, so that command needs a cluster/service name it can write out literally rather than looking up from a Terraform-assigned one.
@@ -312,9 +312,9 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - `scripts/dev/run-tests.sh` runs every lint, typecheck, and test suite.
   - Postgres-dependent web tests need `TEST_DATABASE_URL` (see [`RUNBOOK.md`](RUNBOOK.md#full-test-suite)). Run the relevant subset of its commands after changes.
 - `scripts:check` also runs `scripts/dev/terraform-test-lib.sh`, which checks the HCL scrapers in `scripts/lib/terraform.sh` against `infra/variables.tf` and against fixtures. `.github/workflows/deploy.yml` signs with `tf_get_aws_region`, so a spelling in `infra/variables.tf` that it no longer reads breaks a deploy rather than a plan.
-- `pnpm biome:ci` is a single workspace-wide command (root's `biome.json` covers `scripts/*.js`, `web/**`, and `infra/`'s own config files in one pass), used by CI's `lint-format` job and by the pre-commit hook.
+- `pnpm biome:ci` is a single workspace-wide command (root's `biome.json` covers `scripts/*.js` and `web/**` in one pass), used by CI's `lint-format` job and by the pre-commit hook.
   - `web:check`/`worker:check`/`infra:check` are root package.json scripts, one per package — the same scripts CI's `web`/`worker`/`infra` jobs call. `infra:check` runs `scripts/dev/terraform-check.sh` so it uses the pinned CLI in `scripts/lib/terraform.sh`, not whichever `terraform` is first on PATH.
-  - The pre-commit hook runs `biome:ci` plus these three (`scripts:check` included), so `web`'s and `scripts/`'s Biome checks run twice there — harmless, and worth it since `biome:ci` is what actually reaches `infra/`'s and root's own config files, which none of the per-package scripts cover.
+  - The pre-commit hook runs `biome:ci` plus these three (`scripts:check` included), so `web`'s and `scripts/`'s Biome checks run twice there — harmless, and worth it since `biome:ci` is what actually reaches root's own config files, which none of the per-package scripts cover.
 
 ## State / what's next
 

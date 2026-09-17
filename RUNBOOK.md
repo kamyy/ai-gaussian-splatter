@@ -283,7 +283,7 @@ scripts/prod/set-deploy-enabled.sh false
 scripts/prod/terraform-destroy.sh
 ```
 
-**This is a full, unconditional teardown** — nothing here is protected from deletion, because there's no real data yet to protect (see `infra/data.tf`'s comments on `force_destroy`/`skip_final_snapshot`). Revisit this before a real deploy holds real uploads or splats: add `lifecycle { prevent_destroy = true }` to the 3 buckets and `aws_db_instance.main`, and drop `force_destroy`/`skip_final_snapshot`.
+**This is a full, unconditional teardown** — nothing here is protected from deletion, because there's no real data yet to protect (see `infra/data.tf`'s comments on `force_destroy`/`skip_final_snapshot`). Revisit this before a real deploy holds real uploads or splats: add `lifecycle { prevent_destroy = true }` to the 3 buckets (`uploads` and `splats` in `infra/data.tf`, `access_logs` in `infra/web.tf`) and `aws_db_instance.main`, and drop `force_destroy`/`skip_final_snapshot`.
 
 The ECR repository (`infra/registry.tf`) is destroyed too — `force_delete = true` means every image in it goes as well.
 

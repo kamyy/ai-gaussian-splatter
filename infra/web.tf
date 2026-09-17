@@ -6,17 +6,8 @@
 # Nothing can open a connection to them regardless: aws_security_group.web admits only aws_security_group.alb.
 # TLS terminates at the ALB with an ACM certificate for local.app_hostname, and plain HTTP is redirected to
 # HTTPS.
-
-locals {
-  ecs_tasks_assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Action    = "sts:AssumeRole"
-      Principal = { Service = "ecs-tasks.amazonaws.com" }
-    }]
-  })
-}
+#
+# The ALB's own access-log bucket is here rather than in data.tf, because nothing but the load balancer writes it.
 
 resource "aws_iam_role" "execution" {
   name               = local.execution_role_name
@@ -78,44 +69,6 @@ resource "aws_iam_role_policy" "execution" {
       error_message = "clerk_secret_key_arn must be a secret in this deploy's own account (${data.aws_caller_identity.current.account_id}) and region (${var.aws_region})."
     }
   }
-}
-
-# The one subnet the worker's spot instance ever launches into (web/lib/server/ec2Launcher.ts's SubnetId) — a
-# single local so the env var below and the RunInstances IAM grant can't reference two different subnets.
-locals {
-  worker_subnet = values(aws_subnet.public)[0]
-}
-
-# The registry hostname web/lib/server/ec2Launcher.ts's user-data logs into before pulling — built from account/region
-# directly rather than parsed out of aws_ecr_repository.worker.repository_url, matching how .github/workflows/deploy.yml
-# and RUNBOOK.md construct the same string for their own docker/podman logins.
-locals {
-  ecr_registry     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com"
-  worker_image_uri = "${aws_ecr_repository.worker.repository_url}:${var.worker_image_tag}"
-}
-
-# Shared by both containers that talk to Postgres — the web service below and the migration task. Defined once
-# so a future change (a renamed secret field, a moved CA path) can't be applied to one and silently missed on
-# the other. The username is shared too, since it never changes. The password is not: see db_password_secret.
-locals {
-  db_environment = [
-    { name = "DATABASE_HOST", value = aws_db_instance.main.address },
-    { name = "DATABASE_PORT", value = tostring(aws_db_instance.main.port) },
-    { name = "DATABASE_NAME", value = local.database_name },
-    # Turns on TLS verification against RDS with the CA bundle web/Dockerfile bakes into the image. An env var
-    # rather than a hardcoded path so a locally-run container can still talk to a plain Postgres.
-    { name = "DATABASE_SSL_CA", value = local.rds_ca_bundle_path },
-  ]
-  db_user_secret = [
-    { name = "DATABASE_USER", valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:username::" },
-  ]
-  # Only the migration task takes this: it runs for seconds and exits, well inside RDS's 7-day rotation window for
-  # this secret, so a value ECS injects once at task start can't go stale. The long-lived web service instead
-  # fetches the current password itself at connect time (DATABASE_SECRET_ARN below, web/lib/server/databaseUrl.ts's
-  # fetchDatabasePassword) rather than trusting one this static either.
-  db_password_secret = [
-    { name = "DATABASE_PASSWORD", valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:password::" },
-  ]
 }
 
 # ---------------------------------------------------------------------------
@@ -311,6 +264,75 @@ resource "aws_acm_certificate_validation" "web" {
 # Load balancer
 # ---------------------------------------------------------------------------
 
+# Without this bucket the app's own logs would be the only record of who called, and those cover only requests its
+# handlers actually received, not the requests the ALB rejected or redirected first. 90 days is how far back an abuse
+# investigation is likely to reach.
+resource "aws_s3_bucket" "access_logs" {
+  bucket_prefix = "ai-gaussian-splatter-access-logs-"
+  force_destroy = true
+}
+
+resource "aws_s3_bucket_public_access_block" "access_logs" {
+  bucket                  = aws_s3_bucket.access_logs.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "access_logs" {
+  bucket = aws_s3_bucket.access_logs.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "access_logs" {
+  bucket = aws_s3_bucket.access_logs.id
+
+  rule {
+    id     = "expire-after-90-days"
+    status = "Enabled"
+    filter {}
+    expiration {
+      days = 90
+    }
+  }
+}
+
+# The ALB's own log-delivery service principal needs a bucket policy statement granting it PutObject before
+# `aws_lb.web`'s `access_logs` block can write here. Terraform's `aws_lb` resource doesn't add this automatically, so it
+# has to be written out by hand.
+resource "aws_s3_bucket_policy" "access_logs" {
+  bucket = aws_s3_bucket.access_logs.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "AllowALBLogDelivery"
+        Effect    = "Allow"
+        Principal = { Service = "logdelivery.elasticloadbalancing.amazonaws.com" }
+        Action    = "s3:PutObject"
+        Resource  = "${aws_s3_bucket.access_logs.arn}/*"
+        # Without this, any account whose ALB is pointed at this bucket's name could write log objects into it. The
+        # service principal alone isn't restricted to this account's own load balancers.
+        Condition = { StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id } }
+      },
+      {
+        Sid       = "DenyInsecureTransport"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource  = [aws_s3_bucket.access_logs.arn, "${aws_s3_bucket.access_logs.arn}/*"]
+        Condition = { Bool = { "aws:SecureTransport" = "false" } }
+      },
+    ]
+  })
+}
+
 resource "aws_lb" "web" {
   name               = "ai-gaussian-splatter"
   internal           = false
@@ -322,8 +344,6 @@ resource "aws_lb" "web" {
   # assembled out of them.
   drop_invalid_header_fields = true
 
-  # Without this the app's own logs would be the only record of who called, and those cover only requests its
-  # handlers actually received, not the requests the ALB rejected or redirected first.
   access_logs {
     bucket  = aws_s3_bucket.access_logs.id
     enabled = true

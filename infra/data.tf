@@ -1,4 +1,5 @@
-# RDS Postgres and the three S3 buckets (uploads, splats, access_logs).
+# RDS Postgres and the two S3 buckets the app reads and writes (uploads, splats). The ALB's access-log bucket lives in
+# web.tf, beside the load balancer that writes it.
 #
 # The uploads and splats buckets' CORS rules name local.app_origin rather than "*": the browser talks to S3
 # directly on both legs (presigned PUT on upload, presigned GET in the viewer), so "*" would let another
@@ -46,8 +47,8 @@ resource "aws_db_instance" "main" {
   skip_final_snapshot = true
 }
 
-# Uploads (source photos) and splats (the deliverable) are both kept indefinitely. Nothing expires them; delete
-# an object by hand if it should go. Access logs are the exception — they age out below.
+# Uploads (source photos) and splats (the deliverable) are both kept indefinitely. Nothing expires them; delete an
+# object by hand if it should go.
 resource "aws_s3_bucket" "uploads" {
   bucket_prefix = "ai-gaussian-splatter-uploads-"
   # No live data exists yet to protect, so `terraform destroy` empties and deletes this bucket outright.
@@ -130,92 +131,4 @@ resource "aws_s3_bucket_cors_configuration" "splats" {
 resource "aws_s3_bucket_policy" "splats" {
   bucket = aws_s3_bucket.splats.id
   policy = local.deny_insecure_transport_policy["splats"]
-}
-
-# ALB access logs are written by the ELB service rather than by the app, so no CORS rule is needed. Without
-# this bucket the ALB would keep no record of who called — the app's own logs cover only requests its handlers
-# actually received, not the requests the ALB rejected or redirected first (web.tf). 90 days is how far back an
-# abuse investigation is likely to reach.
-resource "aws_s3_bucket" "access_logs" {
-  bucket_prefix = "ai-gaussian-splatter-access-logs-"
-  force_destroy = true
-}
-
-resource "aws_s3_bucket_public_access_block" "access_logs" {
-  bucket                  = aws_s3_bucket.access_logs.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_server_side_encryption_configuration" "access_logs" {
-  bucket = aws_s3_bucket.access_logs.id
-
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "access_logs" {
-  bucket = aws_s3_bucket.access_logs.id
-
-  rule {
-    id     = "expire-after-90-days"
-    status = "Enabled"
-    filter {}
-    expiration {
-      days = 90
-    }
-  }
-}
-
-# The ALB's own log-delivery service principal needs a bucket policy statement granting it PutObject before
-# `aws_lb.web`'s `access_logs` block (web.tf) can write here — Terraform's `aws_lb` resource doesn't add this
-# automatically, so it has to be written out by hand.
-resource "aws_s3_bucket_policy" "access_logs" {
-  bucket = aws_s3_bucket.access_logs.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid       = "AllowALBLogDelivery"
-        Effect    = "Allow"
-        Principal = { Service = "logdelivery.elasticloadbalancing.amazonaws.com" }
-        Action    = "s3:PutObject"
-        Resource  = "${aws_s3_bucket.access_logs.arn}/*"
-        # Without this, any account whose ALB is pointed at this bucket's name could write log objects into it —
-        # the service principal alone isn't restricted to this account's own load balancers.
-        Condition = { StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id } }
-      },
-      {
-        Sid       = "DenyInsecureTransport"
-        Effect    = "Deny"
-        Principal = "*"
-        Action    = "s3:*"
-        Resource  = [aws_s3_bucket.access_logs.arn, "${aws_s3_bucket.access_logs.arn}/*"]
-        Condition = { Bool = { "aws:SecureTransport" = "false" } }
-      },
-    ]
-  })
-}
-
-# Adds the aws:SecureTransport deny to a bucket that otherwise has no other policy statement of its own.
-locals {
-  deny_insecure_transport_policy = {
-    for name, bucket in { uploads = aws_s3_bucket.uploads, splats = aws_s3_bucket.splats } :
-    name => jsonencode({
-      Version = "2012-10-17"
-      Statement = [{
-        Sid       = "DenyInsecureTransport"
-        Effect    = "Deny"
-        Principal = "*"
-        Action    = "s3:*"
-        Resource  = [bucket.arn, "${bucket.arn}/*"]
-        Condition = { Bool = { "aws:SecureTransport" = "false" } }
-      }]
-    })
-  }
 }

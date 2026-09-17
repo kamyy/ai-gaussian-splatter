@@ -124,7 +124,3 @@ variable "monthly_budget_limit_usd" {
   type        = number
   default     = 75
 }
-
-locals {
-  migrate_image_tag = var.migrate_image_tag != "" ? var.migrate_image_tag : var.web_image_tag
-}
