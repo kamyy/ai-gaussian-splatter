@@ -253,6 +253,20 @@ run "autoscaling_bounds" {
   }
 }
 
+run "access_log_bucket_force_destroy_and_blocks_public_access" {
+  command = apply
+
+  assert {
+    condition     = aws_s3_bucket.access_logs.force_destroy == true
+    error_message = "the access-log bucket must be force_destroy=true so `terraform destroy` doesn't get stuck on a non-empty bucket"
+  }
+
+  assert {
+    condition     = aws_s3_bucket_public_access_block.access_logs.block_public_acls && aws_s3_bucket_public_access_block.access_logs.block_public_policy
+    error_message = "the access-log bucket must block all public access"
+  }
+}
+
 run "certificate_and_dns" {
   command = apply
 

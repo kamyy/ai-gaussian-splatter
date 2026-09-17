@@ -106,13 +106,13 @@ run "buckets_force_destroy_and_block_public_access" {
   command = apply
 
   assert {
-    condition     = alltrue([for b in [aws_s3_bucket.uploads, aws_s3_bucket.splats, aws_s3_bucket.access_logs] : b.force_destroy == true])
-    error_message = "every bucket must be force_destroy=true so `terraform destroy` doesn't get stuck on a non-empty bucket"
+    condition     = alltrue([for b in [aws_s3_bucket.uploads, aws_s3_bucket.splats] : b.force_destroy == true])
+    error_message = "the uploads and splats buckets must be force_destroy=true so `terraform destroy` doesn't get stuck on a non-empty bucket"
   }
 
   assert {
-    condition     = alltrue([for p in [aws_s3_bucket_public_access_block.uploads, aws_s3_bucket_public_access_block.splats, aws_s3_bucket_public_access_block.access_logs] : p.block_public_acls && p.block_public_policy])
-    error_message = "every bucket must block all public access"
+    condition     = alltrue([for p in [aws_s3_bucket_public_access_block.uploads, aws_s3_bucket_public_access_block.splats] : p.block_public_acls && p.block_public_policy])
+    error_message = "the uploads and splats buckets must block all public access"
   }
 }
 

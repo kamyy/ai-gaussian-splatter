@@ -32,7 +32,7 @@ The `deploy` job (`.github/workflows/deploy.yml`) does every deploy, the first o
 
 ## Before merging an `infra/` change
 
-Run `scripts/prod/terraform-plan.sh` and show the user what it says. RDS currently carries `deletion_protection = false` and `skip_final_snapshot = true` (no live data to protect yet, see `infra/data.tf`), so a replacing change is immediately destructive. It must never be a surprise. Treat any plan touching `aws_db_instance.main` or the 3 S3 buckets with extra care until those get `prevent_destroy` ([Tearing down](../../../RUNBOOK.md#tearing-down)).
+Run `scripts/prod/terraform-plan.sh` and show the user what it says. RDS currently carries `deletion_protection = false` and `skip_final_snapshot = true` (no live data to protect yet, see `infra/data.tf`), so a replacing change is immediately destructive. It must never be a surprise. Treat any plan touching `aws_db_instance.main` or the 3 S3 buckets (`infra/data.tf`, plus `access_logs` in `infra/web.tf`) with extra care until those get `prevent_destroy` ([Tearing down](../../../RUNBOOK.md#tearing-down)).
 
 ## After a deploy reports success
 
