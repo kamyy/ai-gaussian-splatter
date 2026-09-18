@@ -19,6 +19,7 @@ terraform {
   # bucket is not written in HCL here because its name would pin infra/ to one account.
   backend "s3" {
     # Terraform's native S3 state locking (>= 1.10). No separate DynamoDB table is needed.
+    # use_lockfile is not the HCL lockfile infra/.terraform.lock.hcl. That file pins provider versions.
     use_lockfile = true
   }
 }
