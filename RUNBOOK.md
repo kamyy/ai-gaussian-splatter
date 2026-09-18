@@ -171,23 +171,17 @@ To check month-to-date spend: Billing console → **Billing Home**, or **Cost Ex
 
 ### Configuring continuous deployment
 
-One-time, after [Creating account prerequisites](#creating-account-prerequisites) and before [Going live](#going-live). The `ai-gaussian-splatter-ci-deploy` role created below can't be Terraform-managed, since CI would need it to apply the `infra/` config that creates it.
+One-time, after [Creating account prerequisites](#creating-account-prerequisites) and before [Going live](#going-live).
 
 #### Creating the OIDC provider and CI role
 
-`scripts/prod/configure-ci-role.sh` creates GitHub's OIDC provider if the account doesn't have it yet, then creates the role and writes both of its policies. It rewrites both policies on every run.
+`scripts/prod/configure-ci-role.sh` creates GitHub's OIDC provider if the account doesn't have it yet, then creates the `ai-gaussian-splatter-ci-deploy` role and writes both of its policies. It rewrites both policies on every run.
 
 ```bash
 scripts/prod/configure-ci-role.sh
 ```
 
-#### Granting deploy permissions
-
-This role holds the AWS permissions `terraform apply` uses directly ([`ARCHITECTURE.md`](ARCHITECTURE.md) has the reasoning), scoped by resource-name prefix where a service supports it. It's a reasonable starting point, not an exhaustively verified minimal policy. Expect `AccessDenied` errors during the first deploy, which is the first time this role creates every resource rather than updating it. Add the missing action to `DEPLOY_POLICY` in `scripts/prod/configure-ci-role.sh`, re-run the script, then rerun the job (`gh run rerun <run-id> --failed-jobs`).
-
-Two statements in it resist the obvious simplification. `ecs:RunTask`'s task-definition ARN uses the wildcard-revision form (`:*`) rather than a pinned revision, since each migration image push registers a new one. The statement that manages the `ai-gaussian-splatter-*` roles lists a `role/` ARN and an `instance-profile/` ARN separately, because IAM rejects a wildcard in an ARN's resource-type segment outright with `MalformedPolicyDocument`.
-
-The role can't read any secret's value. Its only Secrets Manager grant is `CreateSecret` and `TagResource` on RDS's own `rds!` secrets.
+`DEPLOY_POLICY` in `scripts/prod/configure-ci-role.sh` is a reasonable starting point, not an exhaustively verified minimal policy, so expect `AccessDenied` during the first deploy, which is the first time the role creates every resource rather than updating it. Add the missing action, re-run the script, then rerun the job (`gh run rerun <run-id> --failed-jobs`).
 
 #### Setting GitHub repository variables
 
@@ -216,7 +210,7 @@ With the role and repository variables in place, turn the job on under [Going li
 
 ### Going live
 
-Once [Configuring continuous deployment](#configuring-continuous-deployment) is done, turn the `deploy` job on. The first deploy is the next push to `main` that is not only `.md` files or `LICENSE`.
+Once [Configuring continuous deployment](#configuring-continuous-deployment) is done, turn the `deploy` job on.
 
 ```bash
 scripts/prod/set-deploy-enabled.sh true
@@ -224,13 +218,13 @@ scripts/prod/set-deploy-enabled.sh true
 
 The script refuses while a CI run on `main` is unfinished ([CI/CD](ARCHITECTURE.md#cicd)).
 
-The service starts before the migration runs, so real routes 500 until the migration finishes. The first apply also waits on ACM DNS validation, which can take several minutes.
+A deploy starts on a push to `main` that changes more than just `.md` files or `LICENSE`.
+
+On a first deploy, the service starts before the migration runs, so real routes 500 until the migration finishes. The first deploy also waits on ACM DNS validation, which can take several minutes.
 
 `deployment_minimum_healthy_percent = 100` will keep any old task serving until the new one passes health checks. If the new image fails those checks, the circuit breaker rolls back to the previous task definition. To roll back by hand, revert the change and push. A schema change gets a corrective migration instead ([Fixing a bad migration](#fixing-a-bad-migration)).
 
 Only the last few releases are kept (`local.releases_kept` in `infra/registry.tf`); older tags are expired and can no longer be rolled back to.
-
-A push that touches only `.md` files or `LICENSE` doesn't deploy. `.github/workflows/ci.yml`'s `paths-ignore` skips the whole workflow for it.
 
 ### Building and pushing the worker image
 
