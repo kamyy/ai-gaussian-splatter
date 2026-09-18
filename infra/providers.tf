@@ -1,6 +1,4 @@
-# Bucket/key/region are supplied via `-backend-config` at `terraform init` (see RUNBOOK.md), not hardcoded
-# here. The bucket is created by hand once in Creating account prerequisites. Its name is account-specific.
-# use_lockfile is Terraform's native S3 state locking (>= 1.10). No separate DynamoDB table is needed.
+# The state bucket is created by hand once (RUNBOOK.md, Creating account prerequisites).
 terraform {
   # Exact, not a floor. A range would let a newer local CLI plan. scripts/lib/terraform.sh's tf_get_required_version
   # reads this string for local install and for hashicorp/setup-terraform in .github/workflows/ci.yml and
@@ -14,7 +12,13 @@ terraform {
     }
   }
 
+  # terraform init -backend-config adds these three arguments to the backend "s3" block:
+  #   - bucket = ai-gaussian-splatter-tfstate-<account-id>
+  #   - key    = infra.tfstate
+  #   - region = the default of var.aws_region in infra/variables.tf
+  # bucket is not written in HCL here because its name would pin infra/ to one account.
   backend "s3" {
+    # Terraform's native S3 state locking (>= 1.10). No separate DynamoDB table is needed.
     use_lockfile = true
   }
 }

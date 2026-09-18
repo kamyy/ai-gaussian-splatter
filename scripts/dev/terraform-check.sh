@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# fmt, init -backend=false, and validate. The root package.json's infra:check calls it, from the pre-commit hook and
-# CI's infra job.
+# The root package.json's infra:check runs scripts/dev/terraform-check.sh, from the pre-commit hook, CI's infra job,
+# and scripts/dev/run-tests.sh.
 
 set -euo pipefail
 
@@ -10,5 +10,14 @@ source "$ROOT/scripts/lib/terraform.sh"
 TERRAFORM=$(tf_get_bin)
 
 "$TERRAFORM" -chdir="$ROOT/infra" fmt -check -recursive
+
+# terraform init -backend=false requires an unexpired aws login session if infra/.terraform/terraform.tfstate exists,
+# so delete the file. scripts/lib/terraform.sh's tf_init passes -reconfigure, so these scripts write it again on their
+# next init against the live account:
+#   - scripts/prod/terraform-plan.sh
+#   - scripts/prod/terraform-destroy.sh
+#   - scripts/prod/terraform-delete-state-bucket.sh
+rm -f "$ROOT/infra/.terraform/terraform.tfstate"
 "$TERRAFORM" -chdir="$ROOT/infra" init -backend=false -input=false
+
 "$TERRAFORM" -chdir="$ROOT/infra" validate
