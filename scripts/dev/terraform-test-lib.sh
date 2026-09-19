@@ -13,8 +13,12 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 source "$REPO_ROOT/scripts/lib/terraform.sh"
 
 FIXTURE=$(mktemp -d)
-trap 'rm -rf "$FIXTURE"' EXIT
+# A second fixture, a repository holding a commit but no web/ directory, for the missing-path check below.
+NO_WEB=$(mktemp -d)
+trap 'rm -rf "$FIXTURE" "$NO_WEB"' EXIT
 mkdir "$FIXTURE/infra"
+git -C "$NO_WEB" -c init.defaultBranch=main init -q
+git -C "$NO_WEB" -c user.email=test@example.com -c user.name=test commit -q --allow-empty -m "no web/"
 
 failures=0
 
@@ -66,6 +70,19 @@ check_matches "tf_get_aws_region reads infra/variables.tf" '^[a-z]{2}(-[a-z]+)+-
 check_equals "tf_get_app_hostname appends the zone name" "ai-gaussian-splatter.example.com" \
   "$(tf_get_app_hostname example.com)"
 check_fails "tf_get_app_hostname refuses an empty zone name" tf_get_app_hostname ""
+# A fixed width, not `git rev-parse --short`, whose length varies with the local object count (AGENTS.md).
+check_matches "tf_get_web_image_tag is 12 hex characters" '^[0-9a-f]{12}$' "$(tf_get_web_image_tag)"
+check_equals "tf_get_web_image_tag is web/'s tree id" "$(git -C "$REPO_ROOT" rev-parse HEAD:web | cut -c1-12)" \
+  "$(tf_get_web_image_tag)"
+# Dropping pipefail is what makes this discriminate: this file sets it, the deploy job does not, and a piped helper
+# fails only where it is set (AGENTS.md). check_fails runs this in a subshell, so the `set` doesn't escape.
+web_image_tag_without_pipefail() {
+  set +o pipefail
+  tf_get_web_image_tag
+}
+ROOT=$NO_WEB
+check_fails "tf_get_web_image_tag fails when web/ is missing" web_image_tag_without_pipefail
+point_root_at_repo
 
 point_root_at_fixture
 

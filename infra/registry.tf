@@ -2,15 +2,16 @@
 # references an image tag: a first apply that tried to create both at once would leave the service with
 # nothing to pull, tripping the deployment circuit breaker.
 #
-# Each deploy pushes two immutable tags, $SHA-web and $SHA-migrate (see web/Dockerfile), capped by a lifecycle
-# rule per suffix so RELEASES_KEPT below is a count of releases rather than of images.
+# A deploy that changes web/ pushes two immutable tags, <tree>-web and <tree>-migrate (see web/Dockerfile). A
+# lifecycle rule per suffix caps each, so RELEASES_KEPT below counts releases rather than images. A deploy that leaves
+# web/ alone pushes nothing, so those releases are distinct web/ builds rather than commits.
 resource "aws_ecr_repository" "web" {
   name = "ai-gaussian-splatter"
 
   # A tag, once pushed, can never be repointed. This is what makes the deployment circuit breaker's rollback mean
   # anything: the previous task definition names a tag that still resolves to the image it was deployed with, so ECS
-  # re-pulls that rather than whatever was pushed most recently. Re-pushing a tag fails outright. Rebuild under a new
-  # commit instead.
+  # re-pulls that rather than whatever was pushed most recently. A second push of the same tag fails at `podman push`.
+  # .github/workflows/deploy.yml stays clear of that by skipping any build whose tag is already in the repository.
   image_tag_mutability = "IMMUTABLE"
 
   # force_delete, not RETAIN: a full `terraform destroy` must not leave an orphaned repository under this fixed

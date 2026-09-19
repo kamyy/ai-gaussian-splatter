@@ -79,9 +79,19 @@ tf_get_app_hostname() {
   printf '%s\n' "ai-gaussian-splatter.$zone_name"
 }
 
+# The tag .github/workflows/deploy.yml pushes web/'s two images under: web/'s git tree id, truncated to a fixed 12.
+# web/ is the whole build context for both images, so the tag moves only when they would — see ARCHITECTURE.md
+# "Image tags". The fixed width and the parameter expansion both matter; AGENTS.md says what each one prevents, and
+# scripts/dev/terraform-test-lib.sh fails if either changes.
+tf_get_web_image_tag() {
+  local tree
+  tree=$(git -C "$ROOT" rev-parse HEAD:web) || return
+  printf '%s\n' "${tree:0:12}"
+}
+
 # The tag the running service's PRIMARY task definition names, the same ECS lookup the deploy job's "Resolve tags" step
-# uses when a service exists. Any SHA-shaped value when nothing is serving, or the plan shows an image change that isn't
-# coming.
+# uses when a service exists. When nothing is serving it falls back to the tag this checkout would build, so the plan
+# doesn't show an image change that isn't coming.
 tf_get_live_web_image_tag() {
   local task_def image region
   region=$(tf_get_aws_region)
@@ -100,13 +110,13 @@ tf_get_live_web_image_tag() {
   fi
 
   if [[ -z $task_def || $task_def == None ]]; then
-    git rev-parse --short HEAD
+    tf_get_web_image_tag
     return
   fi
 
   image=$(aws ecs describe-task-definition --region "$region" --task-definition "$task_def" \
     --query 'taskDefinition.containerDefinitions[0].image' --output text) || return 1
-  # The image is tagged "<sha>-web" (infra/web.tf), but web_image_tag takes the bare SHA.
+  # The image is tagged "<tree>-web" (infra/web.tf), but web_image_tag takes the bare tag.
   image=${image##*:}
   printf '%s\n' "${image%-web}"
 }

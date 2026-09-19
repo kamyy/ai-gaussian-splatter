@@ -15,11 +15,12 @@ The `deploy` job (`.github/workflows/deploy.yml`) does every deploy, the first o
 
 | Situation | What to do |
 |---|---|
-| `web/` or `infra/*.tf` change, job on | Land it on `main` through a PR. The job builds, migrates, and rolls out. A push touching only `.md` files or `LICENSE` skips the whole workflow (`paths-ignore`). |
+| `web/` change, job on | Land it on `main` through a PR. The job builds, migrates, and rolls out. A push touching only `.md` files or `LICENSE` skips the whole workflow (`paths-ignore`). |
+| `infra/*.tf` change, job on | Same PR route. The job applies Terraform and migrates but builds no image, because the image tag is `web/`'s tree id ([Image tags](../../../ARCHITECTURE.md#image-tags)). It still replaces the running tasks when the apply changes the web task definition, so treat it as a rollout and check the plan. |
 | Fresh or torn-down account | [Creating account prerequisites](../../../RUNBOOK.md#creating-account-prerequisites) (`scripts/prod/create-account-prereqs.sh`) → [Configuring continuous deployment](../../../RUNBOOK.md#configuring-continuous-deployment) (`scripts/prod/configure-ci-role.sh`, then `scripts/prod/set-gh-repo-variables.sh`) → [Going live](../../../RUNBOOK.md#going-live) (`scripts/prod/set-deploy-enabled.sh true`). After the first run, `scripts/prod/worker-push-image.sh`. |
 | New worker image | `scripts/prod/worker-push-image.sh` ([Building and pushing the worker image](../../../RUNBOOK.md#building-and-pushing-the-worker-image)). It also updates `WORKER_IMAGE_TAG`, and the next deploy points `WORKER_IMAGE_URI` at it. |
 | Preview a change | `scripts/prod/terraform-plan.sh` ([Running Terraform locally](../../../RUNBOOK.md#running-terraform-locally)). Never `apply` from there. Only the job runs migrations before rolling the service. |
-| Roll back | The circuit breaker rolls a bad image back on its own. To roll back by hand, revert the change and push. A schema change gets a corrective migration instead ([Fixing a bad migration](../../../RUNBOOK.md#fixing-a-bad-migration)). |
+| Roll back | The circuit breaker rolls a bad image back on its own. To roll back by hand, revert the change and push; that reuses the image already in ECR when it hasn't expired, and rebuilds it when it has. A schema change gets a corrective migration instead ([Fixing a bad migration](../../../RUNBOOK.md#fixing-a-bad-migration)). |
 | Tear down | `scripts/prod/set-deploy-enabled.sh false`, then `scripts/prod/terraform-destroy.sh`. Both refuse while CI is unfinished ([Tearing down](../../../RUNBOOK.md#tearing-down)). |
 
 ## Before turning the job on

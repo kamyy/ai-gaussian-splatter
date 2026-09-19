@@ -216,18 +216,31 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 ### Deploy: image tags
 
-- **Image tags are `<commit-sha>-web` and `<commit-sha>-migrate`, and the ECR repository (`infra/registry.tf`) is `IMMUTABLE`.**
+- **Image tags are `<web-tree-id>-web` and `<web-tree-id>-migrate`, not commit SHAs, and the ECR repository (`infra/registry.tf`) is `IMMUTABLE`.** `scripts/lib/terraform.sh`'s `tf_get_web_image_tag` is the one definition, used by `.github/workflows/deploy.yml` and by the no-service fallback in the same file.
+  - It truncates to a fixed 12 characters rather than calling `git rev-parse --short`, whose length tracks the local object count and so differs between CI's shallow checkout and a full clone. `scripts/dev/terraform-test-lib.sh` pins the width.
   - One repository (`ai-gaussian-splatter`) holds both build targets of `web/Dockerfile`; the suffix is what tells them apart, and `infra/web.tf` appends it.
-  - `var.web_image_tag`/`var.migrate_image_tag` take a bare SHA; a variable `validation` block in `infra/variables.tf` refuses any other shape before `terraform plan` ever reaches AWS.
-  - A pushed tag can never be repointed, so rebuilding an already-pushed commit fails at `podman push` with `ImageTagAlreadyExists`. Commit again rather than retagging.
-  - Both exist to keep the deployment circuit breaker's rollback meaningful: with a moving tag every release shares one task definition, and a rollback re-pulls the image that just failed.
+  - `var.web_image_tag`/`var.migrate_image_tag` take a bare abbreviated hex object id; a variable `validation` block in `infra/variables.tf` refuses any other shape before `terraform plan` ever reaches AWS.
+  - A pushed tag can never be repointed, so the deploy job skips any build whose tag is already in the repository. That is what makes it re-runnable from any step, and what keeps an unchanged `web/` from rebuilding.
+  - Per-build tags exist to keep the deployment circuit breaker's rollback meaningful: with a moving tag every release shares one task definition, and a rollback re-pulls the image that just failed.
+- **A push that leaves `web/` byte-identical builds nothing and leaves the service's *image* unchanged. It does not mean the service keeps running.** `aws_ecs_service.web` names `aws_ecs_task_definition.web.arn`, a revision-qualified ARN with no `ignore_changes`, so any task-definition change registers a new revision and ECS replaces the tasks.
+  - The image is one field among many in that task definition. `WORKER_IMAGE_URI`, `KEEP_ALIVE_TIMEOUT`, `cpu`/`memory`, `APP_PUBLIC_URL`, and the Clerk and RDS wiring all live there too, and all of them are editable from `infra/` alone.
+  - That rollout is load-bearing, not a leak. The worker-image flow depends on it: a deploy carries a new `WORKER_IMAGE_TAG` into `WORKER_IMAGE_URI`, and only a task replacement puts it in front of `web/lib/server/ec2Launcher.ts` ([Building and pushing the worker image](RUNBOOK.md#building-and-pushing-the-worker-image)).
+  - It lands in the *first* apply, which is untargeted. The roll-forward apply is the no-op on such a push, not the other way round.
+  - **The migration task still runs, and gating it on the tag is a trap.** An unchanged tag says `web/drizzle/` is unchanged, not that the database matches it. The first apply can replace `aws_db_instance.main`, and on a first deploy that apply creates the service already on the new tag — so a re-run after a failed migration reads equal tags and would skip the migration that never ran.
+  - `HEAD:web` is tree-root relative, so the `working-directory: infra` on "Resolve tags" doesn't change what it reads.
+  - **Keep the truncation a parameter expansion, not a pipe through `cut`.** `git rev-parse` echoes an argument it cannot resolve back to stdout before exiting non-zero, and a pipeline reports only its last command's status unless the caller set pipefail. `.github/workflows/deploy.yml` names no `shell:`, so its steps run under Actions' default `bash -e {0}`, which does not — a piped helper would return 0 and tag images `HEAD:web-web`. `scripts/dev/terraform-test-lib.sh` drops pipefail to pin this.
+  - The files `web/.dockerignore` excludes (`web/e2e/`, `web/tests/`, `web/playwright.config.ts`, `**/*.test.ts`) still change the tree id, so touching one costs a rebuild and a rollout of identical bytes. That is the safe direction to be wrong in.
+- **A build input outside `web/` reaches production only through a change under `web/`.** That covers the `CLERK_PUBLISHABLE_KEY` repository variable and a patched `node:24-alpine` base image.
+  - `gh run rerun` resolves the same tag and so rebuilds nothing.
+  - Map a tag back to a commit with `git log --format='%h' -- web`, then `git rev-parse <commit>:web | cut -c1-12` for each — `--short` would print a different width than the tag.
 - **Two separate image-tag variables, one default.**
   - `web_image_tag` is the Fargate service's own image; `migrate_image_tag` is the migration task definition's, and falls back to `web_image_tag` when left empty (`infra/locals.tf`'s `local.migrate_image_tag`).
-  - Every existing `terraform apply -var web_image_tag=$SHA` invocation with no `migrate_image_tag` keeps deploying one build that serves both roles.
+  - Every existing `terraform apply -var web_image_tag=$TAG` invocation with no `migrate_image_tag` keeps deploying one build that serves both roles.
   - `.github/workflows/deploy.yml` is the one caller that ever diverges the two — see [`ARCHITECTURE.md`](ARCHITECTURE.md) for why.
   - `ai-gaussian-splatter-migrate` (task family), `ai-gaussian-splatter-migrate-task` (migration task role), and `ai-gaussian-splatter-execution` (execution role) are fixed literal names for the same reason `CLUSTER_NAME`/`SERVICE_NAME` are: rotating the Clerk secret is a write plus `aws ecs update-service --force-new-deployment`, not a `terraform apply`, so that command needs a cluster/service name it can write out literally rather than looking up from a Terraform-assigned one.
 - **The worker image lives in its own ECR repository (`ai-gaussian-splatter-worker`, `infra/registry.tf`), separate from the web repository above, and `var.worker_image_tag` has no default.**
-  - Unlike `web_image_tag`/`migrate_image_tag`, nothing rebuilds and pushes it automatically — GPU worker deployment stays manual (`RUNBOOK.md`) — so this variable only changes when someone hand-builds and pushes a new one.
+  - No deploy ever rebuilds and pushes it — GPU worker deployment stays manual (`RUNBOOK.md`) — so this variable only changes when someone hand-builds and pushes a new one. It stays a commit SHA, because `scripts/prod/worker-push-image.sh` tags the image with the checked-out commit rather than a tree.
+  - Re-running that script on an already-pushed commit fails at `podman push` with `ImageTagAlreadyExists`. Commit again rather than retagging.
   - Its lifecycle policy keeps far fewer images (`local.worker_releases_kept`, currently 2) than the web repository's `RELEASES_KEPT` (10): at ~19 GB each the worker image isn't cheap to retain, and it isn't part of any ECS rollback mechanism anyway — `web/lib/server/ec2Launcher.ts` just reads whatever `WORKER_IMAGE_URI` currently names.
 
 ### Variables & state backend
