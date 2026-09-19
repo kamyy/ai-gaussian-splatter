@@ -48,7 +48,7 @@ resource "aws_iam_role_policy" "worker" {
         Action   = local.s3_read_write_actions
         Resource = [aws_s3_bucket.splats.arn, "${aws_s3_bucket.splats.arn}/*"]
       },
-      # What lets worker/run_job.py's finally block terminate its own instance at the end of a job, scoped by the
+      # What lets worker/run_job.py's finally block terminate its own instance at the end of a stage, scoped by the
       # same worker-tag convention infra/web.tf's RunInstances grant uses (infra/locals.tf holds the shared tag
       # key/value).
       {

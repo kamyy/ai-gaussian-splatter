@@ -51,7 +51,7 @@ worker_run_stage() {
   shift 2
   # A bare -e NAME copies the value from this shell, which keeps the secret key out of the process list. boto3 reads
   # only AWS_DEFAULT_REGION. Inside the container localhost is the container itself, so status callbacks go to Podman's
-  # alias for the host running `next dev`. JOB_ID and CALLBACK_TOKEN only matter to a job the web app launched.
+  # alias for the host running `next dev`. JOB_ID and CALLBACK_TOKEN only matter to a worker job the web app launched.
   podman run --rm \
     --security-opt=label=disable \
     --device nvidia.com/gpu=all \

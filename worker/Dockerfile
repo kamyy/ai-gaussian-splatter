@@ -1,7 +1,8 @@
 # Worker image: COLMAP (taken from upstream's published image) + Python deps for the gsplat training pipeline.
 #
-# Built on stock base images, so every job pays the pull and the gsplat kernel build. A Packer-baked AMI carrying these
-# layers is the M10 fast-follow that cuts that per-job boot latency (ARCHITECTURE.md).
+# Built on stock base images, so every worker instance pays the image pull and the train stage pays gsplat's kernel
+# build on top. A Packer-baked AMI carrying these layers is the M10 fast-follow that cuts that boot latency
+# (ARCHITECTURE.md).
 #
 # Base images are registry-qualified because podman, unlike docker, does not assume Docker Hub for a bare `nvidia/cuda`.
 # With several unqualified-search registries configured it asks which to use, and under `short-name-mode = "enforcing"`
@@ -10,10 +11,10 @@
 # COLMAP is copied from upstream's published image rather than compiled here. Compiling it saves about 4 GB of image
 # (22.8 GB against 18.7 GB, measured like for like) — their build enables the GUI and links MKL, neither of which a
 # headless worker calls — but costs roughly twenty minutes on any build that misses the cache, which is every CI run.
-# Image size is paid per job on a cold pull and build time only on release, so this is a deliberate trade rather than a
-# free win. Upstream also maintains the dependency list across releases, which moves: 4.0 swapped FreeImage for
-# OpenImageIO and Qt5 for Qt6 and added SuiteSparse and OpenSSL. Their build covers all major CUDA architectures, so the
-# same binary runs on the g5.xlarge's A10G and on Ada-generation dev GPUs.
+# Image size is paid per worker instance on a cold pull and build time only on release, so this is a deliberate trade
+# rather than a free win. Upstream also maintains the dependency list across releases, which moves: 4.0 swapped
+# FreeImage for OpenImageIO and Qt5 for Qt6 and added SuiteSparse and OpenSSL. Their build covers all major CUDA
+# architectures, so the same binary runs on the g5.xlarge's A10G and on Ada-generation dev GPUs.
 #
 # Pinned by digest rather than tag, since upstream's CI names tags `$(date +%Y%m%d).$GITHUB_RUN_NUMBER` — a build
 # number, not a version.
@@ -34,7 +35,7 @@ FROM docker.io/colmap/colmap@sha256:64768b92a3b6ce126bb4838b8bf4f2531e220a7d73cd
 # pure Python, and it depends on ninja for exactly this reason), so it builds its CUDA kernels on first use through
 # torch.utils.cpp_extension — which needs nvcc and a host C++ compiler present at run time, not just at build time. On
 # -runtime the image builds fine and then the first rasterization() call fails. That build happens once per container,
-# so each job pays it before training starts.
+# so a worker job pays it once, at the start of its train stage.
 #
 # The CUDA version here is load-bearing beyond COLMAP: torch aborts the kernel build when its own CUDA major version
 # differs from the toolkit it finds, so pyproject.toml pins torch to the matching cu129 wheels. Move one and move both.

@@ -6,10 +6,10 @@ variable "aws_region" {
   default     = "us-west-2"
 }
 
-# The AMI each job's spot instance boots. Only forwarded to the web task as WORKER_AMI_ID; the first thing to
-# test it is the RunInstances call in web/lib/server/ec2Launcher.ts, a job at a time.
+# The AMI every worker instance boots. Only forwarded to the web task as WORKER_AMI_ID; the first thing to test it
+# is the RunInstances call in web/lib/server/ec2Launcher.ts, one worker job at a time.
 variable "worker_ami_id" {
-  description = "AMI each job's GPU spot instance boots. Must carry Docker, the NVIDIA driver/container toolkit, and the AWS CLI (see RUNBOOK.md)."
+  description = "AMI every GPU worker instance boots. Must carry Docker, the NVIDIA driver/container toolkit, and the AWS CLI (see RUNBOOK.md)."
   type        = string
 
   # Catches the empty string CI sends for an unset repository variable (AGENTS.md), or an AMI name pasted in place
