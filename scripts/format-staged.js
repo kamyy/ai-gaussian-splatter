@@ -29,20 +29,13 @@ const before = hashFiles(stagedFiles);
 
 execFileSync("npx", ["biome", "check", "--write", "--staged", "--no-errors-on-unmatched"], { stdio: "inherit" });
 
-const PACKAGES = ["worker", "infra"];
+const workerPy = stagedFiles
+  .filter(f => f.startsWith("worker/") && f.endsWith(".py"))
+  .map(f => f.slice("worker/".length));
 
-for (const pkg of PACKAGES) {
-  const prefix = `${pkg}/`;
-  const relativePaths = stagedFiles
-    .filter(f => f.startsWith(prefix) && f.endsWith(".py"))
-    .map(f => f.slice(prefix.length));
-
-  if (relativePaths.length === 0) {
-    continue;
-  }
-
-  console.log(`\n> ${pkg}: uv run ruff format ${relativePaths.join(" ")}`);
-  execFileSync("uv", ["run", "ruff", "format", ...relativePaths], { cwd: pkg, stdio: "inherit" });
+if (workerPy.length > 0) {
+  console.log(`\n> worker: uv run ruff format ${workerPy.join(" ")}`);
+  execFileSync("uv", ["run", "ruff", "format", ...workerPy], { cwd: "worker", stdio: "inherit" });
 }
 
 const after = hashFiles(stagedFiles);
