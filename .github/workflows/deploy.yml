@@ -1,9 +1,11 @@
 name: Deploy
 
-# Builds, migrates, and deploys on every push to main. See ARCHITECTURE.md "Deployment" for why it's two terraform apply
-# calls around the migration rather than one, and RUNBOOK.md for the one-time OIDC role setup this job's AWS credentials
-# depend on. It runs only as .github/workflows/ci.yml's deploy job, so it starts after every check job passes. That
-# caller also holds the push-to-main gate and grants the id-token permission.
+# Applies infra/ and runs the migration on every push to main. It builds a new web image only when web/ changed, and it
+# rolls the service out whenever an apply changes the web task definition. See ARCHITECTURE.md "Image tags" for why the
+# image tag is web/'s tree id rather than the commit SHA, and "Migration ordering" for why the migration sits between
+# two terraform apply calls rather than inside one. See RUNBOOK.md for the one-time OIDC role setup this job's AWS
+# credentials depend on. It runs only as .github/workflows/ci.yml's deploy job, so it starts after every check job
+# passes. That caller also holds the push-to-main gate and grants the id-token permission.
 on:
   workflow_call:
 
@@ -130,7 +132,10 @@ jobs:
       - name: Resolve tags
         working-directory: infra
         run: |
-          NEW_TAG=$(git rev-parse --short HEAD)
+          source "$GITHUB_WORKSPACE/scripts/lib/terraform.sh"
+          # web/'s git tree id, not the commit SHA, so a push that leaves web/ untouched resolves to the tag already
+          # in ECR and skips the builds below.
+          NEW_TAG=$(tf_get_web_image_tag)
           echo "NEW_TAG=$NEW_TAG" >> "$GITHUB_ENV"
           echo "REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com" >> "$GITHUB_ENV"
           # `state pull` prints nothing and exits 0 when the state is empty.
@@ -143,16 +148,17 @@ jobs:
             # Nothing is serving yet, so there is no old image to keep the service on. With OLD_TAG equal to NEW_TAG,
             # the first apply below creates the whole stack, service included.
             echo "FIRST_DEPLOY=true" >> "$GITHUB_ENV"
-            echo "OLD_TAG=$NEW_TAG" >> "$GITHUB_ENV"
+            OLD_TAG=$NEW_TAG
           else
             SERVICE_JSON=$(aws ecs describe-services --cluster "$CLUSTER_NAME" --services "$SERVICE_NAME")
             OLD_TASK_DEF=$(jq -r '.services[0].deployments[] | select(.status=="PRIMARY") | .taskDefinition' <<<"$SERVICE_JSON")
-            # image is tagged "<sha>-web" (infra/web.tf appends the -web suffix); web_image_tag takes a bare commit
-            # SHA, so strip it back off.
+            # image is tagged "<tree>-web" (infra/web.tf appends the -web suffix); web_image_tag takes the bare tag,
+            # so strip it back off.
             OLD_TAG=$(aws ecs describe-task-definition --task-definition "$OLD_TASK_DEF" \
               --query 'taskDefinition.containerDefinitions[0].image' --output text | awk -F: '{print $NF}')
-            echo "OLD_TAG=${OLD_TAG%-web}" >> "$GITHUB_ENV"
+            OLD_TAG=${OLD_TAG%-web}
           fi
+          echo "OLD_TAG=$OLD_TAG" >> "$GITHUB_ENV"
 
       # The first deploy has no repository to push into yet. Only the repository is applied here, because the service
       # can't be created before the image it names has been pushed.
@@ -163,11 +169,11 @@ jobs:
           TF_VAR_web_image_tag: ${{ env.NEW_TAG }}
         run: terraform apply -auto-approve -input=false -target=aws_ecr_repository.web -target=aws_ecr_lifecycle_policy.web
 
-      # Each tag is skipped if it is already in the repository: the repository is IMMUTABLE (infra/registry.tf), so
-      # re-running this job after a failure in any step below would otherwise abort here with ImageTagAlreadyExists —
-      # podman builds aren't bit-reproducible, so rebuilding the same commit produces a different digest. Skipping
-      # makes the whole job re-runnable. `batch-get-image` rather than `describe-images` because the CI role already
-      # grants it (scripts/prod/configure-ci-role.sh).
+      # Each tag is skipped if it is already in the repository. A push that leaves web/ untouched therefore builds
+      # nothing, and a run that failed in any step below re-runs cleanly. The repository is IMMUTABLE
+      # (infra/registry.tf) and podman builds aren't bit-reproducible, so rebuilding the same tree produces a different
+      # digest and would abort here with ImageTagAlreadyExists. `batch-get-image` rather than `describe-images` because
+      # the CI role already grants it (scripts/prod/configure-ci-role.sh).
       - name: Build and push images
         working-directory: web
         env:
@@ -195,7 +201,8 @@ jobs:
       # The two builds above are separate podman invocations, so one can be skipped or fail to push without the other
       # noticing. `terraform apply` then registers a task definition naming an image that is not there, and nothing
       # pulls the -migrate tag until `ecs run-task` does. Checked here, while the deploys below have not run yet.
-      - name: Verify both of this commit's images are in the repository
+      # The check also covers a pair pushed by an earlier deploy, since a run that rebuilds nothing still names both.
+      - name: Verify both of this build's images are in the repository
         run: |
           FOUND=$(aws ecr batch-get-image --repository-name "$ECR_REPO" \
             --image-ids imageTag="$NEW_TAG-web" imageTag="$NEW_TAG-migrate" \
@@ -217,6 +224,10 @@ jobs:
           TF_VAR_migrate_image_tag: ${{ env.NEW_TAG }}
         run: terraform apply -auto-approve -input=false
 
+      # This step is unconditional (AGENTS.md). An unchanged tag says web/drizzle/ is unchanged, not that the database
+      # matches it. The apply above can replace aws_db_instance.main. A re-run after a failed first deploy finds the
+      # service already on this tag, with the migration that failed still unapplied. Re-applying migrations that
+      # already ran costs one short task.
       - name: Run migration
         run: |
           # Looked up here rather than before the apply above, because on the first deploy that apply is what created
@@ -235,9 +246,10 @@ jobs:
             exit 1
           fi
 
-      # Only reached if the migration above exited 0. Now both tags match, so this apply includes the service's
-      # image change — Terraform rolls it out, and deployment_circuit_breaker(rollback) protects the rollout. On the
-      # first deploy there is nothing left to change, so this apply is a no-op.
+      # Only reached if the migration above exited 0. Now both tags match, so this apply includes the service's image
+      # change. Terraform rolls it out, and deployment_circuit_breaker(rollback) protects the rollout. On the first
+      # deploy, and on any deploy whose tag is unchanged, the migration-task apply already ran with these same
+      # variables, so this apply changes nothing. A rollout on such a deploy happens there instead.
       - name: terraform apply — roll the service forward to NEW_TAG
         working-directory: infra
         env:

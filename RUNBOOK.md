@@ -140,10 +140,12 @@ After that, a human only builds the worker image ([Building and pushing the work
 CI's `deploy` job (`.github/workflows/deploy.yml`) does every deploy, including the first one into an empty account ([Going live](#going-live)):
 
 1. Creates the `ai-gaussian-splatter` ECR repository (`aws_ecr_repository.web` in `infra/registry.tf`) — first deploy only.
-2. Builds both web images (`<sha>-web` and `<sha>-migrate`) and pushes them into that repository.
+2. Builds both web images (`<tree>-web` and `<tree>-migrate`, tagged with `web/`'s git tree id) and pushes them into that repository — skipped when that tag is already there.
 3. Applies the rest of the stack.
 4. Runs the migration.
 5. Rolls the service forward.
+
+Steps 2 and 5 do nothing on a push that leaves `web/` untouched, so a `worker/`, `scripts/` or `infra/` change applies Terraform and runs the migration without building an image ([Image tags](ARCHITECTURE.md#image-tags)). Step 3 still replaces the running tasks whenever it changes the web task definition, which carries `WORKER_IMAGE_URI` and `KEEP_ALIVE_TIMEOUT` as well as the image — that replacement is what [Building and pushing the worker image](#building-and-pushing-the-worker-image) relies on.
 
 Whether the job is on is `gh variable get DEPLOY_ENABLED` ([Going live](#going-live)).
 
@@ -201,7 +203,7 @@ It asks for these, defaulting to each one's current value:
 
 - `DOMAIN_ZONE_NAME` is the public DNS zone the app is served from, e.g. `orky.net`. Everything carrying the app's public name is built from it: the hostname, the ACM certificate, the Route 53 record, the S3 CORS origins, the origin the worker PATCHes status back to, and the origin `.github/workflows/deploy.yml` smoke-checks after a rollout. A trailing dot or uppercase is normalized away before the variable is set.
 - `ALERT_EMAIL` is where the AWS Budget (`infra/budgets.tf`) sends spend alerts. A typo'd but well-formed address deploys green with the alerts never arriving, and nothing can catch that at apply time ([State / what's next](AGENTS.md#state--whats-next)).
-- `CLERK_PUBLISHABLE_KEY` is the `pk_live_...` key, not the secret one.
+- `CLERK_PUBLISHABLE_KEY` is the `pk_live_...` key, not the secret one. `web/Dockerfile` compiles it into the browser bundle, so a later change to it reaches users on the next deploy that changes `web/` ([Image tags](ARCHITECTURE.md#image-tags)).
 - `WORKER_AMI_ID` is the AMI each job's spot instance boots. User data does no provisioning of its own, so the image must already carry Docker, the NVIDIA driver and container toolkit, and the AWS CLI. AWS's Deep Learning Base GPU AMIs do, and the script lists the newest five before asking.
 
 `WORKER_IMAGE_TAG` is set to the current commit only while it's unset. After that it changes only through [Building and pushing the worker image](#building-and-pushing-the-worker-image).
@@ -224,7 +226,7 @@ On a first deploy, the service starts before the migration runs, so real routes 
 
 `deployment_minimum_healthy_percent = 100` will keep any old task serving until the new one passes health checks. If the new image fails those checks, the circuit breaker rolls back to the previous task definition. To roll back by hand, revert the change and push. A schema change gets a corrective migration instead ([Fixing a bad migration](#fixing-a-bad-migration)).
 
-Only the last few releases are kept (`local.releases_kept` in `infra/registry.tf`); older tags are expired and can no longer be rolled back to.
+Only the last few releases are kept (`local.releases_kept` in `infra/registry.tf`). That bounds the circuit breaker's automatic rollback and any fresh task placement onto an older task definition, both of which need the image still present. Reverting and pushing by hand reaches further back: an expired tag is free to push again, so that build is simply remade.
 
 ### Building and pushing the worker image
 
@@ -236,7 +238,9 @@ The image is tagged with the current commit, so commit any `worker/` changes fir
 scripts/prod/worker-push-image.sh
 ```
 
-After the push, the script sets the `WORKER_IMAGE_TAG` repository variable ([Setting GitHub repository variables](#setting-github-repository-variables)) to the new tag. The next deploy passes it as `TF_VAR_worker_image_tag`, which points `WORKER_IMAGE_URI` on the web task definition at the new image. Until then, job launches keep using the old one.
+After the push, the script sets the `WORKER_IMAGE_TAG` repository variable ([Setting GitHub repository variables](#setting-github-repository-variables)) to the new tag. A deploy then has to run to pass it as `TF_VAR_worker_image_tag`, which points `WORKER_IMAGE_URI` on the web task definition at the new image and replaces the running tasks. Until then, job launches keep using the old one.
+
+Rerun the latest `main` run to trigger that deploy (`gh run rerun <run-id>`), because the job reads the variable as the run starts. Pushing a commit works too, but not a docs-only one: a push touching only `.md` files or `LICENSE` skips the workflow, so nothing reads the new variable.
 
 Only the last `local.worker_releases_kept` images are kept (`infra/registry.tf`), which makes a stale `WORKER_IMAGE_TAG` the risk. Once that many newer images exist, the lifecycle policy expires the tag it names, and every job launch then fails its pull and bills until the `WORKER_MAX_LIFETIME_MINUTES` shutdown.
 

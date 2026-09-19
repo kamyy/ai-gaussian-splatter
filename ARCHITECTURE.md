@@ -132,13 +132,18 @@ The web app runs on **Fargate** behind an **Application Load Balancer** (`infra/
 
 ### Image tags
 
-- The web image is tagged per release with the commit SHA, in an ECR repository `infra/` owns (`infra/registry.tf`). The tag travels as a Terraform variable (`web_image_tag`).
+- The web and migrator images are tagged with the git tree id of `web/`, truncated to a fixed 12 characters (`scripts/lib/terraform.sh`'s `tf_get_web_image_tag`), in an ECR repository `infra/` owns (`infra/registry.tf`). The tag travels as a Terraform variable (`web_image_tag`).
+- `web/` is the whole build context both images are built from, so the tag is a function of exactly their inputs. A push that leaves that tree untouched resolves to the tag already in ECR, so `.github/workflows/deploy.yml` builds nothing and leaves the service with no image change for either `terraform apply` to roll out.
+- A fixed width rather than `git rev-parse --short`, whose length is the shortest prefix unique in the local object database. That varies between CI's shallow checkout and a full clone, and grows with the repository, so an abbreviated tag is not a function of the tree it names — and a tag that moves on its own rebuilds and rolls out code that did not change.
+- That gating is the point. Measured over twelve commits on `main`, the commit SHA moved twelve times, `infra/`'s tree three times and `web/`'s once — so tagging by commit spent 22 of 24 image builds and 11 of 12 ECS rollouts on byte-identical application code, each rollout a real task replacement and a consumed rollback slot.
 - A moving tag like `latest` would be simpler to push, but it leaves every release sharing one task definition. That disarms the deployment circuit breaker: rollback restarts the previous deployment against that same string, so Fargate re-pulls whatever was pushed most recently — the image that just failed.
-- Per-release tags make each deploy its own task definition instead. The repository is also `IMMUTABLE`, so a pushed tag can never be repointed.
+- Per-build tags make each deploy its own task definition instead. The repository is also `IMMUTABLE`, so a pushed tag can never be repointed.
 - Costs of this approach:
   - A variable is required on every `terraform apply`.
-  - Rebuilding an already-pushed commit is rejected at push time.
+  - The tag names no commit. Map it back with `git log --format='%h' -- web`, then `git rev-parse <commit>:web | cut -c1-12` for each.
+  - A build input outside `web/` reaches production only through a change under `web/`. That covers the `CLERK_PUBLISHABLE_KEY` repository variable, which `web/Dockerfile` bakes into the browser bundle, and a patched `node:24-alpine` base.
   - The rollback window is bounded by `RELEASES_KEPT`, not unlimited.
+- Rejected alternative: **a path filter on `.github/workflows/ci.yml`'s `deploy` job**, skipping the deploy outright unless the push touched `web/` or `infra/`. It saves nothing on the common case, since `infra/` changes more often than `web/` here and an `infra/` change still has to deploy. Worse, any filter that skips a push also stops `infra/` converging, and converging `infra/` is how a new `WORKER_IMAGE_TAG` reaches the web task definition ([Building and pushing the worker image](RUNBOOK.md#building-and-pushing-the-worker-image)) — on a `worker/`-only push, exactly the push that carries a new worker image.
 
 ### Clerk secret
 
@@ -162,7 +167,7 @@ Ops fallback: an AWS Budget (`infra/budgets.tf`) for spend the request path neve
 
 ## CI/CD
 
-- CI (`.github/workflows/deploy.yml`) builds, migrates, and rolls out the web service on every push to `main`, including the first deploy into an empty account. A human never applies `infra/` itself.
+- CI (`.github/workflows/deploy.yml`) applies `infra/` and migrates on every push to `main`, and builds a new web image only when `web/` changed, the first deploy into an empty account included ([Image tags](#image-tags)). It still rolls the service out whenever an apply changes the web task definition, which carries far more than the image. A human never applies `infra/` itself.
 - Whether that job runs is a repository variable (`DEPLOY_ENABLED` on `.github/workflows/ci.yml`'s deploy job), not a committed `if:` in the workflow file. A committed flag makes going live and tearing down a workflow edit. The file would then differ between "the account exists" and "the account is gone" for a one-bit operational state. An unset variable is `""`. A fork or a torn-down account deploys nothing until someone sets it to `true` ([Going live](RUNBOOK.md#going-live)).
 - `.github/workflows/ci.yml` records that variable in a trivial job at the start of each run on `main`. The deploy job's `if:` reads that copy, not live `vars` when the deploy job starts. A flip that lands after the recording cannot change what the run does, which narrows the window from the whole check suite to that one job's dispatch. `scripts/prod/set-deploy-enabled.sh` and `scripts/prod/terraform-destroy.sh` refuse while a run on `main` is unfinished, because a flip inside that remaining window still reaches it.
 - Creating the state bucket and tearing down are done locally. CI can't `terraform init` against a bucket that doesn't exist yet. A teardown is too rare and too destructive to put behind a push.
@@ -178,7 +183,7 @@ Ops fallback: an AWS Budget (`infra/budgets.tf`) for spend the request path neve
 
 ## Migration ordering
 
-Two separate images are in play here: the **migrator image** (runs the one-off migration task) and the **web image** (runs the service). Both are built from the same commit, but `terraform apply` tracks their tags independently — `migrate_image_tag` for the migrator image, `web_image_tag` for the web image.
+Two separate images are in play here: the **migrator image** (runs the one-off migration task) and the **web image** (runs the service). Both are built from the same `web/` tree, but `terraform apply` tracks their tags independently — `migrate_image_tag` for the migrator image, `web_image_tag` for the web image.
 
 The core ordering problem:
 
@@ -188,8 +193,10 @@ The core ordering problem:
 
 Solved by giving the migration task its own variable (`migrate_image_tag`, defaulting to `web_image_tag` so every existing manual invocation is unaffected), then calling `terraform apply` twice:
 
-1. Apply with `migrate_image_tag` on the new commit's SHA but `web_image_tag` still on the old one. This registers the migration task against the new **migrator image** while the service stays pinned to its old **web image** — no diff on the service, so no rollout.
-2. Only if the migration task exits 0, apply again with `web_image_tag` also updated to the new SHA (now equal to `migrate_image_tag`). This second apply is what actually moves the service onto the new **web image**.
+1. Apply with `migrate_image_tag` on the new tag but `web_image_tag` still on the old one. This registers the migration task against the new **migrator image** while the service stays pinned to its old **web image** — no diff on the service, so no rollout.
+2. Only if the migration task exits 0, apply again with `web_image_tag` also updated to the new tag (now equal to `migrate_image_tag`). This second apply is what actually moves the service onto the new **web image**.
+
+The migration task runs on every deploy, including one whose tag is unchanged. An unchanged tag says `web/drizzle/` is unchanged, not that the database matches it — the first apply can replace `aws_db_instance.main`, and a first deploy whose migration failed leaves the service already on the new tag with nothing applied. Re-applying migrations that already ran is a no-op, so running it unconditionally is cheaper than any test for whether it is needed.
 
 Terraform stays the sole owner of "what's currently deployed" — nothing calls `aws ecs update-service` out of band.
 
