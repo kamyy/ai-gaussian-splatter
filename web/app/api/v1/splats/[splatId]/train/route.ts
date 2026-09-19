@@ -77,7 +77,7 @@ export const POST = withErrorHandling(
           splatId,
           callbackToken: flipped.callbackToken,
           stage: "train",
-          workerImageUri: workerImageUri(),
+          workerImageUri: workerImageUri("train"),
           ecrRegistry: ecrRegistry(),
         });
       }

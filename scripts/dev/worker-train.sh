@@ -35,7 +35,7 @@ esac
 # The pipeline's AWS calls happen inside the container. Checking the web/.env key pair on the host first fails in
 # seconds rather than after the image build.
 worker_use_dev_aws
-worker_build_image
+worker_build_image train
 
 mkdir -p "$ROOT/worker/jobdir"
 worker_run_stage "$SPLAT_ID" train "${extra_args[@]}"

@@ -65,11 +65,14 @@ docker run --rm --gpus all \\
 }
 
 // Populated from infra/'s ECR repository output once infra is deployed. Placeholders for local/pre-deploy development.
-// Shared by web/app/api/v1/splats/[splatId]/process/route.ts (stage "reconstruct") and
-// web/app/api/v1/splats/[splatId]/train/route.ts (stage "train"), which launch the same worker image with a
-// different STAGE.
-export function workerImageUri(): string {
-  return process.env.WORKER_IMAGE_URI ?? "REPLACE_WITH_ECR_IMAGE_URI";
+// The stages run different images. worker/Dockerfile's reconstruct target carries COLMAP and no torch, and its train
+// target carries torch and gsplat and no COLMAP, so each stage pulls only what it runs.
+// Called by web/app/api/v1/splats/[splatId]/process/route.ts and web/app/api/v1/splats/[splatId]/train/route.ts.
+export function workerImageUri(stage: WorkerStage): string {
+  if (stage === "reconstruct") {
+    return process.env.WORKER_RECONSTRUCT_IMAGE_URI ?? "REPLACE_WITH_ECR_IMAGE_URI";
+  }
+  return process.env.WORKER_TRAIN_IMAGE_URI ?? "REPLACE_WITH_ECR_IMAGE_URI";
 }
 
 export function ecrRegistry(): string {

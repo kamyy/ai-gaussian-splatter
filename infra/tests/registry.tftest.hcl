@@ -80,12 +80,14 @@ run "worker_repository_is_separate_immutable_and_force_deletable" {
 run "worker_lifecycle_keeps_far_fewer_images_than_web" {
   command = apply
 
+  # Counted in images, not releases. One release pushes a -reconstruct and a -train image, so 4 is two releases, and
+  # an odd number here would retain half of one.
   assert {
     condition = anytrue([
       for rule in jsondecode(aws_ecr_lifecycle_policy.worker.policy).rules :
-      contains(rule.selection.tagPatternList, "*") && rule.selection.countNumber == 2
+      contains(rule.selection.tagPatternList, "*") && rule.selection.countNumber == 4
     ])
-    error_message = "the ~19 GB worker image isn't part of any ECS rollback mechanism, so it should keep far fewer images than RELEASES_KEPT (10)"
+    error_message = "worker images aren't part of any ECS rollback mechanism, so retention should stay far below releases_kept (10), and even because one release pushes two images"
   }
 }
 

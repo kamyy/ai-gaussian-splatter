@@ -29,7 +29,7 @@ gh_require_login
 gh_require_aws_deploy_account
 REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
 
-# Both checks run before a ~19 GB build that would otherwise only fail at the push. Each reads only its own not-found
+# Both checks run before a build that would otherwise only fail at the push. Each reads only its own not-found
 # error as an answer. Any other error stops here with AWS's own message.
 if ! REPO_CHECK=$(aws ecr describe-repositories --region "$REGION" --repository-names "$REPO" 2>&1); then
   if [[ $REPO_CHECK == *RepositoryNotFoundException* ]]; then
@@ -39,21 +39,37 @@ if ! REPO_CHECK=$(aws ecr describe-repositories --region "$REGION" --repository-
   fi
   exit 1
 fi
-if IMAGE_CHECK=$(aws ecr describe-images --region "$REGION" --repository-name "$REPO" --image-ids imageTag="$TAG" \
-  2>&1); then
-  echo "$REPO:$TAG is already pushed, and a pushed tag can never be replaced. Commit again for a new build." >&2
-  exit 1
-fi
-if [[ $IMAGE_CHECK != *ImageNotFoundException* ]]; then
-  echo "$IMAGE_CHECK" >&2
-  exit 1
-fi
+# One commit produces two images, one per worker-job stage, and infra/locals.tf appends these same suffixes when it
+# builds the URIs the web task hands to web/lib/server/ec2Launcher.ts.
+STAGES=(reconstruct train)
 
-confirm "Build and push $REPO:$TAG to account $AWS_ACCOUNT_ID, then set WORKER_IMAGE_TAG=$TAG?"
+# Either tag already being present means this commit was pushed before. Checked before the build, because a pushed
+# tag can never be replaced and the repository holds both.
+for stage in "${STAGES[@]}"; do
+  if IMAGE_CHECK=$(aws ecr describe-images --region "$REGION" --repository-name "$REPO" \
+    --image-ids imageTag="$TAG-$stage" 2>&1); then
+    echo "$REPO:$TAG-$stage is already pushed, and a pushed tag can never be replaced. Commit again for a new build." >&2
+    exit 1
+  fi
+  if [[ $IMAGE_CHECK != *ImageNotFoundException* ]]; then
+    echo "$IMAGE_CHECK" >&2
+    exit 1
+  fi
+done
+
+confirm "Build and push $REPO:$TAG-reconstruct and $REPO:$TAG-train to account $AWS_ACCOUNT_ID, then set WORKER_IMAGE_TAG=$TAG?"
 
 aws ecr get-login-password --region "$REGION" | podman login --username AWS --password-stdin "$REGISTRY"
-podman build -t "$REGISTRY/$REPO:$TAG" "$ROOT/worker"
-podman push "$REGISTRY/$REPO:$TAG"
+
+# Both images are built before either is pushed, so a build failure in the second leaves nothing half-released under
+# a tag that can never be reused. WORKER_IMAGE_TAG is set only once both are up, because a deploy reading it expects
+# to find both.
+for stage in "${STAGES[@]}"; do
+  podman build --target "$stage" -t "$REGISTRY/$REPO:$TAG-$stage" "$ROOT/worker"
+done
+for stage in "${STAGES[@]}"; do
+  podman push "$REGISTRY/$REPO:$TAG-$stage"
+done
 gh variable set WORKER_IMAGE_TAG --body "$TAG"
 
-echo "WORKER_IMAGE_TAG is now $TAG. The next deploy points WORKER_IMAGE_URI at it."
+echo "WORKER_IMAGE_TAG is now $TAG. The next deploy points both worker image URIs at it."

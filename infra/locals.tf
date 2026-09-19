@@ -53,8 +53,12 @@ locals {
   # The registry hostname web/lib/server/ec2Launcher.ts's user-data logs into before pulling. It is built from
   # account/region directly rather than parsed out of aws_ecr_repository.worker.repository_url, matching how
   # .github/workflows/deploy.yml and RUNBOOK.md construct the same string for their own docker/podman logins.
-  ecr_registry     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com"
-  worker_image_uri = "${aws_ecr_repository.worker.repository_url}:${var.worker_image_tag}"
+  ecr_registry = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com"
+  # One repository, two tag suffixes, the same shape infra/web.tf uses for -web and -migrate. The stages run
+  # different images: worker/Dockerfile's reconstruct target carries COLMAP and no torch, its train target the
+  # reverse, so each stage pulls only what it runs.
+  worker_reconstruct_image_uri = "${aws_ecr_repository.worker.repository_url}:${var.worker_image_tag}-reconstruct"
+  worker_train_image_uri       = "${aws_ecr_repository.worker.repository_url}:${var.worker_image_tag}-train"
 
   # .github/workflows/deploy.yml is the only caller that ever diverges these two builds (ARCHITECTURE.md).
   migrate_image_tag = var.migrate_image_tag != "" ? var.migrate_image_tag : var.web_image_tag
@@ -62,9 +66,10 @@ locals {
   # How many releases the web ECR repository keeps per tag suffix. See infra/registry.tf.
   releases_kept = 10
 
-  # Far shallower than releases_kept: the worker image is ~19 GB and isn't part of any ECS rollback mechanism,
-  # so there's no reason to pay for that many of them. See infra/registry.tf.
-  worker_releases_kept = 2
+  # Far shallower than releases_kept: the worker images aren't part of any ECS rollback mechanism, so there's no
+  # reason to pay for that many of them. Counted in images rather than releases, and one release pushes two, so this
+  # keeps two releases. See infra/registry.tf.
+  worker_releases_kept = 4
 
   # ---------------------------------------------------------------------------
   # Database wiring

@@ -32,11 +32,17 @@ worker_use_dev_aws() {
   fi
 }
 
+# Usage: worker_build_image <stage>
+#
+# worker/Dockerfile has no default target: it builds a reconstruct image and a train image, each carrying only what
+# its stage runs. Both share every earlier stage, so building the second after the first is nearly free.
+#
 # worker/pipeline/ and worker/run_job.py are copied after uv sync, so a code-only edit rebuilds in seconds and an
 # unchanged tree is fully cached. Touching pyproject.toml or uv.lock re-runs uv sync as well. Only a cold build
-# downloads torch/CUDA (~19 GB).
+# downloads torch and CUDA.
 worker_build_image() {
-  podman build -t splat-worker:dev "$ROOT/worker"
+  local stage=$1
+  podman build --target "$stage" -t "splat-worker-$stage:dev" "$ROOT/worker"
 }
 
 # Usage: worker_run_stage <splat-id> <stage> [extra podman run args]
@@ -67,5 +73,5 @@ worker_run_stage() {
     -e STAGE="$stage" \
     "$@" \
     -v "$ROOT/worker/jobdir:/tmp/job" \
-    splat-worker:dev
+    "splat-worker-$stage:dev"
 }

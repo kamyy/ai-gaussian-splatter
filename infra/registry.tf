@@ -62,11 +62,13 @@ resource "aws_ecr_lifecycle_policy" "web" {
   })
 }
 
-# A separate repository, not a third tag suffix on the one above: the worker image is a completely different
-# build (~19 GB of COLMAP + gsplat) with no reason to share the web repository's retention depth. It isn't part
-# of any ECS rollback mechanism either — web/lib/server/ec2Launcher.ts just reads whatever WORKER_IMAGE_URI
-# currently points to — so worker_releases_kept (infra/locals.tf) is far shallower than releases_kept. GPU worker
-# deployment stays manual (RUNBOOK.md), so nothing pushes here automatically.
+# A separate repository, not more tag suffixes on the one above: the worker images are a completely different
+# build (COLMAP and gsplat rather than Next.js) with no reason to share the web repository's retention depth. They
+# aren't part of any ECS rollback mechanism either — web/lib/server/ec2Launcher.ts just reads whichever image URI it
+# is given — so worker_releases_kept (infra/locals.tf) is far shallower than releases_kept. GPU worker deployment
+# stays manual (RUNBOOK.md), so nothing pushes here automatically.
+#
+# The -reconstruct and -train suffixes both live here, so the lifecycle policy below counts images across both.
 resource "aws_ecr_repository" "worker" {
   name                 = "ai-gaussian-splatter-worker"
   image_tag_mutability = "IMMUTABLE"
@@ -83,7 +85,7 @@ resource "aws_ecr_lifecycle_policy" "worker" {
   policy = jsonencode({
     rules = [{
       rulePriority = 1
-      description  = "Keep the last ${local.worker_releases_kept} worker images"
+      description  = "Keep the last ${local.worker_releases_kept} worker images across both tag suffixes"
       selection = {
         tagStatus      = "tagged"
         tagPatternList = ["*"]

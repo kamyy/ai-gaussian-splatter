@@ -8,7 +8,7 @@ import logging
 import sys
 from pathlib import Path
 
-from pipeline import export, fetch, sfm, sparse_export, status, train
+from pipeline import fetch, sfm, sparse_export, status
 from pipeline.colmap_model import SparseModel, read_sparse_model
 from pipeline.config import Settings, get_settings
 from pipeline.instance import terminate_self
@@ -57,6 +57,11 @@ def _run_reconstruct(settings: Settings) -> int:
 
 
 def _run_train(settings: Settings) -> int:
+    # Imported here rather than at module scope because both modules reach torch, which the reconstruct image does not
+    # carry (worker/Dockerfile). At module scope a reconstruct run would fail on the import before it ran anything.
+    # worker/pipeline/export.py reaches it through worker/pipeline/train.py rather than directly.
+    from pipeline import export, train
+
     try:
         status.report_status(settings, "training_running")
         photos_dir = fetch.fetch_photos(settings)
