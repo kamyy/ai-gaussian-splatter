@@ -2,12 +2,12 @@
 # Load Balancer.
 #
 # The tasks share the public subnets with the ALB and carry a public IP. Their calls to the EC2 API egress
-# through the internet gateway; S3 calls stay on AWS's network through the gateway endpoint (network.tf) instead.
+# through the internet gateway; S3 calls stay on AWS's network through the gateway endpoint (infra/network.tf) instead.
 # Nothing can open a connection to them regardless: aws_security_group.web admits only aws_security_group.alb.
 # TLS terminates at the ALB with an ACM certificate for local.app_hostname, and plain HTTP is redirected to
 # HTTPS.
 #
-# The ALB's own access-log bucket is here rather than in data.tf, because nothing but the load balancer writes it.
+# The ALB's own access-log bucket is here rather than in infra/data.tf, because nothing but the load balancer writes it.
 
 resource "aws_iam_role" "execution" {
   name               = local.execution_role_name
@@ -141,9 +141,9 @@ resource "aws_iam_role_policy" "task" {
         Action   = local.s3_read_write_actions
         Resource = [aws_s3_bucket.splats.arn, "${aws_s3_bucket.splats.arn}/*"]
       },
-      # The app's own runtime permission to re-fetch the DB master password at connect time (databaseUrl.ts's
-      # fetchDatabasePassword), separate from execution_role's DbSecretRead statement above, which only covers
-      # what ECS itself needs at task start.
+      # The app's own runtime permission to re-fetch the DB master password at connect time
+      # (web/lib/server/databaseUrl.ts's fetchDatabasePassword), separate from execution_role's DbSecretRead
+      # statement above, which only covers what ECS itself needs at task start.
       {
         Sid      = "DbSecretRead"
         Effect   = "Allow"
@@ -480,9 +480,9 @@ resource "aws_ecs_task_definition" "web" {
       }
     }
     environment = concat(local.db_environment, [
-      # Read by every AWS SDK client the app constructs (s3.ts, ec2Launcher.ts, databaseUrl.ts's
-      # fetchDatabasePassword) via getEnv().AWS_REGION. Without this, each client falls back to its own default
-      # region resolution, which can land somewhere other than where these resources actually live.
+      # Read via getEnv().AWS_REGION by every AWS SDK client the app constructs, in web/lib/server/s3.ts,
+      # web/lib/server/ec2Launcher.ts, and web/lib/server/databaseUrl.ts. Without this, each client falls back to
+      # its own default region resolution, which can land somewhere other than where these resources actually live.
       { name = "AWS_REGION", value = var.aws_region },
       { name = "UPLOADS_BUCKET", value = aws_s3_bucket.uploads.id },
       { name = "SPLATS_BUCKET", value = aws_s3_bucket.splats.id },

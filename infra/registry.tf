@@ -2,9 +2,9 @@
 # references an image tag: a first apply that tried to create both at once would leave the service with
 # nothing to pull, tripping the deployment circuit breaker.
 #
-# A deploy that changes web/ pushes two immutable tags, <tree>-web and <tree>-migrate (see web/Dockerfile). A
-# lifecycle rule per suffix caps each, so RELEASES_KEPT below counts releases rather than images. A deploy that leaves
-# web/ alone pushes nothing, so those releases are distinct web/ builds rather than commits.
+# A deploy that changes web/ pushes two immutable tags, <tree>-web and <tree>-migrate (see web/Dockerfile). A lifecycle
+# rule per suffix caps each, so local.releases_kept (infra/locals.tf) counts releases rather than images. A deploy that
+# leaves web/ alone pushes nothing, so those releases are distinct web/ builds rather than commits.
 resource "aws_ecr_repository" "web" {
   name = "ai-gaussian-splatter"
 
@@ -29,7 +29,7 @@ resource "aws_ecr_repository" "web" {
 # running is eligible once enough newer images exist. Running tasks survive that, having already pulled. The
 # next placement (a Spot reclaim, a scale-out, or the circuit breaker's own rollback) fails with
 # CannotPullContainerError. The exposure is real after a rollback, where the live tag is deliberately an old
-# one, so RELEASES_KEPT is the number that protects it. Rolling back also re-points the migration task
+# one, so local.releases_kept is the number that protects it. Rolling back also re-points the migration task
 # definition at the matching -migrate tag, so both of a release's tags are kept to the same depth.
 resource "aws_ecr_lifecycle_policy" "web" {
   repository = aws_ecr_repository.web.name
@@ -65,7 +65,7 @@ resource "aws_ecr_lifecycle_policy" "web" {
 # A separate repository, not a third tag suffix on the one above: the worker image is a completely different
 # build (~19 GB of COLMAP + gsplat) with no reason to share the web repository's retention depth. It isn't part
 # of any ECS rollback mechanism either — web/lib/server/ec2Launcher.ts just reads whatever WORKER_IMAGE_URI
-# currently points to — so worker_releases_kept (locals.tf) is far shallower than releases_kept. GPU worker
+# currently points to — so worker_releases_kept (infra/locals.tf) is far shallower than releases_kept. GPU worker
 # deployment stays manual (RUNBOOK.md), so nothing pushes here automatically.
 resource "aws_ecr_repository" "worker" {
   name                 = "ai-gaussian-splatter-worker"

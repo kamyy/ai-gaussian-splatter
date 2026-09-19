@@ -1,5 +1,5 @@
 # RDS Postgres and the two S3 buckets the app reads and writes (uploads, splats). The ALB's access-log bucket lives in
-# web.tf, beside the load balancer that writes it.
+# infra/web.tf, beside the load balancer that writes it.
 #
 # The uploads and splats buckets' CORS rules name local.app_origin rather than "*": the browser talks to S3
 # directly on both legs (presigned PUT on upload, presigned GET in the viewer), so "*" would let another
@@ -29,9 +29,9 @@ resource "aws_db_instance" "main" {
 
   db_name  = local.database_name
   username = "splatter_admin"
-  # RDS creates and rotates its own Secrets Manager secret for the master password, with no separate
-  # `random_password` resource needed. The generated secret's JSON includes both `username` and `password`
-  # fields, so web.tf reads both off the one secret ARN in `aws_db_instance.main.master_user_secret[0].secret_arn`.
+  # RDS creates and rotates its own Secrets Manager secret for the master password, with no separate `random_password`
+  # resource needed. The generated secret's JSON includes both `username` and `password` fields, so infra/web.tf reads
+  # both off the one secret ARN in `aws_db_instance.main.master_user_secret[0].secret_arn`.
   manage_master_user_password = true
 
   # RDS defaults to 1 day, which is the whole recovery window for a bad migration given no deletion protection.

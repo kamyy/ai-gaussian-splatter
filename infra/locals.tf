@@ -10,7 +10,7 @@ locals {
   project_tag = "ai-gaussian-splatter"
 
   # EC2 has no native "restrict to the calling/launched instance" condition, so the worker's self-termination
-  # grant (worker_iam.tf) and the web task role's RunInstances/TerminateInstances grants (web.tf) both scope
+  # grant (infra/worker_iam.tf) and the web task role's RunInstances/TerminateInstances grants (infra/web.tf) both scope
   # themselves to instances carrying this tag instead.
   worker_tag_key   = "Role"
   worker_tag_value = "worker"
@@ -34,7 +34,7 @@ locals {
   availability_zones = [for suffix in ["a", "b"] : "${var.aws_region}${suffix}"]
 
   # The one subnet the worker's spot instance ever launches into (web/lib/server/ec2Launcher.ts's SubnetId). A
-  # single local keeps web.tf's WORKER_SUBNET_ID env var and its RunInstances IAM grant from naming two different
+  # single local keeps infra/web.tf's WORKER_SUBNET_ID env var and its RunInstances IAM grant from naming two different
   # subnets.
   worker_subnet = values(aws_subnet.public)[0]
 
@@ -42,7 +42,7 @@ locals {
 
   # Derived from the hostname above rather than passed in separately, so the certificate, the DNS record, and the
   # origin the worker PATCHes status back to cannot disagree. It carries no trailing slash, because both consumers
-  # append to it: worker/pipeline/status.py would double-slash its callback path, and the S3 CORS rules in data.tf
+  # append to it: worker/pipeline/status.py would double-slash its callback path, and the S3 CORS rules in infra/data.tf
   # are matched against the browser's Origin header exactly.
   app_origin = "https://${local.app_hostname}"
 
@@ -59,11 +59,11 @@ locals {
   # .github/workflows/deploy.yml is the only caller that ever diverges these two builds (ARCHITECTURE.md).
   migrate_image_tag = var.migrate_image_tag != "" ? var.migrate_image_tag : var.web_image_tag
 
-  # How many releases the web ECR repository keeps per tag suffix. See registry.tf.
+  # How many releases the web ECR repository keeps per tag suffix. See infra/registry.tf.
   releases_kept = 10
 
   # Far shallower than releases_kept: the worker image is ~19 GB and isn't part of any ECS rollback mechanism,
-  # so there's no reason to pay for that many of them. See registry.tf.
+  # so there's no reason to pay for that many of them. See infra/registry.tf.
   worker_releases_kept = 2
 
   # ---------------------------------------------------------------------------
@@ -75,9 +75,9 @@ locals {
   # Where web/Dockerfile downloads Amazon's RDS global CA bundle, in both of its stages. Must match that path.
   rds_ca_bundle_path = "/app/certs/rds-global-bundle.pem"
 
-  # Shared by both containers in web.tf that talk to Postgres, the web service and the migration task. Defined once
-  # so a future change (a renamed secret field, a moved CA path) can't be applied to one and silently missed on
-  # the other. The username is shared too, since it never changes. The password is not: see db_password_secret.
+  # Shared by both containers in infra/web.tf that talk to Postgres, the web service and the migration task. Defined
+  # once so a future change (a renamed secret field, a moved CA path) can't be applied to one and silently missed on the
+  # other. The username is shared too, since it never changes. The password is not: see db_password_secret.
   db_environment = [
     { name = "DATABASE_HOST", value = aws_db_instance.main.address },
     { name = "DATABASE_PORT", value = tostring(aws_db_instance.main.port) },
@@ -89,9 +89,9 @@ locals {
   db_user_secret = [
     { name = "DATABASE_USER", valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:username::" },
   ]
-  # Only the migration task takes this: it runs for seconds and exits, well inside RDS's 7-day rotation window for
-  # this secret, so a value ECS injects once at task start can't go stale. The long-lived web service instead
-  # fetches the current password itself at connect time (web.tf's DATABASE_SECRET_ARN, web/lib/server/databaseUrl.ts's
+  # Only the migration task takes this: it runs for seconds and exits, well inside RDS's 7-day rotation window for this
+  # secret, so a value ECS injects once at task start can't go stale. The long-lived web service instead fetches the
+  # current password itself at connect time (infra/web.tf's DATABASE_SECRET_ARN, web/lib/server/databaseUrl.ts's
   # fetchDatabasePassword) rather than trusting one this static either.
   db_password_secret = [
     { name = "DATABASE_PASSWORD", valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:password::" },
@@ -106,7 +106,7 @@ locals {
   # has to be kept in sync by hand.
   container_port = 8000
 
-  # Must stay above the ALB's own idle timeout (60s, left at its default in web.tf) or the ALB serves intermittent
+  # Must stay above the ALB's own idle timeout (60s, left at its default in infra/web.tf) or the ALB serves intermittent
   # 502s. See AGENTS.md.
   keep_alive_timeout_ms = "65000"
 
@@ -114,7 +114,7 @@ locals {
   # Policy documents
   # ---------------------------------------------------------------------------
 
-  # The trust policy shared by every ECS task role in web.tf.
+  # The trust policy shared by every ECS task role in infra/web.tf.
   ecs_tasks_assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -124,15 +124,16 @@ locals {
     }]
   })
 
-  # Shared by every S3 role-policy grant in web.tf/worker_iam.tf, so an action list change (e.g. adding
-  # s3:PutObjectTagging) is made once instead of separately on each role/bucket pair.
+  # Shared by every S3 role-policy grant in infra/web.tf and infra/worker_iam.tf, so an action list change (e.g.
+  # adding s3:PutObjectTagging) is made once instead of separately on each role/bucket pair.
   s3_read_actions = ["s3:GetObject", "s3:GetBucketLocation", "s3:ListBucket"]
   s3_read_write_actions = concat(local.s3_read_actions, [
     "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload",
   ])
 
-  # Adds the aws:SecureTransport deny to a data.tf bucket that otherwise has no other policy statement of its own.
-  # The access-log bucket in web.tf writes its own policy instead, because it also needs the ALB log-delivery grant.
+  # Adds the aws:SecureTransport deny to a bucket in infra/data.tf that otherwise has no policy statement of its own.
+  # The access-log bucket in infra/web.tf writes its own policy instead, because it also needs the ALB log-delivery
+  # grant.
   deny_insecure_transport_policy = {
     for name, bucket in { uploads = aws_s3_bucket.uploads, splats = aws_s3_bucket.splats } :
     name => jsonencode({

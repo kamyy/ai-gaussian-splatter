@@ -14,9 +14,8 @@ if (existsSync(envFile)) {
   }
 }
 
-// Two projects: component tests need jsdom, while server-side code is plain
-// Node — no DOM, and a real Postgres for the rate-limit and Route Handler tiers.
-// Route Handlers live under app/api/, so those tests are routed to the server
+// Two projects: component tests need jsdom, while server-side code is plain Node with no DOM, plus a real Postgres for
+// the rate-limit and Route Handler tiers. Route Handlers live under app/api/, so those tests are routed to the server
 // project explicitly and excluded from the client one.
 export default defineConfig({
   test: {

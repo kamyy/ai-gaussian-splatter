@@ -39,9 +39,8 @@ set -euo pipefail
 # and no ceiling, billing until someone notices. -f skips systemd, in case systemd is why shutdown failed.
 shutdown -h +${p.maxLifetimeMinutes} || poweroff -f
 
-# Plaintext, and EC2 user-data is readable by anyone holding
-# ec2:DescribeInstances. The token is per-job and only authorizes status
-# updates on that one job (lib/server/auth.ts), which is what bounds this.
+# Plaintext, and EC2 user-data is readable by anyone holding ec2:DescribeInstances. The token is per-job and only
+# authorizes status updates on that one job (web/lib/server/auth.ts), which is what bounds this.
 CALLBACK_TOKEN="${p.callbackToken}"
 JOB_ID="${p.jobId}"
 SPLAT_ID="${p.splatId}"
@@ -66,8 +65,9 @@ docker run --rm --gpus all \\
 }
 
 // Populated from infra/'s ECR repository output once infra is deployed. Placeholders for local/pre-deploy development.
-// Shared by both web/app/api/v1/splats/[splatId]/process/route.ts (stage "reconstruct") and .../train/route.ts
-// (stage "train"), which launch the same worker image with a different STAGE.
+// Shared by web/app/api/v1/splats/[splatId]/process/route.ts (stage "reconstruct") and
+// web/app/api/v1/splats/[splatId]/train/route.ts (stage "train"), which launch the same worker image with a
+// different STAGE.
 export function workerImageUri(): string {
   return process.env.WORKER_IMAGE_URI ?? "REPLACE_WITH_ECR_IMAGE_URI";
 }
@@ -134,11 +134,10 @@ export async function launchJob(params: {
       SubnetId: env.WORKER_SUBNET_ID,
       SecurityGroupIds: [env.WORKER_SECURITY_GROUP_ID],
       IamInstanceProfile: { Arn: env.WORKER_INSTANCE_PROFILE_ARN },
-      // The pipeline runs in a container on default bridge networking, which puts IMDS one hop further away than the
-      // host. EC2's default response hop limit of 1 therefore drops the token PUT that worker/pipeline/instance.py
-      // opens with, so it cannot read its own instance ID and skips self-termination. The instance then bills until
-      // someone notices. Raising the limit is the fix. Requiring tokens is only safe alongside it, since it removes the
-      // IMDSv1 fallback the container would otherwise be relying on for credentials.
+      // The pipeline runs in a container on default bridge networking, one hop further from IMDS than the host. At
+      // EC2's default hop limit of 1, worker/pipeline/instance.py cannot read its own instance ID and silently skips
+      // self-termination, and the instance bills until someone notices (AGENTS.md). HttpTokens is only safe paired
+      // with the raised limit, since on its own it breaks the container's credentials too.
       MetadataOptions: {
         HttpTokens: "required",
         HttpPutResponseHopLimit: 2,
@@ -153,17 +152,16 @@ export async function launchJob(params: {
           ResourceType: "instance",
           Tags: [
             { Key: "Name", Value: `ai-gaussian-splatter-worker-${params.jobId}` },
-            // Must match infra/locals.tf's worker_tag_key/worker_tag_value and worker_iam.tf's self-termination
-            // grant. That's a separate Terraform config, so the constant can't be imported directly, and the two
-            // must stay in sync by hand.
+            // Must match infra/locals.tf's worker_tag_key/worker_tag_value and infra/worker_iam.tf's self-termination
+            // grant. That's a separate Terraform config, so the constant can't be imported directly, and the two must
+            // stay in sync by hand.
             { Key: "Role", Value: "worker" },
             { Key: "JobId", Value: params.jobId },
           ],
         },
       ],
-      // Paired with the scheduled `shutdown -h` in renderUserData's max-lifetime safety net above: without this,
-      // that shutdown would just stop the instance (AWS's default), leaving it around to bill EBS storage and
-      // block cleanup instead of actually going away.
+      // Without this, renderUserData's scheduled `shutdown -h` would only stop the instance (AWS's default), leaving
+      // it to bill EBS storage and block cleanup instead of going away.
       InstanceInitiatedShutdownBehavior: "terminate",
     }),
   );
@@ -178,7 +176,8 @@ export async function launchJob(params: {
 /**
  * Local-dev substitute for launchJob(): runs the worker image on the caller's own GPU via Podman instead of
  * launching a real EC2 spot instance. Both launch routes gate it behind WORKER_LOCAL_LAUNCH
- * (web/app/api/v1/splats/[splatId]/process/route.ts and .../train/route.ts). It is never reachable in production,
+ * (web/app/api/v1/splats/[splatId]/process/route.ts and web/app/api/v1/splats/[splatId]/train/route.ts). It is never
+ * reachable in production,
  * where the ECS task has neither a podman binary nor a GPU.
  *
  * Fire-and-forget like the EC2 launch it replaces: the worker reports its own progress back over

@@ -14,12 +14,11 @@ import { ScrollEdgeButton } from "./ScrollEdgeButton";
 import { SplatCarouselCard } from "./SplatCarouselCard";
 import { useDragMomentumScroll } from "./useDragMomentumScroll";
 
-// The navbar Box in web/app/(authenticated)/splats/layout.tsx spans the full viewport height and gives this
-// component a definite height to fill, minus its own tiny top/bottom padding. The scroll
-// container below stretches to it so the list reaches near the bottom of the viewport. It's plain overflow-y, not a
-// JS carousel, so the mouse wheel and a trackpad scroll it natively and it gets a real (if thinned, see
-// .thin-scrollbar in app/globals.css) scrollbar for free — click-and-drag panning with momentum is layered on top by
-// useDragMomentumScroll.
+// The navbar Box in web/app/(authenticated)/splats/layout.tsx spans the full viewport height and gives this component a
+// definite height to fill, minus its own tiny top/bottom padding. The scroll container below stretches to it so the
+// list reaches near the bottom of the viewport. It's plain overflow-y, not a JS carousel, so the mouse wheel and a
+// trackpad scroll it natively and it gets a real (if thinned, see .thin-scrollbar in web/app/globals.css) scrollbar for
+// free — click-and-drag panning with momentum is layered on top by useDragMomentumScroll.
 export function SplatCarousel() {
   const { data: splats, isLoading, error } = useSplats();
   const [modalOpened, setModalOpened] = useState(false);

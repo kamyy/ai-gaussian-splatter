@@ -2,7 +2,7 @@
 # limiting/daily-cap logic in the web app.
 #
 # The Budgets API only operates against us-east-1, regardless of where the rest of the app runs — hence
-# provider = aws.billing (see providers.tf).
+# provider = aws.billing (see infra/providers.tf).
 
 resource "aws_budgets_budget" "monthly" {
   provider = aws.billing

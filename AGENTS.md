@@ -241,7 +241,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - **The worker image lives in its own ECR repository (`ai-gaussian-splatter-worker`, `infra/registry.tf`), separate from the web repository above, and `var.worker_image_tag` has no default.**
   - No deploy ever rebuilds and pushes it — GPU worker deployment stays manual (`RUNBOOK.md`) — so this variable only changes when someone hand-builds and pushes a new one. It stays a commit SHA, because `scripts/prod/worker-push-image.sh` tags the image with the checked-out commit rather than a tree.
   - Re-running that script on an already-pushed commit fails at `podman push` with `ImageTagAlreadyExists`. Commit again rather than retagging.
-  - Its lifecycle policy keeps far fewer images (`local.worker_releases_kept`, currently 2) than the web repository's `RELEASES_KEPT` (10): at ~19 GB each the worker image isn't cheap to retain, and it isn't part of any ECS rollback mechanism anyway — `web/lib/server/ec2Launcher.ts` just reads whatever `WORKER_IMAGE_URI` currently names.
+  - Its lifecycle policy keeps far fewer images (`local.worker_releases_kept`, currently 2) than the web repository's `local.releases_kept` (10): at ~19 GB each the worker image isn't cheap to retain, and it isn't part of any ECS rollback mechanism anyway — `web/lib/server/ec2Launcher.ts` just reads whatever `WORKER_IMAGE_URI` currently names.
 
 ### Variables & state backend
 

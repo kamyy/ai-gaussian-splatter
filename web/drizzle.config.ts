@@ -6,7 +6,8 @@ import { databaseSsl, resolveDatabaseUrl } from "./lib/server/databaseUrl";
 // Pool in web/lib/server/db/index.ts, which takes discrete fields and re-fetches the RDS password per connection
 // instead of assembling a URL.
 //
-// `casing` is deliberately not set: every column in schema.ts carries its database name explicitly, so there is no
+// `casing` is deliberately not set: every column in web/lib/server/db/schema.ts carries its database name explicitly,
+// so there is no
 // derivation rule that could drift between what drizzle-kit emits into a migration and what the running app queries.
 // See AGENTS.md.
 //

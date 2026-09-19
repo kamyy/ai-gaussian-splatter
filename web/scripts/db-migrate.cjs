@@ -1,5 +1,5 @@
-// Applies the migrations in web/drizzle/ — used by `pnpm db:migrate` everywhere: local dev, ci.yml, and the migrator
-// image's CMD (web/Dockerfile).
+// Applies the migrations in web/drizzle/ — used by `pnpm db:migrate` everywhere: local dev,
+// .github/workflows/ci.yml, and the migrator image's CMD (web/Dockerfile).
 //
 // Not `drizzle-kit migrate` because it can exit 1 without printing any error. drizzle-team/drizzle-orm#5521. Delete
 // this script and point db:migrate back at `drizzle-kit migrate` once the fix ships in a stable release.

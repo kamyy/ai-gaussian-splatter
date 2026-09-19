@@ -71,7 +71,7 @@ variable "clerk_secret_key_arn" {
 
   # Catches a missing suffix, a bare secret name, or the wrong secret name. A variable validation block can only
   # see the variable's own value, not other resources, so it can't also check the ARN's account/region match this
-  # deploy's own — that cross-check is a lifecycle precondition on aws_iam_role_policy.execution in web.tf
+  # deploy's own — that cross-check is a lifecycle precondition on aws_iam_role_policy.execution in infra/web.tf
   # instead.
   validation {
     condition     = can(regex("^arn:aws:secretsmanager:[a-z0-9-]+:\\d{12}:secret:ai-gaussian-splatter/clerk-secret-key-[A-Za-z0-9]{6}$", var.clerk_secret_key_arn))

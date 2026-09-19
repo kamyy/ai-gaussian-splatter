@@ -127,8 +127,8 @@ def _train_loop(sparse: SparseModel, photos_dir: Path, settings: Settings):
 
 
 def render_view(model: GaussianModel, viewmat: torch.Tensor, K: torch.Tensor, width: int, height: int) -> torch.Tensor:
-    """Public entrypoint for worker/pipeline/export.py's thumbnail render — reuses the same
-    rasterization call as training, just without gradient tracking.
+    """Public entrypoint for worker/pipeline/export.py's thumbnail render. It reuses the same rasterization call as
+    training, just without gradient tracking.
     """
     with torch.no_grad():
         rendered, _alpha, _meta = _render(model, viewmat, K, width, height)
@@ -218,10 +218,9 @@ def _build_optimizer(model: GaussianModel) -> torch.optim.Optimizer:
 
 
 def _render(model: GaussianModel, viewmat: torch.Tensor, K: torch.Tensor, width: int, height: int):
-    """Returns (rendered_image, alpha, meta) for the single camera passed in.
-    gsplat.rasterization is batched over cameras, so we slice batch index 0
-    out of the image and alpha before returning them. Meta is returned as-is,
-    since neither caller currently uses it.
+    """Returns (rendered_image, alpha, meta) for the single camera passed in. gsplat.rasterization is batched over
+    cameras, so batch index 0 is sliced out of the image and alpha before returning them. Meta is returned as-is,
+    since neither caller uses it.
     """
     import gsplat  # imported lazily so the rest of the module is importable/testable without CUDA/gsplat installed
 

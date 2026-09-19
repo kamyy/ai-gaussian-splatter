@@ -73,10 +73,10 @@ export function getDb(): NodePgDatabase<typeof schema> {
       ? new SecretPasswordPool({ ...options, password: () => fetchDatabasePassword(DATABASE_SECRET_ARN, AWS_REGION) })
       : new Pool({ ...options, password: DATABASE_PASSWORD });
     globalForDb.pool.on("error", err => {
-      // Without this, a single dead idle connection takes down the process. `pg` re-emits errors from idle pooled clients
-      // on the Pool itself, and an unhandled "error" event on an EventEmitter is an uncaught exception. So an RDS
-      // failover, a maintenance reboot, or any server-side idle reap would kill the whole task and drop every in-flight
-      // request instead of the pool quietly discarding one client.
+      // Without this, a single dead idle connection takes down the process. `pg` re-emits errors from idle pooled
+      // clients on the Pool itself, and an unhandled "error" event on an EventEmitter is an uncaught exception. So an
+      // RDS failover, a maintenance reboot, or any server-side idle reap would kill the whole task and drop every
+      // in-flight request instead of the pool quietly discarding one client.
       console.error("Idle pg client error (connection discarded):", err);
     });
     globalForDb.pgDb = drizzle(globalForDb.pool, { schema });

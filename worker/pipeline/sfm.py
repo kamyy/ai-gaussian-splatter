@@ -1,5 +1,5 @@
-"""Structure-from-Motion via COLMAP: exhaustive matching, favouring accuracy
-over speed for a small object-centric photo set.
+"""Structure-from-Motion via COLMAP: exhaustive matching, favouring accuracy over speed for a small object-centric
+photo set.
 
 Requires the `colmap` CLI on PATH, which `worker/Dockerfile` installs. It is not a pip package, hence subprocess
 rather than pycolmap.
@@ -28,13 +28,12 @@ class SfmResult:
 
 
 def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
-    """Run the standard COLMAP CLI pipeline (feature extraction -> exhaustive
-    matching -> incremental mapping) and return the sparse reconstruction.
+    """Run the standard COLMAP CLI pipeline (feature extraction -> exhaustive matching -> incremental mapping) and
+    return the sparse reconstruction.
 
-    A good object-centric capture registers close to every photo, so a low
-    registered_ratio signals a capture-quality problem rather than a pipeline
-    bug. The caller should surface it instead of silently training on a
-    broken reconstruction.
+    A good object-centric capture registers close to every photo, so a low registered_ratio signals a capture-quality
+    problem rather than a pipeline bug. The caller should surface it instead of silently training on a broken
+    reconstruction.
     """
     database_path = workdir / "database.db"
     sparse_dir = workdir / "sparse"

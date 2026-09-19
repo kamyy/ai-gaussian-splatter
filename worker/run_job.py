@@ -1,9 +1,7 @@
-"""Worker entrypoint. Reads job config from env vars and runs one phase of the
-pipeline, chosen by settings.stage: "reconstruct" (fetch -> COLMAP -> point
-cloud, then pauses so the user can decide whether to train) or "train" (fetch
--> gsplat training -> export). Reports status back to the web app at each
-phase and self-terminates the EC2 instance from the finally block below, on
-success and on failure alike, so a job never runs up spend past its own end.
+"""Worker entrypoint. Reads job config from env vars and runs one phase of the pipeline, chosen by settings.stage:
+"reconstruct" (fetch -> COLMAP -> point cloud, then pauses so the user can decide whether to train) or "train" (fetch ->
+gsplat training -> export). Reports status back to the web app at each phase and self-terminates the EC2 instance from
+the finally block below, on success and on failure alike, so a job never runs up spend past its own end.
 """
 
 import logging

@@ -40,9 +40,9 @@ export async function uploadPhotos(splatId: string, files: File[], token: string
     }),
   );
 
-  // Each failure is already recorded per-file via setUploadStatus above (UploadProgress.tsx shows it); this throw is
-  // what lets a caller like CreateSplatModal.tsx learn that at least one upload didn't make it, instead of treating
-  // a fully-failed batch as success.
+  // Each failure is already recorded per-file via setUploadStatus above, which web/components/upload/UploadProgress.tsx
+  // renders. This throw is what lets web/components/splats/CreateSplatModal.tsx learn that at least one upload didn't
+  // make it, instead of treating a fully-failed batch as success.
   const failedCount = results.filter(ok => !ok).length;
   if (failedCount > 0) {
     throw new Error(`${failedCount} of ${files.length} photo upload${files.length === 1 ? "" : "s"} failed`);
