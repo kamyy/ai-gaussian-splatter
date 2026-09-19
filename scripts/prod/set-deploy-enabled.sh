@@ -43,7 +43,7 @@ fi
 
 # Checked here rather than earlier, so the gap between the check and the write stays one API round-trip. A run whose
 # capture-deploy-enabled job has not reached a runner yet still reads this variable live.
-gh_require_no_ci
+gh_require_no_in_progress_ci
 
 gh variable set DEPLOY_ENABLED --body "$wanted"
 echo "GitHub repository variable DEPLOY_ENABLED is now $wanted."

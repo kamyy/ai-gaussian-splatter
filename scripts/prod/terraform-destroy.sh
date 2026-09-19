@@ -22,7 +22,7 @@ if [[ ${deploy_enabled,,} == true ]]; then
   exit 1
 fi
 
-gh_require_no_ci
+gh_require_no_in_progress_ci
 gh_require_aws_deploy_account
 
 confirm "Destroy every resource in infra/'s state in account $AWS_ACCOUNT_ID, data buckets and database included?"

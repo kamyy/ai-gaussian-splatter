@@ -42,7 +42,7 @@ On the first deploy the service starts before its migration, so real routes 500 
 
 ## When it goes wrong
 
-- **`AccessDenied` on the first deploy.** It's the first time the CI role creates every resource rather than updating them, and its policy ([Granting deploy permissions](../../../RUNBOOK.md#granting-deploy-permissions)) is a starting point, not a verified minimum. Add the missing action to `DEPLOY_POLICY` in `scripts/prod/configure-ci-role.sh`, re-run that script, then `gh run rerun <run-id> --failed-jobs`. The job is safe to rerun from any step.
+- **`AccessDenied` on the first deploy.** It's the first time the CI role creates every resource rather than updating them, and its policy ([Creating the OIDC provider and CI role](../../../RUNBOOK.md#creating-the-oidc-provider-and-ci-role)) is a starting point, not a verified minimum. Add the missing action to `DEPLOY_POLICY` in `scripts/prod/configure-ci-role.sh`, re-run that script, then `gh run rerun <run-id> --failed-jobs`. The job is safe to rerun from any step.
 - **A bad image rolls back on its own.** The circuit breaker restores the previous task definition, which names its own still-present tag. Only `local.releases_kept` releases survive.
 - **`ImageTagAlreadyExists` pushing the worker image.** That commit was already built. The repository is immutable by design, so commit again rather than retagging.
 - **Intermittent 502s with nothing in the application logs.** The app never saw those requests. Check `KEEP_ALIVE_TIMEOUT` against the ALB idle timeout ([Networking & TLS](../../../AGENTS.md#networking--tls)).

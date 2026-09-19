@@ -53,7 +53,7 @@ gh_get_running_ci_status() {
 # Exits while a ci.yml run on main is unfinished. scripts/prod/set-deploy-enabled.sh calls it because a run whose
 # capture-deploy-enabled job has not been dispatched yet still reads DEPLOY_ENABLED live, so a write would reach it.
 # scripts/prod/terraform-destroy.sh calls it because a run that captured true deploys into the state it just emptied.
-gh_require_no_ci() {
+gh_require_no_in_progress_ci() {
   local status
   status=$(gh_get_running_ci_status)
   if [[ -n $status ]]; then
