@@ -27,9 +27,9 @@ interface CreateSplatModalProps {
   onClose: () => void;
 }
 
-// Replaces the old two-phase web/app/(authenticated)/splats/new/page.tsx: name + optional photos in one step. This is
-// the only place photos can be added to a splat, so it uploads them itself before navigating to the new splat's
-// default view — its uploaded photos show up in that route's PhotoFilmstrip, not a dedicated page.
+// Name plus optional photos in one step. This is the only place photos can be added to a splat, so it uploads them
+// itself before navigating to the new splat's default view, where they show up in that route's PhotoFilmstrip rather
+// than on a page of their own.
 export function CreateSplatModal({ opened, onClose }: CreateSplatModalProps) {
   const { getToken } = useAuth();
   const router = useRouter();

@@ -29,6 +29,9 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
   - "the root module", "this app", and "this config" all make the reader work out which thing is meant, and each one goes stale the moment that thing is renamed or split. Write `infra/`, or the ECS task, or whichever it is.
   - A bare "one" or "the AWS ones" standing in for a noun from an earlier sentence has the same problem. Repeat the noun.
   - A demonstrative pointing at the immediately preceding noun in the same sentence is fine.
+- **Never write a bare "job".** Two unrelated things are called that, often in the same paragraph.
+  - A GitHub Actions job is named: the `deploy` job, CI's `web` job, `capture-deploy-enabled`.
+  - A **worker job** is one splat's run through the pipeline: a `jobs` row, plus a GPU spot instance per stage. Say "worker job" for the run, "worker instance" for the EC2 instance, and "stage" for the reconstruct or train half that one instance runs.
 - **When prose names another section — in the same doc or a different one — link it, don't just quote or bold the name.**
   - Use `[Section name](#section-name)` for a same-file reference and `[Section name](OTHER.md#section-name)` across files, with the anchor GitHub/VS Code derive from the heading (lowercase, spaces to hyphens, punctuation stripped).
   - A plain quoted or bolded name silently goes stale the moment the target heading is renamed; a broken link is easier to spot in review.
@@ -40,7 +43,7 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
 Monorepo, three independent packages:
 
 - `web/` — Next.js 16 (App Router) + MUI + SWR + Zustand + react-three-fiber, **and** the REST API as Route Handlers under `app/api/v1/` backed by Drizzle.
-- `worker/` — COLMAP + gsplat pipeline, runs on an EC2 GPU spot instance per job.
+- `worker/` — COLMAP + gsplat pipeline, runs on an EC2 GPU spot instance per worker-job stage.
 - `infra/` — Terraform. Network, registry, data, worker IAM, web, and budgets in separate `.tf` files, one state.
 
 Server-only code lives in `web/lib/server/` — never import it from a `"use client"` file. The one shared client-safe module is `web/lib/types.ts` (status-value tuples for Drizzle `pgEnum`s); import runs types → schema, never the reverse.
@@ -172,7 +175,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - **The worker container is two hops from IMDS, so `RunInstances` sets `HttpPutResponseHopLimit: 2`** (`web/lib/server/ec2Launcher.ts`).
   - At EC2's default of 1 the token PUT in `worker/pipeline/instance.py` gets no reply, `get_self_instance_id()` returns `None`, and the instance never terminates itself — logging one INFO line indistinguishable from a local run while a `g5.xlarge` keeps billing.
   - `HttpTokens: "required"` is paired with it and depends on it: on its own it removes the IMDSv1 fallback and breaks credentials too, not just self-termination.
-- **Typical agent sandboxes have none of that** (a GPU driver alone isn't enough — `gsplat` needs `nvcc` to JIT). `worker/pipeline/train.py` is structurally validated but unproven on real hardware; don't claim the training loop "works" without that.
+- **Typical agent sandboxes have none of that** (a GPU driver alone isn't enough — `gsplat` needs `nvcc` to JIT), so an agent can't run the pipeline itself and has to hand a real run back to the user.
 
 ## Infra (Terraform / AWS)
 
@@ -241,7 +244,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - **The worker image lives in its own ECR repository (`ai-gaussian-splatter-worker`, `infra/registry.tf`), separate from the web repository above, and `var.worker_image_tag` has no default.**
   - No deploy ever rebuilds and pushes it — GPU worker deployment stays manual (`RUNBOOK.md`) — so this variable only changes when someone hand-builds and pushes a new one. It stays a commit SHA, because `scripts/prod/worker-push-image.sh` tags the image with the checked-out commit rather than a tree.
   - Re-running that script on an already-pushed commit fails at `podman push` with `ImageTagAlreadyExists`. Commit again rather than retagging.
-  - Its lifecycle policy keeps far fewer images (`local.worker_releases_kept`, currently 2) than the web repository's `RELEASES_KEPT` (10): at ~19 GB each the worker image isn't cheap to retain, and it isn't part of any ECS rollback mechanism anyway — `web/lib/server/ec2Launcher.ts` just reads whatever `WORKER_IMAGE_URI` currently names.
+  - Its lifecycle policy keeps far fewer images (`local.worker_releases_kept`, currently 2) than the web repository's `local.releases_kept` (10): at ~19 GB each the worker image isn't cheap to retain, and it isn't part of any ECS rollback mechanism anyway — `web/lib/server/ec2Launcher.ts` just reads whatever `WORKER_IMAGE_URI` currently names.
 
 ### Variables & state backend
 
@@ -334,31 +337,27 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 Scaffolding (three packages + CI) is in place. Host-run `next dev` can 500 with `ECONNREFUSED ::1` in sandboxes that block loopback to the Next proxy process — use the container (own netns); not an app bug.
 
 - **The AWS account is torn down.** Nothing the `deploy` job deploys to exists: no state bucket, no CI role, no stack.
-  - Turn the job on only after redoing [Creating account prerequisites](RUNBOOK.md#creating-account-prerequisites) and [Configuring continuous deployment](RUNBOOK.md#configuring-continuous-deployment), including the `WORKER_IMAGE_TAG` repository variable. [Going live](RUNBOOK.md#going-live) covers the switch.
-  - The job's first run deploys the whole stack, and the worker image is pushed after that ([Building and pushing the worker image](RUNBOOK.md#building-and-pushing-the-worker-image)).
+  - Turn the `deploy` job on only after redoing [Creating account prerequisites](RUNBOOK.md#creating-account-prerequisites) and [Configuring continuous deployment](RUNBOOK.md#configuring-continuous-deployment), including the `WORKER_IMAGE_TAG` repository variable. [Going live](RUNBOOK.md#going-live) covers the switch.
+  - The `deploy` job's first run deploys the whole stack, and the worker image is pushed after that ([Building and pushing the worker image](RUNBOOK.md#building-and-pushing-the-worker-image)).
 
 Known gaps, priority order:
 
 1. **No E2E coverage.** `web/e2e/` has no specs; share/view pages SSR from the DB with no seeded test DB to run against. Seed one and add a spec.
 2. **`web/Dockerfile` never run on AWS** — local podman only; ECS/ECR path unproven.
-3. **Training rasterizes at full photo resolution.**
-   - `_load_views` (`worker/pipeline/train.py`) resizes each photo to its COLMAP camera's `width`/`height`, which are the *original* dimensions — COLMAP downsamples for feature detection only and keeps intrinsics in original pixels — so that resize is a no-op and a 12 MP phone photo trains at 12 MP against the reference implementation's ~1600px longest edge.
-   - Two consequences: training dominates job wall clock, and every ground-truth image sits in VRAM at full size (~5.9 GB for 40 × 12 MP), so a large enough set OOMs the A10G.
-   - Fix is a longest-edge cap in `_load_views` scaling `fx`/`fy`/`cx`/`cy` and `width`/`height` by the same factor, or `K` no longer matches the pixels.
-4. **No maximum photo count or upload size.**
+3. **No maximum photo count or upload size.**
    - `MIN_PHOTOS_PER_SPLAT` has no counterpart and the presign body schema (`web/app/api/v1/splats/[splatId]/photos/presign/route.ts`) is `.min(1)` only.
    - COLMAP's exhaustive matching is O(n²) pairs and the instance runs until `worker/run_job.py` returns, so an oversized upload is unbounded GPU spend.
-   - The global daily cap in `process` bounds job count, not job cost ([`ARCHITECTURE.md`](ARCHITECTURE.md)).
-5. **The worker's max-lifetime safety net has no alerting, and a real gap it can't close.**
+   - The global daily cap in `process` bounds how many worker jobs run, not what each one costs ([`ARCHITECTURE.md`](ARCHITECTURE.md)).
+4. **The worker's max-lifetime safety net has no alerting, and a real gap it can't close.**
    - `web/lib/server/ec2Launcher.ts` schedules `shutdown -h +WORKER_MAX_LIFETIME_MINUTES` as the first thing user-data does, paired with `InstanceInitiatedShutdownBehavior = "terminate"` on the launch, so a failed `docker login`/pull or a hang that never reaches `worker/pipeline/instance.py`'s own self-terminate still can't bill past that ceiling — *if user-data runs at all*.
    - If cloud-init itself never starts (bad AMI, a boot/networking failure), the `shutdown` is never scheduled and nothing inside the instance can catch it; only an external, instance-runtime CloudWatch alarm checking instance age independent of anything running on it would. That alarm still doesn't exist.
-   - Also unaddressed either way: nothing notifies anyone when the ceiling *does* fire, so a legitimately slow job gets killed exactly the same silent way a real hang does, and nothing updates `jobs.status` when the instance disappears out from under it, so the row stays stuck rather than moving to `failed`.
+   - Also unaddressed either way: nothing notifies anyone when the ceiling *does* fire, so a legitimately slow worker job gets killed exactly the same silent way a real hang does, and nothing updates `jobs.status` when the instance disappears out from under it, so the row stays stuck rather than moving to `failed`.
    - The budgets email (`infra/budgets.tf`) is the only signal for any of this, and only in aggregate, weeks later.
-   - `WORKER_MAX_LIFETIME_MINUTES`'s 2 hours is also a guess made before M0 has run on real hardware, not a measured ceiling.
-6. **A well-formed but wrong `alertEmail` still deploys green.**
+   - `WORKER_MAX_LIFETIME_MINUTES`'s 2 hours is also a guess, not a ceiling measured against a real worker job's wall clock.
+5. **A well-formed but wrong `alertEmail` still deploys green.**
    - `infra/variables.tf`'s validation now catches a non-email string outright (a blank value, a stray flag, a copy-paste mistake), but a typo'd-and-still-email-shaped address (`alert+email@gmial.com`) is syntactically fine and passes it.
    - Deliverability can't be checked at apply time either way. The AWS Budget emails that address directly, with no subscription-confirmation state to check via the CLI, so the first sign of that class of typo is a budget alert that never arrives.
    - Watching for a real alert once spend crosses a threshold, or temporarily lowering `monthly_budget_limit_usd` to force one, is the only way to check.
-7. **`_densify_and_prune` discards optimizer state.** `worker/pipeline/train.py` rebuilds the Adam optimizer after each densification round, dropping its moment estimates every `iterations // 10` steps. Suspect this before raising the iteration count if 10k under-converges — raising it is the expensive fix.
+6. **`_densify_and_prune` discards optimizer state.** `worker/pipeline/train.py` rebuilds the Adam optimizer after each densification round, dropping its moment estimates every `iterations // 10` steps. Suspect this before raising the iteration count if 10k under-converges — raising it is the expensive fix.
 
-**M0 is next:** photograph a real object per [Capture](RUNBOOK.md#capture), then COLMAP→gsplat on real hardware. Needs the user, not an agent.
+**M0 has run locally:** a real capture has been through COLMAP→gsplat and opened in the viewer on a local GPU, via the `scripts/dev/worker-*.sh` runs in [Worker (local pipeline run)](RUNBOOK.md#worker-local-pipeline-run). Nothing has run on AWS (gap 2), and no run's wall clock has been recorded.

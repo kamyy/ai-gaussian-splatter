@@ -15,7 +15,7 @@ aws_require_login
 gh_require_login
 
 deploy_enabled=$(gh_get_repo_var DEPLOY_ENABLED "Run: scripts/prod/set-deploy-enabled.sh false")
-# Lowercased first, because a GitHub Actions `==` comparison ignores case. True and TRUE arm the job in
+# Lowercased first, because a GitHub Actions `==` comparison ignores case. True and TRUE arm the deploy job in
 # .github/workflows/ci.yml just as true does.
 if [[ ${deploy_enabled,,} == true ]]; then
   echo "The deploy job is still on. Run: scripts/prod/set-deploy-enabled.sh false" >&2

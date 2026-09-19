@@ -20,9 +20,9 @@ import { ScrollEdgeButton } from "./ScrollEdgeButton";
 import { useDragMomentumScroll } from "./useDragMomentumScroll";
 
 const HANDLE_HEIGHT = 40;
-// Each photo is sized by height only, at its own natural aspect ratio (width: "auto") — unlike the fixed-width
-// sidebar thumbnail (SplatCarouselCard.tsx), there's room here to show the whole photo with no letterboxing and no
-// cropping.
+// Each photo is sized by height only, at its own natural aspect ratio (width: "auto"). Unlike the fixed-width sidebar
+// thumbnail in web/components/splats/SplatCarouselCard.tsx, there's room here to show the whole photo with no
+// letterboxing and no cropping.
 const FILMSTRIP_PHOTO_HEIGHT = 150;
 // Starting guess for the body's height, used only until the ResizeObserver below reports the real one (SSR and the
 // very first client render, before that effect has run). Hand-tuning this as a fixed constant kept leaving dead
@@ -153,10 +153,9 @@ export function PhotoFilmstrip({ splatId }: PhotoFilmstripProps) {
       sx={{
         pointerEvents: "auto",
         position: "absolute",
-        // SIDEBAR_WIDTH/CHROME_GAP are the same values web/app/(authenticated)/splats/layout.tsx uses for the
-        // navbar's own width and padding, so the splat carousel inside it already stops CHROME_GAP short of
-        // SIDEBAR_WIDTH. Starting here at SIDEBAR_WIDTH leaves that same gap on this side as `right` leaves on the
-        // other, rather than a second, independently-hardcoded number that could drift out of sync with it.
+        // 208 is the navbar width web/app/(authenticated)/splats/layout.tsx gives the splat carousel (200) plus the
+        // same 8 `right` leaves below, so the panel clears the navbar with a matching gap on each side. That layout
+        // exports no width constant, so the two numbers are kept in step by hand.
         left: rem(208),
         right: rem(8),
         bottom: 0,

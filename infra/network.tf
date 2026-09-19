@@ -101,8 +101,8 @@ resource "aws_vpc_endpoint" "s3" {
   route_table_ids   = [aws_route_table.public.id, aws_route_table.private.id]
 }
 
-# Declared here, not in web.tf, so it sits alongside the two rules below that name a public CIDR. The
-# ALB-to-tasks ingress rule itself lives in web.tf, once the container port is known.
+# Declared here, not in infra/web.tf, so it sits alongside the two rules below that name a public CIDR. The
+# ALB-to-tasks ingress rule itself lives in infra/web.tf, once the container port is known.
 resource "aws_security_group" "alb" {
   name        = "ai-gaussian-splatter-alb"
   description = "Public ALB in front of the web ECS service"
@@ -134,7 +134,7 @@ resource "aws_vpc_security_group_egress_rule" "alb_all" {
   ip_protocol       = "-1"
 }
 
-# Receives the ALB-to-tasks rule (web.tf), and gives the web tasks a stable identity that the DB security
+# Receives the ALB-to-tasks rule (infra/web.tf), and gives the web tasks a stable identity that the DB security
 # group's own ingress rule can name as a source. Security-group references check ENI membership, not the
 # referenced group's own rules.
 resource "aws_security_group" "web" {

@@ -77,9 +77,8 @@ export const POST = withErrorHandling(
         ),
       );
 
-    // Before this feature, a job ran start to finish in one automatic pass, so a second POST while one was in flight
-    // was a narrow race. Now a job can sit at "awaiting_training" for as long as the user takes to decide, making an
-    // accidental double-trigger far more reachable. The unique index above enforces "at most one active job per
+    // A job can sit at "awaiting_training" for as long as the user takes to decide, so a second POST arriving while
+    // one is in flight is easy to reach by accident. The unique index above enforces "at most one active job per
     // splat" at the database level, so a race loses here as a unique violation rather than needing a separate
     // read-then-write check that could itself race.
     //
@@ -99,9 +98,11 @@ export const POST = withErrorHandling(
       throw err;
     }
 
-    // The hard backstop, checked last so per-user/IP limits already screened most abuse before this expensive step is
-    // even considered. The claimed row is deleted rather than marked failed when the cap rejects: nothing has run for
-    // it, and leaving a failed job behind would make the next attempt report a failure that never happened.
+    // The hard backstop on total GPU spend. The per-IP and per-user limits sit earlier in the flow, on the presign
+    // route (web/app/api/v1/splats/[splatId]/photos/presign/route.ts), so most abuse is screened before a splat has
+    // enough photos to reach this route at all. The claimed row is deleted rather than marked failed when the cap
+    // rejects: nothing has run for it, and leaving a failed job behind would make the next attempt report a failure
+    // that never happened.
     try {
       await checkAndIncrementGlobalDaily(env.GLOBAL_MAX_JOBS_PER_DAY);
     } catch (err) {

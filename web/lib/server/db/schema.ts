@@ -24,7 +24,7 @@ import { JOB_STATUSES, PHOTO_UPLOAD_STATUSES, SPLAT_STATUSES } from "@/lib/types
  * The table export is `splats`, not `objects`, to avoid shadowing JS's `Object`. The same naming is used throughout
  * the app, including REST paths and hooks.
  *
- * Enum labels come from lib/types.ts, so the client-side unions and the Postgres labels are one list.
+ * Enum labels come from web/lib/types.ts, so the client-side unions and the Postgres labels are one list.
  */
 
 export const splatStatus = pgEnum("splat_status", SPLAT_STATUSES);

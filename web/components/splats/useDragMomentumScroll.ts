@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 
-// Shared by SplatCarousel.tsx (vertical) and PhotoFilmstrip.tsx (horizontal): click-and-drag panning for a scrollable
-// element, on top of its native scrollbar/wheel scrolling, plus momentum after release. Mouse only — touch and pen
+// Shared by web/components/splats/SplatCarousel.tsx (vertical) and web/components/splats/PhotoFilmstrip.tsx
+// (horizontal): click-and-drag panning for a scrollable element, on top of its native scrollbar/wheel scrolling, plus
+// momentum after release. Mouse only — touch and pen
 // already pan a scrollable element natively, and handling those too would fight the browser's own gesture. Wheel
 // input deliberately has no momentum of its own; only a drag release hands off to runMomentum.
 //

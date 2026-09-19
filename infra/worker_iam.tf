@@ -1,8 +1,11 @@
-# The GPU spot worker's IAM role/instance profile — pulling its own image, read on the uploads bucket,
-# read/write on the splats bucket, and terminating any instance tagged Role=worker. Both bucket grants cover the
-# whole bucket, not just the calling job's own objects, and the terminate grant matches every worker instance,
-# not only the caller — EC2 has no resource-level condition for "the calling instance" to scope either one down
-# further.
+# The GPU spot worker's IAM role and instance profile. Both bucket grants cover the whole bucket, not just the
+# calling job's own objects, and the terminate grant matches every worker instance, not only the caller: EC2 has no
+# resource-level condition for "the calling instance" to scope either one down further.
+#
+# AWSServiceRoleForEC2Spot is deliberately absent: it's one account-wide role shared by every other Spot workload, so
+# creating it fails outright in an account that already has one, and Terraform deleting it would break those other
+# workloads. It has to exist before web/lib/server/ec2Launcher.ts's first RunInstances call — see RUNBOOK.md for the
+# one-time setup.
 
 resource "aws_iam_role" "worker" {
   name        = "ai-gaussian-splatter-worker"
@@ -45,10 +48,9 @@ resource "aws_iam_role_policy" "worker" {
         Action   = local.s3_read_write_actions
         Resource = [aws_s3_bucket.splats.arn, "${aws_s3_bucket.splats.arn}/*"]
       },
-      # Self-termination, scoped by the same worker-tag convention used in web.tf's RunInstances grant (see
-      # locals.tf for the shared tag key/value) since EC2 has no resource-level condition for "the calling
-      # instance." This is what lets worker/run_job.py's finally block terminate its own instance at the end of
-      # a job.
+      # What lets worker/run_job.py's finally block terminate its own instance at the end of a stage, scoped by the
+      # same worker-tag convention infra/web.tf's RunInstances grant uses (infra/locals.tf holds the shared tag
+      # key/value).
       {
         Sid       = "SelfTerminate"
         Effect    = "Allow"
@@ -60,10 +62,6 @@ resource "aws_iam_role_policy" "worker" {
   })
 }
 
-# AWSServiceRoleForEC2Spot is not managed here: it's one account-wide role shared by every other Spot workload, so
-# creating it fails outright in an account that already has one, and Terraform deleting it would break those other
-# workloads. It has to exist before web/lib/server/ec2Launcher.ts's first RunInstances call — see RUNBOOK.md for the
-# one-time setup.
 resource "aws_iam_instance_profile" "worker" {
   name = "ai-gaussian-splatter-worker"
   role = aws_iam_role.worker.name

@@ -13,7 +13,7 @@ import { presignPhotoUpload } from "@/lib/server/s3";
 import type { PhotoPresignItem } from "@/lib/types";
 
 // Rate limiting happens here: it gates *before* any upload happens (per-IP + per-user), separate from the global daily
-// cap which only gates the expensive job-launch step (../process).
+// cap, which only gates the expensive job-launch step (web/app/api/v1/splats/[splatId]/process/route.ts).
 const presignSchema = z.array(z.object({ filename: z.string().min(1), contentType: z.string().min(1) })).min(1);
 
 export const POST = withErrorHandling(

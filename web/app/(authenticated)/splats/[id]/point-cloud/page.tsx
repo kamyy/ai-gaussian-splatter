@@ -12,14 +12,16 @@ import { apiFetch } from "@/lib/apiFetch";
 import { useLatestJob } from "@/lib/hooks";
 import { rem } from "@/lib/rem";
 
-// SWR is left on its defaults here (unlike the old single-page design's manual pre-switch presign refresh): this
-// route mounts once per navigation, so the presign fetch it triggers on mount is always fresh, and a three.js scene
-// that has already finished loading never re-reads the URL again regardless of the object's age.
+// SWR is left on its defaults here: this route mounts once per navigation, so the presign fetch it triggers on mount
+// is always fresh, and a three.js scene that has already finished loading never re-reads the URL again regardless of
+// the object's age.
 export default function PointCloudPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { getToken } = useAuth();
   const { data: job, mutate: refetchJob } = useLatestJob(id);
 
+  // pointCloudS3Key is set once by the reconstruct phase and never cleared, so this fetch keeps the point cloud
+  // reachable through training and after completion, not just during the awaiting_training pause.
   const { data: pointCloudUrl, error: pointCloudError } = useSWR(
     job?.pointCloudS3Key ? ["point-cloud", id] : null,
     async () => {
@@ -31,8 +33,7 @@ export default function PointCloudPage({ params }: { params: Promise<{ id: strin
     },
   );
 
-  // Set once by the reconstruct phase and never cleared, so the toggle position stays reachable through training and
-  // after completion — not just during the awaiting_training pause.
+  // The review step: the point cloud plus the button that pays for training.
   if (job?.status === "awaiting_training") {
     return (
       <Box sx={{ height: "100%", overflowY: "auto", pt: rem(76), pl: rem(24), pr: rem(24) }}>

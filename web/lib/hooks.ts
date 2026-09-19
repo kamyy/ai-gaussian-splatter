@@ -30,8 +30,9 @@ const JOB_POLL_INTERVAL_MS: Record<JobStatus, number> = {
   cancelled: 0,
 };
 
+// At module scope so every render hands SWR the same function identity. SWR keys its polling effect on that identity,
+// so a fresh closure per render would tear down the pending timeout and restart the interval instead.
 function refreshInterval(job: Job | undefined) {
-  // At  module scope so it doesn't recreate on a re-render.
   if (job) {
     return JOB_POLL_INTERVAL_MS[job.status];
   }

@@ -20,7 +20,7 @@ Most procedures below run a script from `scripts/dev/` or `scripts/prod/`, and e
   - [Building and pushing the worker image](#building-and-pushing-the-worker-image)
   - [Running Terraform locally](#running-terraform-locally)
 - [Fixing a bad migration](#fixing-a-bad-migration)
-- [Debugging a failed job](#debugging-a-failed-job)
+- [Debugging a failed worker job](#debugging-a-failed-worker-job)
 - [Tearing down](#tearing-down)
 
 ## Dev AWS resources
@@ -109,7 +109,7 @@ cd worker && podman build -t splat-worker:dev . # once, and again after any work
 cd ../web && pnpm dev
 ```
 
-Upload photos and click Process in the browser as normal. The job goes through the same DB rows, callback token, and `/api/v1/internal/jobs/[jobId]/status` route a real EC2 run would use, so its status updates in the dashboard live. Leave `WORKER_LOCAL_LAUNCH` unset (or `false`) to go back to launching a real spot instance.
+Upload photos and click Process in the browser as normal. The worker job goes through the same DB rows, callback token, and `/api/v1/internal/jobs/[jobId]/status` route a real EC2 run would use, so its status updates in the dashboard live. Leave `WORKER_LOCAL_LAUNCH` unset (or `false`) to go back to launching a real spot instance.
 
 ## Installing Terraform
 
@@ -133,7 +133,7 @@ Required one-time manual setup, in this order:
 
 1. [Creating account prerequisites](#creating-account-prerequisites)
 2. [Configuring continuous deployment](#configuring-continuous-deployment)
-3. [Going live](#going-live) to turn the job on
+3. [Going live](#going-live) to turn the `deploy` job on
 
 After that, a human only builds the worker image ([Building and pushing the worker image](#building-and-pushing-the-worker-image)) and runs Terraform for a `terraform plan` preview or a teardown ([Running Terraform locally](#running-terraform-locally)).
 
@@ -147,7 +147,7 @@ CI's `deploy` job (`.github/workflows/deploy.yml`) does every deploy, including 
 
 Steps 2 and 5 do nothing on a push that leaves `web/` untouched, so a `worker/`, `scripts/` or `infra/` change applies Terraform and runs the migration without building an image ([Image tags](ARCHITECTURE.md#image-tags)). Step 3 still replaces the running tasks whenever it changes the web task definition, which carries `WORKER_IMAGE_URI` and `KEEP_ALIVE_TIMEOUT` as well as the image — that replacement is what [Building and pushing the worker image](#building-and-pushing-the-worker-image) relies on.
 
-Whether the job is on is `gh variable get DEPLOY_ENABLED` ([Going live](#going-live)).
+Whether the `deploy` job is on is `gh variable get DEPLOY_ENABLED` ([Going live](#going-live)).
 
 ### Signing in to AWS
 
@@ -183,7 +183,7 @@ One-time, after [Creating account prerequisites](#creating-account-prerequisites
 scripts/prod/configure-ci-role.sh
 ```
 
-`DEPLOY_POLICY` in `scripts/prod/configure-ci-role.sh` is a reasonable starting point, not an exhaustively verified minimal policy, so expect `AccessDenied` during the first deploy, which is the first time the role creates every resource rather than updating it. Add the missing action, re-run the script, then rerun the job (`gh run rerun <run-id> --failed-jobs`).
+`DEPLOY_POLICY` in `scripts/prod/configure-ci-role.sh` is a reasonable starting point, not an exhaustively verified minimal policy, so expect `AccessDenied` during the first deploy, which is the first time the role creates every resource rather than updating it. Add the missing action, re-run the script, then rerun the `deploy` job (`gh run rerun <run-id> --failed-jobs`).
 
 #### Setting GitHub repository variables
 
@@ -204,11 +204,11 @@ It asks for these, defaulting to each one's current value:
 - `DOMAIN_ZONE_NAME` is the public DNS zone the app is served from, e.g. `orky.net`. Everything carrying the app's public name is built from it: the hostname, the ACM certificate, the Route 53 record, the S3 CORS origins, the origin the worker PATCHes status back to, and the origin `.github/workflows/deploy.yml` smoke-checks after a rollout. A trailing dot or uppercase is normalized away before the variable is set.
 - `ALERT_EMAIL` is where the AWS Budget (`infra/budgets.tf`) sends spend alerts. A typo'd but well-formed address deploys green with the alerts never arriving, and nothing can catch that at apply time ([State / what's next](AGENTS.md#state--whats-next)).
 - `CLERK_PUBLISHABLE_KEY` is the `pk_live_...` key, not the secret one. `web/Dockerfile` compiles it into the browser bundle, so a later change to it reaches users on the next deploy that changes `web/` ([Image tags](ARCHITECTURE.md#image-tags)).
-- `WORKER_AMI_ID` is the AMI each job's spot instance boots. User data does no provisioning of its own, so the image must already carry Docker, the NVIDIA driver and container toolkit, and the AWS CLI. AWS's Deep Learning Base GPU AMIs do, and the script lists the newest five before asking.
+- `WORKER_AMI_ID` is the AMI every worker instance boots. User data does no provisioning of its own, so the image must already carry Docker, the NVIDIA driver and container toolkit, and the AWS CLI. AWS's Deep Learning Base GPU AMIs do, and the script lists the newest five before asking.
 
 `WORKER_IMAGE_TAG` is set to the current commit only while it's unset. After that it changes only through [Building and pushing the worker image](#building-and-pushing-the-worker-image).
 
-With the role and repository variables in place, turn the job on under [Going live](#going-live).
+With the role and repository variables in place, turn the `deploy` job on under [Going live](#going-live).
 
 ### Going live
 
@@ -230,7 +230,7 @@ Only the last few releases are kept (`local.releases_kept` in `infra/registry.tf
 
 ### Building and pushing the worker image
 
-Nothing builds or pushes this image on its own — GPU worker deployment stays manual ([`ARCHITECTURE.md`](ARCHITECTURE.md)). Do this whenever `worker/` changes and you want a job to actually pick up the new build. Its repository, `aws_ecr_repository.worker`, comes from the first deploy.
+Nothing builds or pushes this image on its own — GPU worker deployment stays manual ([`ARCHITECTURE.md`](ARCHITECTURE.md)). Do this whenever `worker/` changes and you want worker jobs to actually pick up the new build. Its repository, `aws_ecr_repository.worker`, comes from the first deploy.
 
 The image is tagged with the current commit, so commit any `worker/` changes first.
 
@@ -238,11 +238,11 @@ The image is tagged with the current commit, so commit any `worker/` changes fir
 scripts/prod/worker-push-image.sh
 ```
 
-After the push, the script sets the `WORKER_IMAGE_TAG` repository variable ([Setting GitHub repository variables](#setting-github-repository-variables)) to the new tag. A deploy then has to run to pass it as `TF_VAR_worker_image_tag`, which points `WORKER_IMAGE_URI` on the web task definition at the new image and replaces the running tasks. Until then, job launches keep using the old one.
+After the push, the script sets the `WORKER_IMAGE_TAG` repository variable ([Setting GitHub repository variables](#setting-github-repository-variables)) to the new tag. A deploy then has to run to pass it as `TF_VAR_worker_image_tag`, which points `WORKER_IMAGE_URI` on the web task definition at the new image and replaces the running tasks. Until then, every worker instance still launches with the old image.
 
-Rerun the latest `main` run to trigger that deploy (`gh run rerun <run-id>`), because the job reads the variable as the run starts. Pushing a commit works too, but not a docs-only one: a push touching only `.md` files or `LICENSE` skips the workflow, so nothing reads the new variable.
+Rerun the latest `main` run to trigger that deploy (`gh run rerun <run-id>`), because the `deploy` job reads the variable as the run starts. Pushing a commit works too, but not a docs-only one: a push touching only `.md` files or `LICENSE` skips the workflow, so nothing reads the new variable.
 
-Only the last `local.worker_releases_kept` images are kept (`infra/registry.tf`), which makes a stale `WORKER_IMAGE_TAG` the risk. Once that many newer images exist, the lifecycle policy expires the tag it names, and every job launch then fails its pull and bills until the `WORKER_MAX_LIFETIME_MINUTES` shutdown.
+Only the last `local.worker_releases_kept` images are kept (`infra/registry.tf`), which makes a stale `WORKER_IMAGE_TAG` the risk. Once that many newer images exist, the lifecycle policy expires the tag it names, and every worker instance then fails its image pull and bills until the `WORKER_MAX_LIFETIME_MINUTES` shutdown.
 
 ### Running Terraform locally
 
@@ -258,13 +258,13 @@ The only supported production apply is the `deploy` job (`.github/workflows/depl
 
 Fix a bad migration the same way you'd fix any other bug: write a corrective migration following the expand/contract discipline in [Schema & migrations (Drizzle)](AGENTS.md#schema--migrations-drizzle) (edit `web/lib/server/db/schema.ts`, `pnpm db:generate`, review the emitted SQL in `web/drizzle/`), commit it, and land it through a normal PR to `main`. It applies when `DEPLOY_ENABLED` is `true` and that commit reaches `main` ([Going live](#going-live)).
 
-If the `deploy` job's migration step fails for an infra reason rather than a bad migration (a transient AWS error, a placement failure), retry the whole job rather than reaching for manual AWS commands — it's idempotent end to end: `gh run rerun <run-id> --failed-jobs`.
+If the `deploy` job's migration step fails for an infra reason rather than a bad migration (a transient AWS error, a placement failure), retry the whole `deploy` job rather than reaching for manual AWS commands — it's idempotent end to end: `gh run rerun <run-id> --failed-jobs`.
 
-## Debugging a failed job
+## Debugging a failed worker job
 
 1. Check `jobs.status` and `jobs.error_message` for the splat (`GET /api/v1/splats/{id}/jobs/latest`).
 2. If `status` is stuck (no update in ~20 min) rather than `failed`: the instance likely died without reporting — check the EC2 console for the tagged instance (`Role=worker`, `JobId=<job_id>`) and its system log.
-3. Confirm the instance actually went away. It self-terminates once the job reaches a terminal state, and `web/lib/server/ec2Launcher.ts` schedules a hard `shutdown` at `WORKER_MAX_LIFETIME_MINUTES` (2 hours) as the first thing user-data runs. **Still running well past that ceiling means cloud-init/user-data itself never started** — a boot failure (bad AMI, IMDS/networking issue), which is the one case that scheduled shutdown can't catch. Terminate it by hand. Nothing alerts when any of this fires ([State / what's next](AGENTS.md#state--whats-next)), so this check has to be done by hand.
+3. Confirm the instance actually went away. It self-terminates once the worker job reaches a terminal state, and `web/lib/server/ec2Launcher.ts` schedules a hard `shutdown` at `WORKER_MAX_LIFETIME_MINUTES` (2 hours) as the first thing user-data runs. **Still running well past that ceiling means cloud-init/user-data itself never started** — a boot failure (bad AMI, IMDS/networking issue), which is the one case that scheduled shutdown can't catch. Terminate it by hand. Nothing alerts when any of this fires ([State / what's next](AGENTS.md#state--whats-next)), so this check has to be done by hand.
 4. `docker logs` on the instance (if still running) or CloudWatch Logs (once wired up) for the actual COLMAP/gsplat stack trace.
 
 ## Tearing down

@@ -23,9 +23,10 @@ function ctx(splatId: string) {
 
 /**
  * Requires a real Postgres (TEST_DATABASE_URL). launchJob is mocked so this never touches real AWS. Covers the two
- * safety properties this route relies on: uq_jobs_splat_id_active (schema.ts) makes the double-trigger guard atomic,
- * and a launch failure moves the job/splat to "failed" rather than stranding them at "queued"/"processing" — which
- * would otherwise permanently block every future POST here for that splat under the same constraint.
+ * safety properties this route relies on: uq_jobs_splat_id_active (web/lib/server/db/schema.ts) makes the
+ * double-trigger guard atomic, and a launch failure moves the job/splat to "failed" rather than stranding them at
+ * "queued"/"processing" — which would otherwise permanently block every future POST here for that splat under the
+ * same constraint.
  */
 describe("POST /api/v1/splats/[splatId]/process", () => {
   beforeEach(async () => {
@@ -126,8 +127,8 @@ describe("POST /api/v1/splats/[splatId]/process", () => {
     const { splat } = await seed();
     launchJobMock.mockRejectedValueOnce(new Error("RunInstances denied"));
 
-    // Not an HttpError, so withErrorHandling (httpError.ts) rethrows it rather than converting it to a response —
-    // same as it already did before this route added its own try/catch here. What's new is the DB cleanup below.
+    // Not an HttpError, so withErrorHandling (web/lib/server/httpError.ts) rethrows it rather than converting it to a
+    // response. The route's own catch runs first, for the DB cleanup asserted below.
     await expect(POST({} as never, ctx(splat.id))).rejects.toThrow("RunInstances denied");
 
     const [job] = await getDb().select().from(jobs).where(eq(jobs.splatId, splat.id));

@@ -1,8 +1,8 @@
-"""Structure-from-Motion via COLMAP: exhaustive matching, favouring accuracy
-over speed for a small object-centric photo set.
+"""Structure-from-Motion via COLMAP: exhaustive matching, favouring accuracy over speed for a small object-centric
+photo set.
 
-Requires the `colmap` CLI on PATH (installed via `worker/Dockerfile` / baked
-AMI). It is not a pip package, hence subprocess rather than pycolmap.
+Requires the `colmap` CLI on PATH, which `worker/Dockerfile` installs. It is not a pip package, hence subprocess
+rather than pycolmap.
 """
 
 import logging
@@ -28,13 +28,12 @@ class SfmResult:
 
 
 def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
-    """Run the standard COLMAP CLI pipeline (feature extraction -> exhaustive
-    matching -> incremental mapping) and return the sparse reconstruction.
+    """Run the standard COLMAP CLI pipeline (feature extraction -> exhaustive matching -> incremental mapping) and
+    return the sparse reconstruction.
 
-    A good object-centric capture registers close to every photo, so a low
-    registered_ratio signals a capture-quality problem rather than a pipeline
-    bug. The caller should surface it instead of silently training on a
-    broken reconstruction.
+    A good object-centric capture registers close to every photo, so a low registered_ratio signals a capture-quality
+    problem rather than a pipeline bug. The caller should surface it instead of silently training on a broken
+    reconstruction.
     """
     database_path = workdir / "database.db"
     sparse_dir = workdir / "sparse"
@@ -116,8 +115,8 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
 def _count_registered_images(model_dir: Path) -> int:
     result = _run(["colmap", "model_analyzer", "--path", str(model_dir)], capture=True)
     # COLMAP reports through glog, which writes to stderr and never to stdout, so the count is not where a plain `colmap
-    # ... | grep` would look for it. Both streams are searched rather than stderr alone, so the parse does not break
-    # again if a future version prints it directly.
+    # ... | grep` would look for it. Both streams are searched rather than stderr alone, so a future version printing
+    # it directly does not break the parse.
     output = f"{result.stdout}\n{result.stderr}"
     match = re.search(r"Registered images:\s*(\d+)", output)
     if not match:

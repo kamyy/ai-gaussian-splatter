@@ -26,21 +26,21 @@ The "AI" here is per-object gradient descent through a differentiable rasterizer
 
 ## Compute
 
-- Each job gets a dedicated EC2 GPU **spot** instance (`web/lib/server/ec2Launcher.ts`; type from `WORKER_INSTANCE_TYPE`, default `g5.xlarge`). It runs the worker container, then self-terminates on success or failure.
-- Fallback if a worker dies without reporting: `web/lib/server/ec2Launcher.ts` schedules `shutdown -h +WORKER_MAX_LIFETIME_MINUTES` as the first thing user-data does, before the failure-prone steps (ECR login, `docker run`) that could otherwise leave `worker/pipeline/instance.py`'s own self-terminate unreached. `InstanceInitiatedShutdownBehavior = "terminate"` on the launch makes that shutdown actually terminate the instance rather than just stop it. If scheduling that shutdown fails, user-data powers the instance off immediately rather than run the job without a ceiling. Losing one job costs less than a GPU instance billing with no bound. A CloudWatch runtime alarm was considered instead (or in addition) for alerting when this fires, but nothing in the request path needs to *know* a job hung, only to stop it from billing — so the ceiling alone was built; alerting is [gap 5](AGENTS.md#state--whats-next).
-- No SQS, Batch, or always-on fleet — job volume is bounded by the global daily job cap instead.
+- Each stage of a worker job — reconstruct, then train — gets its own EC2 GPU **spot** instance (`web/lib/server/ec2Launcher.ts`; type from `WORKER_INSTANCE_TYPE`, default `g5.xlarge`). It runs the worker container, then self-terminates on success or failure.
+- Fallback if a worker dies without reporting: `web/lib/server/ec2Launcher.ts` schedules `shutdown -h +WORKER_MAX_LIFETIME_MINUTES` as the first thing user-data does, before the failure-prone steps (ECR login, `docker run`) that could otherwise leave `worker/pipeline/instance.py`'s own self-terminate unreached. `InstanceInitiatedShutdownBehavior = "terminate"` on the launch makes that shutdown actually terminate the instance rather than just stop it. If scheduling that shutdown fails, user-data powers the instance off immediately rather than run the stage without a ceiling. Losing one worker job costs less than a GPU instance billing with no bound. A CloudWatch runtime alarm was considered instead (or in addition) for alerting when this fires, but nothing in the request path needs to *know* a worker job hung, only to stop it from billing — so the ceiling alone was built; alerting is [gap 5](AGENTS.md#state--whats-next).
+- No SQS, Batch, or always-on fleet — the global daily cap on worker jobs bounds their volume instead.
 - A queue is only worth the added complexity at higher, decoupled-fleet scale.
 
-Job wall clock splits into three parts:
+A worker job's wall clock splits into three parts:
 
-- **Fixed overhead**: pulling and extracting the ~19 GB worker image, then gsplat's `nvcc` kernel build. `docker run --rm` repeats that build on every job.
+- **Fixed overhead**: pulling and extracting the ~19 GB worker image, which every stage pays, then gsplat's `nvcc` kernel build, which only the train stage reaches. `docker run --rm` keeps either from carrying over to the next stage.
 - **COLMAP**: a few minutes, CPU-bound by `mapper`'s incremental bundle adjustment.
 - **Training**: the majority of wall clock.
 
-M10's baked AMI therefore attacks the smaller half — fixed overhead, not training. Training cost is set by the resolution the photos are rasterized at ([State / what's next](AGENTS.md#state--whats-next), gap 3), not by boot latency. All of this is read off the code rather than observed; M0/M5 is the first run that will produce real numbers.
+M10's baked AMI therefore attacks the smaller half — fixed overhead, not training. Training cost is set by the resolution the photos are rasterized at (`MAX_TRAINING_EDGE` in `worker/pipeline/train.py`), not by boot latency. All of this is read off the code rather than observed; M0/M5 is the first run that will produce real numbers.
 
 - Not Lambda or Fargate: neither offers GPU.
-- Not hand-rolled ECS orchestration: bin-packing shared instances doesn't fit a one-job-one-instance model.
+- Not hand-rolled ECS orchestration: bin-packing shared instances doesn't fit a one-stage-one-instance model.
 
 ## API design
 
@@ -55,7 +55,7 @@ M10's baked AMI therefore attacks the smaller half — fixed overhead, not train
 
 - Next.js App Router: Open Graph needs server `generateMetadata`, since crawlers don't run JS.
 - UI: **MUI** over Mantine. Mantine's `ColorSchemeScript`/`MantineProvider` setup produced SSR hydration mismatches under the App Router; `@mui/material-nextjs`'s `AppRouterCacheProvider` is a mature, documented fix for emotion's SSR style-injection-order problem, the exact failure mode Mantine hit. Trade-off accepted: MUI's default styling engine is emotion, a CSS-in-JS runtime, unlike Mantine's static CSS Modules — a small bundle/runtime cost accepted in exchange for hydration correctness.
-- SWR for server-derived data (job polling via `refreshInterval`).
+- SWR for server-derived data (worker-job polling via `refreshInterval`).
 - Zustand, not Redux, for pure client UI (upload progress, banners). Zustand needs less boilerplate.
 - `@mkkellogg/gaussian-splats-3d`'s `DropInViewer` runs in r3f via `<primitive>`. It drives itself with Three.js's `onBeforeRender`.
 
@@ -116,7 +116,7 @@ The web app runs on **Fargate** behind an **Application Load Balancer** (`infra/
 ### Networking
 
 - Tasks share public subnets with the ALB and have a public IP, for EC2 API egress via the IGW. S3 calls instead go through a gateway VPC endpoint (free, no IGW hop).
-- No NAT: it costs ~$33/mo + $0.045/GB, and a multi-GB worker ECR pull would cost more per job than the spot instance itself.
+- No NAT: it costs ~$33/mo + $0.045/GB, and a multi-GB worker ECR pull would cost more per worker job than the spot instance itself.
 - Tradeoff: `web_security_group`'s single ingress rule, from `alb_security_group` on `CONTAINER_PORT`, is the only network control between the tasks and the internet.
 - RDS sits in a private subnet whose route table carries no default route out: it has no outbound need.
 - That route table is a resource in its own right, not inferred from the subnet — an explicit table with no `0.0.0.0/0` route is the only thing that actually blocks outbound traffic; nothing about a subnet being "private" does that on its own.
@@ -161,14 +161,14 @@ Three request-path layers (`web/lib/server/rateLimit.ts`). A per-user quota alon
    - **IP is the _last_ `X-Forwarded-For` hop.** ALB appends the address it saw; trusting the first lets clients spoof.
    - Assumes one trusted proxy. Adding CloudFront in front would move that.
 2. Per-user, alongside it.
-3. Global daily job cap, in `process` only — bounds worst-case GPU spend regardless of caller.
+3. Global daily cap on worker jobs, in `process` only — bounds worst-case GPU spend regardless of caller.
 
 Ops fallback: an AWS Budget (`infra/budgets.tf`) for spend the request path never sees.
 
 ## CI/CD
 
 - CI (`.github/workflows/deploy.yml`) applies `infra/` and migrates on every push to `main`, and builds a new web image only when `web/` changed, the first deploy into an empty account included ([Image tags](#image-tags)). It still rolls the service out whenever an apply changes the web task definition, which carries far more than the image. A human never applies `infra/` itself.
-- Whether that job runs is a repository variable (`DEPLOY_ENABLED` on `.github/workflows/ci.yml`'s deploy job), not a committed `if:` in the workflow file. A committed flag makes going live and tearing down a workflow edit. The file would then differ between "the account exists" and "the account is gone" for a one-bit operational state. An unset variable is `""`. A fork or a torn-down account deploys nothing until someone sets it to `true` ([Going live](RUNBOOK.md#going-live)).
+- Whether the deploy job runs is a repository variable (`DEPLOY_ENABLED` on `.github/workflows/ci.yml`'s deploy job), not a committed `if:` in the workflow file. A committed flag makes going live and tearing down a workflow edit. The file would then differ between "the account exists" and "the account is gone" for a one-bit operational state. An unset variable is `""`. A fork or a torn-down account deploys nothing until someone sets it to `true` ([Going live](RUNBOOK.md#going-live)).
 - `.github/workflows/ci.yml` records that variable in a trivial job at the start of each run on `main`. The deploy job's `if:` reads that copy, not live `vars` when the deploy job starts. A flip that lands after the recording cannot change what the run does, which narrows the window from the whole check suite to that one job's dispatch. `scripts/prod/set-deploy-enabled.sh` and `scripts/prod/terraform-destroy.sh` refuse while a run on `main` is unfinished, because a flip inside that remaining window still reaches it.
 - Creating the state bucket and tearing down are done locally. CI can't `terraform init` against a bucket that doesn't exist yet. A teardown is too rare and too destructive to put behind a push.
 - No manual approval gate: there's no live traffic yet to protect, and this is the first real deploy (M9).
@@ -234,7 +234,7 @@ Milestones (`M0`…`M10`) name phases, not a schedule — web/infra largely exis
 - **M4** — Local end-to-end: upload → process → result (no cloud orchestration).
 - **M5** — EC2 spot launch, worker image, status callback, self-termination (success + induced failure).
 - **M6** — Auth + three rate-limit layers.
-- **M7** — Authenticated UI: upload, job polling, splat viewer.
+- **M7** — Authenticated UI: upload, worker-job polling, splat viewer.
 - **M8** — Share links, OG thumbnails.
 - **M9** — IaC + first real deploy.
 - **M10** — Packer-baked worker AMI; measure boot-latency improvement.

@@ -1,9 +1,8 @@
 """EC2 instance self-termination via the instance metadata service (IMDSv2).
 
-Called from worker/run_job.py's finally block, so it runs on success and on a failed
-job alike. It is the only thing stopping a worker from billing indefinitely:
-nothing outside the instance terminates it, so a process killed outright, or a
-termination call that fails, leaves the instance running until someone notices.
+Called from worker/run_job.py's finally block, so it runs on success and on a failed job alike. This is what ends a
+job's billing at the job's own end. The backstop under it is the `shutdown -h` web/lib/server/ec2Launcher.ts schedules
+in user-data, which only fires hours later at WORKER_MAX_LIFETIME_MINUTES.
 """
 
 import logging

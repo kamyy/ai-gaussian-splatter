@@ -43,8 +43,8 @@ function SplatScene({
 
   // The load effect below reads the URL from here instead of depending on it. Every presign mints a different URL
   // string for the same object (web/lib/server/s3.ts), so depending on it would restart the whole download whenever
-  // the page re-minted one. A remount is what reloads instead, and ViewerSceneManager gives each mode its own key so
-  // that a mode switch is a remount.
+  // the page re-minted one. A mount is what loads instead, and ViewerSceneManager (below) mounts a fresh scene on
+  // every mode switch.
   const splatUrlRef = useRef(splatUrl);
   useEffect(() => {
     splatUrlRef.current = splatUrl;
@@ -154,8 +154,9 @@ function ViewerSceneManager({
     [camera, controlsRef],
   );
 
-  // Each branch carries its own key. The two point-cloud modes would otherwise reconcile as one component instance
-  // whose props merely changed, and neither scene reloads on a prop change any more.
+  // Switching mode renders a different component here, so React unmounts one scene and mounts the other. That mount is
+  // what starts a load: both scenes read their URL from a ref (see SplatScene above) rather than reloading on a prop
+  // change.
   if (mode === "splat" && splatUrl) {
     return <SplatScene key="splat" splatUrl={splatUrl} onError={onError} onFirstLoad={onFirstLoad} />;
   }

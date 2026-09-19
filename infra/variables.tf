@@ -6,10 +6,10 @@ variable "aws_region" {
   default     = "us-west-2"
 }
 
-# The AMI each job's spot instance boots. Only forwarded to the web task as WORKER_AMI_ID; the first thing to
-# test it is the RunInstances call in web/lib/server/ec2Launcher.ts, a job at a time.
+# The AMI every worker instance boots. Only forwarded to the web task as WORKER_AMI_ID; the first thing to test it
+# is the RunInstances call in web/lib/server/ec2Launcher.ts, one worker job at a time.
 variable "worker_ami_id" {
-  description = "AMI each job's GPU spot instance boots. Must carry Docker, the NVIDIA driver/container toolkit, and the AWS CLI (see RUNBOOK.md)."
+  description = "AMI every GPU worker instance boots. Must carry Docker, the NVIDIA driver/container toolkit, and the AWS CLI (see RUNBOOK.md)."
   type        = string
 
   # Catches the empty string CI sends for an unset repository variable (AGENTS.md), or an AMI name pasted in place
@@ -71,7 +71,7 @@ variable "clerk_secret_key_arn" {
 
   # Catches a missing suffix, a bare secret name, or the wrong secret name. A variable validation block can only
   # see the variable's own value, not other resources, so it can't also check the ARN's account/region match this
-  # deploy's own — that cross-check is a lifecycle precondition on aws_iam_role_policy.execution in web.tf
+  # deploy's own — that cross-check is a lifecycle precondition on aws_iam_role_policy.execution in infra/web.tf
   # instead.
   validation {
     condition     = can(regex("^arn:aws:secretsmanager:[a-z0-9-]+:\\d{12}:secret:ai-gaussian-splatter/clerk-secret-key-[A-Za-z0-9]{6}$", var.clerk_secret_key_arn))

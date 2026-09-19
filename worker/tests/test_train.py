@@ -84,7 +84,7 @@ def _raise_oom(*_args, **_kwargs):
 
 
 def test_train_translates_cuda_oom_into_a_clean_runtime_error(monkeypatch, tmp_path):
-    """torch's OutOfMemoryError is a multi-line CUDA allocator dump aimed at a developer. run_job.py reports
+    """torch's OutOfMemoryError is a multi-line CUDA allocator dump aimed at a developer. worker/run_job.py reports
     whatever this raises verbatim to the browser (web/components/job/JobStatusPoller.tsx), so it must come out as
     something a user waiting on their splat can actually read.
     """

@@ -9,8 +9,8 @@ import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-sec
  * bundle: set it (production, pointed at the bundle `web/Dockerfile` bakes in) and the connection is encrypted and
  * verified against that bundle; leave it unset (local dev, CI) and the connection is plain.
  *
- * `rejectUnauthorized` is deliberately not passed, so it stays at Node's default `true`. Reaching for `?sslmode=require`
- * instead does not do what its name suggests here — see AGENTS.md.
+ * `rejectUnauthorized` is deliberately not passed, so it stays at Node's default `true`. Reaching for
+ * `?sslmode=require` instead does not do what its name suggests here — see AGENTS.md.
  */
 export function databaseSsl(env: Record<string, string | undefined> = process.env): ConnectionOptions | undefined {
   const caPath = env.DATABASE_SSL_CA;
@@ -52,20 +52,16 @@ let secretsClient: SecretsManagerClient | undefined;
 let cachedPassword: { secretArn: string; value: string; fetchedAt: number } | undefined;
 
 /**
- * Fetches the RDS master password from Secrets Manager on demand, rather than trusting a value ECS injected once
- * as an env var at task start. RDS rotates this secret every 7 days by default; a long-lived web task that never
- * re-fetches keeps authenticating new pg connections with a password Postgres no longer accepts, which shows up as
- * growing, intermittent connection failures rather than a clean cutover, since already-open connections are
- * unaffected by a password change.
+ * Fetches the RDS master password from Secrets Manager on demand, rather than trusting a value ECS injected once at
+ * task start. RDS rotates that secret, and the failure it causes is gradual rather than a clean cutover (AGENTS.md).
  *
  * `getDb()` (web/lib/server/db/index.ts) passes this as a `pg.Pool` `password` callback, so it re-runs on every new
- * physical connection instead of once. Cached for PASSWORD_CACHE_TTL_MS so a pool opening many connections in quick
- * succession doesn't call Secrets Manager on every single one. A rotation makes the cached value wrong immediately,
- * not when the TTL runs out. `SecretPasswordPool` (web/lib/server/db/index.ts) therefore clears the cache and retries
- * once whenever Postgres rejects the password.
+ * physical connection instead of once. The cache keeps a pool opening many connections at once from calling Secrets
+ * Manager for each one. A rotation makes the cached value wrong immediately rather than at the TTL, which is why
+ * `SecretPasswordPool` (web/lib/server/db/index.ts) clears the cache and retries once when Postgres rejects it.
  *
- * Not used by the migration task (web/scripts/db-migrate.cjs): it runs for seconds and exits, well inside that same
- * rotation window, so it keeps using the static DATABASE_PASSWORD ECS injects at its own task start instead.
+ * Not used by the migration task (web/scripts/db-migrate.cjs), which runs for seconds on the static
+ * DATABASE_PASSWORD ECS injects at its own task start.
  */
 export async function fetchDatabasePassword(secretArn: string, region: string): Promise<string> {
   const now = Date.now();
@@ -78,8 +74,9 @@ export async function fetchDatabasePassword(secretArn: string, region: string): 
   }
 
   // Without an explicit region, the SDK's own default-region resolution can land somewhere other than where the
-  // secret actually lives (e.g. RDS's region), failing with a not-found rather than an auth error — matching how
-  // s3.ts/ec2Launcher.ts already pass region: getEnv().AWS_REGION to their own clients rather than omitting it.
+  // secret actually lives (e.g. RDS's region), failing with a not-found rather than an auth error. It matches how
+  // web/lib/server/s3.ts and web/lib/server/ec2Launcher.ts already pass region: getEnv().AWS_REGION to their own
+  // clients rather than omitting it.
   secretsClient ??= new SecretsManagerClient({ region });
   const { SecretString } = await secretsClient.send(new GetSecretValueCommand({ SecretId: secretArn }));
   if (!SecretString) {
