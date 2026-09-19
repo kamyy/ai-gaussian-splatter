@@ -33,7 +33,7 @@ The "AI" here is per-object gradient descent through a differentiable rasterizer
 
 A worker job's wall clock splits into three parts:
 
-- **Fixed overhead**: pulling and extracting the ~19 GB worker image, which every stage pays, then gsplat's `nvcc` kernel build, which only the train stage reaches. `docker run --rm` keeps either from carrying over to the next stage.
+- **Fixed overhead**: pulling and extracting the ~15.6 GB worker image, which every stage pays, then gsplat's `nvcc` kernel build, which only the train stage reaches. `docker run --rm` keeps either from carrying over to the next stage.
 - **COLMAP**: a few minutes, CPU-bound by `mapper`'s incremental bundle adjustment.
 - **Training**: the majority of wall clock.
 

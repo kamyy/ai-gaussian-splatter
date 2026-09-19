@@ -8,13 +8,13 @@
 # With several unqualified-search registries configured it asks which to use, and under `short-name-mode = "enforcing"`
 # a build with no TTY — CI, or any scripted build — fails outright rather than choosing.
 
-# COLMAP is copied from upstream's published image rather than compiled here. Compiling it saves about 4 GB of image
-# (22.8 GB against 18.7 GB, measured like for like) — their build enables the GUI and links MKL, neither of which a
-# headless worker calls — but costs roughly twenty minutes on any build that misses the cache, which is every CI run.
-# Image size is paid per worker instance on a cold pull and build time only on release, so this is a deliberate trade
-# rather than a free win. Upstream also maintains the dependency list across releases, which moves: 4.0 swapped
-# FreeImage for OpenImageIO and Qt5 for Qt6 and added SuiteSparse and OpenSSL. Their build covers all major CUDA
-# architectures, so the same binary runs on the g5.xlarge's A10G and on Ada-generation dev GPUs.
+# COLMAP is copied from upstream's published image rather than compiled here. Compiling it saves about 4 GB of image —
+# their build enables the GUI and links MKL, neither of which a headless worker calls — but costs roughly twenty minutes
+# on any build that misses the cache, which is every CI run. Image size is paid per worker instance on a cold pull and
+# build time only on release, so this is a deliberate trade rather than a free win. Upstream also maintains the
+# dependency list across releases, which moves: 4.0 swapped FreeImage for OpenImageIO and Qt5 for Qt6 and added
+# SuiteSparse and OpenSSL. Their build covers all major CUDA architectures, so the same binary runs on the g5.xlarge's
+# A10G and on Ada-generation dev GPUs.
 #
 # Pinned by digest rather than tag, since upstream's CI names tags `$(date +%Y%m%d).$GITHUB_RUN_NUMBER` — a build
 # number, not a version.
@@ -88,7 +88,48 @@ COPY --from=ghcr.io/astral-sh/uv:0.12.3 /uv /uvx /usr/local/bin/
 
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
-RUN uv sync --no-dev --locked
+# The second `rm -rf` deletes CUDA libraries that this image would otherwise carry twice. torch's cu129 wheels bundle
+# their own copies of libraries the nvidia/cuda base image already installs through apt. Deleting them in the same RUN
+# that created them is what shrinks the image; a later RUN would add a whiteout layer on top of bytes already pulled,
+# making it bigger.
+#
+# torch finds these through a DT_RPATH of $ORIGIN/../../nvidia/*/lib on libtorch_cuda.so, which the loader searches
+# ahead of LD_LIBRARY_PATH. A directory missing from an RPATH is skipped rather than fatal, so the lookup falls through
+# to the LD_LIBRARY_PATH=/usr/local/cuda/lib64 the base image sets and resolves against the apt copy. Both sides are
+# CUDA 12.9, so the sonames match. Moving torch to a wheel built against a new CUDA major breaks that, and the symptom
+# is `import torch` failing with the library named in the error.
+#
+# cudnn, cusparselt and nvshmem are NEEDED entries of libtorch_cuda.so with no apt copy here, because cuDNN ships only
+# in the -cudnn- image variants. cuda_cupti has one only in the devel layer. nccl does have one, at
+# /lib/x86_64-linux-gnu/libnccl.so.2 by way of ld.so.cache rather than LD_LIBRARY_PATH, but apt's 2.27.3 predates the
+# ncclCommResume that this torch build calls. Deleting that wheel therefore fails at `import torch` with an
+# undefined-symbol error instead of a missing-file one. All five stay. triton goes because it is torch.compile's
+# backend and worker/pipeline/ never calls torch.compile.
+#
+# `uv cache clean` is what makes those deletions count. uv unpacks into /root/.cache/uv and hardlinks from there into
+# the venv, so removing only the venv copy leaves every byte alive through the cache's reference to the same inode and
+# the layer does not shrink at all. Both references have to go, and both have to go in this RUN.
+#
+# The loop makes every path required. `rm -rf` on a path that is already gone succeeds, so a wheel layout that moved
+# these directories would leave the image silently back at its full size with the build still green. torch already
+# depends on cuda-toolkit and cuda-pathfinder, whose job is locating CUDA libraries across more than one layout, so
+# that move is a matter of when. The worker job in .github/workflows/ci.yml never builds this image, which leaves this
+# RUN as the only place such a mistake can surface.
+#
+# The closing `import torch` asserts the prune left a working venv. It catches strictly more than a check for
+# unresolved NEEDED entries would: deleting nvidia/nccl resolves libnccl.so.2 against the apt copy and then fails on a
+# missing ncclCommResume symbol, which ldd reports as a perfectly resolved library.
+RUN uv sync --no-dev --locked && \
+    cd .venv/lib/python3.*/site-packages && \
+    for d in triton \
+        nvidia/cublas nvidia/cusolver nvidia/cusparse nvidia/cufft \
+        nvidia/cuda_nvrtc nvidia/curand nvidia/nvjitlink nvidia/cuda_runtime nvidia/cufile; do \
+        [ -d "$d" ] || { echo "worker/Dockerfile: $d was queued for pruning but does not exist" >&2; exit 1; }; \
+        rm -rf "$d"; \
+    done && \
+    cd /app && \
+    uv cache clean && \
+    .venv/bin/python -c "import torch"
 
 COPY pipeline/ ./pipeline/
 COPY run_job.py ./
