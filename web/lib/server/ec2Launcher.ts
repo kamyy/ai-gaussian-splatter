@@ -96,8 +96,8 @@ export function generateCallbackToken(): string {
 
 /**
  * How long after boot renderUserData's `shutdown -h` terminates a worker, whatever its job is doing. It caps
- * worst-case billing and is not a tuned SLA. M0 hasn't run on real hardware yet (AGENTS.md), so 2 hours is a rough
- * guess generous over the expected job. Revisit it once real wall-clock numbers exist.
+ * worst-case billing and is not a tuned SLA. No job's wall clock has been measured yet, so 2 hours is a rough guess
+ * generous over the expected job. Revisit it once real numbers exist.
  */
 export const WORKER_MAX_LIFETIME_MINUTES = 120;
 
@@ -179,8 +179,9 @@ export async function launchJob(params: {
 
 /**
  * Local-dev substitute for launchJob(): runs the worker image on the caller's own GPU via Podman instead of
- * launching a real EC2 spot instance. Gated behind WORKER_LOCAL_LAUNCH in process/route.ts and never reachable in
- * production, where the ECS task has neither a podman binary nor a GPU.
+ * launching a real EC2 spot instance. Both launch routes gate it behind WORKER_LOCAL_LAUNCH
+ * (web/app/api/v1/splats/[splatId]/process/route.ts and .../train/route.ts). It is never reachable in production,
+ * where the ECS task has neither a podman binary nor a GPU.
  *
  * Fire-and-forget like the EC2 launch it replaces: the worker reports its own progress back over
  * APP_PUBLIC_URL/CALLBACK_TOKEN (worker/pipeline/status.py), so this function doesn't wait on the container.

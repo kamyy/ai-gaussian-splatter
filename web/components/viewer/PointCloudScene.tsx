@@ -6,9 +6,9 @@ import { PLYLoader } from "three/examples/jsm/loaders/PLYLoader.js";
 
 import { AXES_HELPER_SIZE } from "./constants";
 
-// Inverse-sigmoid DC-term convention worker/pipeline/export.py documents: color = SH_C0 * f_dc + 0.5. Only
-// "trained_points" mode needs this — the COLMAP point cloud already carries plain 0-255 red/green/blue, which
-// PLYLoader decodes into a standard color attribute on its own.
+// The DC-term decode worker/pipeline/export.py documents: color = SH_C0 * f_dc + 0.5. Only "sh_dc" mode needs it. The
+// COLMAP point cloud already carries plain 0-255 red/green/blue, which PLYLoader decodes into a standard color
+// attribute on its own.
 const SH_C0 = 0.28209479177387814;
 
 interface PointCloudSceneProps {

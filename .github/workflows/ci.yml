@@ -1,9 +1,8 @@
 name: CI
 
-# Plan §8: unit/component tests run on every PR here. Playwright runs too, but its one spec is skipped pending a seeded
-# test database, so it currently asserts nothing. Real-pipeline integration tests (COLMAP + gsplat on a real GPU) are
-# deliberately NOT run here — they cost real time/money and stay manual/milestone-gated, per the plan's testing
-# strategy.
+# Unit and component tests run on every PR here. Playwright runs too, with no specs to run: `--pass-with-no-tests`
+# keeps it green until a seeded test database exists (AGENTS.md). Real-pipeline integration tests (COLMAP + gsplat on a real GPU) are
+# deliberately NOT run here — they cost real time/money and stay manual/milestone-gated.
 on:
   pull_request:
   push:
@@ -49,7 +48,7 @@ jobs:
       - run: pnpm run worker:check
       - working-directory: worker
         # No GPU/CUDA toolkit in CI runners — this is exactly the CI-cheap tier (fetch/export/status callbacks, mocked
-        # S3/HTTP), not the real COLMAP+gsplat pipeline. See worker/pipeline/train.py's docstring.
+        # S3/HTTP), not the real COLMAP+gsplat pipeline.
         run: uv run pytest -v
 
   web:

@@ -37,7 +37,7 @@ Job wall clock splits into three parts:
 - **COLMAP**: a few minutes, CPU-bound by `mapper`'s incremental bundle adjustment.
 - **Training**: the majority of wall clock.
 
-M10's baked AMI therefore attacks the smaller half — fixed overhead, not training. Training cost is set by the resolution the photos are rasterized at ([State / what's next](AGENTS.md#state--whats-next), gap 3), not by boot latency. All of this is read off the code rather than observed; M0/M5 is the first run that will produce real numbers.
+M10's baked AMI therefore attacks the smaller half — fixed overhead, not training. Training cost is set by the resolution the photos are rasterized at (`MAX_TRAINING_EDGE` in `worker/pipeline/train.py`), not by boot latency. All of this is read off the code rather than observed; M0/M5 is the first run that will produce real numbers.
 
 - Not Lambda or Fargate: neither offers GPU.
 - Not hand-rolled ECS orchestration: bin-packing shared instances doesn't fit a one-job-one-instance model.

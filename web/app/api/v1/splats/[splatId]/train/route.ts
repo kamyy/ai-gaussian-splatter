@@ -83,8 +83,8 @@ export const POST = withErrorHandling(
       }
     } catch (err) {
       // Reverted rather than left at "launching": the reconstruct phase's own output (sparse model, point cloud) is
-      // untouched, so the user should be able to just hit "Proceed to train" again instead of being stuck forever —
-      // "launching" isn't a status this route (or POST /process's in-flight guard) will ever move on from by itself.
+      // untouched, so the user can just hit "Proceed to train" again. Left at "launching" the job blocks on
+      // POST /process's JOB_STALE_AFTER_MS sweep instead, which is hours away and cancels the job outright.
       await getDb().update(jobs).set({ status: "awaiting_training" }).where(eq(jobs.id, flipped.id));
       throw err;
     }

@@ -5,9 +5,9 @@
 #
 # Usage: scripts/dev/worker-train.sh <splat-id> [--fast]
 #
-# --fast cuts training to 20 iterations. It doesn't cut GPU memory. Every photo stays resident at full resolution
-# whatever the iteration count, so a GPU smaller than a 24GB A10G needs fewer or downscaled photos to even get through a
-# smoke test.
+# --fast cuts training to 20 iterations. It doesn't cut GPU memory: every photo stays resident in VRAM for the whole
+# run, downscaled to worker/pipeline/train.py's MAX_TRAINING_EDGE longest edge, so what a smoke test costs in memory
+# follows the photo count rather than the iteration count.
 
 set -euo pipefail
 

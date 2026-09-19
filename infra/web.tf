@@ -73,8 +73,8 @@ resource "aws_iam_role_policy" "execution" {
 
 # ---------------------------------------------------------------------------
 # Migration task — runs `node web/scripts/db-migrate.cjs` (web/Dockerfile's `migrator` stage) as a one-off
-# ecs:RunTask, ahead of the service's own rollout — see RUNBOOK.md and AGENTS.md for why migrations can't run
-# at container boot. execution_role is reused as-is: it already has ECR pull and DB-secret read, everything
+# ecs:RunTask, ahead of the service's own rollout — see ARCHITECTURE.md for why migrations can't run at
+# container boot. execution_role is reused as-is: it already has ECR pull and DB-secret read, everything
 # this container needs to start. The migration task role gets its own fixed name for the same
 # RUNBOOK-literalness reason as execution_role, and needs no grants at all: the container only opens a TCP
 # connection to RDS, no AWS API calls.

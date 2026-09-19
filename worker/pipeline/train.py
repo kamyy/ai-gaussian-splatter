@@ -1,20 +1,14 @@
-"""3D Gaussian Splatting training via gsplat, at a reduced iteration count for
-object-centric captures.
+"""3D Gaussian Splatting training via gsplat, at a reduced iteration count for object-centric captures.
 
-The training loop below has never executed on a GPU. The structure follows
-the standard 3DGS algorithm and gsplat's `rasterization()` signature, but no
-CUDA kernel here has ever run. Nothing in it is proven; see AGENTS.md.
-
-Simplifications relative to the original paper, made deliberately for a
-reduced-iteration, object-centric MVP rather than by oversight:
-- Direct RGB colors, not full spherical-harmonics view-dependent color
-  (sh_degree=0) — adequate for a mostly-diffuse single-object capture.
-- Simplified densification (clone high-position-gradient points + prune
-  low-opacity points on a fixed schedule) rather than the paper's full
-  clone/split heuristic.
-- Camera radial distortion from COLMAP is not undistorted before training
-  (see worker/pipeline/colmap_model.py) — acceptable for SIMPLE_RADIAL's typically small
-  phone-camera distortion at this quality bar, not for wide-angle lenses.
+Simplifications relative to the original paper, made deliberately for a reduced-iteration, object-centric MVP rather
+than by oversight:
+- Direct RGB colors, not full spherical-harmonics view-dependent color (sh_degree=0). That is adequate for a
+  mostly-diffuse single-object capture.
+- Simplified densification (clone high-position-gradient points + prune low-opacity points on a fixed schedule) rather
+  than the paper's full clone/split heuristic.
+- Camera radial distortion from COLMAP is not undistorted before training (see worker/pipeline/colmap_model.py). That
+  is acceptable for SIMPLE_RADIAL's typically small phone-camera distortion at this quality bar, not for wide-angle
+  lenses.
 """
 
 import logging

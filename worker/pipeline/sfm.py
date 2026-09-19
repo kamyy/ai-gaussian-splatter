@@ -1,8 +1,8 @@
 """Structure-from-Motion via COLMAP: exhaustive matching, favouring accuracy
 over speed for a small object-centric photo set.
 
-Requires the `colmap` CLI on PATH (installed via `worker/Dockerfile` / baked
-AMI). It is not a pip package, hence subprocess rather than pycolmap.
+Requires the `colmap` CLI on PATH, which `worker/Dockerfile` installs. It is not a pip package, hence subprocess
+rather than pycolmap.
 """
 
 import logging

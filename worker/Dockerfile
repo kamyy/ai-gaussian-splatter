@@ -1,9 +1,7 @@
 # Worker image: COLMAP (taken from upstream's published image) + Python deps for the gsplat training pipeline.
 #
-# Not yet run end to end on real hardware — per plan §6/M5, build and run this before trusting it.
-#
-# Per plan §6: this stock-base-image approach is the "simplest to get right first" path; a Packer-baked AMI with these
-# layers pre-installed is the documented M10 fast-follow to cut per-job boot latency.
+# Built on stock base images, so every job pays the pull and the gsplat kernel build. A Packer-baked AMI carrying these
+# layers is the M10 fast-follow that cuts that per-job boot latency (ARCHITECTURE.md).
 #
 # Base images are registry-qualified because podman, unlike docker, does not assume Docker Hub for a bare `nvidia/cuda`.
 # With several unqualified-search registries configured it asks which to use, and under `short-name-mode = "enforcing"`

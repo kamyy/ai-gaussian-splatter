@@ -99,9 +99,11 @@ export const POST = withErrorHandling(
       throw err;
     }
 
-    // The hard backstop, checked last so per-user/IP limits already screened most abuse before this expensive step is
-    // even considered. The claimed row is deleted rather than marked failed when the cap rejects: nothing has run for
-    // it, and leaving a failed job behind would make the next attempt report a failure that never happened.
+    // The hard backstop on total GPU spend. The per-IP and per-user limits sit earlier in the flow, on the presign
+    // route (web/app/api/v1/splats/[splatId]/photos/presign/route.ts), so most abuse is screened before a splat has
+    // enough photos to reach this route at all. The claimed row is deleted rather than marked failed when the cap
+    // rejects: nothing has run for it, and leaving a failed job behind would make the next attempt report a failure
+    // that never happened.
     try {
       await checkAndIncrementGlobalDaily(env.GLOBAL_MAX_JOBS_PER_DAY);
     } catch (err) {
