@@ -65,8 +65,8 @@ export function JobStatusPoller({ splatId }: JobStatusPollerProps) {
         variant="determinate"
         value={STATUS_PROGRESS[job.status]}
         // MUI's LinearProgress has no built-in pulse for a determinate bar (only "indeterminate", which would hide
-        // the percentage). This keeps the percentage while still giving a "still working" visual cue for a
-        // non-terminal status, closer to the old animated bar's intent.
+        // the percentage). This keeps the percentage while still giving a "still working" cue for a non-terminal
+        // status.
         sx={
           inProgress
             ? {

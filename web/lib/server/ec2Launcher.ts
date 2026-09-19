@@ -7,11 +7,9 @@ import { EC2Client, RunInstancesCommand } from "@aws-sdk/client-ec2";
 
 import { getEnv } from "./env";
 
-/**
- * Direct spot-instance-per-job launch — no SQS/Batch/Step Functions. IAM instance profile is scoped externally
- * (infra/worker_iam.tf) to: ECR pull on the worker repository, S3 read (uploads bucket), S3 read/write (splats
- * bucket), and ec2:TerminateInstances on any instance tagged Role=worker, not only itself.
- */
+// Direct spot-instance-per-job launch — no SQS/Batch/Step Functions. The instance profile these launches pass is
+// scoped externally, in infra/worker_iam.tf.
+
 type WorkerStage = "reconstruct" | "train";
 
 interface UserDataParams {

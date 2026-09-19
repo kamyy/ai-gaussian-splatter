@@ -91,11 +91,11 @@ jobs:
       APP_PUBLIC_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v7
-      # A manual `podman run` rather than the `services:` block the postgres:18 container used before: the migrator-
-      # image test below runs its own podman container that needs to address Postgres by name, and a GitHub Actions
-      # `services:` container (Docker-managed) isn't reachable that way from a sibling podman container. A dedicated
-      # user-defined podman network sidesteps that rather than relying on `--network host`, which does not behave as
-      # true host networking under rootless podman here — verified directly against this runner setup.
+      # A manual `podman run` rather than a `services:` block: the migrator-image test below runs its own podman
+      # container that needs to address Postgres by name, and a GitHub Actions `services:` container (Docker-managed)
+      # isn't reachable that way from a sibling podman container. A dedicated user-defined podman network sidesteps
+      # that rather than relying on `--network host`, which does not behave as true host networking under rootless
+      # podman here — verified directly against this runner setup.
       - name: Start Postgres
         run: |
           podman network create ci-net

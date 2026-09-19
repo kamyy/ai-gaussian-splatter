@@ -72,9 +72,9 @@ export const PATCH = withErrorHandling(
     // self-terminates at "awaiting_training" and the user then decides whether to train, a gap that can last hours.
     // Stamping it on "training_running" instead would fold that think-time into COLMAP's own wall clock.
     //
-    // The `?? now` fallback on "training_running" is a rollout backstop, not the normal path: a worker instance
-    // launched by the previous (pre-stage-split) web release never sends "awaiting_training" at all, so without this,
-    // any job already mid-flight when this change deploys would leave colmapFinishedAt permanently null.
+    // "training_running" stamps colmapFinishedAt too, for a job that arrives here without its "awaiting_training"
+    // callback: worker/pipeline/status.py swallows a failed PATCH, so that callback can simply go missing. Without
+    // the fallback, colmapFinishedAt would stay null for the life of the job.
     const now = new Date();
     if (status === "colmap_running" && job.colmapStartedAt === null) {
       jobData.colmapStartedAt = now;

@@ -3,6 +3,11 @@
 # whole bucket, not just the calling job's own objects, and the terminate grant matches every worker instance,
 # not only the caller — EC2 has no resource-level condition for "the calling instance" to scope either one down
 # further.
+#
+# AWSServiceRoleForEC2Spot is deliberately absent: it's one account-wide role shared by every other Spot workload, so
+# creating it fails outright in an account that already has one, and Terraform deleting it would break those other
+# workloads. It has to exist before web/lib/server/ec2Launcher.ts's first RunInstances call — see RUNBOOK.md for the
+# one-time setup.
 
 resource "aws_iam_role" "worker" {
   name        = "ai-gaussian-splatter-worker"
@@ -60,10 +65,6 @@ resource "aws_iam_role_policy" "worker" {
   })
 }
 
-# AWSServiceRoleForEC2Spot is not managed here: it's one account-wide role shared by every other Spot workload, so
-# creating it fails outright in an account that already has one, and Terraform deleting it would break those other
-# workloads. It has to exist before web/lib/server/ec2Launcher.ts's first RunInstances call — see RUNBOOK.md for the
-# one-time setup.
 resource "aws_iam_instance_profile" "worker" {
   name = "ai-gaussian-splatter-worker"
   role = aws_iam_role.worker.name

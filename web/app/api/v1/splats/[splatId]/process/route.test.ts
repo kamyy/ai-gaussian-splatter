@@ -126,8 +126,8 @@ describe("POST /api/v1/splats/[splatId]/process", () => {
     const { splat } = await seed();
     launchJobMock.mockRejectedValueOnce(new Error("RunInstances denied"));
 
-    // Not an HttpError, so withErrorHandling (httpError.ts) rethrows it rather than converting it to a response —
-    // same as it already did before this route added its own try/catch here. What's new is the DB cleanup below.
+    // Not an HttpError, so withErrorHandling (web/lib/server/httpError.ts) rethrows it rather than converting it to a
+    // response. The route's own catch runs first, for the DB cleanup asserted below.
     await expect(POST({} as never, ctx(splat.id))).rejects.toThrow("RunInstances denied");
 
     const [job] = await getDb().select().from(jobs).where(eq(jobs.splatId, splat.id));

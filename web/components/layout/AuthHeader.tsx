@@ -10,10 +10,10 @@ import { useSplat } from "@/lib/hooks";
 import { statusColor } from "@/lib/statusColor";
 import { useActiveSplatId } from "@/lib/useActiveSplatId";
 
-// Not a reuse of the header inlined in web/app/(public)/layout.tsx. Both now sit inside a fixed-height header row
-// (this one the <Box component="header"> in web/app/(authenticated)/splats/layout.tsx), but the content differs:
-// this header looks up and shows the current splat's name/status, which the public layout has no notion of. A
-// height of "100%" fills whatever height that row leaves, rather than repeating a pixel number here.
+// Not a reuse of the header inlined in web/app/(public)/layout.tsx. Both sit inside a fixed-height header row (this
+// one the <Box component="header"> in web/app/(authenticated)/splats/layout.tsx), but the content differs: this
+// header looks up and shows the current splat's name/status, which the public layout has no notion of. A height of
+// "100%" fills whatever height that row leaves, rather than repeating a pixel number here.
 export function AuthHeader() {
   const splatId = useActiveSplatId();
   const { data: splat } = useSplat(splatId);

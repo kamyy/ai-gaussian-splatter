@@ -92,9 +92,6 @@ resource "aws_s3_bucket_policy" "uploads" {
   policy = local.deny_insecure_transport_policy["uploads"]
 }
 
-# CORS is needed here for the same reason as on uploads, in the other direction: the viewer fetches the .ply
-# straight from S3 in the browser (web/components/viewer/SplatViewer.tsx passes the presigned URL to
-# DropInViewer), so it is a cross-origin GET that S3 rejects without a matching rule.
 resource "aws_s3_bucket" "splats" {
   bucket_prefix = "ai-gaussian-splatter-splats-"
   force_destroy = true
@@ -118,6 +115,9 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "splats" {
   }
 }
 
+# Needed for the same reason as on uploads, in the other direction: the viewer fetches the .ply straight from S3 in
+# the browser (web/components/viewer/SplatViewer.tsx passes the presigned URL to DropInViewer), so it is a
+# cross-origin GET that S3 rejects without a matching rule.
 resource "aws_s3_bucket_cors_configuration" "splats" {
   bucket = aws_s3_bucket.splats.id
 

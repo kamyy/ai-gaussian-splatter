@@ -17,10 +17,6 @@ interface SplatCarouselCardProps {
   splat: SplatListItem;
 }
 
-// Sized by width (height: "auto"), not a fixed box: unlike the horizontally-scrolling filmstrip in
-// PhotoFilmstrip.tsx, this card has no scroll to absorb a wider photo, so the thumbnail fills the card's content
-// width and grows or shrinks in height to match, at its own aspect ratio. No cropping and no letterboxing.
-
 // This file is "use client", so the Server Component restriction AGENTS.md documents doesn't apply and
 // `component={Link}` works here.
 export function SplatCarouselCard({ splat }: SplatCarouselCardProps) {
@@ -40,6 +36,10 @@ export function SplatCarouselCard({ splat }: SplatCarouselCardProps) {
       </Stack>
 
       {splat.thumbnailPhotoUrl ? (
+        // Sized by width (height: "auto"), not a fixed box. Unlike the horizontally-scrolling filmstrip in
+        // web/components/splats/PhotoFilmstrip.tsx, this card has no scroll to absorb a wider photo, so the thumbnail
+        // fills the card's content width and grows or shrinks in height to match, at its own aspect ratio. No
+        // cropping and no letterboxing.
         // biome-ignore lint/performance/noImgElement: presigned S3 URL has no fixed domain for next/image.
         <img
           src={splat.thumbnailPhotoUrl}

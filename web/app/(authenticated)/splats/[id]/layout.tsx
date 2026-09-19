@@ -24,9 +24,8 @@ interface SplatLayoutProps {
 }
 
 // Shared by both view routes (point-cloud/splat): the splat/job fetch, the job-ended refetch effect, the job progress
-// strip, the view toggle, and the photos slideout. The name/status chip that used to float here now lives in
-// web/components/layout/AuthHeader.tsx instead. This is the new home for logic that used to live in the single
-// web/app/(authenticated)/splats/[id]/page.tsx now that each view is its own route.
+// strip, the view toggle, and the photos slideout. The splat's name and status are not here; they belong to the
+// header web/components/layout/AuthHeader.tsx renders above this route.
 export default function SplatLayout({ children, params }: SplatLayoutProps) {
   const { id } = use(params);
   const { data: splat, isLoading, mutate: refetchSplat } = useSplat(id);
@@ -77,8 +76,8 @@ export default function SplatLayout({ children, params }: SplatLayoutProps) {
           </Paper>
         )}
 
-        {/* Stacked under the poller when it's shown, now that the name/status chip that used to sit above this has
-        moved into AuthHeader and the bottom of the viewport belongs to PhotoFilmstrip instead. */}
+        {/* Stacked under the poller when it's shown, and back up to the poller's own position when it isn't. The
+        bottom of the viewport belongs to PhotoFilmstrip. */}
         <Paper
           variant="outlined"
           sx={{

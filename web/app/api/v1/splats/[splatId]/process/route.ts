@@ -77,9 +77,8 @@ export const POST = withErrorHandling(
         ),
       );
 
-    // Before this feature, a job ran start to finish in one automatic pass, so a second POST while one was in flight
-    // was a narrow race. Now a job can sit at "awaiting_training" for as long as the user takes to decide, making an
-    // accidental double-trigger far more reachable. The unique index above enforces "at most one active job per
+    // A job can sit at "awaiting_training" for as long as the user takes to decide, so a second POST arriving while
+    // one is in flight is easy to reach by accident. The unique index above enforces "at most one active job per
     // splat" at the database level, so a race loses here as a unique violation rather than needing a separate
     // read-then-write check that could itself race.
     //
