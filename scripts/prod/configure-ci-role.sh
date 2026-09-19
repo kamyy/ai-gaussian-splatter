@@ -46,17 +46,21 @@ TRUST_POLICY=$(
   cat <<EOF
 {
   "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Principal": {"Federated": "arn:aws:iam::$AWS_ACCOUNT_ID:oidc-provider/$OIDC_HOST"},
-    "Action": "sts:AssumeRoleWithWebIdentity",
-    "Condition": {
-      "StringEquals": {
-        "$OIDC_HOST:aud": "sts.amazonaws.com",
-        "$OIDC_HOST:sub": "$SUBJECT"
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::$AWS_ACCOUNT_ID:oidc-provider/$OIDC_HOST"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "$OIDC_HOST:aud": "sts.amazonaws.com",
+          "$OIDC_HOST:sub": "$SUBJECT"
+        }
       }
     }
-  }]
+  ]
 }
 EOF
 )
@@ -69,110 +73,337 @@ fi
 
 aws iam tag-role --role-name "$ROLE" --tags "Key=Project,Value=$PROJECT_TAG"
 
+# Image push is the web repository only. .github/workflows/deploy.yml never pushes the worker image.
+# App S3 ARNs name the three prefixes infra/ creates. ai-gaussian-splatter-* also matches the state bucket.
+# IAM is additive, so a narrower tfstate statement would not cancel DeleteBucket on that bucket.
+# iam:CreateServiceLinkedRole is for the ECS, ELB, RDS, and Application Auto Scaling SLRs a first apply creates.
+# scripts/prod/create-account-prereqs.sh only creates AWSServiceRoleForEC2Spot.
+# logs:DescribeLogGroups is a list API and ignores a log-group resource ARN.
 DEPLOY_POLICY=$(
   cat <<EOF
 {
   "Version": "2012-10-17",
   "Statement": [
-    {"Effect": "Allow", "Action": "ecr:GetAuthorizationToken", "Resource": "*"},
-    {"Effect": "Allow", "Action": [
-        "ecr:BatchCheckLayerAvailability", "ecr:PutImage", "ecr:InitiateLayerUpload",
-        "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer",
-        "ecr:CreateRepository", "ecr:DeleteRepository", "ecr:DescribeRepositories",
-        "ecr:PutLifecyclePolicy", "ecr:GetLifecyclePolicy", "ecr:TagResource", "ecr:PutImageTagMutability"
-      ], "Resource": "arn:aws:ecr:$REGION:$AWS_ACCOUNT_ID:repository/ai-gaussian-splatter*"},
-    {"Effect": "Allow", "Action": "ecs:RunTask", "Resource": [
-        "arn:aws:ecs:$REGION:$AWS_ACCOUNT_ID:task-definition/ai-gaussian-splatter-migrate:*",
-        "arn:aws:ecs:$REGION:$AWS_ACCOUNT_ID:cluster/ai-gaussian-splatter"
-      ]},
-    {"Effect": "Allow", "Action": ["ecs:DescribeTasks", "ecs:DescribeServices"], "Resource": "*",
-      "Condition": {"ArnEquals": {
-        "ecs:cluster": "arn:aws:ecs:$REGION:$AWS_ACCOUNT_ID:cluster/ai-gaussian-splatter"
-      }}},
-    {"Effect": "Allow", "Action": [
-        "ecs:DescribeTaskDefinition", "ecs:RegisterTaskDefinition", "ecs:DeregisterTaskDefinition",
-        "ecs:CreateCluster", "ecs:DeleteCluster", "ecs:DescribeClusters", "ecs:PutClusterCapacityProviders",
-        "ecs:CreateService", "ecs:UpdateService", "ecs:DeleteService", "ecs:TagResource",
-        "ecs:PutAccountSetting", "ecs:ListTagsForResource"
-      ], "Resource": "*"},
-    {"Effect": "Allow", "Action": [
-        "application-autoscaling:RegisterScalableTarget", "application-autoscaling:DeregisterScalableTarget",
-        "application-autoscaling:PutScalingPolicy", "application-autoscaling:DeleteScalingPolicy",
-        "application-autoscaling:DescribeScalableTargets", "application-autoscaling:DescribeScalingPolicies"
-      ], "Resource": "*"},
-    {"Effect": "Allow", "Action": "iam:PassRole", "Resource": [
+    {
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecr:InitiateLayerUpload",
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:BatchGetImage",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:CompleteLayerUpload",
+        "ecr:PutImage",
+        "ecr:UploadLayerPart"
+      ],
+      "Resource": "arn:aws:ecr:$REGION:$AWS_ACCOUNT_ID:repository/ai-gaussian-splatter"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecr:CreateRepository",
+        "ecr:DescribeRepositories",
+        "ecr:GetLifecyclePolicy",
+        "ecr:ListTagsForResource",
+        "ecr:PutImageScanningConfiguration",
+        "ecr:PutImageTagMutability",
+        "ecr:PutLifecyclePolicy",
+        "ecr:DeleteRepository",
+        "ecr:TagResource"
+      ],
+      "Resource": "arn:aws:ecr:$REGION:$AWS_ACCOUNT_ID:repository/ai-gaussian-splatter*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "ecs:RunTask",
+      "Resource": [
+        "arn:aws:ecs:$REGION:$AWS_ACCOUNT_ID:cluster/ai-gaussian-splatter",
+        "arn:aws:ecs:$REGION:$AWS_ACCOUNT_ID:task-definition/ai-gaussian-splatter-migrate:*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecs:DescribeServices",
+        "ecs:DescribeTasks"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ArnEquals": {
+          "ecs:cluster": "arn:aws:ecs:$REGION:$AWS_ACCOUNT_ID:cluster/ai-gaussian-splatter"
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecs:CreateCluster",
+        "ecs:CreateService",
+        "ecs:RegisterTaskDefinition",
+        "ecs:DescribeClusters",
+        "ecs:DescribeTaskDefinition",
+        "ecs:ListTagsForResource",
+        "ecs:PutClusterCapacityProviders",
+        "ecs:UpdateCluster",
+        "ecs:UpdateService",
+        "ecs:DeleteCluster",
+        "ecs:DeleteService",
+        "ecs:DeregisterTaskDefinition",
+        "ecs:TagResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "application-autoscaling:RegisterScalableTarget",
+        "application-autoscaling:DescribeScalableTargets",
+        "application-autoscaling:DescribeScalingPolicies",
+        "application-autoscaling:ListTagsForResource",
+        "application-autoscaling:PutScalingPolicy",
+        "application-autoscaling:DeleteScalingPolicy",
+        "application-autoscaling:DeregisterScalableTarget",
+        "application-autoscaling:TagResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": [
         "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-gaussian-splatter-execution",
         "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-gaussian-splatter-migrate-task",
-        "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-gaussian-splatter-task",
-        "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-gaussian-splatter-worker"
-      ]},
-    {"Effect": "Allow", "Action": [
-        "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:TagRole",
-        "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRolePolicy", "iam:ListRolePolicies",
-        "iam:CreateInstanceProfile", "iam:DeleteInstanceProfile", "iam:GetInstanceProfile",
-        "iam:AddRoleToInstanceProfile", "iam:RemoveRoleFromInstanceProfile"
-      ], "Resource": [
-        "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-gaussian-splatter-*",
-        "arn:aws:iam::$AWS_ACCOUNT_ID:instance-profile/ai-gaussian-splatter-*"
-      ]},
-    {"Effect": "Allow", "Action": [
-        "s3:CreateBucket", "s3:DeleteBucket*", "s3:ListBucket", "s3:GetBucket*", "s3:PutBucket*",
-        "s3:PutObject", "s3:GetObject", "s3:DeleteObject",
-        "s3:PutEncryptionConfiguration", "s3:GetEncryptionConfiguration",
-        "s3:PutLifecycleConfiguration", "s3:GetLifecycleConfiguration"
-      ], "Resource": [
-        "arn:aws:s3:::ai-gaussian-splatter-*", "arn:aws:s3:::ai-gaussian-splatter-*/*"
-      ]},
-    {"Effect": "Allow", "Action": [
-        "ec2:CreateVpc", "ec2:DeleteVpc", "ec2:DescribeVpcs", "ec2:ModifyVpcAttribute",
-        "ec2:CreateSubnet", "ec2:DeleteSubnet", "ec2:DescribeSubnets", "ec2:ModifySubnetAttribute",
-        "ec2:CreateInternetGateway", "ec2:DeleteInternetGateway", "ec2:AttachInternetGateway",
-        "ec2:DetachInternetGateway", "ec2:DescribeInternetGateways",
-        "ec2:CreateRouteTable", "ec2:DeleteRouteTable", "ec2:CreateRoute", "ec2:DeleteRoute",
-        "ec2:AssociateRouteTable", "ec2:DisassociateRouteTable", "ec2:DescribeRouteTables",
-        "ec2:CreateVpcEndpoint", "ec2:DeleteVpcEndpoints", "ec2:DescribeVpcEndpoints",
-        "ec2:CreateSecurityGroup", "ec2:DeleteSecurityGroup", "ec2:DescribeSecurityGroups",
-        "ec2:AuthorizeSecurityGroupIngress", "ec2:AuthorizeSecurityGroupEgress",
-        "ec2:RevokeSecurityGroupIngress", "ec2:RevokeSecurityGroupEgress",
-        "ec2:DescribeSecurityGroupRules", "ec2:UpdateSecurityGroupRuleDescriptionsIngress",
+        "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-gaussian-splatter-task"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "arn:aws:iam::$AWS_ACCOUNT_ID:role/aws-service-role/*",
+      "Condition": {
+        "StringEquals": {
+          "iam:AWSServiceName": [
+            "ecs.amazonaws.com",
+            "ecs.application-autoscaling.amazonaws.com",
+            "elasticloadbalancing.amazonaws.com",
+            "rds.amazonaws.com"
+          ]
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "iam:AddRoleToInstanceProfile",
+        "iam:CreateInstanceProfile",
+        "iam:CreateRole",
+        "iam:GetInstanceProfile",
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:ListInstanceProfileTags",
+        "iam:ListInstanceProfilesForRole",
+        "iam:ListRolePolicies",
+        "iam:ListRoleTags",
+        "iam:PutRolePolicy",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:DeleteInstanceProfile",
+        "iam:DeleteRole",
+        "iam:DeleteRolePolicy",
+        "iam:RemoveRoleFromInstanceProfile",
+        "iam:TagInstanceProfile",
+        "iam:TagRole"
+      ],
+      "Resource": [
+        "arn:aws:iam::$AWS_ACCOUNT_ID:instance-profile/ai-gaussian-splatter-*",
+        "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-gaussian-splatter-*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:GetBucket*",
+        "s3:GetEncryptionConfiguration",
+        "s3:GetLifecycleConfiguration",
+        "s3:GetObject",
+        "s3:ListBucket",
+        "s3:PutBucket*",
+        "s3:PutEncryptionConfiguration",
+        "s3:PutLifecycleConfiguration",
+        "s3:PutObject",
+        "s3:DeleteBucket*",
+        "s3:DeleteObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::ai-gaussian-splatter-access-logs-*",
+        "arn:aws:s3:::ai-gaussian-splatter-access-logs-*/*",
+        "arn:aws:s3:::ai-gaussian-splatter-splats-*",
+        "arn:aws:s3:::ai-gaussian-splatter-splats-*/*",
+        "arn:aws:s3:::ai-gaussian-splatter-uploads-*",
+        "arn:aws:s3:::ai-gaussian-splatter-uploads-*/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateInternetGateway",
+        "ec2:CreateRoute",
+        "ec2:CreateRouteTable",
+        "ec2:CreateSecurityGroup",
+        "ec2:CreateSubnet",
+        "ec2:CreateTags",
+        "ec2:CreateVpc",
+        "ec2:CreateVpcEndpoint",
+        "ec2:DescribeAvailabilityZones",
+        "ec2:DescribeInternetGateways",
+        "ec2:DescribeNetworkInterfaces",
+        "ec2:DescribeRouteTables",
+        "ec2:DescribeSecurityGroupRules",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeTags",
+        "ec2:DescribeVpcAttribute",
+        "ec2:DescribeVpcEndpoints",
+        "ec2:DescribeVpcs",
+        "ec2:ModifySubnetAttribute",
+        "ec2:ModifyVpcAttribute",
         "ec2:UpdateSecurityGroupRuleDescriptionsEgress",
-        "ec2:CreateTags", "ec2:DeleteTags", "ec2:DescribeTags", "ec2:DescribeAvailabilityZones"
-      ], "Resource": "*"},
-    {"Effect": "Allow", "Action": [
-        "rds:CreateDBInstance", "rds:DeleteDBInstance", "rds:ModifyDBInstance", "rds:DescribeDBInstances",
-        "rds:CreateDBSubnetGroup", "rds:DeleteDBSubnetGroup", "rds:DescribeDBSubnetGroups",
-        "rds:AddTagsToResource", "rds:ListTagsForResource"
-      ], "Resource": "*"},
-    {"Effect": "Allow", "Action": [
-        "elasticloadbalancing:CreateLoadBalancer", "elasticloadbalancing:DeleteLoadBalancer",
-        "elasticloadbalancing:DescribeLoadBalancers", "elasticloadbalancing:ModifyLoadBalancerAttributes",
-        "elasticloadbalancing:CreateTargetGroup", "elasticloadbalancing:DeleteTargetGroup",
-        "elasticloadbalancing:DescribeTargetGroups", "elasticloadbalancing:ModifyTargetGroupAttributes",
-        "elasticloadbalancing:CreateListener", "elasticloadbalancing:DeleteListener",
-        "elasticloadbalancing:DescribeListeners", "elasticloadbalancing:ModifyListener",
-        "elasticloadbalancing:AddTags", "elasticloadbalancing:DescribeTags"
-      ], "Resource": "*"},
-    {"Effect": "Allow", "Action": [
-        "route53:ChangeResourceRecordSets", "route53:GetHostedZone", "route53:ListResourceRecordSets",
-        "route53:GetChange"
-      ], "Resource": "*"},
-    {"Effect": "Allow", "Action": [
-        "acm:RequestCertificate", "acm:DeleteCertificate", "acm:DescribeCertificate", "acm:AddTagsToCertificate"
-      ], "Resource": "*"},
-    {"Effect": "Allow", "Action": [
-        "budgets:ViewBudget", "budgets:ModifyBudget"
-      ], "Resource": "*"},
-    {"Effect": "Allow", "Action": [
-        "logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:DescribeLogGroups", "logs:PutRetentionPolicy",
+        "ec2:UpdateSecurityGroupRuleDescriptionsIngress",
+        "ec2:DeleteInternetGateway",
+        "ec2:DeleteRoute",
+        "ec2:DeleteRouteTable",
+        "ec2:DeleteSecurityGroup",
+        "ec2:DeleteSubnet",
+        "ec2:DeleteTags",
+        "ec2:DeleteVpc",
+        "ec2:DeleteVpcEndpoints",
+        "ec2:AssociateRouteTable",
+        "ec2:AttachInternetGateway",
+        "ec2:AuthorizeSecurityGroupEgress",
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:DetachInternetGateway",
+        "ec2:DisassociateRouteTable",
+        "ec2:RevokeSecurityGroupEgress",
+        "ec2:RevokeSecurityGroupIngress"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "rds:AddTagsToResource",
+        "rds:CreateDBInstance",
+        "rds:CreateDBSubnetGroup",
+        "rds:DescribeDBInstances",
+        "rds:DescribeDBSubnetGroups",
+        "rds:ListTagsForResource",
+        "rds:ModifyDBInstance",
+        "rds:DeleteDBInstance",
+        "rds:DeleteDBSubnetGroup"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "elasticloadbalancing:AddTags",
+        "elasticloadbalancing:CreateListener",
+        "elasticloadbalancing:CreateLoadBalancer",
+        "elasticloadbalancing:CreateTargetGroup",
+        "elasticloadbalancing:DescribeListenerAttributes",
+        "elasticloadbalancing:DescribeListeners",
+        "elasticloadbalancing:DescribeLoadBalancerAttributes",
+        "elasticloadbalancing:DescribeLoadBalancers",
+        "elasticloadbalancing:DescribeTags",
+        "elasticloadbalancing:DescribeTargetGroupAttributes",
+        "elasticloadbalancing:DescribeTargetGroups",
+        "elasticloadbalancing:ModifyListener",
+        "elasticloadbalancing:ModifyLoadBalancerAttributes",
+        "elasticloadbalancing:ModifyTargetGroup",
+        "elasticloadbalancing:ModifyTargetGroupAttributes",
+        "elasticloadbalancing:DeleteListener",
+        "elasticloadbalancing:DeleteLoadBalancer",
+        "elasticloadbalancing:DeleteTargetGroup"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "route53:GetChange",
+        "route53:GetHostedZone",
+        "route53:ListResourceRecordSets",
+        "route53:ChangeResourceRecordSets"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "acm:AddTagsToCertificate",
+        "acm:RequestCertificate",
+        "acm:DescribeCertificate",
+        "acm:ListTagsForCertificate",
+        "acm:DeleteCertificate"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "budgets:ListTagsForResource",
+        "budgets:ViewBudget",
+        "budgets:ModifyBudget",
+        "budgets:TagResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "logs:DescribeLogGroups",
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:ListTagsForResource",
+        "logs:PutRetentionPolicy",
+        "logs:DeleteLogGroup",
         "logs:TagResource"
-      ], "Resource": "arn:aws:logs:$REGION:$AWS_ACCOUNT_ID:log-group:/ecs/ai-gaussian-splatter-*"},
-    {"Effect": "Allow", "Action": ["secretsmanager:CreateSecret", "secretsmanager:TagResource"],
-      "Resource": "arn:aws:secretsmanager:$REGION:$AWS_ACCOUNT_ID:secret:rds!*"},
-    {"Effect": "Allow", "Action": "kms:DescribeKey", "Resource": "arn:aws:kms:$REGION:$AWS_ACCOUNT_ID:key/*"},
-    {"Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject", "s3:ListBucket"], "Resource": [
+      ],
+      "Resource": "arn:aws:logs:$REGION:$AWS_ACCOUNT_ID:log-group:/ecs/ai-gaussian-splatter-*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:CreateSecret",
+        "secretsmanager:TagResource"
+      ],
+      "Resource": "arn:aws:secretsmanager:$REGION:$AWS_ACCOUNT_ID:secret:rds!*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "kms:DescribeKey",
+      "Resource": "arn:aws:kms:$REGION:$AWS_ACCOUNT_ID:key/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:ListBucket",
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": [
         "arn:aws:s3:::ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID",
         "arn:aws:s3:::ai-gaussian-splatter-tfstate-$AWS_ACCOUNT_ID/*"
-      ]}
+      ]
+    }
   ]
 }
 EOF

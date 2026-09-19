@@ -29,11 +29,20 @@ resource "aws_iam_role_policy" "worker" {
       # web/lib/server/ec2Launcher.ts's user-data runs `aws ecr get-login-password` then `docker run`, which
       # pulls aws_ecr_repository.worker's image using this instance's own role — nothing else authenticates
       # that pull. ecr:GetAuthorizationToken has no resource-level permissions to scope to.
-      { Sid = "EcrAuth", Effect = "Allow", Action = "ecr:GetAuthorizationToken", Resource = "*" },
       {
-        Sid      = "EcrPull"
+        Sid      = "EcrAuth"
         Effect   = "Allow"
-        Action   = ["ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage"]
+        Action   = "ecr:GetAuthorizationToken"
+        Resource = "*"
+      },
+      {
+        Sid    = "EcrPull"
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:BatchGetImage",
+          "ecr:GetDownloadUrlForLayer",
+        ]
         Resource = aws_ecr_repository.worker.arn
       },
       {

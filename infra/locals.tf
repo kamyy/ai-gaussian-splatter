@@ -126,9 +126,15 @@ locals {
 
   # Shared by every S3 role-policy grant in infra/web.tf and infra/worker_iam.tf, so an action list change (e.g.
   # adding s3:PutObjectTagging) is made once instead of separately on each role/bucket pair.
-  s3_read_actions = ["s3:GetObject", "s3:GetBucketLocation", "s3:ListBucket"]
+  s3_read_actions = [
+    "s3:GetBucketLocation",
+    "s3:GetObject",
+    "s3:ListBucket",
+  ]
   s3_read_write_actions = concat(local.s3_read_actions, [
-    "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload",
+    "s3:PutObject",
+    "s3:DeleteObject",
+    "s3:AbortMultipartUpload",
   ])
 
   # Adds the aws:SecureTransport deny to a bucket in infra/data.tf that otherwise has no policy statement of its own.

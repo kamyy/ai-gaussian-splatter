@@ -31,17 +31,29 @@ resource "aws_iam_role_policy" "execution" {
       {
         Sid    = "WriteLogs"
         Effect = "Allow"
-        Action = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+        ]
         Resource = [
           "${aws_cloudwatch_log_group.web.arn}:*",
           "${aws_cloudwatch_log_group.migration.arn}:*",
         ]
       },
-      { Sid = "EcrAuth", Effect = "Allow", Action = "ecr:GetAuthorizationToken", Resource = "*" },
       {
-        Sid      = "EcrPull"
+        Sid      = "EcrAuth"
         Effect   = "Allow"
-        Action   = ["ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage"]
+        Action   = "ecr:GetAuthorizationToken"
+        Resource = "*"
+      },
+      {
+        Sid    = "EcrPull"
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:BatchGetImage",
+          "ecr:GetDownloadUrlForLayer",
+        ]
         Resource = aws_ecr_repository.web.arn
       },
       {
@@ -217,8 +229,10 @@ resource "aws_iam_role_policy" "task" {
         Sid    = "SsmExec"
         Effect = "Allow"
         Action = [
-          "ssmmessages:CreateControlChannel", "ssmmessages:CreateDataChannel",
-          "ssmmessages:OpenControlChannel", "ssmmessages:OpenDataChannel",
+          "ssmmessages:CreateControlChannel",
+          "ssmmessages:CreateDataChannel",
+          "ssmmessages:OpenControlChannel",
+          "ssmmessages:OpenDataChannel",
         ]
         Resource = "*"
       },
