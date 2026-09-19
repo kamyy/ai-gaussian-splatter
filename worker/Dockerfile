@@ -1,8 +1,9 @@
 # Worker image: COLMAP (taken from upstream's published image) + Python deps for the gsplat training pipeline.
 #
-# Built on stock base images, so every worker instance pays the image pull and the train stage pays gsplat's kernel
-# build on top. A Packer-baked AMI carrying these layers is the M10 fast-follow that cuts that boot latency
-# (ARCHITECTURE.md).
+# Two stages. The build stage compiles gsplat's CUDA kernels against a -devel base; the runtime stage carries the
+# result on a -runtime base, which has no nvcc, no CUDA headers and no nsight-compute. A worker-job stage pays the
+# image pull before its GPU does anything, and a worker job is two stages on two spot instances, so that difference is
+# paid twice.
 #
 # Base images are registry-qualified because podman, unlike docker, does not assume Docker Hub for a bare `nvidia/cuda`.
 # With several unqualified-search registries configured it asks which to use, and under `short-name-mode = "enforcing"`
@@ -27,59 +28,24 @@
 # actual revision, if that ever matters more than the build time.
 FROM docker.io/colmap/colmap@sha256:64768b92a3b6ce126bb4838b8bf4f2531e220a7d73cdfc44d969c22704f0d982 AS colmap
 
-# Matches the Ubuntu and CUDA versions COLMAP's image is built on, so the binary copied out of it finds the ABI it was
-# linked against — its runtime libraries are Ubuntu 24.04's 64-bit-time_t (`t64`) builds, which have no equivalent on
-# 22.04.
+# The build stage exists to produce /app/.venv and nothing else. Its own layers are discarded, so size here is free
+# and only what the runtime stage COPYs counts.
 #
-# -devel rather than -runtime, despite being several GB larger: gsplat ships no compiled extension (its PyPI wheel is
-# pure Python, and it depends on ninja for exactly this reason), so it builds its CUDA kernels on first use through
-# torch.utils.cpp_extension — which needs nvcc and a host C++ compiler present at run time, not just at build time. On
-# -runtime the image builds fine and then the first rasterization() call fails. That build happens once per container,
-# so a worker job pays it once, at the start of its train stage.
-#
-# The CUDA version here is load-bearing beyond COLMAP: torch aborts the kernel build when its own CUDA major version
-# differs from the toolkit it finds, so pyproject.toml pins torch to the matching cu129 wheels. Move one and move both.
-FROM docker.io/nvidia/cuda:12.9.1-devel-ubuntu24.04
+# The CUDA version is load-bearing beyond COLMAP: torch aborts a kernel build when its own CUDA major version differs
+# from the toolkit it finds, so worker/pyproject.toml pins torch to the matching cu129 wheels. Move one and move both.
+FROM docker.io/nvidia/cuda:12.9.1-devel-ubuntu24.04 AS build
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# The shared libraries COLMAP's binary links, matching the list upstream's own runtime stage installs. Qt6 and MKL are
-# in there because their build enables the GUI and uses MKL for BLAS; the CLI still needs both present to load, even
-# though this worker never opens a window. build-essential is ours, for the gsplat kernel build described above.
+# build-essential supplies the host C++ compiler nvcc drives when compiling gsplat below. The -devel base carries nvcc
+# and the CUDA headers but not a host toolchain.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    libboost-program-options1.83.0 libc6 libomp5 libopengl0 libmetis5 \
-    libceres4t64 libopenimageio2.4t64 libgcc-s1 libgl1 libglew2.2 \
-    libgoogle-glog0v6t64 \
-    libqt6core6 libqt6gui6 libqt6widgets6 libqt6openglwidgets6 libqt6svg6 \
-    libcurl4 libssl3t64 \
-    libmkl-locale libmkl-intel-lp64 libmkl-intel-thread libmkl-core \
     && rm -rf /var/lib/apt/lists/*
-
-# Only the binary, its data files, and the one shared library it links. Copying the whole /usr/local prefix instead
-# costs about 4 GB: upstream's image carries its own 3.2 GB CUDA installation there, which a COPY would duplicate into a
-# new layer rather than dedupe against the identical files this base image already has — and would overlay a runtime
-# CUDA tree onto a devel one. libcudart and libOpenCL resolve from the base image's /usr/local/cuda either way. The
-# static .a archives beside libonnxruntime are already linked into the binary, and the 357 MB CUDA execution provider is
-# only consulted when running an ONNX model, which this SIFT-based pipeline does not.
-#
-# libonnxruntime lands in /usr/local/lib because that is where the binary's RPATH looks ($ORIGIN/../lib); no ldconfig
-# needed.
-COPY --from=colmap /usr/local/bin/colmap /usr/local/bin/colmap
-COPY --from=colmap /usr/local/share/colmap /usr/local/share/colmap
-COPY --from=colmap /usr/local/lib/libonnxruntime.so* /usr/local/lib/
 
 # torch locates nvcc through CUDA_HOME first, falling back to a PATH search. The base image puts nvcc on PATH but sets
 # no CUDA_HOME, so this makes the lookup explicit rather than dependent on that fallback.
 ENV CUDA_HOME=/usr/local/cuda
-
-# worker/pipeline/train.py's densify_and_prune reallocates all five Gaussian-model tensors at a new size on every
-# call, so their old blocks return to PyTorch's caching allocator at a size nothing new needs. Over several
-# densification rounds within one training run, that fragments the cache into pieces too small individually to
-# satisfy a later allocation even when their sum is enough. expandable_segments lets the allocator grow one segment
-# instead of hunting for a contiguous block, which is what PyTorch's own CUDA OOM message recommends when "reserved
-# but unallocated" memory is large.
-ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # uv comes from its own published image rather than pip: Ubuntu 24.04 marks the system Python as externally managed (PEP
 # 668), so `pip install` into it fails without --break-system-packages. No system Python is needed at all this way — uv
@@ -106,9 +72,8 @@ COPY pyproject.toml uv.lock ./
 # undefined-symbol error instead of a missing-file one. All five stay. triton goes because it is torch.compile's
 # backend and worker/pipeline/ never calls torch.compile.
 #
-# `uv cache clean` is what makes those deletions count. uv unpacks into /root/.cache/uv and hardlinks from there into
-# the venv, so removing only the venv copy leaves every byte alive through the cache's reference to the same inode and
-# the layer does not shrink at all. Both references have to go, and both have to go in this RUN.
+# Only /app/.venv is carried into the runtime stage, so deleting from it is what keeps those bytes out of the final
+# image. uv also hardlinks the same files into /root/.cache/uv, but that cache stays behind in this discarded stage.
 #
 # The loop makes every path required. `rm -rf` on a path that is already gone succeeds, so a wheel layout that moved
 # these directories would leave the image silently back at its full size with the build still green. torch already
@@ -128,8 +93,73 @@ RUN uv sync --no-dev --locked && \
         rm -rf "$d"; \
     done && \
     cd /app && \
-    uv cache clean && \
     .venv/bin/python -c "import torch"
+
+# gsplat's PyPI wheel is pure Python and compiles its CUDA kernels on first use through torch.utils.cpp_extension,
+# which costs about a minute at the start of every train stage and is thrown away with the container. Building from
+# the sdist here instead produces a real gsplat/csrc.so, and gsplat/cuda/_backend.py tries `from gsplat import csrc`
+# before it checks for nvcc at all. That is what lets the runtime stage below carry no CUDA toolkit.
+#
+# TORCH_CUDA_ARCH_LIST is required, not an optimization. Unset, torch targets whichever device it can see, and a
+# builder sees none. 8.6 is the g5.xlarge's A10G that worker jobs run on; 8.9 covers an Ada-generation dev GPU for a
+# local run through scripts/dev/worker-train.sh.
+#
+# The version comes from what uv already resolved, so worker/uv.lock stays the single pin. --no-deps keeps this from
+# reinstalling anything the prune above removed.
+RUN TORCH_CUDA_ARCH_LIST="8.6;8.9" uv pip install --no-build-isolation --no-deps --force-reinstall \
+        --no-binary gsplat "gsplat==$(uv pip show gsplat | awk '/^Version:/{print $2}')" && \
+    .venv/bin/python -c "from gsplat import csrc"
+
+# Matches the Ubuntu and CUDA versions COLMAP's image is built on, so the binary copied out of it finds the ABI it was
+# linked against — its runtime libraries are Ubuntu 24.04's 64-bit-time_t (`t64`) builds, which have no equivalent on
+# 22.04.
+#
+# -runtime rather than -devel, which is the larger half of this image's size: nothing here compiles. gsplat arrives as
+# a compiled csrc.so from the build stage, and the deleted nvidia wheels resolve against this base's own apt copies of
+# cuBLAS, cuSOLVER, cuSPARSE, cuFFT, nvRTC, cuRAND, nvJitLink, cudart and cuFile, all of which -runtime carries.
+FROM docker.io/nvidia/cuda:12.9.1-runtime-ubuntu24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# The shared libraries COLMAP's binary links, matching the list upstream's own runtime stage installs. Qt6 and MKL are
+# in there because their build enables the GUI and uses MKL for BLAS; the CLI still needs both present to load, even
+# though this worker never opens a window.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libboost-program-options1.83.0 libc6 libomp5 libopengl0 libmetis5 \
+    libceres4t64 libopenimageio2.4t64 libgcc-s1 libgl1 libglew2.2 \
+    libgoogle-glog0v6t64 \
+    libqt6core6 libqt6gui6 libqt6widgets6 libqt6openglwidgets6 libqt6svg6 \
+    libcurl4 libssl3t64 \
+    libmkl-locale libmkl-intel-lp64 libmkl-intel-thread libmkl-core \
+    && rm -rf /var/lib/apt/lists/*
+
+# Only the binary, its data files, and the one shared library it links. Copying the whole /usr/local prefix instead
+# costs about 4 GB: upstream's image carries its own 3.2 GB CUDA installation there, which a COPY would duplicate into a
+# new layer rather than dedupe against the identical files this base image already has — and would overlay a runtime
+# CUDA tree onto a devel one. libcudart and libOpenCL resolve from the base image's /usr/local/cuda either way. The
+# static .a archives beside libonnxruntime are already linked into the binary, and the 357 MB CUDA execution provider is
+# only consulted when running an ONNX model, which this SIFT-based pipeline does not.
+#
+# libonnxruntime lands in /usr/local/lib because that is where the binary's RPATH looks ($ORIGIN/../lib); no ldconfig
+# needed.
+COPY --from=colmap /usr/local/bin/colmap /usr/local/bin/colmap
+COPY --from=colmap /usr/local/share/colmap /usr/local/share/colmap
+COPY --from=colmap /usr/local/lib/libonnxruntime.so* /usr/local/lib/
+
+# worker/pipeline/train.py's densify_and_prune reallocates all five Gaussian-model tensors at a new size on every
+# call, so their old blocks return to PyTorch's caching allocator at a size nothing new needs. Over several
+# densification rounds within one training run, that fragments the cache into pieces too small individually to
+# satisfy a later allocation even when their sum is enough. expandable_segments lets the allocator grow one segment
+# instead of hunting for a contiguous block, which is what PyTorch's own CUDA OOM message recommends when "reserved
+# but unallocated" memory is large.
+ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+WORKDIR /app
+
+# uv puts the interpreter outside the venv and points /app/.venv/bin/python at it by absolute path, so copying only
+# .venv leaves a dangling symlink and no working Python. Both directories have to travel, at the same paths.
+COPY --from=build /root/.local/share/uv/python /root/.local/share/uv/python
+COPY --from=build /app/.venv /app/.venv
 
 COPY pipeline/ ./pipeline/
 COPY run_job.py ./

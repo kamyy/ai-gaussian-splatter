@@ -33,11 +33,11 @@ The "AI" here is per-object gradient descent through a differentiable rasterizer
 
 A worker job's wall clock splits into three parts:
 
-- **Fixed overhead**: pulling and extracting the ~15.6 GB worker image, which every stage pays, then gsplat's `nvcc` kernel build, which only the train stage reaches. `docker run --rm` keeps either from carrying over to the next stage.
+- **Fixed overhead**: pulling and extracting the ~9.2 GB worker image, which every stage pays before its GPU does anything. `worker/Dockerfile` builds gsplat's CUDA kernels into the image, so no stage compiles them at run time.
 - **COLMAP**: a few minutes, CPU-bound by `mapper`'s incremental bundle adjustment.
 - **Training**: the majority of wall clock.
 
-M10's baked AMI therefore attacks the smaller half — fixed overhead, not training. Training cost is set by the resolution the photos are rasterized at (`MAX_TRAINING_EDGE` in `worker/pipeline/train.py`), not by boot latency. All of this is read off the code rather than observed; M0/M5 is the first run that will produce real numbers.
+A baked AMI would attack the smaller half — fixed overhead, not training. Training cost is set by the resolution the photos are rasterized at (`MAX_TRAINING_EDGE` in `worker/pipeline/train.py`), not by boot latency. Shrinking the image and precompiling the kernels took most of what an AMI was worth here, which is why M10 is now a measurement rather than a build. Only the image size is measured; the split between the three parts is still read off the code, and no run on a `g5.xlarge` has been timed.
 
 - Not Lambda or Fargate: neither offers GPU.
 - Not hand-rolled ECS orchestration: bin-packing shared instances doesn't fit a one-stage-one-instance model.
@@ -237,4 +237,4 @@ Milestones (`M0`…`M10`) name phases, not a schedule — web/infra largely exis
 - **M7** — Authenticated UI: upload, worker-job polling, splat viewer.
 - **M8** — Share links, OG thumbnails.
 - **M9** — IaC + first real deploy.
-- **M10** — Packer-baked worker AMI; measure boot-latency improvement.
+- **M10** — time a real worker job on a `g5.xlarge`, split by pull, COLMAP and training; revisit a Packer-baked AMI only if fixed overhead still dominates.

@@ -170,12 +170,12 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 ## Worker (GPU pipeline)
 
 - **Local pipeline runs are a Podman container: they need an NVIDIA GPU, the NVIDIA driver, and `nvidia-container-toolkit`.**
-  - CUDA (including `nvcc`), COLMAP, and gsplat live in the worker image — don't install those on the host.
+  - The CUDA runtime, COLMAP, and gsplat live in the worker image — don't install those on the host. `worker/Dockerfile` compiles gsplat's kernels in a build stage, so the image it ships carries no `nvcc`.
   - Setup and the run scripts are in [`RUNBOOK.md`](RUNBOOK.md#worker-local-pipeline-run).
 - **The worker container is two hops from IMDS, so `RunInstances` sets `HttpPutResponseHopLimit: 2`** (`web/lib/server/ec2Launcher.ts`).
   - At EC2's default of 1 the token PUT in `worker/pipeline/instance.py` gets no reply, `get_self_instance_id()` returns `None`, and the instance never terminates itself — logging one INFO line indistinguishable from a local run while a `g5.xlarge` keeps billing.
   - `HttpTokens: "required"` is paired with it and depends on it: on its own it removes the IMDSv1 fallback and breaks credentials too, not just self-termination.
-- **Typical agent sandboxes have none of that** (a GPU driver alone isn't enough — `gsplat` needs `nvcc` to JIT), so an agent can't run the pipeline itself and has to hand a real run back to the user.
+- **Typical agent sandboxes have none of that**, so an agent can't run the pipeline itself and has to hand a real run back to the user.
 
 ## Infra (Terraform / AWS)
 
@@ -244,7 +244,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - **The worker image lives in its own ECR repository (`ai-gaussian-splatter-worker`, `infra/registry.tf`), separate from the web repository above, and `var.worker_image_tag` has no default.**
   - No deploy ever rebuilds and pushes it — GPU worker deployment stays manual (`RUNBOOK.md`) — so this variable only changes when someone hand-builds and pushes a new one. It stays a commit SHA, because `scripts/prod/worker-push-image.sh` tags the image with the checked-out commit rather than a tree.
   - Re-running that script on an already-pushed commit fails at `podman push` with `ImageTagAlreadyExists`. Commit again rather than retagging.
-  - Its lifecycle policy keeps far fewer images (`local.worker_releases_kept`, currently 2) than the web repository's `local.releases_kept` (10): at ~15.6 GB each the worker image isn't cheap to retain, and it isn't part of any ECS rollback mechanism anyway — `web/lib/server/ec2Launcher.ts` just reads whatever `WORKER_IMAGE_URI` currently names.
+  - Its lifecycle policy keeps far fewer images (`local.worker_releases_kept`, currently 2) than the web repository's `local.releases_kept` (10): at ~9.2 GB each the worker image isn't cheap to retain, and it isn't part of any ECS rollback mechanism anyway — `web/lib/server/ec2Launcher.ts` just reads whatever `WORKER_IMAGE_URI` currently names.
 
 ### Variables & state backend
 
