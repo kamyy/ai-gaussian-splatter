@@ -247,7 +247,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - **The worker image lives in its own ECR repository (`ai-gaussian-splatter-worker`, `infra/registry.tf`), separate from the web repository above, and `var.worker_image_tag` has no default.**
   - No deploy ever rebuilds and pushes it — GPU worker deployment stays manual (`RUNBOOK.md`) — so this variable only changes when someone hand-builds and pushes a new one. It stays a commit SHA, because `scripts/prod/worker-push-image.sh` tags the image with the checked-out commit rather than a tree.
   - Re-running that script on an already-pushed commit fails at `podman push` with `ImageTagAlreadyExists`. Commit again rather than retagging.
-  - Its lifecycle policy keeps far fewer images (`local.worker_releases_kept`, currently 4) than the web repository's `local.releases_kept` (10): the worker images aren't cheap to retain at ~1.9 GB and ~8.0 GB, and they aren't part of any ECS rollback mechanism anyway — `web/lib/server/ec2Launcher.ts` just reads whichever URI it is handed. That count is images rather than releases, and one commit pushes both suffixes, so 4 keeps two releases.
+  - Its lifecycle policy keeps far fewer images (`local.worker_releases_kept`, currently 2) than the web repository's `local.releases_kept` (10): the worker images aren't cheap to retain at ~1.9 GB and ~8.0 GB, and they aren't part of any ECS rollback mechanism anyway — `web/lib/server/ec2Launcher.ts` just reads whichever URI it is handed. Counted per tag suffix, with one rule each for `-reconstruct` and `-train`, so both halves of a release expire together.
 
 ### Variables & state backend
 

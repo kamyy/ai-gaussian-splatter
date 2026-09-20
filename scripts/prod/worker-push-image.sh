@@ -43,31 +43,42 @@ fi
 # builds the URIs the web task hands to web/lib/server/ec2Launcher.ts.
 STAGES=(reconstruct train)
 
-# Either tag already being present means this commit was pushed before. Checked before the build, because a pushed
-# tag can never be replaced and the repository holds both.
+# Which suffixes this commit still needs, checked before the build because a pushed tag can never be replaced. A run
+# that pushed one image and failed on the other leaves the repository half-populated, so re-running finishes what is
+# missing rather than refusing outright, which would otherwise take an empty commit to get past.
+PENDING=()
 for stage in "${STAGES[@]}"; do
   if IMAGE_CHECK=$(aws ecr describe-images --region "$REGION" --repository-name "$REPO" \
     --image-ids imageTag="$TAG-$stage" 2>&1); then
-    echo "$REPO:$TAG-$stage is already pushed, and a pushed tag can never be replaced. Commit again for a new build." >&2
-    exit 1
+    continue
   fi
   if [[ $IMAGE_CHECK != *ImageNotFoundException* ]]; then
     echo "$IMAGE_CHECK" >&2
     exit 1
   fi
+  PENDING+=("$stage")
 done
 
-confirm "Build and push $REPO:$TAG-reconstruct and $REPO:$TAG-train to account $AWS_ACCOUNT_ID, then set WORKER_IMAGE_TAG=$TAG?"
+if [[ ${#PENDING[@]} -eq 0 ]]; then
+  echo "$REPO:$TAG is already pushed for every stage, and a pushed tag can never be replaced." >&2
+  echo "Commit again for a new build." >&2
+  exit 1
+fi
+if [[ ${#PENDING[@]} -lt ${#STAGES[@]} ]]; then
+  echo "Resuming a partial push of $TAG: ${PENDING[*]} still missing." >&2
+fi
+
+confirm "Build and push ${PENDING[*]} for $REPO:$TAG to account $AWS_ACCOUNT_ID, then set WORKER_IMAGE_TAG=$TAG?"
 
 aws ecr get-login-password --region "$REGION" | podman login --username AWS --password-stdin "$REGISTRY"
 
-# Both images are built before either is pushed, so a build failure in the second leaves nothing half-released under
-# a tag that can never be reused. WORKER_IMAGE_TAG is set only once both are up, because a deploy reading it expects
-# to find both.
-for stage in "${STAGES[@]}"; do
+# Every image is built before any is pushed, so a build failure in the second leaves nothing half-released under a tag
+# that can never be reused. WORKER_IMAGE_TAG is set only once all of them are up, because a deploy reading it expects
+# to find both suffixes.
+for stage in "${PENDING[@]}"; do
   podman build --target "$stage" -t "$REGISTRY/$REPO:$TAG-$stage" "$ROOT/worker"
 done
-for stage in "${STAGES[@]}"; do
+for stage in "${PENDING[@]}"; do
   podman push "$REGISTRY/$REPO:$TAG-$stage"
 done
 gh variable set WORKER_IMAGE_TAG --body "$TAG"

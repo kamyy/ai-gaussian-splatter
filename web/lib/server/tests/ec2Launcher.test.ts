@@ -139,7 +139,7 @@ describe("launchJobLocal", () => {
     expect(spawnMock).toHaveBeenCalledTimes(1);
     const [command, args, options] = spawnMock.mock.calls[0];
     expect(command).toBe("podman");
-    expect(args).toContain("splat-worker:dev");
+    expect(args).toContain("splat-worker-train:dev");
     expect(args).toEqual(expect.arrayContaining(["-e", "JOB_ID=job-123"]));
     expect(args).toEqual(expect.arrayContaining(["-e", "SPLAT_ID=splat-456"]));
     expect(args).toEqual(expect.arrayContaining(["-e", "CALLBACK_TOKEN=tok-abc"]));
@@ -147,6 +147,15 @@ describe("launchJobLocal", () => {
     // Podman's alias for the host running `next dev` — see the APP_PUBLIC_URL comment in web/lib/server/ec2Launcher.ts.
     expect(args).toEqual(expect.arrayContaining(["-e", "APP_PUBLIC_URL=http://host.containers.internal:3000"]));
     expect(options).toMatchObject({ detached: true });
+  });
+
+  it("runs the reconstruct image for a reconstruct stage", () => {
+    launchJobLocal({ ...params, stage: "reconstruct" });
+
+    const [, args] = spawnMock.mock.calls[0];
+    expect(args).toContain("splat-worker-reconstruct:dev");
+    expect(args).not.toContain("splat-worker-train:dev");
+    expect(args).toEqual(expect.arrayContaining(["-e", "STAGE=reconstruct"]));
   });
 
   it("throws if AWS credentials aren't set", () => {

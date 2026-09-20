@@ -238,7 +238,10 @@ export function launchJobLocal(params: {
       `AWS_DEFAULT_REGION=${env.AWS_REGION}`,
       "-v",
       `${jobDir}:/tmp/job`,
-      "splat-worker:dev",
+      // worker/Dockerfile builds one image per stage, so this picks the same one scripts/lib/worker.sh's
+      // worker_build_image tags. Running the wrong stage's image fails inside the container, where only worker.log
+      // shows it.
+      `splat-worker-${params.stage}:dev`,
     ],
     { detached: true, stdio: ["ignore", log, log] },
   );

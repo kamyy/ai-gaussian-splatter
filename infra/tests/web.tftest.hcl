@@ -561,7 +561,7 @@ override_resource {
   }
 }
 
-# Distinct literal URLs so the WORKER_IMAGE_URI assertion can tell the two repositories apart. mock_provider would
+# Distinct literal URLs so the worker image URI assertions can tell the two repositories apart. mock_provider would
 # otherwise give each a random string.
 override_resource {
   target = aws_ecr_repository.web

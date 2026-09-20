@@ -68,7 +68,8 @@ resource "aws_ecr_lifecycle_policy" "web" {
 # is given — so worker_releases_kept (infra/locals.tf) is far shallower than releases_kept. GPU worker deployment
 # stays manual (RUNBOOK.md), so nothing pushes here automatically.
 #
-# The -reconstruct and -train suffixes both live here, so the lifecycle policy below counts images across both.
+# One rule per suffix below, the same way the web repository does it, so a release's two tags are kept to the same
+# depth. A single rule counting `*` would let an unpaired push shift the window and strand one half of an older one.
 resource "aws_ecr_repository" "worker" {
   name                 = "ai-gaussian-splatter-worker"
   image_tag_mutability = "IMMUTABLE"
@@ -83,16 +84,29 @@ resource "aws_ecr_lifecycle_policy" "worker" {
   repository = aws_ecr_repository.worker.name
 
   policy = jsonencode({
-    rules = [{
-      rulePriority = 1
-      description  = "Keep the last ${local.worker_releases_kept} worker images across both tag suffixes"
-      selection = {
-        tagStatus      = "tagged"
-        tagPatternList = ["*"]
-        countType      = "imageCountMoreThan"
-        countNumber    = local.worker_releases_kept
-      }
-      action = { type = "expire" }
-    }]
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep the last ${local.worker_releases_kept} reconstruct images"
+        selection = {
+          tagStatus      = "tagged"
+          tagPatternList = ["*-reconstruct"]
+          countType      = "imageCountMoreThan"
+          countNumber    = local.worker_releases_kept
+        }
+        action = { type = "expire" }
+      },
+      {
+        rulePriority = 2
+        description  = "Keep the last ${local.worker_releases_kept} train images"
+        selection = {
+          tagStatus      = "tagged"
+          tagPatternList = ["*-train"]
+          countType      = "imageCountMoreThan"
+          countNumber    = local.worker_releases_kept
+        }
+        action = { type = "expire" }
+      },
+    ]
   })
 }

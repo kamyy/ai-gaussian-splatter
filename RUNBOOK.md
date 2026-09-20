@@ -105,9 +105,11 @@ scripts/dev/worker-train.sh <splat-id>         # add --fast for a 20-iteration s
 Set `WORKER_LOCAL_LAUNCH=true` in `web/.env` to make the web app's Process button run the worker on your own GPU instead of launching a real EC2 spot instance. Output lands in `worker/jobdir/<jobId>/worker.log`, for the same [registration debugging](#capture) the manual flow uses. Needs the one-time [GPU passthrough setup](#one-time-gpu-passthrough-setup) and an image already built — this path never builds one for you.
 
 ```bash
-cd worker && podman build --target reconstruct -t splat-worker-reconstruct:dev . # once, and again after any worker code change
-cd worker && podman build --target train -t splat-worker-train:dev .       # the stage Process launches is the one to build
-cd ../web && pnpm dev
+cd worker
+podman build --target reconstruct -t splat-worker-reconstruct:dev .  # once, and again after any worker code change
+podman build --target train -t splat-worker-train:dev .              # only the stage you will launch is needed
+cd ../web
+pnpm dev
 ```
 
 Upload photos and click Process in the browser as normal. The worker job goes through the same DB rows, callback token, and `/api/v1/internal/jobs/[jobId]/status` route a real EC2 run would use, so its status updates in the dashboard live. Leave `WORKER_LOCAL_LAUNCH` unset (or `false`) to go back to launching a real spot instance.

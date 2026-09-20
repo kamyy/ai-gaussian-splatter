@@ -67,9 +67,9 @@ locals {
   releases_kept = 10
 
   # Far shallower than releases_kept: the worker images aren't part of any ECS rollback mechanism, so there's no
-  # reason to pay for that many of them. Counted in images rather than releases, and one release pushes two, so this
-  # keeps two releases. See infra/registry.tf.
-  worker_releases_kept = 4
+  # reason to pay for that many of them. Counted per tag suffix, the same as releases_kept, so this keeps two
+  # releases. See infra/registry.tf.
+  worker_releases_kept = 2
 
   # ---------------------------------------------------------------------------
   # Database wiring

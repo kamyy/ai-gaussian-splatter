@@ -35,7 +35,8 @@ worker_use_dev_aws() {
 # Usage: worker_build_image <stage>
 #
 # worker/Dockerfile has no default target: it builds a reconstruct image and a train image, each carrying only what
-# its stage runs. Both share every earlier stage, so building the second after the first is nearly free.
+# its stage runs. They share the venv stage but not much else, since they start from different CUDA base images and
+# reconstruct adds COLMAP while train compiles gsplat. Expect the second build to take minutes, not seconds.
 #
 # worker/pipeline/ and worker/run_job.py are copied after uv sync, so a code-only edit rebuilds in seconds and an
 # unchanged tree is fully cached. Touching pyproject.toml or uv.lock re-runs uv sync as well. Only a cold build

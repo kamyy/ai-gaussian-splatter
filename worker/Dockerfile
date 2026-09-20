@@ -101,11 +101,14 @@ RUN uv sync --no-dev --locked && \
 # Kept off `build` itself so --target reconstruct never runs this compile only to delete what it produced.
 #
 # TORCH_CUDA_ARCH_LIST is required, not a tuning knob: unset, torch targets whatever device it sees, and a builder
-# sees none. 8.6 is the g5.xlarge's A10G, 8.9 an Ada dev GPU for scripts/dev/worker-train.sh. The version comes from
-# what uv resolved, so worker/uv.lock stays the single pin.
+# sees none. 8.6 is the g5.xlarge's A10G and 8.9 an Ada dev GPU for scripts/dev/worker-train.sh. `+PTX` emits PTX for
+# the last of them as well, which the driver JITs for any newer architecture: without it a GPU outside 8.6/8.9 fails
+# at the first rasterization() with "no kernel image is available", since the prebuilt csrc.so means gsplat never
+# compiles at run time to cover itself. That reaches an A100, an H100, a Blackwell dev card, or any other
+# WORKER_INSTANCE_TYPE. The version comes from what uv resolved, so worker/uv.lock stays the single pin.
 FROM build AS build-train
 
-RUN TORCH_CUDA_ARCH_LIST="8.6;8.9" uv pip install --no-build-isolation --no-deps --force-reinstall \
+RUN TORCH_CUDA_ARCH_LIST="8.6;8.9+PTX" uv pip install --no-build-isolation --no-deps --force-reinstall \
         --no-binary gsplat "gsplat==$(uv pip show gsplat | awk '/^Version:/{print $2}')" && \
     .venv/bin/python -c "from gsplat import csrc"
 
@@ -219,4 +222,11 @@ COPY pipeline/ ./pipeline/
 COPY run_job.py ./
 
 ENV PATH="/app/.venv/bin:${PATH}"
+
+# The checks in build and build-train ran on a -devel base, against torch's own bundled CUDA libraries. This image is
+# -runtime and the prune left torch resolving those from apt instead, so this is the first point either combination is
+# exercised. Without it a mismatch builds green and fails on a real worker job, after the user has paid for the
+# reconstruct stage.
+RUN python -c "import run_job, torch; from gsplat import csrc"
+
 CMD ["python3", "run_job.py"]

@@ -57,12 +57,13 @@ def _run_reconstruct(settings: Settings) -> int:
 
 
 def _run_train(settings: Settings) -> int:
-    # Imported here rather than at module scope because both modules reach torch, which the reconstruct image does not
-    # carry (worker/Dockerfile). At module scope a reconstruct run would fail on the import before it ran anything.
-    # worker/pipeline/export.py reaches it through worker/pipeline/train.py rather than directly.
-    from pipeline import export, train
-
     try:
+        # Imported here rather than at module scope because both modules reach torch, which the reconstruct image does
+        # not carry (worker/Dockerfile). worker/pipeline/export.py reaches it through worker/pipeline/train.py rather
+        # than directly. Inside the try so that a failed import is still reported and still self-terminates: raised
+        # above it, the worker job would sit at training_running while the instance billed until user-data's shutdown.
+        from pipeline import export, train
+
         status.report_status(settings, "training_running")
         photos_dir = fetch.fetch_photos(settings)
 
