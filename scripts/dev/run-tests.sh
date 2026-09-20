@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
-# Runs every lint, typecheck, and test suite in the repo. The Postgres-backed web tests need splat-pg up
-# (scripts/dev/db-up.sh) and TEST_DATABASE_URL in web/.env.
+# The Postgres-backed web tests need splat-pg up (scripts/dev/db-up.sh) and TEST_DATABASE_URL in web/.env.
 
 set -euo pipefail
+
+usage() {
+  echo "Usage: scripts/dev/run-tests.sh"
+  echo
+  echo "Runs every lint, typecheck, and test suite in the repo."
+}
+
+if [[ ${1-} == -h || ${1-} == --help ]]; then
+  usage
+  exit 0
+fi
 
 ROOT=$(git rev-parse --show-toplevel)
 source "$ROOT/scripts/lib/terraform.sh"

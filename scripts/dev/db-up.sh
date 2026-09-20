@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
-# Starts the splat-pg Postgres container if needed, then creates the empty dev and test databases. Does not migrate.
-# Vitest's globalSetup (web/tests/migrate-test-db.ts) applies web/drizzle/ to TEST_DATABASE_URL.
+# Does not migrate. Vitest's globalSetup (web/tests/migrate-test-db.ts) applies web/drizzle/ to TEST_DATABASE_URL.
 
 set -euo pipefail
+
+usage() {
+  echo "Usage: scripts/dev/db-up.sh"
+  echo
+  echo "Starts the splat-pg Postgres container if needed, then creates the empty dev and test databases."
+}
+
+if [[ ${1-} == -h || ${1-} == --help ]]; then
+  usage
+  exit 0
+fi
 
 CONTAINER=splat-pg
 VOLUME=splat-pg-data

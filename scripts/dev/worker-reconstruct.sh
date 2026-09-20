@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
-# Stage 1 of a local pipeline run: uploads a photo set under a new SPLAT_ID, then runs COLMAP on it. Stage 2 is
-# scripts/dev/worker-train.sh. Needs web/.env's dev AWS keys and the one-time scripts/dev/setup-gpu-passthrough.sh.
-#
-# Usage: scripts/dev/worker-reconstruct.sh [photos-dir]
-#
-# photos-dir defaults to worker/photos.
+# Stage 2 is scripts/dev/worker-train.sh. Needs web/.env's dev AWS keys and the one-time
+# scripts/dev/setup-gpu-passthrough.sh.
 
 set -euo pipefail
+
+usage() {
+  echo "Usage: scripts/dev/worker-reconstruct.sh [photos-dir]"
+  echo
+  echo "Stage 1 of a local pipeline run: uploads a photo set under a new SPLAT_ID, then runs COLMAP on it."
+  echo "photos-dir defaults to worker/photos."
+}
+
+if [[ ${1-} == -h || ${1-} == --help ]]; then
+  usage
+  exit 0
+fi
 
 ROOT=$(git rev-parse --show-toplevel)
 photos_dir=${1:-$ROOT/worker/photos}

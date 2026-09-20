@@ -1,9 +1,19 @@
 #!/usr/bin/env bash
-# Installs the exact Terraform release infra/providers.tf pins as a standalone binary in ~/.local/bin. It checks
-# HashiCorp's signature on the release's checksum file first, then the zip against that checksum, and installs nothing
-# if either check fails.
+# Checks HashiCorp's signature on the release's checksum file first, then the zip against that checksum. Installs
+# nothing if either check fails.
 
 set -euo pipefail
+
+usage() {
+  echo "Usage: scripts/dev/terraform-install.sh"
+  echo
+  echo "Installs the exact Terraform release infra/providers.tf pins as a standalone binary in ~/.local/bin."
+}
+
+if [[ ${1-} == -h || ${1-} == --help ]]; then
+  usage
+  exit 0
+fi
 
 ROOT=$(git rev-parse --show-toplevel)
 source "$ROOT/scripts/lib/terraform.sh"

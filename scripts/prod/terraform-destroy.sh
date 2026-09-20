@@ -1,9 +1,20 @@
 #!/usr/bin/env bash
-# Destroys everything in infra/'s state. Refuses while DEPLOY_ENABLED is true, because the next push to main would
-# find an empty state and deploy the whole stack again. An unreadable variable is refused too, rather than treated as
-# off. An unfinished CI run on main is refused too, because that run may still deploy after destroy.
+# Refuses while DEPLOY_ENABLED is true, because the next push to main would find an empty state and deploy the whole
+# stack again. An unreadable variable is refused as well, rather than treated as off. An unfinished CI run on main is
+# refused too, because that run may still deploy after destroy.
 
 set -euo pipefail
+
+usage() {
+  echo "Usage: scripts/prod/terraform-destroy.sh"
+  echo
+  echo "Destroys everything in infra/'s state."
+}
+
+if [[ ${1-} == -h || ${1-} == --help ]]; then
+  usage
+  exit 0
+fi
 
 ROOT=$(git rev-parse --show-toplevel)
 source "$ROOT/scripts/lib/aws.sh"

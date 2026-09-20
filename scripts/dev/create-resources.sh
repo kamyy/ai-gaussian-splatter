@@ -1,10 +1,20 @@
 #!/usr/bin/env bash
-# Creates web/.env from web/.env.example when it's missing, then the uploads and splats buckets it names and the
-# ai-gaussian-splatter-dev IAM user scoped to just those two buckets. Writes the user's access key into web/.env when it
-# creates one. Safe to re-run.
-# Existing buckets and the existing user are kept, and their CORS rules, tags, and policy are rewritten.
+# Writes the dev IAM user's access key into web/.env when it creates one. Safe to re-run. Existing buckets and the
+# existing user are kept, and their CORS rules, tags, and policy are rewritten.
 
 set -euo pipefail
+
+usage() {
+  echo "Usage: scripts/dev/create-resources.sh"
+  echo
+  echo "Creates web/.env from web/.env.example when it's missing, then the uploads and splats buckets it names and the"
+  echo "ai-gaussian-splatter-dev IAM user scoped to just those two buckets."
+}
+
+if [[ ${1-} == -h || ${1-} == --help ]]; then
+  usage
+  exit 0
+fi
 
 ROOT=$(git rev-parse --show-toplevel)
 source "$ROOT/scripts/lib/aws.sh"

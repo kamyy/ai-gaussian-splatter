@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
-# Empties and deletes the Terraform state bucket. Run it only after scripts/prod/terraform-destroy.sh has finished with
-# it.
 
 set -euo pipefail
+
+usage() {
+  echo "Usage: scripts/prod/terraform-delete-state-bucket.sh"
+  echo
+  echo "Empties and deletes the Terraform state bucket. Run it only after"
+  echo "scripts/prod/terraform-destroy.sh has finished with it."
+}
+
+if [[ ${1-} == -h || ${1-} == --help ]]; then
+  usage
+  exit 0
+fi
 
 ROOT=$(git rev-parse --show-toplevel)
 source "$ROOT/scripts/lib/aws.sh"

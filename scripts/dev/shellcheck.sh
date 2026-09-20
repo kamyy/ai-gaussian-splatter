@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
-# Runs shellcheck over every `.sh` file in scripts/dev/, scripts/prod/, and scripts/lib/. The root package.json's
-# scripts:check calls it, from the pre-commit hook and CI's lint-format job.
+# The root package.json's scripts:check calls it, from the pre-commit hook and CI's lint-format job.
 
 set -euo pipefail
+
+usage() {
+  echo "Usage: scripts/dev/shellcheck.sh"
+  echo
+  echo "Runs shellcheck over every .sh file in scripts/dev/, scripts/prod/, and scripts/lib/."
+}
+
+if [[ ${1-} == -h || ${1-} == --help ]]; then
+  usage
+  exit 0
+fi
 
 ROOT=$(git rev-parse --show-toplevel)
 

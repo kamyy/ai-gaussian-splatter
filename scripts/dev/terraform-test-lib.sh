@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Checks the HCL scrapers in scripts/lib/terraform.sh. The root package.json's scripts:check calls it, from the
-# pre-commit hook and CI's lint-format job.
+# The root package.json's scripts:check calls it, from the pre-commit hook and CI's lint-format job.
 #
 # .github/workflows/deploy.yml signs its AWS credentials with tf_get_aws_region, so a spelling in infra/variables.tf
 # that this no longer reads breaks a deploy rather than a plan. The check against the real file is shape-only, since
@@ -8,6 +7,17 @@
 # exact output. tf_get_app_hostname does not read infra/: it prefixes the zone name with ai-gaussian-splatter.
 
 set -euo pipefail
+
+usage() {
+  echo "Usage: scripts/dev/terraform-test-lib.sh"
+  echo
+  echo "Checks the HCL scrapers in scripts/lib/terraform.sh."
+}
+
+if [[ ${1-} == -h || ${1-} == --help ]]; then
+  usage
+  exit 0
+fi
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
 source "$REPO_ROOT/scripts/lib/terraform.sh"

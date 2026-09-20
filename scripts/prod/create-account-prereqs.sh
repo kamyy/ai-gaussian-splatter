@@ -1,8 +1,19 @@
 #!/usr/bin/env bash
-# One-time setup `infra/` can't do for itself: the Clerk secret, the Spot service-linked role, and the Terraform state
-# bucket. Safe to re-run. Anything that already exists is kept, and the Clerk secret's value is never overwritten.
+# Safe to re-run. Anything that already exists is kept, and the Clerk secret's value is never overwritten.
 
 set -euo pipefail
+
+usage() {
+  echo "Usage: scripts/prod/create-account-prereqs.sh"
+  echo
+  echo "One-time setup infra/ can't do for itself: the Clerk secret, the Spot service-linked role, and the Terraform"
+  echo "state bucket."
+}
+
+if [[ ${1-} == -h || ${1-} == --help ]]; then
+  usage
+  exit 0
+fi
 
 ROOT=$(git rev-parse --show-toplevel)
 source "$ROOT/scripts/lib/aws.sh"
