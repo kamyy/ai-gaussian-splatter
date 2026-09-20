@@ -93,7 +93,7 @@ When a set registers poorly, `worker/jobdir/colmap/database.db` says why — gue
 
 The pipeline can run standalone — nothing has to be listening at `APP_PUBLIC_URL`.
 
-A run is two stages, one script each, and both rebuild the `splat-worker:dev` image before running. Both take the dev IAM key pair, region, and bucket names from `web/.env`, which [Dev AWS resources](#dev-aws-resources) fills in. `scripts/dev/worker-reconstruct.sh` uploads the photos under a new splat ID, runs COLMAP, and prints the command for the train stage.
+A run is two stages, one script each, and each rebuilds its own image (`splat-worker-reconstruct:dev` or `splat-worker-train:dev`) before running. Both take the dev IAM key pair, region, and bucket names from `web/.env`, which [Dev AWS resources](#dev-aws-resources) fills in. `scripts/dev/worker-reconstruct.sh` uploads the photos under a new splat ID, runs COLMAP, and prints the command for the train stage.
 
 ```bash
 scripts/dev/worker-reconstruct.sh              # photos from worker/photos, or pass another directory
@@ -105,8 +105,11 @@ scripts/dev/worker-train.sh <splat-id>         # add --fast for a 20-iteration s
 Set `WORKER_LOCAL_LAUNCH=true` in `web/.env` to make the web app's Process button run the worker on your own GPU instead of launching a real EC2 spot instance. Output lands in `worker/jobdir/<jobId>/worker.log`, for the same [registration debugging](#capture) the manual flow uses. Needs the one-time [GPU passthrough setup](#one-time-gpu-passthrough-setup) and an image already built — this path never builds one for you.
 
 ```bash
-cd worker && podman build -t splat-worker:dev . # once, and again after any worker code change
-cd ../web && pnpm dev
+cd worker
+podman build --target reconstruct -t splat-worker-reconstruct:dev .  # once, and again after any worker code change
+podman build --target train -t splat-worker-train:dev .              # only the stage you will launch is needed
+cd ../web
+pnpm dev
 ```
 
 Upload photos and click Process in the browser as normal. The worker job goes through the same DB rows, callback token, and `/api/v1/internal/jobs/[jobId]/status` route a real EC2 run would use, so its status updates in the dashboard live. Leave `WORKER_LOCAL_LAUNCH` unset (or `false`) to go back to launching a real spot instance.
@@ -145,7 +148,7 @@ CI's `deploy` job (`.github/workflows/deploy.yml`) does every deploy, including 
 4. Runs the migration.
 5. Rolls the service forward.
 
-Steps 2 and 5 do nothing on a push that leaves `web/` untouched, so a `worker/`, `scripts/` or `infra/` change applies Terraform and runs the migration without building an image ([Image tags](ARCHITECTURE.md#image-tags)). Step 3 still replaces the running tasks whenever it changes the web task definition, which carries `WORKER_IMAGE_URI` and `KEEP_ALIVE_TIMEOUT` as well as the image — that replacement is what [Building and pushing the worker image](#building-and-pushing-the-worker-image) relies on.
+Steps 2 and 5 do nothing on a push that leaves `web/` untouched, so a `worker/`, `scripts/` or `infra/` change applies Terraform and runs the migration without building an image ([Image tags](ARCHITECTURE.md#image-tags)). Step 3 still replaces the running tasks whenever it changes the web task definition, which carries the two worker image URIs and `KEEP_ALIVE_TIMEOUT` as well as the image — that replacement is what [Building and pushing the worker image](#building-and-pushing-the-worker-image) relies on.
 
 Whether the `deploy` job is on is `gh variable get DEPLOY_ENABLED` ([Going live](#going-live)).
 
@@ -238,7 +241,7 @@ The image is tagged with the current commit, so commit any `worker/` changes fir
 scripts/prod/worker-push-image.sh
 ```
 
-After the push, the script sets the `WORKER_IMAGE_TAG` repository variable ([Setting GitHub repository variables](#setting-github-repository-variables)) to the new tag. A deploy then has to run to pass it as `TF_VAR_worker_image_tag`, which points `WORKER_IMAGE_URI` on the web task definition at the new image and replaces the running tasks. Until then, every worker instance still launches with the old image.
+After the push, the script sets the `WORKER_IMAGE_TAG` repository variable ([Setting GitHub repository variables](#setting-github-repository-variables)) to the new tag. A deploy then has to run to pass it as `TF_VAR_worker_image_tag`, which points both worker image URIs on the web task definition at the new images and replaces the running tasks. Until then, every worker instance still launches with the old images.
 
 Rerun the latest `main` run to trigger that deploy (`gh run rerun <run-id>`), because the `deploy` job reads the variable as the run starts. Pushing a commit works too, but not a docs-only one: a push touching only `.md` files or `LICENSE` skips the workflow, so nothing reads the new variable.
 

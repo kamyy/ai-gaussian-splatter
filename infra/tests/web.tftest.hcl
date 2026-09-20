@@ -152,15 +152,26 @@ run "web_container_wiring" {
   }
 
   # The override_resource blocks below give each ECR repository its own URL, and worker_image_tag differs from
-  # web_image_tag. So this fails if WORKER_IMAGE_URI names the web repository or the web tag. The us-west-2 in both
-  # this assertion and the ECR_REGISTRY one below is var.aws_region's default: if that default moves, the right fix
+  # web_image_tag. So these fail if either URI names the web repository or the web tag. The us-west-2 in these
+  # assertions and the ECR_REGISTRY one below is var.aws_region's default: if that default moves, the right fix
   # is to move these too, not to stop asserting the region.
+  #
+  # The two suffixes are asserted separately because a stage pulling the other stage's image is the failure this
+  # split exists to prevent, and it would still be a valid worker repository URI.
   assert {
     condition = anytrue([
       for e in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].environment :
-      e.name == "WORKER_IMAGE_URI" && e.value == "000000000000.dkr.ecr.us-west-2.amazonaws.com/ai-gaussian-splatter-worker:4567def"
+      e.name == "WORKER_RECONSTRUCT_IMAGE_URI" && e.value == "000000000000.dkr.ecr.us-west-2.amazonaws.com/ai-gaussian-splatter-worker:4567def-reconstruct"
     ])
-    error_message = "WORKER_IMAGE_URI must point at the worker ECR repository, tagged with worker_image_tag"
+    error_message = "WORKER_RECONSTRUCT_IMAGE_URI must name the worker repository, worker_image_tag, and the -reconstruct suffix"
+  }
+
+  assert {
+    condition = anytrue([
+      for e in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].environment :
+      e.name == "WORKER_TRAIN_IMAGE_URI" && e.value == "000000000000.dkr.ecr.us-west-2.amazonaws.com/ai-gaussian-splatter-worker:4567def-train"
+    ])
+    error_message = "WORKER_TRAIN_IMAGE_URI must name the worker repository, worker_image_tag, and the -train suffix"
   }
 
   assert {
@@ -550,7 +561,7 @@ override_resource {
   }
 }
 
-# Distinct literal URLs so the WORKER_IMAGE_URI assertion can tell the two repositories apart. mock_provider would
+# Distinct literal URLs so the worker image URI assertions can tell the two repositories apart. mock_provider would
 # otherwise give each a random string.
 override_resource {
   target = aws_ecr_repository.web

@@ -506,7 +506,8 @@ resource "aws_ecs_task_definition" "web" {
       { name = "WORKER_INSTANCE_PROFILE_ARN", value = aws_iam_instance_profile.worker.arn },
       # Read by web/lib/server/ec2Launcher.ts's workerImageUri()/ecrRegistry(), which otherwise fall back to
       # REPLACE_WITH_* placeholders meant only for local/pre-deploy development.
-      { name = "WORKER_IMAGE_URI", value = local.worker_image_uri },
+      { name = "WORKER_RECONSTRUCT_IMAGE_URI", value = local.worker_reconstruct_image_uri },
+      { name = "WORKER_TRAIN_IMAGE_URI", value = local.worker_train_image_uri },
       { name = "ECR_REGISTRY", value = local.ecr_registry },
       # Where the GPU worker PATCHes job status back to. Passed in rather than read off the load balancer, so
       # it stays the stable custom domain the ALB is aliased to.

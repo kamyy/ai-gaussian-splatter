@@ -123,7 +123,7 @@ export const POST = withErrorHandling(
           splatId,
           callbackToken,
           stage: "reconstruct",
-          workerImageUri: workerImageUri(),
+          workerImageUri: workerImageUri("reconstruct"),
           ecrRegistry: ecrRegistry(),
         });
       }

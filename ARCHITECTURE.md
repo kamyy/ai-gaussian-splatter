@@ -33,7 +33,7 @@ The "AI" here is per-object gradient descent through a differentiable rasterizer
 
 A worker job's wall clock splits into three parts:
 
-- **Fixed overhead**: pulling and extracting the ~9.2 GB worker image, which every stage pays before its GPU does anything. `worker/Dockerfile` builds gsplat's CUDA kernels into the image, so no stage compiles them at run time.
+- **Fixed overhead**: pulling and extracting the stage's image before its GPU does anything — ~1.9 GB for reconstruct, ~8.0 GB for train. `worker/Dockerfile` builds one target per stage carrying only what that stage runs, and compiles gsplat's CUDA kernels in, so no stage compiles them at run time. Reconstruct gets much the smaller image and is the stage that runs more often, since every upload reconstructs while only some go on to train. It needs no CUDA library beyond cudart, so it starts from a `-base` image where train needs `-runtime`.
 - **COLMAP**: a few minutes, CPU-bound by `mapper`'s incremental bundle adjustment.
 - **Training**: the majority of wall clock.
 

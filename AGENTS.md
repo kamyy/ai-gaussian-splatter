@@ -135,6 +135,9 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - `biome.json` sets `lineWidth: 120`. One measure holds repo-wide.
   - When hand-wrapping comments in the files Biome skips, including comments inside a Markdown fenced code block, treat 120 as the fill target: greedily pack each line with words up to that width before wrapping to the next, the same way a `fmt`/text-fill pass would, not an early wrap at whatever width feels readable.
   - Markdown *prose* is the exception: no max width, since GitHub reflows paragraphs and fixed wraps only add diff noise. One line per paragraph/list item.
+  - **The fill target governs comments, not the shell Biome skips.** Shell in `scripts/` and in a Dockerfile `RUN` is laid out to be read, so packing it to 120 is the wrong instinct.
+  - **A list a loop iterates gets one item per line, sorted, once it outgrows a single line.** Each name is then greppable, and adding or removing one touches one line of diff. `worker/Dockerfile`'s prune list is the example.
+  - **A guard inside that shell is `if ... then ... fi`, not `test ... || { ...; exit 1; }`.** The condition, the message and the exit each get their own line, which is how `scripts/` already writes them.
 - **Operational scripts in `scripts/dev/` (local) and `scripts/prod/` (the deployed account) are committed executable (`100755`); helpers in `scripts/lib/` are sourced, so they stay `100644`.**
   - Each helper starts with `# shellcheck shell=bash` in place of a shebang.
   - Executables that share a subject use topic-then-action kebab-case (`terraform-*`, `worker-*`, `db-*`).
@@ -226,8 +229,8 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - A pushed tag can never be repointed, so the deploy job skips any build whose tag is already in the repository. That is what makes it re-runnable from any step, and what keeps an unchanged `web/` from rebuilding.
   - Per-build tags exist to keep the deployment circuit breaker's rollback meaningful: with a moving tag every release shares one task definition, and a rollback re-pulls the image that just failed.
 - **A push that leaves `web/` byte-identical builds nothing and leaves the service's *image* unchanged. It does not mean the service keeps running.** `aws_ecs_service.web` names `aws_ecs_task_definition.web.arn`, a revision-qualified ARN with no `ignore_changes`, so any task-definition change registers a new revision and ECS replaces the tasks.
-  - The image is one field among many in that task definition. `WORKER_IMAGE_URI`, `KEEP_ALIVE_TIMEOUT`, `cpu`/`memory`, `APP_PUBLIC_URL`, and the Clerk and RDS wiring all live there too, and all of them are editable from `infra/` alone.
-  - That rollout is load-bearing, not a leak. The worker-image flow depends on it: a deploy carries a new `WORKER_IMAGE_TAG` into `WORKER_IMAGE_URI`, and only a task replacement puts it in front of `web/lib/server/ec2Launcher.ts` ([Building and pushing the worker image](RUNBOOK.md#building-and-pushing-the-worker-image)).
+  - The image is one field among many in that task definition. `WORKER_RECONSTRUCT_IMAGE_URI`, `WORKER_TRAIN_IMAGE_URI`, `KEEP_ALIVE_TIMEOUT`, `cpu`/`memory`, `APP_PUBLIC_URL`, and the Clerk and RDS wiring all live there too, and all of them are editable from `infra/` alone.
+  - That rollout is load-bearing, not a leak. The worker-image flow depends on it: a deploy carries a new `WORKER_IMAGE_TAG` into both worker image URIs, and only a task replacement puts them in front of `web/lib/server/ec2Launcher.ts` ([Building and pushing the worker image](RUNBOOK.md#building-and-pushing-the-worker-image)).
   - It lands in the *first* apply, which is untargeted. The roll-forward apply is the no-op on such a push, not the other way round.
   - **The migration task still runs, and gating it on the tag is a trap.** An unchanged tag says `web/drizzle/` is unchanged, not that the database matches it. The first apply can replace `aws_db_instance.main`, and on a first deploy that apply creates the service already on the new tag — so a re-run after a failed migration reads equal tags and would skip the migration that never ran.
   - `HEAD:web` is tree-root relative, so the `working-directory: infra` on "Resolve tags" doesn't change what it reads.
@@ -244,7 +247,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - **The worker image lives in its own ECR repository (`ai-gaussian-splatter-worker`, `infra/registry.tf`), separate from the web repository above, and `var.worker_image_tag` has no default.**
   - No deploy ever rebuilds and pushes it — GPU worker deployment stays manual (`RUNBOOK.md`) — so this variable only changes when someone hand-builds and pushes a new one. It stays a commit SHA, because `scripts/prod/worker-push-image.sh` tags the image with the checked-out commit rather than a tree.
   - Re-running that script on an already-pushed commit fails at `podman push` with `ImageTagAlreadyExists`. Commit again rather than retagging.
-  - Its lifecycle policy keeps far fewer images (`local.worker_releases_kept`, currently 2) than the web repository's `local.releases_kept` (10): at ~9.2 GB each the worker image isn't cheap to retain, and it isn't part of any ECS rollback mechanism anyway — `web/lib/server/ec2Launcher.ts` just reads whatever `WORKER_IMAGE_URI` currently names.
+  - Its lifecycle policy keeps far fewer images (`local.worker_releases_kept`, currently 2) than the web repository's `local.releases_kept` (10): the worker images aren't cheap to retain at ~1.9 GB and ~8.0 GB, and they aren't part of any ECS rollback mechanism anyway — `web/lib/server/ec2Launcher.ts` just reads whichever URI it is handed. Counted per tag suffix, with one rule each for `-reconstruct` and `-train`, so both halves of a release expire together.
 
 ### Variables & state backend
 

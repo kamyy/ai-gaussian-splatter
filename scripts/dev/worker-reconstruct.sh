@@ -21,7 +21,7 @@ if [[ -e "$ROOT/worker/jobdir" ]]; then
 fi
 
 worker_use_dev_aws
-worker_build_image
+worker_build_image reconstruct
 
 # Needs to be different for every run.
 SPLAT_ID=$(uuidgen)

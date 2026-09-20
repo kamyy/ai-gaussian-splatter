@@ -29,7 +29,7 @@ gh_require_login
 gh_require_aws_deploy_account
 REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
 
-# Both checks run before a ~19 GB build that would otherwise only fail at the push. Each reads only its own not-found
+# Both checks run before a build that would otherwise only fail at the push. Each reads only its own not-found
 # error as an answer. Any other error stops here with AWS's own message.
 if ! REPO_CHECK=$(aws ecr describe-repositories --region "$REGION" --repository-names "$REPO" 2>&1); then
   if [[ $REPO_CHECK == *RepositoryNotFoundException* ]]; then
@@ -39,21 +39,48 @@ if ! REPO_CHECK=$(aws ecr describe-repositories --region "$REGION" --repository-
   fi
   exit 1
 fi
-if IMAGE_CHECK=$(aws ecr describe-images --region "$REGION" --repository-name "$REPO" --image-ids imageTag="$TAG" \
-  2>&1); then
-  echo "$REPO:$TAG is already pushed, and a pushed tag can never be replaced. Commit again for a new build." >&2
+# One commit produces two images, one per worker-job stage, and infra/locals.tf appends these same suffixes when it
+# builds the URIs the web task hands to web/lib/server/ec2Launcher.ts.
+STAGES=(reconstruct train)
+
+# Which suffixes this commit still needs, checked before the build because a pushed tag can never be replaced. A run
+# that pushed one image and failed on the other leaves the repository half-populated, so re-running finishes what is
+# missing rather than refusing outright, which would otherwise take an empty commit to get past.
+PENDING=()
+for stage in "${STAGES[@]}"; do
+  if IMAGE_CHECK=$(aws ecr describe-images --region "$REGION" --repository-name "$REPO" \
+    --image-ids imageTag="$TAG-$stage" 2>&1); then
+    continue
+  fi
+  if [[ $IMAGE_CHECK != *ImageNotFoundException* ]]; then
+    echo "$IMAGE_CHECK" >&2
+    exit 1
+  fi
+  PENDING+=("$stage")
+done
+
+if [[ ${#PENDING[@]} -eq 0 ]]; then
+  echo "$REPO:$TAG is already pushed for every stage, and a pushed tag can never be replaced." >&2
+  echo "Commit again for a new build." >&2
   exit 1
 fi
-if [[ $IMAGE_CHECK != *ImageNotFoundException* ]]; then
-  echo "$IMAGE_CHECK" >&2
-  exit 1
+if [[ ${#PENDING[@]} -lt ${#STAGES[@]} ]]; then
+  echo "Resuming a partial push of $TAG: ${PENDING[*]} still missing." >&2
 fi
 
-confirm "Build and push $REPO:$TAG to account $AWS_ACCOUNT_ID, then set WORKER_IMAGE_TAG=$TAG?"
+confirm "Build and push ${PENDING[*]} for $REPO:$TAG to account $AWS_ACCOUNT_ID, then set WORKER_IMAGE_TAG=$TAG?"
 
 aws ecr get-login-password --region "$REGION" | podman login --username AWS --password-stdin "$REGISTRY"
-podman build -t "$REGISTRY/$REPO:$TAG" "$ROOT/worker"
-podman push "$REGISTRY/$REPO:$TAG"
+
+# Every image is built before any is pushed, so a build failure in the second leaves nothing half-released under a tag
+# that can never be reused. WORKER_IMAGE_TAG is set only once all of them are up, because a deploy reading it expects
+# to find both suffixes.
+for stage in "${PENDING[@]}"; do
+  podman build --target "$stage" -t "$REGISTRY/$REPO:$TAG-$stage" "$ROOT/worker"
+done
+for stage in "${PENDING[@]}"; do
+  podman push "$REGISTRY/$REPO:$TAG-$stage"
+done
 gh variable set WORKER_IMAGE_TAG --body "$TAG"
 
-echo "WORKER_IMAGE_TAG is now $TAG. The next deploy points WORKER_IMAGE_URI at it."
+echo "WORKER_IMAGE_TAG is now $TAG. The next deploy points both worker image URIs at it."

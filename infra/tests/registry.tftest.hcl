@@ -80,12 +80,16 @@ run "worker_repository_is_separate_immutable_and_force_deletable" {
 run "worker_lifecycle_keeps_far_fewer_images_than_web" {
   command = apply
 
+  # One rule per suffix, each at the same depth, so a release's two tags expire together rather than one half of an
+  # older release being stranded when a push leaves the suffixes unpaired.
   assert {
-    condition = anytrue([
+    condition = length([
       for rule in jsondecode(aws_ecr_lifecycle_policy.worker.policy).rules :
-      contains(rule.selection.tagPatternList, "*") && rule.selection.countNumber == 2
-    ])
-    error_message = "the ~19 GB worker image isn't part of any ECS rollback mechanism, so it should keep far fewer images than RELEASES_KEPT (10)"
+      rule if rule.selection.countNumber == 2 && (
+        contains(rule.selection.tagPatternList, "*-reconstruct") || contains(rule.selection.tagPatternList, "*-train")
+      )
+    ]) == 2
+    error_message = "each worker tag suffix needs its own rule at the same depth, well below releases_kept (10)"
   }
 }
 
