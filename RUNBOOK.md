@@ -69,7 +69,7 @@ scripts/dev/run-web-container.sh
 
 ## Worker (local pipeline run)
 
-A real Nvidia GPU is required. The worker image carries CUDA and a CUDA-enabled COLMAP build, so only the Nvidia GPU driver and `nvidia-container-toolkit` have to be installed locally.
+A real Nvidia GPU is required. Both worker images carry a CUDA runtime, and `splat-worker-reconstruct` carries a CUDA-enabled COLMAP build as well, so only the Nvidia GPU driver and `nvidia-container-toolkit` have to be installed locally.
 
 ### One-time GPU passthrough setup
 

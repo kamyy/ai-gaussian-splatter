@@ -225,7 +225,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 ## Worker (GPU pipeline)
 
 - **Local pipeline runs are a Podman container: they need an NVIDIA GPU, the NVIDIA driver, and `nvidia-container-toolkit`.**
-  - The CUDA runtime, COLMAP, and gsplat live in the worker image — don't install those on the host. `worker/Dockerfile` compiles gsplat's kernels in a build stage, so the image it ships carries no `nvcc`.
+  - The CUDA runtime lives in both worker images. COLMAP lives in `worker/Dockerfile`'s `reconstruct` target and gsplat in its `train` target. Don't install any of them on the host. `worker/Dockerfile` compiles gsplat's kernels in a build stage, so neither shipped image carries `nvcc`.
   - Setup and the run scripts are in [`RUNBOOK.md`](RUNBOOK.md#worker-local-pipeline-run).
 - **The worker container is two hops from IMDS, so `RunInstances` sets `HttpPutResponseHopLimit: 2`** (`web/lib/server/ec2Launcher.ts`).
   - At EC2's default of 1 the token PUT in `worker/pipeline/instance.py` gets no reply, `get_self_instance_id()` returns `None`, and the instance never terminates itself — logging one INFO line indistinguishable from a local run while a `g5.xlarge` keeps billing.
