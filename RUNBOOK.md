@@ -69,7 +69,7 @@ scripts/dev/run-web-container.sh
 
 ## Worker (local pipeline run)
 
-A real Nvidia GPU is required. The worker image carries CUDA and a CUDA-enabled COLMAP build, so only the Nvidia GPU driver and `nvidia-container-toolkit` have to be installed locally.
+A real Nvidia GPU is required. Both worker images carry a CUDA runtime, and `splat-worker-reconstruct` carries a CUDA-enabled COLMAP build as well, so only the Nvidia GPU driver and `nvidia-container-toolkit` have to be installed locally.
 
 ### One-time GPU passthrough setup
 
@@ -197,7 +197,10 @@ scripts/prod/configure-ci-role.sh
 
 #### Setting GitHub repository variables
 
-`.github/workflows/deploy.yml` reads its configuration from GitHub repository variables (`vars.*`). `scripts/prod/set-gh-repo-variables.sh` sets all of them. `scripts/prod/terraform-plan.sh` and `scripts/prod/terraform-destroy.sh` read the same ones back. It needs `gh` signed in with write access to the repository, and the Clerk secret from [Creating account prerequisites](#creating-account-prerequisites).
+`.github/workflows/deploy.yml` reads its configuration from GitHub repository variables (`vars.*`). `scripts/prod/set-gh-repo-variables.sh` sets all of them, and needs `gh` signed in with write access to the repository plus the Clerk secret from [Creating account prerequisites](#creating-account-prerequisites). Two scripts read the same variables back:
+
+- `scripts/prod/terraform-destroy.sh`
+- `scripts/prod/terraform-plan.sh`
 
 ```bash
 scripts/prod/set-gh-repo-variables.sh

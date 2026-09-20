@@ -53,6 +53,9 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
   - Several facts hung off one subject only read cleanly when they're the same kind of fact. A failure condition, an action, and a conditional action need their own sentences.
   - Don't coordinate a negated verb with a positive one, as in "won't run unless you're signed in, and prints the account". The reader has to work out that the second half applies in the case the first half rules out.
 - **Reference files by their full package-relative path, not a bare filename** — `web/proxy.ts`, not `proxy.ts`. Do this every time the file is named, even right next to an earlier mention that already gave the full path; don't rely on the reader having seen that earlier sentence.
+- **A sentence naming more than one file path becomes a bulleted list instead, sorted, one path per line** — even where that costs a sub-bullet under the sentence introducing them.
+  - Each path is then greppable, and adding or removing one touches one line of diff.
+  - Write that introducing sentence as the rule the listed files share, rather than as a subject made of their names.
 - **Name the subject instead of pointing at it.** The full-path rule applies to every subject, not just files.
   - "the root module", "this app", and "this config" all make the reader work out which thing is meant, and each one goes stale the moment that thing is renamed or split. Write `infra/`, or the ECS task, or whichever it is.
   - A bare "one" or "the AWS ones" standing in for a noun from an earlier sentence has the same problem. Repeat the noun.
@@ -176,17 +179,22 @@ Node is pinned in root `.nvmrc` (`24.18.0`); CI jobs use `node-version-file`. Ru
 
 ### Shell scripts
 
-Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the deployed account), and are committed executable (`100755`). Helpers in `scripts/lib/` are sourced, so they stay `100644`.
+Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the deployed account), and are committed executable (`rwxr-xr-x`). Helpers in `scripts/lib/` are sourced, so they stay `rw-r--r--`.
 
-- Every executable accepts `-h`/`--help`, prints usage on stdout, exits 0, and does that before login, confirm, or any other work.
+- Every operational script accepts `-h`/`--help`, prints usage on stdout, exits 0, and does that before login, confirm, or any other work.
 - Each helper starts with `# shellcheck shell=bash` in place of a shebang.
-- Executables that share a subject use topic-then-action kebab-case (`terraform-*`, `worker-*`, `db-*`).
+- Operational scripts that share a subject use topic-then-action kebab-case (`terraform-*`, `worker-*`, `db-*`).
 - A one-off procedure stays verb-object (`create-account-prereqs`, `configure-ci-role`).
-- Lib files are a domain: `scripts/lib/aws.sh`, `scripts/lib/github.sh`, `scripts/lib/terraform.sh`, `scripts/lib/env.sh`, `scripts/lib/worker.sh`.
+- Lib files are a domain:
+  - `scripts/lib/aws.sh`
+  - `scripts/lib/env.sh`
+  - `scripts/lib/github.sh`
+  - `scripts/lib/terraform.sh`
+  - `scripts/lib/worker.sh`
 - `scripts/lib/confirm.sh` is named after its one function.
 - Lib functions take that file's prefix (`aws_`, `gh_`, `tf_`, `env_`, `worker_`) then a verb.
 - Fail-fast helpers are `*_require_*`.
-- A function that exists only inside one executable has no prefix.
+- A function defined in an operational script itself, rather than in a sourced `scripts/lib/` file, has no prefix.
 - Assign each positional argument to a named variable before using it, so a later `$1` doesn't leave the reader guessing which argument it is.
   - That assignment is `local` inside a function and an ordinary variable at script top, where `local` is invalid.
   - `"$@"` is only for leftover arguments forwarded to another command.
@@ -195,7 +203,11 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - The Spot service-linked role and GitHub OIDC provider are account-wide and stay untagged.
 - A script that creates or deletes anything sources `scripts/lib/confirm.sh` and calls `confirm` first.
 - A script that uses the GitHub CLI sources `scripts/lib/github.sh` and calls `gh_require_login` before its first `gh` call. Otherwise a logged-out `gh` reads the same as an unset repository variable.
-- `scripts/prod/terraform-plan.sh`, `scripts/prod/terraform-destroy.sh`, `scripts/prod/terraform-delete-state-bucket.sh`, and `scripts/prod/worker-push-image.sh` act on the deployed account, so they also call `gh_require_aws_deploy_account`, which checks the signed-in account against the `AWS_ACCOUNT_ID` repository variable.
+- A script that acts on the deployed account also calls `gh_require_aws_deploy_account`, which checks the signed-in account against the `AWS_ACCOUNT_ID` repository variable:
+  - `scripts/prod/terraform-delete-state-bucket.sh`
+  - `scripts/prod/terraform-destroy.sh`
+  - `scripts/prod/terraform-plan.sh`
+  - `scripts/prod/worker-push-image.sh`
 - The worker scripts run as the dev IAM user from `web/.env` instead, so `worker_use_dev_aws` in `scripts/lib/worker.sh` checks those keys.
 - Local Terraform is `$HOME/.local/bin/terraform` (`scripts/dev/terraform-install.sh`). Scripts that run it assign `TERRAFORM=$(tf_get_bin)`, which prefers that path over PATH, because a different CLI earlier on PATH still satisfies `command -v terraform`.
   - CI has no copy there. `hashicorp/setup-terraform` in `.github/workflows/ci.yml` and `.github/workflows/deploy.yml` installs whatever `tf_get_required_version` reads from `infra/providers.tf`.
@@ -213,7 +225,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 ## Worker (GPU pipeline)
 
 - **Local pipeline runs are a Podman container: they need an NVIDIA GPU, the NVIDIA driver, and `nvidia-container-toolkit`.**
-  - The CUDA runtime, COLMAP, and gsplat live in the worker image — don't install those on the host. `worker/Dockerfile` compiles gsplat's kernels in a build stage, so the image it ships carries no `nvcc`.
+  - The CUDA runtime lives in both worker images. COLMAP lives in `worker/Dockerfile`'s `reconstruct` target and gsplat in its `train` target. Don't install any of them on the host. `worker/Dockerfile` compiles gsplat's kernels in a build stage, so neither shipped image carries `nvcc`.
   - Setup and the run scripts are in [`RUNBOOK.md`](RUNBOOK.md#worker-local-pipeline-run).
 - **The worker container is two hops from IMDS, so `RunInstances` sets `HttpPutResponseHopLimit: 2`** (`web/lib/server/ec2Launcher.ts`).
   - At EC2's default of 1 the token PUT in `worker/pipeline/instance.py` gets no reply, `get_self_instance_id()` returns `None`, and the instance never terminates itself — logging one INFO line indistinguishable from a local run while a `g5.xlarge` keeps billing.
