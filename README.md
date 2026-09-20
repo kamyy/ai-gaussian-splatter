@@ -1,6 +1,6 @@
 # AI Gaussian Splatter
 
-> 🚧 **Under construction.** Scaffolding is in place but the pipeline is unproven on real hardware and several gaps remain — see [State / what's next](AGENTS.md#state--whats-next), [`ARCHITECTURE.md`](ARCHITECTURE.md), and [`RUNBOOK.md`](RUNBOOK.md).
+> 🚧 **Under construction.** The pipeline has run end to end on a local GPU, but nothing has run on AWS yet and several gaps remain — see [State / what's next](AGENTS.md#state--whats-next), [`ARCHITECTURE.md`](ARCHITECTURE.md), and [`RUNBOOK.md`](RUNBOOK.md).
 
 Upload multi-angle photos of a physical object, get back a real-time, interactive 3D Gaussian Splat you can view in the browser and share.
 
@@ -20,9 +20,9 @@ Built with the help of [Claude Code](https://claude.com/product/claude-code) and
 
 ## Structure
 
-- `web/` — Next.js (App Router) + MUI + SWR + Zustand + react-three-fiber, and the REST API as Route Handlers (auth, rate limiting, worker-job orchestration) backed by Drizzle
-- `worker/` — COLMAP + gsplat reconstruction pipeline, run on a GPU spot instance per worker-job stage
-- `infra/` — Terraform
+- `web/` — the frontend, and the REST API as Route Handlers (auth, rate limiting, worker-job orchestration)
+- `worker/` — the reconstruction pipeline, run on a GPU spot instance per worker-job stage
+- `infra/` — the Terraform configuration for the whole AWS stack
 
 ## Quick start
 

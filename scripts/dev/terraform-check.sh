@@ -1,8 +1,19 @@
 #!/usr/bin/env bash
-# The root package.json's infra:check runs scripts/dev/terraform-check.sh, from the pre-commit hook, CI's infra job,
-# and scripts/dev/run-tests.sh.
+# The root package.json's infra:check runs this, from the pre-commit hook, CI's infra job, and
+# scripts/dev/run-tests.sh.
 
 set -euo pipefail
+
+usage() {
+  echo "Usage: scripts/dev/terraform-check.sh"
+  echo
+  echo "Runs terraform fmt -check, init -backend=false, and validate on infra/."
+}
+
+if [[ ${1-} == -h || ${1-} == --help ]]; then
+  usage
+  exit 0
+fi
 
 ROOT=$(git rev-parse --show-toplevel)
 source "$ROOT/scripts/lib/terraform.sh"

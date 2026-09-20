@@ -1,8 +1,19 @@
 #!/usr/bin/env bash
-# Builds the splat-web image production runs and serves it on http://localhost:8000 in place of `pnpm dev`. Needs
-# splat-pg up (scripts/dev/db-up.sh) and a filled-in web/.env. Replaces any splat-web container from an earlier run.
+# Needs splat-pg up (scripts/dev/db-up.sh) and a filled-in web/.env. Replaces any splat-web container from an earlier
+# run.
 
 set -euo pipefail
+
+usage() {
+  echo "Usage: scripts/dev/run-web-container.sh"
+  echo
+  echo "Builds the splat-web image production runs and serves it on http://localhost:8000 in place of pnpm dev."
+}
+
+if [[ ${1-} == -h || ${1-} == --help ]]; then
+  usage
+  exit 0
+fi
 
 ROOT=$(git rev-parse --show-toplevel)
 source "$ROOT/scripts/lib/env.sh"

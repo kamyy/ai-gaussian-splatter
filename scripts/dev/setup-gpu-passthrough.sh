@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
-# One-time Fedora setup that lets rootless Podman pass the host's NVIDIA GPU into the worker container. Needs the NVIDIA
-# GPU driver already installed. Asks for sudo.
+# Needs the NVIDIA GPU driver already installed. Asks for sudo.
 
 set -euo pipefail
+
+usage() {
+  echo "Usage: scripts/dev/setup-gpu-passthrough.sh"
+  echo
+  echo "One-time Fedora setup that lets rootless Podman pass the host's NVIDIA GPU into the worker container."
+}
+
+if [[ ${1-} == -h || ${1-} == --help ]]; then
+  usage
+  exit 0
+fi
 
 # NVIDIA documents no fingerprint for this key, so this is the one its server served on 2026-09-15 rather than an
 # independently published value. Pinning it still catches a later swap of the key. Check any mismatch against NVIDIA

@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
-# Builds the worker image from this commit, pushes it to the ai-gaussian-splatter-worker ECR repository, and points the
-# WORKER_IMAGE_TAG repository variable at it.
 
 set -euo pipefail
+
+usage() {
+  echo "Usage: scripts/prod/worker-push-image.sh"
+  echo
+  echo "Builds the worker image from this commit, pushes it to the ai-gaussian-splatter-worker ECR repository, and"
+  echo "points the WORKER_IMAGE_TAG repository variable at it."
+}
+
+if [[ ${1-} == -h || ${1-} == --help ]]; then
+  usage
+  exit 0
+fi
 
 ROOT=$(git rev-parse --show-toplevel)
 source "$ROOT/scripts/lib/aws.sh"

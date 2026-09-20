@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
-# Resolves every repository variable .github/workflows/deploy.yml reads and sets them with `gh variable set`.
 # scripts/prod/terraform-plan.sh and scripts/prod/terraform-destroy.sh read the same variables back. Run it after
 # scripts/prod/create-account-prereqs.sh, since it looks up the Clerk secret that script creates. Safe to re-run. Each
 # prompt defaults to the variable's current value.
 
 # shellcheck disable=SC2034 # Each value is read back through ${!repo_var} at the end.
 set -euo pipefail
+
+usage() {
+  echo "Usage: scripts/prod/set-gh-repo-variables.sh"
+  echo
+  echo "Resolves every repository variable .github/workflows/deploy.yml reads and sets them with gh variable set."
+}
+
+if [[ ${1-} == -h || ${1-} == --help ]]; then
+  usage
+  exit 0
+fi
 
 ROOT=$(git rev-parse --show-toplevel)
 source "$ROOT/scripts/lib/aws.sh"

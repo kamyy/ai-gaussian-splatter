@@ -1,9 +1,20 @@
 #!/usr/bin/env bash
-# Creates the GitHub OIDC provider and the ai-gaussian-splatter-ci-deploy role .github/workflows/deploy.yml assumes.
 # Safe to re-run. Both of the role's policies are rewritten from this file on every run, so fixing an AccessDenied from
 # the deploy job is an edit to DEPLOY_POLICY below and a re-run.
 
 set -euo pipefail
+
+usage() {
+  echo "Usage: scripts/prod/configure-ci-role.sh"
+  echo
+  echo "Creates the GitHub OIDC provider and the ai-gaussian-splatter-ci-deploy role that"
+  echo ".github/workflows/deploy.yml assumes."
+}
+
+if [[ ${1-} == -h || ${1-} == --help ]]; then
+  usage
+  exit 0
+fi
 
 ROOT=$(git rev-parse --show-toplevel)
 source "$ROOT/scripts/lib/aws.sh"

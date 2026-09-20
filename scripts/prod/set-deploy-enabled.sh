@@ -1,10 +1,19 @@
 #!/usr/bin/env bash
-# Sets the DEPLOY_ENABLED GitHub repository variable to true or false. scripts/prod/set-gh-repo-variables.sh leaves
-# this variable alone. Safe to re-run. A value that already matches is a no-op.
-#
-# Usage: scripts/prod/set-deploy-enabled.sh true|false
+# scripts/prod/set-gh-repo-variables.sh leaves this variable alone. Safe to re-run. A value that already matches is a
+# no-op.
 
 set -euo pipefail
+
+usage() {
+  echo "Usage: scripts/prod/set-deploy-enabled.sh true|false"
+  echo
+  echo "Sets the DEPLOY_ENABLED GitHub repository variable to true or false."
+}
+
+if [[ ${1-} == -h || ${1-} == --help ]]; then
+  usage
+  exit 0
+fi
 
 ROOT=$(git rev-parse --show-toplevel)
 source "$ROOT/scripts/lib/confirm.sh"
@@ -12,7 +21,7 @@ source "$ROOT/scripts/lib/github.sh"
 
 wanted=${1-}
 if [[ $# -ne 1 || ( "$wanted" != true && "$wanted" != false ) ]]; then
-  echo "Usage: scripts/prod/set-deploy-enabled.sh true|false" >&2
+  usage >&2
   exit 1
 fi
 

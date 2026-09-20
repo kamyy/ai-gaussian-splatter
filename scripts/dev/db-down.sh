@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
-# Stops and removes splat-pg and the splat-pg-data volume. Dev and test databases are gone.
 # A missing container or volume is a no-op.
 
 set -euo pipefail
+
+usage() {
+  echo "Usage: scripts/dev/db-down.sh"
+  echo
+  echo "Stops and removes splat-pg and the splat-pg-data volume. Dev and test databases are gone."
+}
+
+if [[ ${1-} == -h || ${1-} == --help ]]; then
+  usage
+  exit 0
+fi
 
 ROOT=$(git rev-parse --show-toplevel)
 source "$ROOT/scripts/lib/confirm.sh"

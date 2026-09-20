@@ -2,6 +2,28 @@
 
 Why the system is shaped this way: decisions, alternatives rejected, costs accepted. [`AGENTS.md`](AGENTS.md) is what breaks if you don't know it; [`RUNBOOK.md`](RUNBOOK.md) is how to run it. Each fact lives in exactly one of the three.
 
+- [Monorepo tooling](#monorepo-tooling)
+- [Pipeline](#pipeline)
+- [Compute](#compute)
+- [API design](#api-design)
+- [Frontend](#frontend)
+- [Schema & ORM](#schema--orm)
+- [Postgres connectivity & TLS](#postgres-connectivity--tls)
+  - [Master password refresh](#master-password-refresh)
+- [Infra](#infra)
+- [Hosting](#hosting)
+  - [Spot tradeoffs](#spot-tradeoffs)
+  - [Networking](#networking)
+  - [TLS & DNS](#tls--dns)
+  - [Image tags](#image-tags)
+  - [Clerk secret](#clerk-secret)
+- [Abuse protection](#abuse-protection)
+- [CI/CD](#cicd)
+- [Migration ordering](#migration-ordering)
+- [CI authentication](#ci-authentication)
+- [Testing](#testing)
+- [Build order](#build-order)
+
 ## Monorepo tooling
 
 - **pnpm**, not npm or yarn, for `web/` and the root scripts. `infra/` needs no Node tooling at all: Terraform ships as a standalone CLI binary, installed directly rather than through a package manager.
@@ -27,24 +49,31 @@ The "AI" here is per-object gradient descent through a differentiable rasterizer
 ## Compute
 
 - Each stage of a worker job — reconstruct, then train — gets its own EC2 GPU **spot** instance (`web/lib/server/ec2Launcher.ts`; type from `WORKER_INSTANCE_TYPE`, default `g5.xlarge`). It runs the worker container, then self-terminates on success or failure.
-- Fallback if a worker dies without reporting: `web/lib/server/ec2Launcher.ts` schedules `shutdown -h +WORKER_MAX_LIFETIME_MINUTES` as the first thing user-data does, before the failure-prone steps (ECR login, `docker run`) that could otherwise leave `worker/pipeline/instance.py`'s own self-terminate unreached. `InstanceInitiatedShutdownBehavior = "terminate"` on the launch makes that shutdown actually terminate the instance rather than just stop it. If scheduling that shutdown fails, user-data powers the instance off immediately rather than run the stage without a ceiling. Losing one worker job costs less than a GPU instance billing with no bound. A CloudWatch runtime alarm was considered instead (or in addition) for alerting when this fires, but nothing in the request path needs to *know* a worker job hung, only to stop it from billing — so the ceiling alone was built; alerting is [gap 5](AGENTS.md#state--whats-next).
+- Fallback if a worker dies without reporting: `web/lib/server/ec2Launcher.ts` schedules `shutdown -h +WORKER_MAX_LIFETIME_MINUTES` as the first thing user-data does.
+  - It runs before the failure-prone steps (ECR login, `docker run`) that could otherwise leave `worker/pipeline/instance.py`'s own self-terminate unreached.
+  - `InstanceInitiatedShutdownBehavior = "terminate"` on the launch makes that shutdown terminate the instance rather than stop it.
+  - If scheduling the shutdown fails, user-data powers the instance off immediately rather than run the stage without a ceiling. Losing one worker job costs less than a GPU instance billing with no bound.
+  - A CloudWatch runtime alarm was considered for alerting when the ceiling fires. Nothing in the request path needs to *know* a worker job hung, only to stop it billing, so the ceiling was built without one. That alerting is still an open gap ([State / what's next](AGENTS.md#state--whats-next)).
 - No SQS, Batch, or always-on fleet — the global daily cap on worker jobs bounds their volume instead.
 - A queue is only worth the added complexity at higher, decoupled-fleet scale.
 
 A worker job's wall clock splits into three parts:
 
-- **Fixed overhead**: pulling and extracting the stage's image before its GPU does anything — ~1.9 GB for reconstruct, ~8.0 GB for train. `worker/Dockerfile` builds one target per stage carrying only what that stage runs, and compiles gsplat's CUDA kernels in, so no stage compiles them at run time. Reconstruct gets much the smaller image and is the stage that runs more often, since every upload reconstructs while only some go on to train. It needs no CUDA library beyond cudart, so it starts from a `-base` image where train needs `-runtime`.
+- **Fixed overhead**: pulling and extracting the stage's image before its GPU does anything — ~1.9 GB for reconstruct, ~8.0 GB for train.
+  - `worker/Dockerfile` builds one target per stage carrying only what that stage runs. It compiles gsplat's CUDA kernels in, so no stage compiles them at run time.
+  - Reconstruct gets much the smaller image and runs more often, since every upload reconstructs while only some go on to train.
+  - Reconstruct needs no CUDA library beyond cudart, so it starts from a `-base` image where train needs `-runtime`.
 - **COLMAP**: a few minutes, CPU-bound by `mapper`'s incremental bundle adjustment.
 - **Training**: the majority of wall clock.
 
-A baked AMI would attack the smaller half — fixed overhead, not training. Training cost is set by the resolution the photos are rasterized at (`MAX_TRAINING_EDGE` in `worker/pipeline/train.py`), not by boot latency. Shrinking the image and precompiling the kernels took most of what an AMI was worth here, which is why M10 is now a measurement rather than a build. Only the image size is measured; the split between the three parts is still read off the code, and no run on a `g5.xlarge` has been timed.
+A baked AMI would attack the smaller half — fixed overhead, not training. Training cost is set by the resolution the photos are rasterized at (`MAX_TRAINING_EDGE` in `worker/pipeline/train.py`), not by boot latency. Shrinking the image and precompiling the kernels took most of what an AMI was worth here, which is why M10 is now a measurement rather than a build. Only the image size is measured. The split between the three parts is still read off the code, and no run on a `g5.xlarge` has been timed.
 
 - Not Lambda or Fargate: neither offers GPU.
 - Not hand-rolled ECS orchestration: bin-packing shared instances doesn't fit a one-stage-one-instance model.
 
 ## API design
 
-- REST (`web/app/api/v1/`), not GraphQL. 12 flat endpoints don't need GraphQL's query flexibility.
+- REST (`web/app/api/v1/`), not GraphQL. 13 flat endpoints don't need GraphQL's query flexibility.
 - Postgres (RDS) for `users`, `splats`, `photos`, `jobs`, and rate-limit/job counters. Relational, low traffic, and needs atomic `INSERT ... ON CONFLICT`.
 - Auth: Clerk (`@clerk/nextjs`). Simple and easy to integrate — this app doesn't need enterprise features (SSO, SCIM, custom identity federation).
 - API and pages share one Next.js app.
@@ -54,7 +83,10 @@ A baked AMI would attack the smaller half — fixed overhead, not training. Trai
 ## Frontend
 
 - Next.js App Router: Open Graph needs server `generateMetadata`, since crawlers don't run JS.
-- UI: **MUI** over Mantine. Mantine's `ColorSchemeScript`/`MantineProvider` setup produced SSR hydration mismatches under the App Router; `@mui/material-nextjs`'s `AppRouterCacheProvider` is a mature, documented fix for emotion's SSR style-injection-order problem, the exact failure mode Mantine hit. Trade-off accepted: MUI's default styling engine is emotion, a CSS-in-JS runtime, unlike Mantine's static CSS Modules — a small bundle/runtime cost accepted in exchange for hydration correctness.
+- UI: **MUI** over Mantine.
+  - Mantine's `ColorSchemeScript`/`MantineProvider` setup produced SSR hydration mismatches under the App Router.
+  - `@mui/material-nextjs`'s `AppRouterCacheProvider` is a mature, documented fix for emotion's SSR style-injection-order problem, the exact failure mode Mantine hit.
+  - Trade-off accepted: MUI's default styling engine is emotion, a CSS-in-JS runtime, where Mantine ships static CSS Modules. That is a small bundle and runtime cost in exchange for hydration correctness.
 - SWR for server-derived data (worker-job polling via `refreshInterval`).
 - Zustand, not Redux, for pure client UI (upload progress, banners). Zustand needs less boilerplate.
 - `@mkkellogg/gaussian-splats-3d`'s `DropInViewer` runs in r3f via `<primitive>`. It drives itself with Three.js's `onBeforeRender`.
@@ -72,7 +104,8 @@ A baked AMI would attack the smaller half — fixed overhead, not training. Trai
 
 ## Postgres connectivity & TLS
 
-- TLS is required only where RDS enforces it (`rds.force_ssl = 1`), not by `web/lib/server/databaseUrl.ts`.
+- TLS is required only where RDS enforces it, not by `web/lib/server/databaseUrl.ts`.
+- That enforcement is RDS's own: its default Postgres parameter group sets `rds.force_ssl = 1`. `infra/data.tf` declares no parameter group, so grepping `infra/` for the setting finds nothing.
 - `databaseSsl()`/`resolveDatabaseUrl()` (`web/lib/server/databaseUrl.ts`) make TLS conditional on `DATABASE_SSL_CA` being set.
 - Local dev and CI run a plain, un-TLS'd Postgres.
 - CI's Postgres starts as a plain `podman run` step (`.github/workflows/ci.yml`'s `web` job), not GitHub Actions' declarative `services:` block. The migrator-image test ([CI/CD](#cicd), below) needs to reach it by container name from a sibling podman container, and a Docker-managed `services:` container isn't reachable that way.
@@ -80,12 +113,12 @@ A baked AMI would attack the smaller half — fixed overhead, not training. Trai
 
 ### Master password refresh
 
-RDS's `manage_master_user_password` rotates its Secrets Manager secret every 7 days by default. A value ECS injects once as an env var at task start goes stale for the web service, which stays up for weeks: Postgres doesn't re-authenticate already-open connections, but rejects new ones with the old password, so this would show up as growing, intermittent connection failures rather than a clean cutover.
+RDS's `manage_master_user_password` rotates its Secrets Manager secret every 7 days by default. A value ECS injects once as an env var at task start goes stale for the web service, which stays up for weeks. Postgres doesn't re-authenticate already-open connections, but it rejects new ones opened with the old password. The symptom is growing, intermittent connection failures rather than a clean cutover.
 
 Two fixes were considered:
 
-- **Scheduled forced redeployment**: an EventBridge Scheduler rule calling `ecs:UpdateService(forceNewDeployment)` on a cadence under 7 days, via a direct "universal target" API call with no Lambda needed. Fully infra-only and cheap, but adds a routine rolling restart as a permanent fixture of the architecture, and only patches the symptom — the app still never verifies it's holding a current password between restarts.
-- **Fetch the password at connect time** (chosen): the web service re-fetches the current password from Secrets Manager on every new `pg` connection instead of trusting a cached value, so it's never more than a few minutes stale regardless of when RDS rotates. This is also what Secrets Manager rotation is designed around — the alternative treats an env var as a cache of something meant to be read live.
+- **Scheduled forced redeployment**: an EventBridge Scheduler rule calling `ecs:UpdateService(forceNewDeployment)` on a cadence under 7 days, via a direct "universal target" API call with no Lambda needed. Fully infra-only and cheap. It adds a routine rolling restart as a permanent fixture of the architecture, and it only patches the symptom, since the app still never verifies it's holding a current password between restarts.
+- **Fetch the password at connect time** (chosen): the web service re-fetches the current password from Secrets Manager on every new `pg` connection instead of trusting a cached value. It is then never more than a few minutes stale, whenever RDS rotates. This is also what Secrets Manager rotation is designed around, where the alternative treats an env var as a cache of something meant to be read live.
 
 The migration task (`web/scripts/db-migrate.cjs`) keeps the old static-env-var behavior: it runs for seconds and exits, well inside the 7-day window, so there's nothing for it to go stale against, and changing it would need its own Secrets Manager IAM grant for no benefit.
 
@@ -134,7 +167,9 @@ The web app runs on **Fargate** behind an **Application Load Balancer** (`infra/
 
 - The web and migrator images are tagged with the git tree id of `web/`, truncated to a fixed 12 characters (`scripts/lib/terraform.sh`'s `tf_get_web_image_tag`), in an ECR repository `infra/` owns (`infra/registry.tf`). The tag travels as a Terraform variable (`web_image_tag`).
 - `web/` is the whole build context both images are built from, so the tag is a function of exactly their inputs. A push that leaves that tree untouched resolves to the tag already in ECR, so `.github/workflows/deploy.yml` builds nothing and leaves the service with no image change for either `terraform apply` to roll out.
-- A fixed width rather than `git rev-parse --short`, whose length is the shortest prefix unique in the local object database. That varies between CI's shallow checkout and a full clone, and grows with the repository, so an abbreviated tag is not a function of the tree it names — and a tag that moves on its own rebuilds and rolls out code that did not change.
+- A fixed width rather than `git rev-parse --short`, whose length is the shortest prefix unique in the local object database.
+  - That length varies between CI's shallow checkout and a full clone, and it grows with the repository. An abbreviated tag is therefore not a function of the tree it names.
+  - A tag that moves on its own rebuilds and rolls out code that did not change.
 - That gating is the point. Measured over twelve commits on `main`, the commit SHA moved twelve times, `infra/`'s tree three times and `web/`'s once — so tagging by commit spent 22 of 24 image builds and 11 of 12 ECS rollouts on byte-identical application code, each rollout a real task replacement and a consumed rollback slot.
 - A moving tag like `latest` would be simpler to push, but it leaves every release sharing one task definition. That disarms the deployment circuit breaker: rollback restarts the previous deployment against that same string, so Fargate re-pulls whatever was pushed most recently — the image that just failed.
 - Per-build tags make each deploy its own task definition instead. The repository is also `IMMUTABLE`, so a pushed tag can never be repointed.
@@ -143,7 +178,7 @@ The web app runs on **Fargate** behind an **Application Load Balancer** (`infra/
   - The tag names no commit. Map it back with `git log --format='%h' -- web`, then `git rev-parse <commit>:web | cut -c1-12` for each.
   - A build input outside `web/` reaches production only through a change under `web/`. That covers the `CLERK_PUBLISHABLE_KEY` repository variable, which `web/Dockerfile` bakes into the browser bundle, and a patched `node:24-alpine` base.
   - The rollback window is bounded by `RELEASES_KEPT`, not unlimited.
-- Rejected alternative: **a path filter on `.github/workflows/ci.yml`'s `deploy` job**, skipping the deploy outright unless the push touched `web/` or `infra/`. It saves nothing on the common case, since `infra/` changes more often than `web/` here and an `infra/` change still has to deploy. Worse, any filter that skips a push also stops `infra/` converging, and converging `infra/` is how a new `WORKER_IMAGE_TAG` reaches the web task definition ([Building and pushing the worker image](RUNBOOK.md#building-and-pushing-the-worker-image)) — on a `worker/`-only push, exactly the push that carries a new worker image.
+- Rejected alternative: **a path filter on `.github/workflows/ci.yml`'s `deploy` job**, skipping the deploy outright unless the push touched `web/` or `infra/`. It saves nothing on the common case, since `infra/` changes more often than `web/` here and an `infra/` change still has to deploy. Worse, any filter that skips a push also stops `infra/` converging. Converging `infra/` is how a new `WORKER_IMAGE_TAG` reaches the web task definition ([Building and pushing the worker image](RUNBOOK.md#building-and-pushing-the-worker-image)), and it does so on a `worker/`-only push — exactly the push that carries a new worker image.
 
 ### Clerk secret
 
@@ -168,11 +203,11 @@ Ops fallback: an AWS Budget (`infra/budgets.tf`) for spend the request path neve
 ## CI/CD
 
 - CI (`.github/workflows/deploy.yml`) applies `infra/` and migrates on every push to `main`, and builds a new web image only when `web/` changed, the first deploy into an empty account included ([Image tags](#image-tags)). It still rolls the service out whenever an apply changes the web task definition, which carries far more than the image. A human never applies `infra/` itself.
-- Whether the deploy job runs is a repository variable (`DEPLOY_ENABLED` on `.github/workflows/ci.yml`'s deploy job), not a committed `if:` in the workflow file. A committed flag makes going live and tearing down a workflow edit. The file would then differ between "the account exists" and "the account is gone" for a one-bit operational state. An unset variable is `""`. A fork or a torn-down account deploys nothing until someone sets it to `true` ([Going live](RUNBOOK.md#going-live)).
-- `.github/workflows/ci.yml` records that variable in a trivial job at the start of each run on `main`. The deploy job's `if:` reads that copy, not live `vars` when the deploy job starts. A flip that lands after the recording cannot change what the run does, which narrows the window from the whole check suite to that one job's dispatch. `scripts/prod/set-deploy-enabled.sh` and `scripts/prod/terraform-destroy.sh` refuse while a run on `main` is unfinished, because a flip inside that remaining window still reaches it.
+- Whether the `deploy` job runs is a repository variable (`DEPLOY_ENABLED` on `.github/workflows/ci.yml`'s `deploy` job), not a committed `if:` in the workflow file. A committed flag makes going live and tearing down a workflow edit. The file would then differ between "the account exists" and "the account is gone" for a one-bit operational state. An unset variable is `""`. A fork or a torn-down account deploys nothing until someone sets it to `true` ([Going live](RUNBOOK.md#going-live)).
+- `.github/workflows/ci.yml` records that variable in `capture-deploy-enabled`, a trivial job at the start of each run on `main`. The `deploy` job's `if:` reads that copy, not live `vars` when the `deploy` job starts. A flip that lands after the recording cannot change what the run does, which narrows the window from the whole check suite to that one job's dispatch. `scripts/prod/set-deploy-enabled.sh` and `scripts/prod/terraform-destroy.sh` refuse while a run on `main` is unfinished, because a flip inside that remaining window still reaches it.
 - Creating the state bucket and tearing down are done locally. CI can't `terraform init` against a bucket that doesn't exist yet. A teardown is too rare and too destructive to put behind a push.
 - No manual approval gate: there's no live traffic yet to protect, and this is the first real deploy (M9).
-- GPU worker deployment stays manual ([State / what's next](AGENTS.md#state--whats-next), gap 5): no ECR pull permissions yet.
+- GPU worker deployment stays manual: nothing builds or pushes the worker image on a schedule or a push, and its tag is a commit SHA someone sets by hand ([Building and pushing the worker image](RUNBOOK.md#building-and-pushing-the-worker-image)).
 
 - Migrations run as a one-off Fargate task from a **separate `migrator` image** (`web/Dockerfile`). Not bundled into the `web` runtime image, and not run at container boot.
 - Two reasons:
@@ -204,14 +239,14 @@ The first deploy into an empty account skips this ordering. With no service in t
 
 Rejected alternative: **running migrations from a local machine through a bastion.** The RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway and no security-group path for an ad hoc host, and no bastion exists in `infra/`. So there's no manual fallback: a bad migration is fixed the same way as any other bug, with a corrective migration through a normal PR (see [Fixing a bad migration](RUNBOOK.md#fixing-a-bad-migration)).
 
-A rolled-back *service* deployment does not undo an already-applied migration. Rollback and "was the migration a good idea" are orthogonal once the migration has committed. This is why every migration has to follow the expand/contract discipline in [`AGENTS.md`](AGENTS.md), not an incidental style preference.
+A rolled-back *service* deployment does not undo an already-applied migration. Rollback and "was the migration a good idea" are orthogonal once the migration has committed. This is why every migration has to follow the expand/contract discipline in [Schema & migrations (Drizzle)](AGENTS.md#schema--migrations-drizzle), not an incidental style preference.
 
 ## CI authentication
 
 - CI authenticates to AWS via **GitHub OIDC**, not static IAM access keys — no long-lived credential to leak or rotate.
 - The identity token's `sub` claim scopes it specifically to `repo:<owner>@<ownerId>/<repo>@<repoId>:ref:refs/heads/main`, so PRs and forks can't assume the role.
 - That role, `ai-gaussian-splatter-ci-deploy`, is created by hand once ([Creating the OIDC provider and CI role](RUNBOOK.md#creating-the-oidc-provider-and-ci-role)), not by `infra/`, because it's chicken-and-egg: CI can't apply the config that grants CI its own apply permission.
-- Unlike a design that delegates through a separate bootstrap role, this role holds the AWS permissions `terraform apply` itself needs directly — ec2, ecr, rds, s3, iam, ecs, elasticloadbalancing, route53, acm, budgets, logs, secretsmanager — scoped by resource-name prefix where a service supports it. Same reasoning that already keeps the Clerk secret, the state bucket, and `AWSServiceRoleForEC2Spot` as hand-run, RUNBOOK-documented one-time setup rather than Terraform-managed resources: whoever can grant broad infrastructure permissions to a CI role is a step this repo keeps out of any automated apply.
+- Unlike a design that delegates through a separate bootstrap role, this role holds the AWS permissions `terraform apply` itself needs directly — ec2, ecr, rds, s3, iam, ecs, elasticloadbalancing, route53, acm, budgets, logs, secretsmanager — scoped by resource-name prefix where a service supports it. The same reasoning keeps the Clerk secret, the state bucket, and `AWSServiceRoleForEC2Spot` as hand-run one-time setup rather than Terraform-managed resources ([Creating account prerequisites](RUNBOOK.md#creating-account-prerequisites)). Granting broad infrastructure permissions to a CI role is a step this repo keeps out of any automated apply.
 
 ## Testing
 
@@ -225,7 +260,7 @@ Three tiers (`.github/workflows/ci.yml`):
 
 ## Build order
 
-Milestones (`M0`…`M10`) name phases, not a schedule — web/infra largely exist while M0/M1 do not. Definitions here; status in [State / what's next](AGENTS.md#state--whats-next).
+Milestones (`M0`…`M10`) name phases, not a schedule, and they are not built in order. Definitions here; status in [State / what's next](AGENTS.md#state--whats-next).
 
 - **M0** — shoot one real object per [Capture](RUNBOOK.md#capture); hand-run COLMAP → gsplat → export; view in a standalone page.
 - **M1** — Same run via scripted `worker/pipeline/` modules.
