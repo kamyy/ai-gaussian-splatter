@@ -4,7 +4,35 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
 
 **Read [`ARCHITECTURE.md`](ARCHITECTURE.md) for the "why" behind every stack choice, and [`RUNBOOK.md`](RUNBOOK.md) for local dev/ops commands before making changes.**
 
+- [Writing docs and comments](#writing-docs-and-comments)
+- [Structure](#structure)
+- [Auth (Clerk)](#auth-clerk)
+- [Next.js & TypeScript](#nextjs--typescript)
+- [MUI & React Server Components](#mui--react-server-components)
+- [CI & repo tooling](#ci--repo-tooling)
+  - [Workflows & branch protection](#workflows--branch-protection)
+  - [Formatting & linting](#formatting--linting)
+  - [Shell scripts](#shell-scripts)
+- [Git workflow](#git-workflow)
+- [Worker (GPU pipeline)](#worker-gpu-pipeline)
+- [Infra (Terraform / AWS)](#infra-terraform--aws)
+  - [Structure & state](#structure--state)
+  - [Networking & TLS](#networking--tls)
+  - [IAM & secrets](#iam--secrets)
+  - [Deploy: image tags](#deploy-image-tags)
+  - [Variables & state backend](#variables--state-backend)
+  - [Stack construction](#stack-construction)
+- [Database](#database)
+  - [Schema & migrations (Drizzle)](#schema--migrations-drizzle)
+  - [Query patterns](#query-patterns)
+  - [Local dev & tests](#local-dev--tests)
+  - [Connecting to RDS in production](#connecting-to-rds-in-production)
+- [Testing](#testing)
+- [State / what's next](#state--whats-next)
+
 - **Don't overengineer.** Solve the problem in front of you, not the general case it might become. No new abstraction, config option, or extensibility hook for a second use case that doesn't exist yet — add it when that use case actually shows up.
+## Writing docs and comments
+
 - **Each fact lives in exactly one of the three docs.**
   - [`ARCHITECTURE.md`](ARCHITECTURE.md) is why — decisions, alternatives rejected, costs accepted.
   - [`RUNBOOK.md`](RUNBOOK.md) is how to run and operate it.
@@ -93,9 +121,9 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - `infra/` has no TypeScript dependency.
 - **There is deliberately no `start` script — `next start` is unsupported under `output: "standalone"`.**
   - Next says so and then serves anyway, so a re-added `pnpm start` looks like it works.
-  - `next build` emits `.next/standalone/server.js` (the container's `CMD`), which omits `.next/static`, so running it by hand serves pages with no CSS or JS unless that directory is copied in as `web/Dockerfile` does. Run the container instead ([`RUNBOOK.md`](RUNBOOK.md)).
+  - `next build` emits `.next/standalone/server.js` (the container's `CMD`), which omits `.next/static`, so running it by hand serves pages with no CSS or JS unless that directory is copied in as `web/Dockerfile` does. Run the container instead ([Building and running the splat-web container locally](RUNBOOK.md#building-and-running-the-splat-web-container-locally)).
 - **Server Components reading request-time data need `export const dynamic = "force-dynamic"`**, or `next build` statically prerenders them. They call `web/lib/server/data.ts` directly — not the Route Handlers under `web/app/api/v1/`.
-- **Playwright `page.route()` can't intercept SSR** (different Node process). Share pages read the DB via `web/lib/server/data.ts`, so HTTP mocks don't help. Seed a test DB instead; see Known gaps.
+- **Playwright `page.route()` can't intercept SSR** (different Node process). Share pages read the DB via `web/lib/server/data.ts`, so HTTP mocks don't help. Seed a test DB instead ([State / what's next](#state--whats-next)).
 
 ## MUI & React Server Components
 
@@ -120,6 +148,10 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 ## CI & repo tooling
 
+Node is pinned in root `.nvmrc` (`24.18.0`); CI jobs use `node-version-file`. Run `nvm use` from repo root. Nothing executes `.ts` via Node directly (Next/Vitest/Playwright transform; root `scripts/*.js` are plain JavaScript).
+
+### Workflows & branch protection
+
 - **Renaming/removing a CI job blocks merges until branch protection is updated too.**
   - Required checks name jobs (`lint-format`, `worker`, `web`, `infra`); a missing context leaves PRs unmergeable — `enforce_admins` is on, so `--admin` does not override either.
   - `capture-deploy-enabled` is not one of them. It only runs on push to `main`. Making it required would block every PR.
@@ -130,6 +162,9 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - The `if:` reads `needs.capture-deploy-enabled.outputs.enabled`, not live `vars.DEPLOY_ENABLED`. `scripts/prod/set-deploy-enabled.sh` is the switch ([Going live](RUNBOOK.md#going-live)). Git does not record whether that variable is set ([CI/CD](ARCHITECTURE.md#cicd)).
   - The grant can't move into `.github/workflows/deploy.yml`, because a called workflow can only narrow its caller's permissions and this repo's default token is read-only.
   - A job run through a called workflow reports its check as `<caller job> / <called job>`, so moving a required one (`lint-format`, `worker`, `web`, `infra`) into its own file is a rename as far as branch protection is concerned.
+
+### Formatting & linting
+
 - **Biome does not format Markdown, YAML, Dockerfiles, or shell scripts** (`@biomejs/biome@2.5.10`, pinned in both root and `web/`). Keep those consistent by hand.
   - It doesn't lint `.sh` either. `scripts:check` runs shellcheck instead.
   - `biome.json` sets `lineWidth: 120`. One measure holds repo-wide.
@@ -138,34 +173,39 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - **The fill target governs comments, not the shell Biome skips.** Shell in `scripts/` and in a Dockerfile `RUN` is laid out to be read, so packing it to 120 is the wrong instinct.
   - **A list a loop iterates gets one item per line, sorted, once it outgrows a single line.** Each name is then greppable, and adding or removing one touches one line of diff. `worker/Dockerfile`'s prune list is the example.
   - **A guard inside that shell is `if ... then ... fi`, not `test ... || { ...; exit 1; }`.** The condition, the message and the exit each get their own line, which is how `scripts/` already writes them.
-- **Operational scripts in `scripts/dev/` (local) and `scripts/prod/` (the deployed account) are committed executable (`100755`); helpers in `scripts/lib/` are sourced, so they stay `100644`.**
-  - Each helper starts with `# shellcheck shell=bash` in place of a shebang.
-  - Executables that share a subject use topic-then-action kebab-case (`terraform-*`, `worker-*`, `db-*`).
-  - A one-off procedure stays verb-object (`create-account-prereqs`, `configure-ci-role`).
-  - Lib files are a domain: `scripts/lib/aws.sh`, `scripts/lib/github.sh`, `scripts/lib/terraform.sh`, `scripts/lib/env.sh`, `scripts/lib/worker.sh`.
-  - `scripts/lib/confirm.sh` is named after its one function.
-  - Lib functions take that file's prefix (`aws_`, `gh_`, `tf_`, `env_`, `worker_`) then a verb.
-  - Fail-fast helpers are `*_require_*`.
-  - A function that exists only inside one executable has no prefix.
-  - Assign each positional argument to a named variable before using it, so a later `$1` doesn't leave the reader guessing which argument it is.
+
+### Shell scripts
+
+Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the deployed account), and are committed executable (`100755`). Helpers in `scripts/lib/` are sourced, so they stay `100644`.
+
+- Every executable accepts `-h`/`--help`, prints usage on stdout, exits 0, and does that before login, confirm, or any other work.
+- Each helper starts with `# shellcheck shell=bash` in place of a shebang.
+- Executables that share a subject use topic-then-action kebab-case (`terraform-*`, `worker-*`, `db-*`).
+- A one-off procedure stays verb-object (`create-account-prereqs`, `configure-ci-role`).
+- Lib files are a domain: `scripts/lib/aws.sh`, `scripts/lib/github.sh`, `scripts/lib/terraform.sh`, `scripts/lib/env.sh`, `scripts/lib/worker.sh`.
+- `scripts/lib/confirm.sh` is named after its one function.
+- Lib functions take that file's prefix (`aws_`, `gh_`, `tf_`, `env_`, `worker_`) then a verb.
+- Fail-fast helpers are `*_require_*`.
+- A function that exists only inside one executable has no prefix.
+- Assign each positional argument to a named variable before using it, so a later `$1` doesn't leave the reader guessing which argument it is.
   - That assignment is `local` inside a function and an ordinary variable at script top, where `local` is invalid.
   - `"$@"` is only for leftover arguments forwarded to another command.
-  - A script that uses the AWS CLI as a signed-in admin sources `scripts/lib/aws.sh`, and calls `aws_require_login` before any other AWS CLI invocation.
-  - A script that tags the AWS resources it creates sets `Project` to `ai-gaussian-splatter`, the same string as `local.project_tag` in `infra/locals.tf` (`infra/providers.tf`'s `default_tags`). The name does not change, so the scripts do not scrape it.
+- A script that uses the AWS CLI as a signed-in admin sources `scripts/lib/aws.sh`, and calls `aws_require_login` before any other AWS CLI invocation.
+- A script that tags the AWS resources it creates sets `Project` to `ai-gaussian-splatter`, the same string as `local.project_tag` in `infra/locals.tf` (`infra/providers.tf`'s `default_tags`). The name does not change, so the scripts do not scrape it.
   - The Spot service-linked role and GitHub OIDC provider are account-wide and stay untagged.
-  - A script that creates or deletes anything sources `scripts/lib/confirm.sh` and calls `confirm` first.
-  - A script that uses the GitHub CLI sources `scripts/lib/github.sh` and calls `gh_require_login` before its first `gh` call. Otherwise a logged-out `gh` reads the same as an unset repository variable.
-  - `scripts/prod/terraform-plan.sh`, `scripts/prod/terraform-destroy.sh`, `scripts/prod/terraform-delete-state-bucket.sh`, and `scripts/prod/worker-push-image.sh` act on the deployed account, so they also call `gh_require_aws_deploy_account`, which checks the signed-in account against the `AWS_ACCOUNT_ID` repository variable.
-  - The worker scripts run as the dev IAM user from `web/.env` instead, so `worker_use_dev_aws` in `scripts/lib/worker.sh` checks those keys.
-  - Local Terraform is `$HOME/.local/bin/terraform` (`scripts/dev/terraform-install.sh`). Scripts that run it assign `TERRAFORM=$(tf_get_bin)`, which prefers that path over PATH, because a different CLI earlier on PATH still satisfies `command -v terraform`. CI has no copy there: `hashicorp/setup-terraform` in `.github/workflows/ci.yml` and `.github/workflows/deploy.yml` installs whatever `tf_get_required_version` reads from `infra/providers.tf`.
-  - `scripts:check` (run by the pre-commit hook and CI's `lint-format` job) shellchecks them with `scripts/dev/shellcheck.sh`, which runs shellcheck's container image.
+- A script that creates or deletes anything sources `scripts/lib/confirm.sh` and calls `confirm` first.
+- A script that uses the GitHub CLI sources `scripts/lib/github.sh` and calls `gh_require_login` before its first `gh` call. Otherwise a logged-out `gh` reads the same as an unset repository variable.
+- `scripts/prod/terraform-plan.sh`, `scripts/prod/terraform-destroy.sh`, `scripts/prod/terraform-delete-state-bucket.sh`, and `scripts/prod/worker-push-image.sh` act on the deployed account, so they also call `gh_require_aws_deploy_account`, which checks the signed-in account against the `AWS_ACCOUNT_ID` repository variable.
+- The worker scripts run as the dev IAM user from `web/.env` instead, so `worker_use_dev_aws` in `scripts/lib/worker.sh` checks those keys.
+- Local Terraform is `$HOME/.local/bin/terraform` (`scripts/dev/terraform-install.sh`). Scripts that run it assign `TERRAFORM=$(tf_get_bin)`, which prefers that path over PATH, because a different CLI earlier on PATH still satisfies `command -v terraform`.
+  - CI has no copy there. `hashicorp/setup-terraform` in `.github/workflows/ci.yml` and `.github/workflows/deploy.yml` installs whatever `tf_get_required_version` reads from `infra/providers.tf`.
+- `scripts:check` (run by the pre-commit hook and CI's `lint-format` job) shellchecks them with `scripts/dev/shellcheck.sh`, which runs shellcheck's container image.
   - The image is pinned by digest, so neither a new shellcheck release nor a re-pushed tag can change the result for an unchanged tree.
   - The repo is mounted read-only with `--security-opt label=disable`, because a `:Z` mount relabels the whole checkout for SELinux.
-- **Node is pinned in root `.nvmrc` (`24.18.0`); CI jobs use `node-version-file`.** Run `nvm use` from repo root. Nothing executes `.ts` via Node directly (Next/Vitest/Playwright transform; root `scripts/*.js` are plain JavaScript).
 
 ## Git workflow
 
-- **`main` is push-protected.** All changes land via PR, including docs/config/`.gitignore`.
+- **`main` is push-protected.** All changes land via PR, including edits to docs, config, and `.gitignore`.
 - **Branch names are type-prefixed** (`chore/`, `refactor/`, `docs/`, `fix/`, …). Commit messages are a separate convention.
 - **Merge with `gh pr merge --merge`**, not squash/rebase — preserves scoped commits on `main`.
 - **Update a stale PR with `git rebase main`** then `push --force-with-lease`, not merge `origin/main` into the branch.
@@ -184,11 +224,13 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 ### Structure & state
 
-- **All of `infra/` shares one state.** Its six logical areas (network, registry, data, worker IAM, web, budgets) live in separate `.tf` files for readability, not separate Terraform states — there's no CloudFormation-style cross-stack export/import to keep in sync, so moving a resource between files or renaming one of the six areas is a file-organization change only.
+- **All of `infra/` shares one state**, with its six logical areas (network, registry, data, worker IAM, web, budgets) split across separate `.tf` files for readability ([Infra](ARCHITECTURE.md#infra)). Nothing references another file by name, only by resource address in that one state, so moving a resource between files or renaming an area is a file-organization change only.
 - **Never add the state bucket as a resource in `infra/`.** Skip creating it ([Creating account prerequisites](RUNBOOK.md#creating-account-prerequisites)) and `terraform init` fails.
 - **`infra/tests/*.tftest.hcl` run fully offline via `mock_provider "aws" {}`.**
   - Every file needs two `mock_provider "aws"` blocks — one default, one `alias = "billing"` — since a bare `mock_provider "aws" {}` only covers the unaliased provider configuration and `providers.tf` declares a second one for `us-east-1`.
-  - An assertion that a value follows a variable has to run against a second value of that variable, in a `run` block with its own `variables {}`. Written against the file-level fixture, `"ai-gaussian-splatter.${var.domain_zone_name}"` and `"ai-gaussian-splatter.example.com"` are the same string, so the assertion passes whether the resource reads `local.app_hostname` or hardcodes the hostname. `hostnames_follow_the_zone_variable` (`infra/tests/web.tftest.hcl`) and `cors_origins_follow_the_zone_variable` (`infra/tests/data.tftest.hcl`) are the runs that own that fact.
+  - An assertion that a value follows a variable has to run against a second value of that variable, in a `run` block with its own `variables {}`.
+    - Written against the file-level fixture, `"ai-gaussian-splatter.${var.domain_zone_name}"` and `"ai-gaussian-splatter.example.com"` are the same string. The assertion then passes whether the resource reads `local.app_hostname` or hardcodes the hostname.
+    - `hostnames_follow_the_zone_variable` (`infra/tests/web.tftest.hcl`) and `cors_origins_follow_the_zone_variable` (`infra/tests/data.tftest.hcl`) are the runs that own that fact.
 - **Terraform reads `aws login` credentials only through a recent AWS provider.**
   - An older `hashicorp/aws` fails at the first `plan` with `No valid credential sources found`, even though `terraform init` succeeds, because the S3 backend reads the credentials itself.
   - `terraform version` in `infra/` names the provider version actually installed.
@@ -198,11 +240,11 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - **The ACM cert (`infra/web.tf`) takes no explicit `provider`**, so it inherits the default provider's `var.aws_region` — required, since an ALB can only reference a certificate in its own region.
   - Same hostname in another region is normal (certs are free).
 - **Set the HTTPS listener's `ssl_policy` explicitly** (`ELBSecurityPolicy-TLS13-1-2-2021-06`). Leaving it unset defaults to the weak `ELBSecurityPolicy-2016-08` (TLS 1.0/1.1), not the console's strong default.
-- **The Route 53 zone is referenced by ID only (`var.hosted_zone_id`), never looked up with a `data "aws_route53_zone"` block.** This config only ever adds records to the zone; it never manages the zone itself, so there's nothing a lookup would add beyond an extra API call on every plan.
+- **Don't add a `data "aws_route53_zone"` block.** The zone is referenced by ID only (`var.hosted_zone_id`), for the reason in [TLS & DNS](ARCHITECTURE.md#tls--dns).
 - **The ALB's `0.0.0.0/0` ingress rules are explicit resources** (`aws_vpc_security_group_ingress_rule.alb_https`/`alb_http` in `infra/network.tf`). Deleting these two resources still applies cleanly and refuses every connection, so their presence is what actually matters, not an assumption that some other resource implies them.
 - **A second ingress rule on `aws_security_group.web` opens a path from the internet.**
   - Tasks are in public subnets with a public IP and no NAT.
-  - That group's single rule, `aws_vpc_security_group_ingress_rule.web_from_alb` (`infra/web.tf`), sourced from the ALB security group on `local.container_port`, is the only network control ([`ARCHITECTURE.md`](ARCHITECTURE.md)).
+  - That group's single rule, `aws_vpc_security_group_ingress_rule.web_from_alb` (`infra/web.tf`), sourced from the ALB security group on `local.container_port`, is the only network control ([Networking](ARCHITECTURE.md#networking)).
   - `infra/tests/network.tftest.hcl` and `web.tftest.hcl` assert this; tripping it is a security change.
 - **`KEEP_ALIVE_TIMEOUT` must exceed the ALB idle timeout (60s), or healthy deploys serve intermittent 502s.**
   - Node's default keep-alive is 5s; Next standalone only overrides via `KEEP_ALIVE_TIMEOUT`. ALB then hands requests to sockets the app already closed — no app log entry.
@@ -214,9 +256,10 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - IAM authorizes it against each resource the request touches; `web/lib/server/ec2Launcher.ts` tags only the instance, so `aws:RequestTag` is absent for the AMI, subnet, and security group and a single conditioned statement denies the whole call.
   - `ec2:CreateTags` (scoped by `ec2:CreateAction`) is a separate statement that tagging-on-launch also requires. `infra/tests/web.tftest.hcl` pins all three staying split.
   - Every role's grants live in one `aws_iam_role_policy` resource per role, one `Sid`-tagged statement per grant — not one resource per grant — so tests address statements by `Sid` instead of by a dedicated resource name.
-- **The Clerk secret is referenced by ARN (`var.clerk_secret_key_arn`), never created.** It must exist before the first apply ([`RUNBOOK.md`](RUNBOOK.md)).
-  - ECS resolves a task definition's `valueFrom` against the six-character suffix Secrets Manager assigns, so a partial ARN applies clean and only fails at task start.
-  - A variable validation checks the ARN's shape and names this secret specifically, and `aws_iam_role_policy.execution`'s precondition checks it names this deploy's own account/region, but neither can confirm it's the actual right secret's value — check with `aws secretsmanager describe-secret` before applying rather than trusting a clean `terraform apply` to have caught a copy-paste of the wrong environment's secret.
+- **The Clerk secret is referenced by ARN (`var.clerk_secret_key_arn`), never created.** It must exist before the first apply ([Creating account prerequisites](RUNBOOK.md#creating-account-prerequisites)).
+  - A partial ARN applies clean and only fails at task start, because ECS resolves `valueFrom` at task start rather than at apply ([Clerk secret](ARCHITECTURE.md#clerk-secret)).
+  - A variable validation checks the ARN's shape and names this secret specifically. `aws_iam_role_policy.execution`'s precondition checks it names this deploy's own account and region.
+  - Neither confirms the value behind the ARN, so a copy-paste of the wrong environment's secret still applies clean. Check with `aws secretsmanager describe-secret` before applying.
 - **The RDS master credentials come from `manage_master_user_password = true`** (`infra/data.tf`), not a hand-rolled secret.
   - RDS creates and rotates its own Secrets Manager secret holding both `username` and `password`; `infra/web.tf` reads both fields off `aws_db_instance.main.master_user_secret[0].secret_arn`.
 
@@ -232,22 +275,25 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - The image is one field among many in that task definition. `WORKER_RECONSTRUCT_IMAGE_URI`, `WORKER_TRAIN_IMAGE_URI`, `KEEP_ALIVE_TIMEOUT`, `cpu`/`memory`, `APP_PUBLIC_URL`, and the Clerk and RDS wiring all live there too, and all of them are editable from `infra/` alone.
   - That rollout is load-bearing, not a leak. The worker-image flow depends on it: a deploy carries a new `WORKER_IMAGE_TAG` into both worker image URIs, and only a task replacement puts them in front of `web/lib/server/ec2Launcher.ts` ([Building and pushing the worker image](RUNBOOK.md#building-and-pushing-the-worker-image)).
   - It lands in the *first* apply, which is untargeted. The roll-forward apply is the no-op on such a push, not the other way round.
-  - **The migration task still runs, and gating it on the tag is a trap.** An unchanged tag says `web/drizzle/` is unchanged, not that the database matches it. The first apply can replace `aws_db_instance.main`, and on a first deploy that apply creates the service already on the new tag — so a re-run after a failed migration reads equal tags and would skip the migration that never ran.
+  - **The migration task still runs, and gating it on the tag is a trap** ([Migration ordering](ARCHITECTURE.md#migration-ordering)).
   - `HEAD:web` is tree-root relative, so the `working-directory: infra` on "Resolve tags" doesn't change what it reads.
-  - **Keep the truncation a parameter expansion, not a pipe through `cut`.** `git rev-parse` echoes an argument it cannot resolve back to stdout before exiting non-zero, and a pipeline reports only its last command's status unless the caller set pipefail. `.github/workflows/deploy.yml` names no `shell:`, so its steps run under Actions' default `bash -e {0}`, which does not — a piped helper would return 0 and tag images `HEAD:web-web`. `scripts/dev/terraform-test-lib.sh` drops pipefail to pin this.
+  - **Keep the truncation a parameter expansion, not a pipe through `cut`.** `git rev-parse` echoes an argument it cannot resolve back to stdout before exiting non-zero.
+    - A pipeline reports only its last command's status unless the caller set pipefail. `.github/workflows/deploy.yml` names no `shell:`, so its steps run under Actions' default `bash -e {0}`, which leaves pipefail off.
+    - A piped helper would therefore return 0 and tag images `HEAD:web-web`. `scripts/dev/terraform-test-lib.sh` drops pipefail to pin this.
   - The files `web/.dockerignore` excludes (`web/e2e/`, `web/tests/`, `web/playwright.config.ts`, `**/*.test.ts`) still change the tree id, so touching one costs a rebuild and a rollout of identical bytes. That is the safe direction to be wrong in.
-- **A build input outside `web/` reaches production only through a change under `web/`.** That covers the `CLERK_PUBLISHABLE_KEY` repository variable and a patched `node:24-alpine` base image.
-  - `gh run rerun` resolves the same tag and so rebuilds nothing.
-  - Map a tag back to a commit with `git log --format='%h' -- web`, then `git rev-parse <commit>:web | cut -c1-12` for each — `--short` would print a different width than the tag.
+- **A build input outside `web/` reaches production only through a change under `web/`**, and `gh run rerun` resolves the same tag and so rebuilds nothing. What that covers, and how to map a tag back to a commit, are in [Image tags](ARCHITECTURE.md#image-tags).
 - **Two separate image-tag variables, one default.**
   - `web_image_tag` is the Fargate service's own image; `migrate_image_tag` is the migration task definition's, and falls back to `web_image_tag` when left empty (`infra/locals.tf`'s `local.migrate_image_tag`).
   - Every existing `terraform apply -var web_image_tag=$TAG` invocation with no `migrate_image_tag` keeps deploying one build that serves both roles.
-  - `.github/workflows/deploy.yml` is the one caller that ever diverges the two — see [`ARCHITECTURE.md`](ARCHITECTURE.md) for why.
-  - `ai-gaussian-splatter-migrate` (task family), `ai-gaussian-splatter-migrate-task` (migration task role), and `ai-gaussian-splatter-execution` (execution role) are fixed literal names for the same reason `CLUSTER_NAME`/`SERVICE_NAME` are: rotating the Clerk secret is a write plus `aws ecs update-service --force-new-deployment`, not a `terraform apply`, so that command needs a cluster/service name it can write out literally rather than looking up from a Terraform-assigned one.
+  - `.github/workflows/deploy.yml` is the one caller that ever diverges the two — see [Migration ordering](ARCHITECTURE.md#migration-ordering) for why.
+  - `ai-gaussian-splatter-migrate` (task family), `ai-gaussian-splatter-migrate-task` (migration task role), and `ai-gaussian-splatter-execution` (execution role) are fixed literal names, for the same reason `CLUSTER_NAME`/`SERVICE_NAME` are.
+    - Rotating the Clerk secret is a write plus `aws ecs update-service --force-new-deployment`, not a `terraform apply`. That command needs names someone can write out literally rather than look up from a Terraform-assigned one.
 - **The worker image lives in its own ECR repository (`ai-gaussian-splatter-worker`, `infra/registry.tf`), separate from the web repository above, and `var.worker_image_tag` has no default.**
-  - No deploy ever rebuilds and pushes it — GPU worker deployment stays manual (`RUNBOOK.md`) — so this variable only changes when someone hand-builds and pushes a new one. It stays a commit SHA, because `scripts/prod/worker-push-image.sh` tags the image with the checked-out commit rather than a tree.
+  - No deploy ever rebuilds and pushes it, so this variable only changes when someone hand-builds and pushes a new one ([Building and pushing the worker image](RUNBOOK.md#building-and-pushing-the-worker-image)). It stays a commit SHA, because `scripts/prod/worker-push-image.sh` tags the image with the checked-out commit rather than a tree.
   - Re-running that script on an already-pushed commit fails at `podman push` with `ImageTagAlreadyExists`. Commit again rather than retagging.
-  - Its lifecycle policy keeps far fewer images (`local.worker_releases_kept`, currently 2) than the web repository's `local.releases_kept` (10): the worker images aren't cheap to retain at ~1.9 GB and ~8.0 GB, and they aren't part of any ECS rollback mechanism anyway — `web/lib/server/ec2Launcher.ts` just reads whichever URI it is handed. Counted per tag suffix, with one rule each for `-reconstruct` and `-train`, so both halves of a release expire together.
+  - Its lifecycle policy keeps far fewer images (`local.worker_releases_kept`, currently 2) than the web repository's `local.releases_kept` (10).
+    - The worker images cost real money to retain at ~1.9 GB and ~8.0 GB. They are also part of no ECS rollback mechanism, since `web/lib/server/ec2Launcher.ts` just reads whichever URI it is handed.
+    - The count is per tag suffix, with one rule each for `-reconstruct` and `-train`, so both halves of a release expire together.
 
 ### Variables & state backend
 
@@ -267,7 +313,6 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 ### Stack construction
 
-- **A single Terraform state means no cross-stack export/import to manage.** Moving a resource between the six logical `.tf` files, or renaming one of the areas, is purely a file-organization change — nothing references another file by name, only by resource address within the one shared state.
 - **The billing/budgets resources (`infra/budgets.tf`) use a second, aliased `provider = aws.billing` (`us-east-1`).** The Budgets API only exists in `us-east-1`, regardless of where the rest of the app runs.
 
 ## Database
@@ -298,7 +343,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - **`await closeDb()` in `afterAll`** or Vitest hangs (open `pg` Pool). `web/tests/migrate-test-db.ts` closes its own migration pool in `finally`.
 - **The `server` Vitest project fails outright when `TEST_DATABASE_URL` is unset**, so a green run means the DB tests actually ran.
   - `web/tests/migrate-test-db.ts` throws before any test starts, including the server tests that never touch Postgres.
-  - CI sets it and starts Postgres as a `podman run` step in `.github/workflows/ci.yml`, not a `services:` container — see [`ARCHITECTURE.md`](ARCHITECTURE.md).
+  - CI sets it and starts Postgres as a `podman run` step in `.github/workflows/ci.yml`, not a `services:` container — see [Postgres connectivity & TLS](ARCHITECTURE.md#postgres-connectivity--tls).
   - Locally `web/vitest.config.mts` reads it from `web/.env`. Run `scripts/dev/db-up.sh` if Postgres seems missing ([`RUNBOOK.md`](RUNBOOK.md#web-frontend--rest-api)).
 - **`fileParallelism: false` in `web/vitest.config.mts`.**
   - DB-backed files share one DB and clear tables in `beforeEach`; parallel runs delete each other's fixtures. Per-worker DBs would restore parallelism.
@@ -310,14 +355,15 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - `infra/web.tf` projects `DATABASE_USER` from the secret for both containers and passes `DATABASE_HOST`/`DATABASE_PORT`/`DATABASE_NAME` as env.
   - `web/scripts/db-migrate.cjs` calls `web/lib/server/databaseUrl.ts`'s `resolveDatabaseUrl()` to reassemble and percent-encode a full URL from those plus a password; local dev, CI, and the migration task all take that same path. The long-lived web service doesn't — see the next bullet.
   - Tests: `infra/tests/web.tftest.hcl`, `web/lib/server/tests/databaseUrl.test.ts`.
-- **The web service fetches its own DB password at connect time; the migration task doesn't.** RDS rotates its managed master-password secret every 7 days by default ([`ARCHITECTURE.md`](ARCHITECTURE.md)).
+- **The web service fetches its own DB password at connect time; the migration task doesn't.** RDS rotates its managed master-password secret on a schedule ([Master password refresh](ARCHITECTURE.md#master-password-refresh)).
   - A password ECS injects once as an env var at task start goes stale for anything long-lived, since Postgres doesn't re-authenticate already-open connections but does reject new ones with the old one.
   - `infra/web.tf` gives the web task only `DATABASE_USER` as a secret, plus a plain `DATABASE_SECRET_ARN` env var naming (not holding) the RDS secret.
   - `web/lib/server/db/index.ts`'s `getDb()` passes `pg.Pool` a `password` **function** (`web/lib/server/databaseUrl.ts`'s `fetchDatabasePassword`, cached 5 minutes) instead of a string, so it re-fetches on every new physical connection rather than once.
   - A rotation makes that cached copy wrong straight away, so `getDb()` builds a `SecretPasswordPool` that clears the cache and retries once when Postgres rejects the password (`28P01`).
   - `pg`'s dynamic password only works with `Pool`'s discrete `host`/`port`/`database`/`user`/`password` fields, not a `connectionString`, which is why `getDb()` no longer builds one the way `web/scripts/db-migrate.cjs` still does.
   - The migration task keeps the old static `DATABASE_PASSWORD` secret unchanged — it runs for seconds and exits, well inside the rotation window, so it has nothing to go stale against, and giving it Secrets Manager read access instead would cost an IAM grant for no benefit.
-- **TLS.** RDS forces SSL (`rds.force_ssl = 1`); `pg` defaults to no TLS → `no pg_hba.conf entry ... no encryption`.
+- **TLS.** RDS forces SSL, and `pg` defaults to no TLS → `no pg_hba.conf entry ... no encryption`.
+  - Nothing in `infra/` sets this. RDS's default Postgres parameter group carries `rds.force_ssl = 1`, and `infra/data.tf` declares no parameter group of its own, so attaching one later would have to keep it.
   - `/api/v1/healthz` never hits the DB, so ECS can look healthy while queries 500.
   - Node's `?sslmode=require` is `verify-full`, not libpq's encrypt-only. Without Amazon's CA you get `UNABLE_TO_VERIFY_LEAF_SIGNATURE`.
   - Fix: bake the RDS CA bundle in `web/Dockerfile`, set `DATABASE_SSL_CA` from `infra/web.tf`, pass `ssl: { ca }` in `web/lib/server/databaseUrl.ts`; leave `rejectUnauthorized` at default `true`. Do not use `rejectUnauthorized: false`. (Node's `sslmode` behavior was checked empirically; libpq docs don't transfer.)
@@ -350,11 +396,12 @@ Known gaps, priority order:
 3. **No maximum photo count or upload size.**
    - `MIN_PHOTOS_PER_SPLAT` has no counterpart and the presign body schema (`web/app/api/v1/splats/[splatId]/photos/presign/route.ts`) is `.min(1)` only.
    - COLMAP's exhaustive matching is O(n²) pairs and the instance runs until `worker/run_job.py` returns, so an oversized upload is unbounded GPU spend.
-   - The global daily cap in `process` bounds how many worker jobs run, not what each one costs ([`ARCHITECTURE.md`](ARCHITECTURE.md)).
+   - The global daily cap in `process` bounds how many worker jobs run, not what each one costs ([Abuse protection](ARCHITECTURE.md#abuse-protection)).
 4. **The worker's max-lifetime safety net has no alerting, and a real gap it can't close.**
    - `web/lib/server/ec2Launcher.ts` schedules `shutdown -h +WORKER_MAX_LIFETIME_MINUTES` as the first thing user-data does, paired with `InstanceInitiatedShutdownBehavior = "terminate"` on the launch, so a failed `docker login`/pull or a hang that never reaches `worker/pipeline/instance.py`'s own self-terminate still can't bill past that ceiling — *if user-data runs at all*.
    - If cloud-init itself never starts (bad AMI, a boot/networking failure), the `shutdown` is never scheduled and nothing inside the instance can catch it; only an external, instance-runtime CloudWatch alarm checking instance age independent of anything running on it would. That alarm still doesn't exist.
-   - Also unaddressed either way: nothing notifies anyone when the ceiling *does* fire, so a legitimately slow worker job gets killed exactly the same silent way a real hang does, and nothing updates `jobs.status` when the instance disappears out from under it, so the row stays stuck rather than moving to `failed`.
+   - Two things are unaddressed either way. Nothing notifies anyone when the ceiling *does* fire, so a legitimately slow worker job dies exactly as silently as a real hang.
+   - Nothing updates `jobs.status` when the instance disappears out from under it either, so the row stays stuck rather than moving to `failed`.
    - The budgets email (`infra/budgets.tf`) is the only signal for any of this, and only in aggregate, weeks later.
    - `WORKER_MAX_LIFETIME_MINUTES`'s 2 hours is also a guess, not a ceiling measured against a real worker job's wall clock.
 5. **A well-formed but wrong `alertEmail` still deploys green.**

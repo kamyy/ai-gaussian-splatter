@@ -1,6 +1,6 @@
 # Runbook
 
-Most procedures below run a script from `scripts/dev/` or `scripts/prod/`, and each works from any directory in the checkout. A script that uses the AWS CLI needs you signed in. It will then print the account it's about to act on. A script that creates or deletes anything asks you to confirm first.
+Most procedures below run a script from `scripts/dev/` or `scripts/prod/`, and each works from any directory in the checkout. Every one of them takes `-h`/`--help`, which prints what it does and what arguments it takes without running anything. A script that uses the AWS CLI needs you signed in. It will then print the account it's about to act on. A script that creates or deletes anything asks you to confirm first.
 
 - [Dev AWS resources](#dev-aws-resources)
 - [Web (frontend + REST API)](#web-frontend--rest-api)
@@ -25,7 +25,9 @@ Most procedures below run a script from `scripts/dev/` or `scripts/prod/`, and e
 
 ## Dev AWS resources
 
-`infra/` only describes production, so dev's uploads/splats buckets are created outside it. `scripts/dev/create-resources.sh` creates the two buckets `web/.env` names in `UPLOADS_BUCKET` and `SPLATS_BUCKET`, plus an `ai-gaussian-splatter-dev` IAM user that can reach only those two buckets. Run it as an admin ([Signing in to AWS](#signing-in-to-aws)). It copies `web/.env.example` to `web/.env` first when that's missing, and writes the IAM user's key pair into it whenever it creates the user's access key. An existing `web/.env` is never replaced. The default bucket names end in the AWS account id, because one S3 bucket namespace spans every account.
+`infra/` only describes production, so dev's uploads/splats buckets are created outside it. `scripts/dev/create-resources.sh` creates the two buckets `web/.env` names in `UPLOADS_BUCKET` and `SPLATS_BUCKET`, plus an `ai-gaussian-splatter-dev` IAM user that can reach only those two buckets. Run it as an admin ([Signing in to AWS](#signing-in-to-aws)).
+
+It copies `web/.env.example` to `web/.env` first when that's missing, and writes the IAM user's key pair into it whenever it creates the user's access key. An existing `web/.env` is never replaced. The default bucket names end in the AWS account id, because one S3 bucket namespace spans every account.
 
 ```bash
 scripts/dev/create-resources.sh
@@ -87,7 +89,12 @@ Object choice matters more than photo count. COLMAP triangulates surface feature
 
 Pick something opaque, matte, and genuinely three-dimensional. Stand it on a patterned surface with static clutter in frame. A plain floor or wall gives the solve nothing to hold on to.
 
-When a set registers poorly, `worker/jobdir/colmap/database.db` says why — guessing from the photos doesn't. Check the keypoint count per image in `keypoints`, and how many other images each one has enough inlier matches with in `two_view_geometries`: very few of either points at blur, low texture, or an orbit that doesn't connect, rather than a pipeline bug. No healthy thresholds are established yet, since nothing here has been checked against a real capture (M0 in [State / what's next](AGENTS.md#state--whats-next)).
+When a set registers poorly, `worker/jobdir/colmap/database.db` says why — guessing from the photos doesn't. Check two tables:
+
+- `keypoints` — the keypoint count per image.
+- `two_view_geometries` — how many other images each image has enough inlier matches with.
+
+Very few of either points at blur, low texture, or an orbit that doesn't connect, rather than a pipeline bug. No healthy thresholds are recorded yet, so read the counts relative to each other rather than against a known-good baseline.
 
 ### Running the pipeline
 
@@ -148,7 +155,7 @@ CI's `deploy` job (`.github/workflows/deploy.yml`) does every deploy, including 
 4. Runs the migration.
 5. Rolls the service forward.
 
-Steps 2 and 5 do nothing on a push that leaves `web/` untouched, so a `worker/`, `scripts/` or `infra/` change applies Terraform and runs the migration without building an image ([Image tags](ARCHITECTURE.md#image-tags)). Step 3 still replaces the running tasks whenever it changes the web task definition, which carries the two worker image URIs and `KEEP_ALIVE_TIMEOUT` as well as the image — that replacement is what [Building and pushing the worker image](#building-and-pushing-the-worker-image) relies on.
+Steps 2 and 5 do nothing on a push that leaves `web/` untouched, so a `worker/`, `scripts/` or `infra/` change applies Terraform and runs the migration without building an image ([Image tags](ARCHITECTURE.md#image-tags)). Step 3 still replaces the running tasks whenever it changes the web task definition, which carries the two worker image URIs and `KEEP_ALIVE_TIMEOUT` as well as the image. That replacement is what [Building and pushing the worker image](#building-and-pushing-the-worker-image) relies on.
 
 Whether the `deploy` job is on is `gh variable get DEPLOY_ENABLED` ([Going live](#going-live)).
 
@@ -204,7 +211,11 @@ It looks these up rather than asking:
 
 It asks for these, defaulting to each one's current value:
 
-- `DOMAIN_ZONE_NAME` is the public DNS zone the app is served from, e.g. `orky.net`. Everything carrying the app's public name is built from it: the hostname, the ACM certificate, the Route 53 record, the S3 CORS origins, the origin the worker PATCHes status back to, and the origin `.github/workflows/deploy.yml` smoke-checks after a rollout. A trailing dot or uppercase is normalized away before the variable is set.
+- `DOMAIN_ZONE_NAME` is the public DNS zone the app is served from, e.g. `orky.net`. A trailing dot or uppercase is normalized away before the variable is set. Everything carrying the app's public name is built from it:
+  - The hostname, the ACM certificate, and the Route 53 record.
+  - The S3 CORS origins.
+  - The origin the worker PATCHes status back to.
+  - The origin `.github/workflows/deploy.yml` smoke-checks after a rollout.
 - `ALERT_EMAIL` is where the AWS Budget (`infra/budgets.tf`) sends spend alerts. A typo'd but well-formed address deploys green with the alerts never arriving, and nothing can catch that at apply time ([State / what's next](AGENTS.md#state--whats-next)).
 - `CLERK_PUBLISHABLE_KEY` is the `pk_live_...` key, not the secret one. `web/Dockerfile` compiles it into the browser bundle, so a later change to it reaches users on the next deploy that changes `web/` ([Image tags](ARCHITECTURE.md#image-tags)).
 - `WORKER_AMI_ID` is the AMI every worker instance boots. User data does no provisioning of its own, so the image must already carry Docker, the NVIDIA driver and container toolkit, and the AWS CLI. AWS's Deep Learning Base GPU AMIs do, and the script lists the newest five before asking.
@@ -233,7 +244,7 @@ Only the last few releases are kept (`local.releases_kept` in `infra/registry.tf
 
 ### Building and pushing the worker image
 
-Nothing builds or pushes this image on its own — GPU worker deployment stays manual ([`ARCHITECTURE.md`](ARCHITECTURE.md)). Do this whenever `worker/` changes and you want worker jobs to actually pick up the new build. Its repository, `aws_ecr_repository.worker`, comes from the first deploy.
+Nothing builds or pushes this image on its own — GPU worker deployment stays manual ([CI/CD](ARCHITECTURE.md#cicd)). Do this whenever `worker/` changes and you want worker jobs to actually pick up the new build. Its repository, `aws_ecr_repository.worker`, comes from the first deploy.
 
 The image is tagged with the current commit, so commit any `worker/` changes first.
 
@@ -249,7 +260,9 @@ Only the last `local.worker_releases_kept` images are kept (`infra/registry.tf`)
 
 ### Running Terraform locally
 
-A `terraform plan` preview and a teardown are the only Terraform a human runs against `infra/`. Don't `apply` from here, because only the `deploy` job runs migrations before rolling the service. `scripts/prod/terraform-plan.sh` needs you signed in ([Signing in to AWS](#signing-in-to-aws)) to the account the `AWS_ACCOUNT_ID` repository variable names. It takes every Terraform variable from the repository variables ([Setting GitHub repository variables](#setting-github-repository-variables)) except `web_image_tag`, which it reads from the task definition the service is running so the plan doesn't show an image change that isn't coming.
+A `terraform plan` preview and a teardown are the only Terraform a human runs against `infra/`. Don't `apply` from here, because only the `deploy` job runs migrations before rolling the service.
+
+`scripts/prod/terraform-plan.sh` needs you signed in ([Signing in to AWS](#signing-in-to-aws)) to the account the `AWS_ACCOUNT_ID` repository variable names. It takes every Terraform variable from the repository variables ([Setting GitHub repository variables](#setting-github-repository-variables)) except `web_image_tag`, which it reads from the task definition the service is running so the plan doesn't show an image change that isn't coming.
 
 ```bash
 scripts/prod/terraform-plan.sh
@@ -257,7 +270,7 @@ scripts/prod/terraform-plan.sh
 
 ## Fixing a bad migration
 
-The only supported production apply is the `deploy` job (`.github/workflows/deploy.yml`), which runs the `migrator` image (`web/Dockerfile`) as a one-off ECS task before rolling the service forward. There is no supported way to reach the database by hand: the RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway and no bastion, reachable only from `aws_security_group.web` on port 5432, which is how the migration task gets to it.
+The only supported production apply is the `deploy` job (`.github/workflows/deploy.yml`), which runs the `migrator` image (`web/Dockerfile`) as a one-off ECS task before rolling the service forward. There is no supported way to reach the database by hand. The RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway and no bastion. It accepts connections only from `aws_security_group.web` on port 5432, which is how the migration task gets to it.
 
 Fix a bad migration the same way you'd fix any other bug: write a corrective migration following the expand/contract discipline in [Schema & migrations (Drizzle)](AGENTS.md#schema--migrations-drizzle) (edit `web/lib/server/db/schema.ts`, `pnpm db:generate`, review the emitted SQL in `web/drizzle/`), commit it, and land it through a normal PR to `main`. It applies when `DEPLOY_ENABLED` is `true` and that commit reaches `main` ([Going live](#going-live)).
 
@@ -267,7 +280,9 @@ If the `deploy` job's migration step fails for an infra reason rather than a bad
 
 1. Check `jobs.status` and `jobs.error_message` for the splat (`GET /api/v1/splats/{id}/jobs/latest`).
 2. If `status` is stuck (no update in ~20 min) rather than `failed`: the instance likely died without reporting — check the EC2 console for the tagged instance (`Role=worker`, `JobId=<job_id>`) and its system log.
-3. Confirm the instance actually went away. It self-terminates once the worker job reaches a terminal state, and `web/lib/server/ec2Launcher.ts` schedules a hard `shutdown` at `WORKER_MAX_LIFETIME_MINUTES` (2 hours) as the first thing user-data runs. **Still running well past that ceiling means cloud-init/user-data itself never started** — a boot failure (bad AMI, IMDS/networking issue), which is the one case that scheduled shutdown can't catch. Terminate it by hand. Nothing alerts when any of this fires ([State / what's next](AGENTS.md#state--whats-next)), so this check has to be done by hand.
+3. Confirm the instance actually went away. It self-terminates once the worker job reaches a terminal state, and `web/lib/server/ec2Launcher.ts` schedules a hard `shutdown` at `WORKER_MAX_LIFETIME_MINUTES` (2 hours) as the first thing user-data runs.
+   - **Still running well past that ceiling means cloud-init/user-data itself never started** — a boot failure (bad AMI, IMDS/networking issue), which is the one case that scheduled shutdown can't catch. Terminate it by hand.
+   - Nothing alerts when any of this fires ([State / what's next](AGENTS.md#state--whats-next)), so run this check by hand.
 4. `docker logs` on the instance (if still running) or CloudWatch Logs (once wired up) for the actual COLMAP/gsplat stack trace.
 
 ## Tearing down
@@ -284,11 +299,24 @@ scripts/prod/set-deploy-enabled.sh false
 scripts/prod/terraform-destroy.sh
 ```
 
-**This is a full, unconditional teardown** — nothing here is protected from deletion, because there's no real data yet to protect (see `infra/data.tf`'s comments on `force_destroy`/`skip_final_snapshot`). Revisit this before a real deploy holds real uploads or splats: add `lifecycle { prevent_destroy = true }` to the 3 buckets (`uploads` and `splats` in `infra/data.tf`, `access_logs` in `infra/web.tf`) and `aws_db_instance.main`, and drop `force_destroy`/`skip_final_snapshot`.
+**This is a full, unconditional teardown.** Nothing here is protected from deletion, because there's no real data yet to protect (see `infra/data.tf`'s comments on `force_destroy`/`skip_final_snapshot`).
+
+Revisit that before a deploy holds real uploads or splats:
+
+- Add `lifecycle { prevent_destroy = true }` to the 3 buckets (`uploads` and `splats` in `infra/data.tf`, `access_logs` in `infra/web.tf`) and to `aws_db_instance.main`.
+- Drop `force_destroy` and `skip_final_snapshot`.
 
 The ECR repository (`infra/registry.tf`) is destroyed too — `force_delete = true` means every image in it goes as well.
 
-Resources `infra/` never owned — hand-created in [Creating account prerequisites](#creating-account-prerequisites) and [Configuring continuous deployment](#configuring-continuous-deployment) — are untouched by `terraform destroy` and need their own manual cleanup, if you want them gone too: the Clerk secret (`ai-gaussian-splatter/clerk-secret-key`), the `ai-gaussian-splatter-ci-deploy` IAM role and its inline policy, the GitHub OIDC provider (skip if another app in the account still uses it), the Route 53 hosted zone `DOMAIN_ZONE_NAME` names, `AWSServiceRoleForEC2Spot`, the GitHub repository variables, and the state bucket itself. None cost anything meaningful to leave in place, and the OIDC provider, the Spot service-linked role, and the hosted zone are shared with anything else in the account.
+Resources `infra/` never owned are untouched by `terraform destroy`. They were hand-created in [Creating account prerequisites](#creating-account-prerequisites) and [Configuring continuous deployment](#configuring-continuous-deployment), and need their own manual cleanup if you want them gone:
+
+- The Clerk secret, `ai-gaussian-splatter/clerk-secret-key`.
+- The `ai-gaussian-splatter-ci-deploy` IAM role and its inline policy.
+- The GitHub repository variables.
+- The state bucket itself.
+- `AWSServiceRoleForEC2Spot`, the GitHub OIDC provider, and the Route 53 hosted zone `DOMAIN_ZONE_NAME` names. Each is shared with anything else in the account, so leave them unless nothing else uses them.
+
+None cost anything meaningful to leave in place.
 
 Only delete the state bucket after `scripts/prod/terraform-destroy.sh` has finished with it. The script refuses while the state still tracks any resource.
 
