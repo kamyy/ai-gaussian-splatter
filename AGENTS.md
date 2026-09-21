@@ -31,6 +31,9 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
 - [State / what's next](#state--whats-next)
 
 - **Don't overengineer.** Solve the problem in front of you, not the general case it might become. No new abstraction, config option, or extensibility hook for a second use case that doesn't exist yet — add it when that use case actually shows up.
+
+---
+
 ## Writing docs and comments
 
 - **Each fact lives in exactly one of the three docs.**
@@ -63,11 +66,17 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
 - **Never write a bare "job".** Two unrelated things are called that, often in the same paragraph.
   - A GitHub Actions job is named: the `deploy` job, CI's `web` job, `capture-deploy-enabled`.
   - A **worker job** is one splat's run through the pipeline: a `jobs` row, plus a GPU spot instance per stage. Say "worker job" for the run, "worker instance" for the EC2 instance, and "stage" for the reconstruct or train half that one instance runs.
+- **Headings stop at `###`, and a `---` rule goes immediately before every `##`.**
+  - GitHub renders `###` and `####` at nearly the same size, so a third level leaves the reader unable to tell which section a subsection belongs to.
+  - Where a `###` needs sub-steps, give each its own `###` and have the parent link them in an ordered list, as [Configuring continuous deployment](RUNBOOK.md#configuring-continuous-deployment) does.
+  - Put the rule under a blank line. Directly below text, `---` turns that text into a heading instead.
 - **When prose names another section — in the same doc or a different one — link it, don't just quote or bold the name.**
   - Use `[Section name](#section-name)` for a same-file reference and `[Section name](OTHER.md#section-name)` across files, with the anchor GitHub/VS Code derive from the heading (lowercase, spaces to hyphens, punctuation stripped).
   - A plain quoted or bolded name silently goes stale the moment the target heading is renamed; a broken link is easier to spot in review.
 - **A bare mention of one of the other root docs (`AGENTS.md`, `RUNBOOK.md`, `ARCHITECTURE.md`, `README.md`) gets linked to the file too** — `` [`AGENTS.md`](AGENTS.md) ``, not just backtick text.
   - This doesn't extend to code file paths: those stay as inline code per the rule above, since linking every one would be churn for no navigational benefit.
+
+---
 
 ## Structure
 
@@ -78,6 +87,8 @@ Monorepo, three independent packages:
 - `infra/` — Terraform. Network, registry, data, worker IAM, web, and budgets in separate `.tf` files, one state.
 
 Server-only code lives in `web/lib/server/` — never import it from a `"use client"` file. The one shared client-safe module is `web/lib/types.ts` (status-value tuples for Drizzle `pgEnum`s); import runs types → schema, never the reverse.
+
+---
 
 ## Auth (Clerk)
 
@@ -112,6 +123,8 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - Setting `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` as a container env var at runtime does nothing. Pass it as `docker build --build-arg`.
   - `CLERK_SECRET_KEY` is the real secret and is injected at runtime from Secrets Manager.
 
+---
+
 ## Next.js & TypeScript
 
 - **Prefer `function` declarations over arrow functions**, except closures assigned to a local (`const handleClick = () => {...}`) or inline arguments (`.map(x => ...)`, `useEffect(() => {...})`). Top-level: `export function foo() {}`, not `export const foo = () => {}`.
@@ -127,6 +140,8 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - `next build` emits `.next/standalone/server.js` (the container's `CMD`), which omits `.next/static`, so running it by hand serves pages with no CSS or JS unless that directory is copied in as `web/Dockerfile` does. Run the container instead ([Building and running the splat-web container locally](RUNBOOK.md#building-and-running-the-splat-web-container-locally)).
 - **Server Components reading request-time data need `export const dynamic = "force-dynamic"`**, or `next build` statically prerenders them. They call `web/lib/server/data.ts` directly — not the Route Handlers under `web/app/api/v1/`.
 - **Playwright `page.route()` can't intercept SSR** (different Node process). Share pages read the DB via `web/lib/server/data.ts`, so HTTP mocks don't help. Seed a test DB instead ([State / what's next](#state--whats-next)).
+
+---
 
 ## MUI & React Server Components
 
@@ -148,6 +163,8 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - There's no dedicated `Flex` component — a flex container is `Box`/`Stack` with `sx={{ display: "flex", ... }}`.
   - `ButtonBase` is a real `<button>` with MUI's styling hooks but the default button chrome (border, background, padding) already stripped, for a button that needs its own look.
   - Reach for a plain element only where the semantics genuinely need to differ, e.g. a real `<img>` rather than `next/image`'s fallback behavior.
+
+---
 
 ## CI & repo tooling
 
@@ -215,12 +232,16 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - The image is pinned by digest, so neither a new shellcheck release nor a re-pushed tag can change the result for an unchanged tree.
   - The repo is mounted read-only with `--security-opt label=disable`, because a `:Z` mount relabels the whole checkout for SELinux.
 
+---
+
 ## Git workflow
 
 - **`main` is push-protected.** All changes land via PR, including edits to docs, config, and `.gitignore`.
 - **Branch names are type-prefixed** (`chore/`, `refactor/`, `docs/`, `fix/`, …). Commit messages are a separate convention.
 - **Merge with `gh pr merge --merge`**, not squash/rebase — preserves scoped commits on `main`.
 - **Update a stale PR with `git rebase main`** then `push --force-with-lease`, not merge `origin/main` into the branch.
+
+---
 
 ## Worker (GPU pipeline)
 
@@ -231,6 +252,8 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - At EC2's default of 1 the token PUT in `worker/pipeline/instance.py` gets no reply, `get_self_instance_id()` returns `None`, and the instance never terminates itself — logging one INFO line indistinguishable from a local run while a `g5.xlarge` keeps billing.
   - `HttpTokens: "required"` is paired with it and depends on it: on its own it removes the IMDSv1 fallback and breaks credentials too, not just self-termination.
 - **Typical agent sandboxes have none of that**, so an agent can't run the pipeline itself and has to hand a real run back to the user.
+
+---
 
 ## Infra (Terraform / AWS)
 
@@ -327,6 +350,8 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 
 - **The billing/budgets resources (`infra/budgets.tf`) use a second, aliased `provider = aws.billing` (`us-east-1`).** The Budgets API only exists in `us-east-1`, regardless of where the rest of the app runs.
 
+---
+
 ## Database
 
 ### Schema & migrations (Drizzle)
@@ -384,6 +409,8 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - `web/drizzle.config.ts`'s `dbCredentials` sets both, so this is dead code there. It only matters for `pnpm db:studio` against a TLS-required database, which fails loudly (the server refuses the plaintext connection) rather than connecting insecurely.
   - `pnpm db:migrate` is unaffected: `web/scripts/db-migrate.cjs` builds its own `Pool` directly, bypassing drizzle-kit's CLI driver entirely.
 
+---
+
 ## Testing
 
 - `scripts/dev/run-tests.sh` runs every lint, typecheck, and test suite.
@@ -392,6 +419,8 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 - `pnpm biome:ci` is a single workspace-wide command (root's `biome.json` covers `scripts/*.js` and `web/**` in one pass), used by CI's `lint-format` job and by the pre-commit hook.
   - `web:check`/`worker:check`/`infra:check` are root package.json scripts, one per package — the same scripts CI's `web`/`worker`/`infra` jobs call. `infra:check` runs `scripts/dev/terraform-check.sh` so it uses the pinned CLI in `scripts/lib/terraform.sh`, not whichever `terraform` is first on PATH.
   - The pre-commit hook runs `biome:ci` plus these three (`scripts:check` included), so `web`'s and `scripts/`'s Biome checks run twice there — harmless, and worth it since `biome:ci` is what actually reaches root's own config files, which none of the per-package scripts cover.
+
+---
 
 ## State / what's next
 
