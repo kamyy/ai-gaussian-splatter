@@ -15,14 +15,15 @@ Why the system is shaped this way: decisions, alternatives rejected, costs accep
   - [9.1 Spot tradeoffs](#91-spot-tradeoffs)
   - [9.2 Networking](#92-networking)
   - [9.3 TLS & DNS](#93-tls--dns)
-  - [9.4 Image tags](#94-image-tags)
-  - [9.5 Clerk secret](#95-clerk-secret)
+  - [9.4 Clerk secret](#94-clerk-secret)
 - [10. Abuse protection](#10-abuse-protection)
 - [11. CI/CD](#11-cicd)
-- [12. Migration ordering](#12-migration-ordering)
-- [13. CI authentication](#13-ci-authentication)
-- [14. Testing](#14-testing)
-- [15. Build order](#15-build-order)
+  - [11.1 Image tags](#111-image-tags)
+  - [11.2 Migrator image](#112-migrator-image)
+  - [11.3 Migration ordering](#113-migration-ordering)
+  - [11.4 CI authentication](#114-ci-authentication)
+- [12. Testing](#12-testing)
+- [13. Build order](#13-build-order)
 
 ---
 
@@ -39,7 +40,7 @@ Why the system is shaped this way: decisions, alternatives rejected, costs accep
 1. User uploads discrete multi-angle photos of one object — not a panorama, individual stills taken while walking around it.
    - Quality tracks angular coverage and overlap between neighboring views, not raw photo count.
    - Gaps in coverage surface as a low COLMAP registered ratio (step 2, below).
-   - [Capture](RUNBOOK.md#42-capture) procedure.
+   - [Capture](RUNBOOK.md#16-capture) procedure.
 2. **COLMAP** (`worker/pipeline/sfm.py`): exhaustive matching → camera poses + sparse cloud.
    - Accuracy over speed, since the object-centric photo sets are small.
    - `worker/run_job.py` fails below 50% registered images. That reflects capture quality, not a pipeline bug.
@@ -59,7 +60,7 @@ The "AI" here is per-object gradient descent through a differentiable rasterizer
   - It runs before the failure-prone steps (ECR login, `docker run`) that could otherwise leave `worker/pipeline/instance.py`'s own self-terminate unreached.
   - `InstanceInitiatedShutdownBehavior = "terminate"` on the launch makes that shutdown terminate the instance rather than stop it.
   - If scheduling the shutdown fails, user-data powers the instance off immediately rather than run the stage without a ceiling. Losing one worker job costs less than a GPU instance billing with no bound.
-  - A CloudWatch runtime alarm was considered for alerting when the ceiling fires. Nothing in the request path needs to *know* a worker job hung, only to stop it billing, so the ceiling was built without one. That alerting is still an open gap ([State / what's next](AGENTS.md#12-state--whats-next)).
+  - A CloudWatch runtime alarm was considered for alerting when the ceiling fires. Nothing in the request path needs to *know* a worker job hung, only to stop it billing, so the ceiling was built without one. That alerting is still an open gap ([State / what's next](AGENTS.md#10-state--whats-next)).
 - No SQS, Batch, or always-on fleet — the global daily cap on worker jobs bounds their volume instead.
 - A queue is only worth the added complexity at higher, decoupled-fleet scale.
 
@@ -140,7 +141,7 @@ The migration task (`web/scripts/db-migrate.cjs`) keeps the old static-env-var b
 
 ## 8. Infra
 
-- Infra: **Terraform**. One configuration (`infra/`) holding one state. The S3 bucket that state lives in is created by hand ([Creating account prerequisites](RUNBOOK.md#72-creating-account-prerequisites)). `terraform init` needs the bucket before any apply. Managing it inside `infra/` would store state in a bucket `infra/` also owns. A second Terraform module with its own local state was rejected.
+- Infra: **Terraform**. One configuration (`infra/`) holding one state. The S3 bucket that state lives in is created by hand ([Creating account prerequisites](RUNBOOK.md#22-creating-account-prerequisites)). `terraform init` needs the bucket before any apply. Managing it inside `infra/` would store state in a bucket `infra/` also owns. A second Terraform module with its own local state was rejected.
 - Six logical areas, one per `.tf` file rather than one per CloudFormation-style stack — a single state resolves the dependencies between them directly, so there's no cross-stack export/import to keep in sync:
   - **network** — VPC, subnets, security groups.
   - **data** — RDS, S3.
@@ -181,24 +182,7 @@ The web app runs on **Fargate** behind an **Application Load Balancer** (`infra/
 - Route 53 zone is referenced by ID only (`var.hosted_zone_id`), never looked up or created — `infra/` only ever adds records to an existing zone.
 - The app's public origin is derived (`local.app_origin`), not passed in. Taking the hostname and the callback origin as two separate inputs let them drift apart, and a mismatch shows up only as the worker's status callbacks failing against a host that doesn't answer.
 
-### 9.4 Image tags
-
-- The web and migrator images are tagged with the git tree id of `web/`, truncated to a fixed 12 characters (`scripts/lib/terraform.sh`'s `tf_get_web_image_tag`), in an ECR repository `infra/` owns (`infra/registry.tf`). The tag travels as a Terraform variable (`web_image_tag`).
-- `web/` is the whole build context both images are built from, so the tag is a function of exactly their inputs. A push that leaves that tree untouched resolves to the tag already in ECR, so `.github/workflows/deploy.yml` builds nothing and leaves the service with no image change for either `terraform apply` to roll out.
-- A fixed width rather than `git rev-parse --short`, whose length is the shortest prefix unique in the local object database.
-  - That length varies between CI's shallow checkout and a full clone, and it grows with the repository. An abbreviated tag is therefore not a function of the tree it names.
-  - A tag that moves on its own rebuilds and rolls out code that did not change.
-- That gating is the point. Measured over twelve commits on `main`, the commit SHA moved twelve times, `infra/`'s tree three times and `web/`'s once — so tagging by commit spent 22 of 24 image builds and 11 of 12 ECS rollouts on byte-identical application code, each rollout a real task replacement and a consumed rollback slot.
-- A moving tag like `latest` would be simpler to push, but it leaves every release sharing one task definition. That disarms the deployment circuit breaker: rollback restarts the previous deployment against that same string, so Fargate re-pulls whatever was pushed most recently — the image that just failed.
-- Per-build tags make each deploy its own task definition instead. The repository is also `IMMUTABLE`, so a pushed tag can never be repointed.
-- Costs of this approach:
-  - A variable is required on every `terraform apply`.
-  - The tag names no commit. Map it back with `git log --format='%h' -- web`, then `git rev-parse <commit>:web | cut -c1-12` for each.
-  - A build input outside `web/` reaches production only through a change under `web/`. That covers the `CLERK_PUBLISHABLE_KEY` repository variable, which `web/Dockerfile` bakes into the browser bundle, and a patched `node:24-alpine` base.
-  - The rollback window is bounded by `RELEASES_KEPT`, not unlimited.
-- Rejected alternative: **a path filter on `.github/workflows/ci.yml`'s `deploy` job**, skipping the deploy outright unless the push touched `web/` or `infra/`. It saves nothing on the common case, since `infra/` changes more often than `web/` here and an `infra/` change still has to deploy. Worse, any filter that skips a push also stops `infra/` converging. Converging `infra/` is how a new `WORKER_IMAGE_TAG` reaches the web task definition ([Building and pushing the worker image](RUNBOOK.md#77-building-and-pushing-the-worker-image)), and it does so on a `worker/`-only push — exactly the push that carries a new worker image.
-
-### 9.5 Clerk secret
+### 9.4 Clerk secret
 
 - The Clerk secret is referenced by its complete ARN (`var.clerk_secret_key_arn`), not created.
 - A Terraform-created secret comes up holding a value `infra/` would have to generate and never actually use. ECS resolves secrets at task start, not on live update, so putting the real key in afterward would cost a second rollout on every fresh environment.
@@ -224,14 +208,33 @@ Ops fallback: an AWS Budget (`infra/budgets.tf`) for spend the request path neve
 
 ## 11. CI/CD
 
-- CI (`.github/workflows/deploy.yml`) applies `infra/` and migrates on every push to `main`, and builds a new web image only when `web/` changed, the first deploy into an empty account included ([Image tags](#94-image-tags)). It still rolls the service out whenever an apply changes the web task definition, which carries far more than the image. A human never applies `infra/` itself.
-- Whether the `deploy` job runs is a repository variable (`DEPLOY_ENABLED` on `.github/workflows/ci.yml`'s `deploy` job), not a committed `if:` in the workflow file. A committed flag makes going live and tearing down a workflow edit. The file would then differ between "the account exists" and "the account is gone" for a one-bit operational state. An unset variable is `""`. A fork or a torn-down account deploys nothing until someone sets it to `true` ([Going live](RUNBOOK.md#76-going-live)).
+- CI (`.github/workflows/deploy.yml`) applies `infra/` and migrates on every push to `main`, and builds a new web image only when `web/` changed, the first deploy into an empty account included ([Image tags](#111-image-tags)). It still rolls the service out whenever an apply changes the web task definition, which carries far more than the image. A human never applies `infra/` itself.
+- Whether the `deploy` job runs is a repository variable (`DEPLOY_ENABLED` on `.github/workflows/ci.yml`'s `deploy` job), not a committed `if:` in the workflow file. A committed flag makes going live and tearing down a workflow edit. The file would then differ between "the account exists" and "the account is gone" for a one-bit operational state. An unset variable is `""`. A fork or a torn-down account deploys nothing until someone sets it to `true` ([Going live](RUNBOOK.md#26-going-live)).
 - `.github/workflows/ci.yml` records that variable in `capture-deploy-enabled`, a trivial job at the start of each run on `main`. The `deploy` job's `if:` reads that copy, not live `vars` when the `deploy` job starts. A flip that lands after the recording cannot change what the run does, which narrows the window from the whole check suite to that one job's dispatch. Two scripts refuse to run while a run on `main` is unfinished, because a flip inside that remaining window still reaches it:
   - `scripts/prod/set-deploy-enabled.sh`
   - `scripts/prod/terraform-destroy.sh`
 - Creating the state bucket and tearing down are done locally. CI can't `terraform init` against a bucket that doesn't exist yet. A teardown is too rare and too destructive to put behind a push.
 - No manual approval gate: there's no live traffic yet to protect, and this is the first real deploy (M9).
-- GPU worker deployment stays manual: nothing builds or pushes the worker image on a schedule or a push, and its tag is a commit SHA someone sets by hand ([Building and pushing the worker image](RUNBOOK.md#77-building-and-pushing-the-worker-image)).
+- GPU worker deployment stays manual: nothing builds or pushes the worker image on a schedule or a push, and its tag is a commit SHA someone sets by hand ([Building and pushing the worker image](RUNBOOK.md#27-building-and-pushing-the-worker-image)).
+
+### 11.1 Image tags
+
+- The web and migrator images are tagged with the git tree id of `web/`, truncated to a fixed 12 characters (`scripts/lib/terraform.sh`'s `tf_get_web_image_tag`), in an ECR repository `infra/` owns (`infra/registry.tf`). The tag travels as a Terraform variable (`web_image_tag`).
+- `web/` is the whole build context both images are built from, so the tag is a function of exactly their inputs. A push that leaves that tree untouched resolves to the tag already in ECR, so `.github/workflows/deploy.yml` builds nothing and leaves the service with no image change for either `terraform apply` to roll out.
+- A fixed width rather than `git rev-parse --short`, whose length is the shortest prefix unique in the local object database.
+  - That length varies between CI's shallow checkout and a full clone, and it grows with the repository. An abbreviated tag is therefore not a function of the tree it names.
+  - A tag that moves on its own rebuilds and rolls out code that did not change.
+- That gating is the point. Measured over twelve commits on `main`, the commit SHA moved twelve times, `infra/`'s tree three times and `web/`'s once — so tagging by commit spent 22 of 24 image builds and 11 of 12 ECS rollouts on byte-identical application code, each rollout a real task replacement and a consumed rollback slot.
+- A moving tag like `latest` would be simpler to push, but it leaves every release sharing one task definition. That disarms the deployment circuit breaker: rollback restarts the previous deployment against that same string, so Fargate re-pulls whatever was pushed most recently — the image that just failed.
+- Per-build tags make each deploy its own task definition instead. The repository is also `IMMUTABLE`, so a pushed tag can never be repointed.
+- Costs of this approach:
+  - A variable is required on every `terraform apply`.
+  - The tag names no commit. Map it back with `git log --format='%h' -- web`, then `git rev-parse <commit>:web | cut -c1-12` for each.
+  - A build input outside `web/` reaches production only through a change under `web/`. That covers the `CLERK_PUBLISHABLE_KEY` repository variable, which `web/Dockerfile` bakes into the browser bundle, and a patched `node:24-alpine` base.
+  - The rollback window is bounded by `RELEASES_KEPT`, not unlimited.
+- Rejected alternative: **a path filter on `.github/workflows/ci.yml`'s `deploy` job**, skipping the deploy outright unless the push touched `web/` or `infra/`. It saves nothing on the common case, since `infra/` changes more often than `web/` here and an `infra/` change still has to deploy. Worse, any filter that skips a push also stops `infra/` converging. Converging `infra/` is how a new `WORKER_IMAGE_TAG` reaches the web task definition ([Building and pushing the worker image](RUNBOOK.md#27-building-and-pushing-the-worker-image)), and it does so on a `worker/`-only push — exactly the push that carries a new worker image.
+
+### 11.2 Migrator image
 
 - Migrations run as a one-off Fargate task from a **separate `migrator` image** (`web/Dockerfile`). Not bundled into the `web` runtime image, and not run at container boot.
 - Two reasons:
@@ -240,9 +243,7 @@ Ops fallback: an AWS Budget (`infra/budgets.tf`) for spend the request path neve
 - `migrator`'s `node_modules` is copied from a `deps-prod` stage — `deps` with `pnpm prune --prod` applied, plus its now-unreferenced pnpm store deleted — rather than from `deps` directly.
 - That's because the migration script needs only `@next/env`, `drizzle-orm`, and `pg`, which are regular dependencies. It never needs the devDependencies (`typescript`, `drizzle-kit`, `vitest`, `@playwright/test`, ...) that `deps` carries for `builder`'s build.
 
----
-
-## 12. Migration ordering
+### 11.3 Migration ordering
 
 Two separate images are in play here: the **migrator image** (runs the one-off migration task) and the **web image** (runs the service). Both are built from the same `web/` tree, but `terraform apply` tracks their tags independently — `migrate_image_tag` for the migrator image, `web_image_tag` for the web image.
 
@@ -263,38 +264,36 @@ Terraform stays the sole owner of "what's currently deployed" — nothing calls 
 
 The first deploy into an empty account skips this ordering. With no service in the Terraform state there is no older image to pin the service to, so the first apply creates it on the new image and the migration runs afterwards. Real routes 500 until the migration finishes. That costs nothing, because nothing was serving before.
 
-Rejected alternative: **running migrations from a local machine through a bastion.** The RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway and no security-group path for an ad hoc host, and no bastion exists in `infra/`. So there's no manual fallback: a bad migration is fixed the same way as any other bug, with a corrective migration through a normal PR (see [Fixing a bad migration](RUNBOOK.md#8-fixing-a-bad-migration)).
+Rejected alternative: **running migrations from a local machine through a bastion.** The RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway and no security-group path for an ad hoc host, and no bastion exists in `infra/`. So there's no manual fallback: a bad migration is fixed the same way as any other bug, with a corrective migration through a normal PR (see [Fixing a bad migration](RUNBOOK.md#31-fixing-a-bad-migration)).
 
-A rolled-back *service* deployment does not undo an already-applied migration. Rollback and "was the migration a good idea" are orthogonal once the migration has committed. This is why every migration has to follow the expand/contract discipline in [Schema & migrations (Drizzle)](AGENTS.md#101-schema--migrations-drizzle), not an incidental style preference.
+A rolled-back *service* deployment does not undo an already-applied migration. Rollback and "was the migration a good idea" are orthogonal once the migration has committed. This is why every migration has to follow the expand/contract discipline in [Schema & migrations (Drizzle)](AGENTS.md#91-schema--migrations-drizzle), not an incidental style preference.
 
----
-
-## 13. CI authentication
+### 11.4 CI authentication
 
 - CI authenticates to AWS via **GitHub OIDC**, not static IAM access keys — no long-lived credential to leak or rotate.
 - The identity token's `sub` claim scopes it specifically to `repo:<owner>@<ownerId>/<repo>@<repoId>:ref:refs/heads/main`, so PRs and forks can't assume the role.
-- That role, `ai-gaussian-splatter-ci-deploy`, is created by hand once ([Creating the OIDC provider and CI role](RUNBOOK.md#74-creating-the-oidc-provider-and-ci-role)), not by `infra/`, because it's chicken-and-egg: CI can't apply the config that grants CI its own apply permission.
-- Unlike a design that delegates through a separate bootstrap role, this role holds the AWS permissions `terraform apply` itself needs directly — ec2, ecr, rds, s3, iam, ecs, elasticloadbalancing, route53, acm, budgets, logs, secretsmanager — scoped by resource-name prefix where a service supports it. The same reasoning keeps the Clerk secret, the state bucket, and `AWSServiceRoleForEC2Spot` as hand-run one-time setup rather than Terraform-managed resources ([Creating account prerequisites](RUNBOOK.md#72-creating-account-prerequisites)). Granting broad infrastructure permissions to a CI role is a step this repo keeps out of any automated apply.
+- That role, `ai-gaussian-splatter-ci-deploy`, is created by hand once ([Creating the OIDC provider and CI role](RUNBOOK.md#24-creating-the-oidc-provider-and-ci-role)), not by `infra/`, because it's chicken-and-egg: CI can't apply the config that grants CI its own apply permission.
+- Unlike a design that delegates through a separate bootstrap role, this role holds the AWS permissions `terraform apply` itself needs directly — ec2, ecr, rds, s3, iam, ecs, elasticloadbalancing, route53, acm, budgets, logs, secretsmanager — scoped by resource-name prefix where a service supports it. The same reasoning keeps the Clerk secret, the state bucket, and `AWSServiceRoleForEC2Spot` as hand-run one-time setup rather than Terraform-managed resources ([Creating account prerequisites](RUNBOOK.md#22-creating-account-prerequisites)). Granting broad infrastructure permissions to a CI role is a step this repo keeps out of any automated apply.
 
 ---
 
-## 14. Testing
+## 12. Testing
 
 Three tiers (`.github/workflows/ci.yml`):
 
 - **Unit/component** (every PR): `pytest` + `moto` for `worker/`; Vitest `client` (jsdom) and `server` (Node + real Postgres for rate limits).
-- **E2E** (every PR): Playwright without live Clerk. No specs yet (SSR reads DB; `page.route()` can't intercept; no seed — see [State / what's next](AGENTS.md#12-state--whats-next)). Server correctness is the Vitest `server` project.
+- **E2E** (every PR): Playwright without live Clerk. No specs yet (SSR reads DB; `page.route()` can't intercept; no seed — see [State / what's next](AGENTS.md#10-state--whats-next)). Server correctness is the Vitest `server` project.
 - **Real-pipeline** (manual/milestone-gated): real COLMAP + gsplat costs GPU money. `FAST_TEST_MODE` (20 iterations) for cheap end-to-end smoke tests; `worker/pipeline/train.py` derives its densify/log schedules from the iteration count so the short run still exercises densification.
 
 `web/` AWS tests use `aws-sdk-client-mock` (assert command args), not `moto`-style emulation.
 
 ---
 
-## 15. Build order
+## 13. Build order
 
-Milestones (`M0`…`M10`) name phases, not a schedule, and they are not built in order. Definitions here; status in [State / what's next](AGENTS.md#12-state--whats-next).
+Milestones (`M0`…`M10`) name phases, not a schedule, and they are not built in order. Definitions here; status in [State / what's next](AGENTS.md#10-state--whats-next).
 
-- **M0** — shoot one real object per [Capture](RUNBOOK.md#42-capture); hand-run COLMAP → gsplat → export; view in a standalone page.
+- **M0** — shoot one real object per [Capture](RUNBOOK.md#16-capture); hand-run COLMAP → gsplat → export; view in a standalone page.
 - **M1** — Same run via scripted `worker/pipeline/` modules.
 - **M2** — Schema + CRUD endpoints.
 - **M3** — S3 presign/complete against a real bucket.
