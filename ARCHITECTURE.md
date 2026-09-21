@@ -24,11 +24,15 @@ Why the system is shaped this way: decisions, alternatives rejected, costs accep
 - [Testing](#testing)
 - [Build order](#build-order)
 
+---
+
 ## Monorepo tooling
 
 - **pnpm**, not npm or yarn, for `web/` and the root scripts. `infra/` needs no Node tooling at all: Terraform ships as a standalone CLI binary, installed directly rather than through a package manager.
 - Its content-addressable store keeps one copy of each package version on disk. Every project that needs a package gets it hard-linked in, rather than duplicating it per `node_modules`.
 - Its `node_modules` layout also only exposes packages a project actually lists in `package.json`. Code can't accidentally import an undeclared transitive dependency — the "phantom dependency" problem npm's and yarn's flat layout allows.
+
+---
 
 ## Pipeline
 
@@ -45,6 +49,8 @@ Why the system is shaped this way: decisions, alternatives rejected, costs accep
 4. **Export** (`worker/pipeline/export.py`): viewer `.ply` plus a thumbnail from gsplat's own rasterizer, for Open Graph. Using gsplat's rasterizer avoids pulling in an extra dependency just for the thumbnail.
 
 The "AI" here is per-object gradient descent through a differentiable rasterizer, not a pretrained inference model. COLMAP is classical CV (bundle adjustment), not ML.
+
+---
 
 ## Compute
 
@@ -71,6 +77,8 @@ A baked AMI would attack the smaller half — fixed overhead, not training. Trai
 - Not Lambda or Fargate: neither offers GPU.
 - Not hand-rolled ECS orchestration: bin-packing shared instances doesn't fit a one-stage-one-instance model.
 
+---
+
 ## API design
 
 - REST (`web/app/api/v1/`), not GraphQL. 13 flat endpoints don't need GraphQL's query flexibility.
@@ -79,6 +87,8 @@ A baked AMI would attack the smaller half — fixed overhead, not training. Trai
 - API and pages share one Next.js app.
   - SSR is needed anyway for Open Graph (`generateMetadata`) and server-side share-page reads, so a long-running Node process already exists.
   - Putting the API in that same process means one deploy and one TypeScript codebase, with no separate API service whose request/response shapes need to be kept in sync by hand.
+
+---
 
 ## Frontend
 
@@ -91,6 +101,8 @@ A baked AMI would attack the smaller half — fixed overhead, not training. Trai
 - Zustand, not Redux, for pure client UI (upload progress, banners). Zustand needs less boilerplate.
 - `@mkkellogg/gaussian-splats-3d`'s `DropInViewer` runs in r3f via `<primitive>`. It drives itself with Three.js's `onBeforeRender`.
 
+---
+
 ## Schema & ORM
 
 - Response shapes are explicit column maps in `web/lib/server/selects.ts`, passed to `.select()` so excluded columns never appear in SQL (e.g. `callbackToken` stays out of job responses).
@@ -101,6 +113,8 @@ A baked AMI would attack the smaller half — fixed overhead, not training. Trai
   - Cons: there's no `@@map` equivalent for enum members, so Postgres labels and TypeScript unions must match exactly (see status values, below).
 - JSON field *names* are camelCase. Status *values* are snake_case (`colmap_running`), because `pgEnum` values are both the DB labels and the TS members — one spelling end to end.
 - The GPU worker callback accepts snake_case request fields (`error_message`, `result_s3_key`, …) and remaps them to camelCase for Drizzle. Status *values* need no translation, since they're already the shared spelling.
+
+---
 
 ## Postgres connectivity & TLS
 
@@ -122,6 +136,8 @@ Two fixes were considered:
 
 The migration task (`web/scripts/db-migrate.cjs`) keeps the old static-env-var behavior: it runs for seconds and exits, well inside the 7-day window, so there's nothing for it to go stale against, and changing it would need its own Secrets Manager IAM grant for no benefit.
 
+---
+
 ## Infra
 
 - Infra: **Terraform**. One configuration (`infra/`) holding one state. The S3 bucket that state lives in is created by hand ([Creating account prerequisites](RUNBOOK.md#creating-account-prerequisites)). `terraform init` needs the bucket before any apply. Managing it inside `infra/` would store state in a bucket `infra/` also owns. A second Terraform module with its own local state was rejected.
@@ -133,6 +149,8 @@ The migration task (`web/scripts/db-migrate.cjs`) keeps the old static-env-var b
   - **web** — ALB + Fargate.
   - **budgets** — a second, `us-east-1`-aliased provider, since the Budgets API only operates there.
 - `infra/tests/*.tftest.hcl` (native `terraform test`, `mock_provider "aws" {}`) replaces hand-written assertions against synthesized templates with the same offline, zero-credential guarantee, run by `.github/workflows/ci.yml`'s `infra` job on every PR.
+
+---
 
 ## Hosting
 
@@ -188,6 +206,8 @@ The web app runs on **Fargate** behind an **Application Load Balancer** (`infra/
 - Complete ARN, not just the secret name, because ECS matches a task definition's `valueFrom` on the six-character suffix Secrets Manager assigns.
 - Cost: a second required variable on every `terraform apply`, and a credential whose lifecycle nothing in `infra/` owns.
 
+---
+
 ## Abuse protection
 
 Three request-path layers (`web/lib/server/rateLimit.ts`). A per-user quota alone doesn't stop multi-accounting:
@@ -199,6 +219,8 @@ Three request-path layers (`web/lib/server/rateLimit.ts`). A per-user quota alon
 3. Global daily cap on worker jobs, in `process` only — bounds worst-case GPU spend regardless of caller.
 
 Ops fallback: an AWS Budget (`infra/budgets.tf`) for spend the request path never sees.
+
+---
 
 ## CI/CD
 
@@ -217,6 +239,8 @@ Ops fallback: an AWS Budget (`infra/budgets.tf`) for spend the request path neve
   - The migration SQL plus the script that applies it have no reason to bloat the lean `web` standalone build that actually serves traffic.
 - `migrator`'s `node_modules` is copied from a `deps-prod` stage — `deps` with `pnpm prune --prod` applied, plus its now-unreferenced pnpm store deleted — rather than from `deps` directly.
 - That's because the migration script needs only `@next/env`, `drizzle-orm`, and `pg`, which are regular dependencies. It never needs the devDependencies (`typescript`, `drizzle-kit`, `vitest`, `@playwright/test`, ...) that `deps` carries for `builder`'s build.
+
+---
 
 ## Migration ordering
 
@@ -243,12 +267,16 @@ Rejected alternative: **running migrations from a local machine through a bastio
 
 A rolled-back *service* deployment does not undo an already-applied migration. Rollback and "was the migration a good idea" are orthogonal once the migration has committed. This is why every migration has to follow the expand/contract discipline in [Schema & migrations (Drizzle)](AGENTS.md#schema--migrations-drizzle), not an incidental style preference.
 
+---
+
 ## CI authentication
 
 - CI authenticates to AWS via **GitHub OIDC**, not static IAM access keys — no long-lived credential to leak or rotate.
 - The identity token's `sub` claim scopes it specifically to `repo:<owner>@<ownerId>/<repo>@<repoId>:ref:refs/heads/main`, so PRs and forks can't assume the role.
 - That role, `ai-gaussian-splatter-ci-deploy`, is created by hand once ([Creating the OIDC provider and CI role](RUNBOOK.md#creating-the-oidc-provider-and-ci-role)), not by `infra/`, because it's chicken-and-egg: CI can't apply the config that grants CI its own apply permission.
 - Unlike a design that delegates through a separate bootstrap role, this role holds the AWS permissions `terraform apply` itself needs directly — ec2, ecr, rds, s3, iam, ecs, elasticloadbalancing, route53, acm, budgets, logs, secretsmanager — scoped by resource-name prefix where a service supports it. The same reasoning keeps the Clerk secret, the state bucket, and `AWSServiceRoleForEC2Spot` as hand-run one-time setup rather than Terraform-managed resources ([Creating account prerequisites](RUNBOOK.md#creating-account-prerequisites)). Granting broad infrastructure permissions to a CI role is a step this repo keeps out of any automated apply.
+
+---
 
 ## Testing
 
@@ -259,6 +287,8 @@ Three tiers (`.github/workflows/ci.yml`):
 - **Real-pipeline** (manual/milestone-gated): real COLMAP + gsplat costs GPU money. `FAST_TEST_MODE` (20 iterations) for cheap end-to-end smoke tests; `worker/pipeline/train.py` derives its densify/log schedules from the iteration count so the short run still exercises densification.
 
 `web/` AWS tests use `aws-sdk-client-mock` (assert command args), not `moto`-style emulation.
+
+---
 
 ## Build order
 

@@ -16,12 +16,16 @@ Most procedures below run a script from `scripts/dev/` or `scripts/prod/`, and e
   - [Signing in to AWS](#signing-in-to-aws)
   - [Creating account prerequisites](#creating-account-prerequisites)
   - [Configuring continuous deployment](#configuring-continuous-deployment)
+  - [Creating the OIDC provider and CI role](#creating-the-oidc-provider-and-ci-role)
+  - [Setting GitHub repository variables](#setting-github-repository-variables)
   - [Going live](#going-live)
   - [Building and pushing the worker image](#building-and-pushing-the-worker-image)
   - [Running Terraform locally](#running-terraform-locally)
 - [Fixing a bad migration](#fixing-a-bad-migration)
 - [Debugging a failed worker job](#debugging-a-failed-worker-job)
 - [Tearing down](#tearing-down)
+
+---
 
 ## Dev AWS resources
 
@@ -32,6 +36,8 @@ It copies `web/.env.example` to `web/.env` first when that's missing, and writes
 ```bash
 scripts/dev/create-resources.sh
 ```
+
+---
 
 ## Web (frontend + REST API)
 
@@ -59,6 +65,8 @@ pnpm db:studio  # opens Drizzle Studio to browse/edit rows.
 
 After editing `web/lib/server/db/schema.ts`, run `pnpm db:generate` to emit a migration into `web/drizzle/`, then `pnpm db:migrate` to apply it.
 
+---
+
 ## Building and running the splat-web container locally
 
 Substitutes for `pnpm dev` to exercise the `splat-web` container that production runs. Uses the `splat-pg` container from above.
@@ -66,6 +74,8 @@ Substitutes for `pnpm dev` to exercise the `splat-web` container that production
 ```bash
 scripts/dev/run-web-container.sh
 ```
+
+---
 
 ## Worker (local pipeline run)
 
@@ -121,6 +131,8 @@ pnpm dev
 
 Upload photos and click Process in the browser as normal. The worker job goes through the same DB rows, callback token, and `/api/v1/internal/jobs/[jobId]/status` route a real EC2 run would use, so its status updates in the dashboard live. Leave `WORKER_LOCAL_LAUNCH` unset (or `false`) to go back to launching a real spot instance.
 
+---
+
 ## Installing Terraform
 
 `infra/providers.tf` pins an exact `required_version`, so any other CLI version fails `terraform init`. Install that exact release as a standalone binary:
@@ -129,6 +141,8 @@ Upload photos and click Process in the browser as normal. The worker job goes th
 scripts/dev/terraform-install.sh
 ```
 
+---
+
 ## Full test suite
 
 ```bash
@@ -136,6 +150,8 @@ scripts/dev/run-tests.sh
 ```
 
 Several of the tests `pnpm test` runs in `web/` need Postgres. They use `TEST_DATABASE_URL` from `web/.env` (`ai_gaussian_splatter_test` on `splat-pg`, created by `scripts/dev/db-up.sh`), and `pnpm test` fails if that container is down or the variable is missing. `web/tests/migrate-test-db.ts` migrates that database before those tests run.
+
+---
 
 ## Deploying to production
 
@@ -183,9 +199,12 @@ To check month-to-date spend: Billing console → **Billing Home**, or **Cost Ex
 
 ### Configuring continuous deployment
 
-One-time, after [Creating account prerequisites](#creating-account-prerequisites) and before [Going live](#going-live).
+One-time, after [Creating account prerequisites](#creating-account-prerequisites) and before [Going live](#going-live). Two steps, in order:
 
-#### Creating the OIDC provider and CI role
+1. [Creating the OIDC provider and CI role](#creating-the-oidc-provider-and-ci-role)
+2. [Setting GitHub repository variables](#setting-github-repository-variables)
+
+### Creating the OIDC provider and CI role
 
 `scripts/prod/configure-ci-role.sh` creates GitHub's OIDC provider if the account doesn't have it yet, then creates the `ai-gaussian-splatter-ci-deploy` role and writes both of its policies. It rewrites both policies on every run.
 
@@ -195,7 +214,7 @@ scripts/prod/configure-ci-role.sh
 
 `DEPLOY_POLICY` in `scripts/prod/configure-ci-role.sh` is a reasonable starting point, not an exhaustively verified minimal policy, so expect `AccessDenied` during the first deploy, which is the first time the role creates every resource rather than updating it. Add the missing action, re-run the script, then rerun the `deploy` job (`gh run rerun <run-id> --failed-jobs`).
 
-#### Setting GitHub repository variables
+### Setting GitHub repository variables
 
 `.github/workflows/deploy.yml` reads its configuration from GitHub repository variables (`vars.*`). `scripts/prod/set-gh-repo-variables.sh` sets all of them, and needs `gh` signed in with write access to the repository plus the Clerk secret from [Creating account prerequisites](#creating-account-prerequisites). Two scripts read the same variables back:
 
@@ -271,6 +290,8 @@ A `terraform plan` preview and a teardown are the only Terraform a human runs ag
 scripts/prod/terraform-plan.sh
 ```
 
+---
+
 ## Fixing a bad migration
 
 The only supported production apply is the `deploy` job (`.github/workflows/deploy.yml`), which runs the `migrator` image (`web/Dockerfile`) as a one-off ECS task before rolling the service forward. There is no supported way to reach the database by hand. The RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway and no bastion. It accepts connections only from `aws_security_group.web` on port 5432, which is how the migration task gets to it.
@@ -278,6 +299,8 @@ The only supported production apply is the `deploy` job (`.github/workflows/depl
 Fix a bad migration the same way you'd fix any other bug: write a corrective migration following the expand/contract discipline in [Schema & migrations (Drizzle)](AGENTS.md#schema--migrations-drizzle) (edit `web/lib/server/db/schema.ts`, `pnpm db:generate`, review the emitted SQL in `web/drizzle/`), commit it, and land it through a normal PR to `main`. It applies when `DEPLOY_ENABLED` is `true` and that commit reaches `main` ([Going live](#going-live)).
 
 If the `deploy` job's migration step fails for an infra reason rather than a bad migration (a transient AWS error, a placement failure), retry the whole `deploy` job rather than reaching for manual AWS commands — it's idempotent end to end: `gh run rerun <run-id> --failed-jobs`.
+
+---
 
 ## Debugging a failed worker job
 
@@ -287,6 +310,8 @@ If the `deploy` job's migration step fails for an infra reason rather than a bad
    - **Still running well past that ceiling means cloud-init/user-data itself never started** — a boot failure (bad AMI, IMDS/networking issue), which is the one case that scheduled shutdown can't catch. Terminate it by hand.
    - Nothing alerts when any of this fires ([State / what's next](AGENTS.md#state--whats-next)), so run this check by hand.
 4. `docker logs` on the instance (if still running) or CloudWatch Logs (once wired up) for the actual COLMAP/gsplat stack trace.
+
+---
 
 ## Tearing down
 
