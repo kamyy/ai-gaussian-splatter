@@ -34,8 +34,10 @@ function SprocketStrip() {
         // defaultColorScheme.
         backgroundImage: theme =>
           `radial-gradient(circle, ${theme.vars.palette.text.secondary} 2px, transparent 2.5px)`,
-        backgroundSize: `${rem(26)} ${rem(10)}`,
-        backgroundPosition: `${rem(13)} center`,
+        // backgroundPosition is always half of backgroundSize's width, so the first hole lands centered in its own
+        // tile instead of clipped at the strip's left edge.
+        backgroundSize: `${rem(40)} ${rem(10)}`,
+        backgroundPosition: `${rem(20)} center`,
       }}
     />
   );
