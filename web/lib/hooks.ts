@@ -12,15 +12,15 @@ import type { Job, JobStatus, PhotoListItem, Splat, SplatListItem } from "./type
 // Poll rate per phase; 0 is how SWR is told to stop, and only an ended status may use it. SWR keys its polling effect
 // on this function's identity rather than on the data, so once the function returns 0 it schedules no further timer
 // and nothing but a remount starts one again. A later mutate() does not. A non-terminal status returning 0 would
-// therefore freeze the progress bar for the rest of the job.
+// therefore freeze the job status for the rest of the job.
 //
 // uploading_result can finish inside 30s, so a poll often steps over it and completion shows up to 30s late —
 // accepted, since the phases before it run for minutes.
 const JOB_POLL_INTERVAL_MS: Record<JobStatus, number> = {
   queued: 30_000,
   launching: 30_000,
-  colmap_running: 30_000,
-  // Nothing moves here until the user hits "Proceed to train", and that click mutates the cache directly. Polling
+  reconstruction_running: 30_000,
+  // Nothing moves here until the user hits "Start training", and that click mutates the cache directly. Polling
   // continues anyway: it is what leaves the timer armed for the training run the click starts.
   awaiting_training: 30_000,
   training_running: 30_000,

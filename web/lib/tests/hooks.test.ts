@@ -78,7 +78,13 @@ describe("useLatestJob", () => {
     renderHook(() => useLatestJob("splat-1"));
     const { refreshInterval } = capturedConfig();
 
-    for (const status of ["queued", "launching", "colmap_running", "training_running", "uploading_result"] as const) {
+    for (const status of [
+      "queued",
+      "launching",
+      "reconstruction_running",
+      "training_running",
+      "uploading_result",
+    ] as const) {
       expect(refreshInterval({ ...baseJob, status })).toBeGreaterThan(0);
     }
   });
@@ -88,9 +94,9 @@ describe("useLatestJob", () => {
     renderHook(() => useLatestJob("splat-1"));
     const { refreshInterval } = capturedConfig();
 
-    const intervals = (["queued", "launching", "colmap_running", "training_running", "uploading_result"] as const).map(
-      status => refreshInterval({ ...baseJob, status }),
-    );
+    const intervals = (
+      ["queued", "launching", "reconstruction_running", "training_running", "uploading_result"] as const
+    ).map(status => refreshInterval({ ...baseJob, status }));
 
     expect(intervals.every(interval => interval > 0)).toBe(true);
     expect(intervals).toStrictEqual([...intervals].sort((a, b) => b - a));
@@ -116,7 +122,7 @@ describe("useLatestJob", () => {
 
   it("keeps polling while paused at awaiting_training", () => {
     // The pause is open-ended and nothing moves server-side until the user proceeds, but the poll is what leaves the
-    // timer armed for the training run that "Proceed to train" starts.
+    // timer armed for the training run that "Start training" starts.
     renderHook(() => useLatestJob("splat-1"));
     const { refreshInterval } = capturedConfig();
 

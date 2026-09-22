@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 def _run_reconstruct(settings: Settings) -> int:
     try:
-        status.report_status(settings, "colmap_running")
+        status.report_status(settings, "reconstruction_running")
         photos_dir = fetch.fetch_photos(settings)
 
         sfm_result = sfm.run_colmap(photos_dir, Path(settings.local_workdir) / "colmap")

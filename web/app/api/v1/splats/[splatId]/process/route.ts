@@ -61,7 +61,7 @@ export const POST = withErrorHandling(
     }
 
     // `uq_jobs_splat_id_active` (web/lib/server/db/schema.ts) makes an active job block every later POST here, and
-    // nothing outside the worker itself ever moves a job on from "launching" or "colmap_running". A worker that dies
+    // nothing outside the worker itself ever moves a job on from "launching" or "reconstruction_running". A worker that dies
     // before it reports would therefore leave its splat unprocessable for good, so a job whose status has not moved
     // in JOB_STALE_AFTER_MS is cancelled here to free the index. The status callback ignores a job that has already
     // ended (web/app/api/v1/internal/jobs/[jobId]/status/route.ts), so a late-waking worker cannot resurrect the row

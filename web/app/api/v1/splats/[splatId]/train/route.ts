@@ -11,7 +11,7 @@ import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
 import { jobColumns } from "@/lib/server/selects";
 
 /**
- * The "proceed to train" trigger — launches the second EC2 spot instance for a job whose reconstruct phase already
+ * The "Start training" trigger — launches the second EC2 spot instance for a job whose reconstruct phase already
  * self-terminated at "awaiting_training", reusing that job's own id/callbackToken rather than creating a new job row
  * (see worker/run_job.py's stage split).
  */
@@ -83,7 +83,7 @@ export const POST = withErrorHandling(
       }
     } catch (err) {
       // Reverted rather than left at "launching": the reconstruct phase's own output (sparse model, point cloud) is
-      // untouched, so the user can just hit "Proceed to train" again. Left at "launching" the job blocks on
+      // untouched, so the user can just hit "Start training" again. Left at "launching" the job blocks on
       // POST /process's JOB_STALE_AFTER_MS sweep instead, which is hours away and cancels the job outright.
       await getDb().update(jobs).set({ status: "awaiting_training" }).where(eq(jobs.id, flipped.id));
       throw err;
