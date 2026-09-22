@@ -49,36 +49,45 @@ describe("PhotoFilmstrip", () => {
     usePhotosMock.mockReturnValue({ data: photos, isLoading: false, mutate: vi.fn() });
   });
 
-  it("shows Start processing when there is no active job", async () => {
-    useLatestJobMock.mockReturnValue({ data: undefined, mutate: vi.fn() });
+  it("shows Start reconstruction when there is no active job", async () => {
+    useLatestJobMock.mockReturnValue({ data: undefined, isLoading: false, mutate: vi.fn() });
     await renderFilmstrip();
 
-    expect(screen.getByRole("button", { name: "Start processing" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start reconstruction" })).toBeInTheDocument();
   });
 
-  it("hides Start processing while a job is active", async () => {
+  it("hides Start reconstruction while the first job fetch is still in flight", async () => {
+    // data is also undefined while loading, same as "no job yet" — isLoading is what tells them apart. Missing this
+    // check let a click during that window insert a second job for an already-finished splat.
+    useLatestJobMock.mockReturnValue({ data: undefined, isLoading: true, mutate: vi.fn() });
+    await renderFilmstrip();
+
+    expect(screen.queryByRole("button", { name: "Start reconstruction" })).not.toBeInTheDocument();
+  });
+
+  it("hides Start reconstruction while a job is active", async () => {
     useLatestJobMock.mockReturnValue({ data: baseJob, mutate: vi.fn() });
     await renderFilmstrip();
 
-    expect(screen.queryByRole("button", { name: "Start processing" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start reconstruction" })).not.toBeInTheDocument();
   });
 
-  it("shows Start processing again after a job fails, allowing a retry", async () => {
+  it("shows Start reconstruction again after a job fails, allowing a retry", async () => {
     // process/route.ts's partial unique index only blocks *active* jobs, so a failed one can be retried.
     useLatestJobMock.mockReturnValue({ data: { ...baseJob, status: "failed" }, mutate: vi.fn() });
     await renderFilmstrip();
 
-    expect(screen.getByRole("button", { name: "Start processing" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start reconstruction" })).toBeInTheDocument();
   });
 
-  it("starts processing and refetches the job", async () => {
+  it("starts reconstruction and refetches the job", async () => {
     const refetchJob = vi.fn();
     useLatestJobMock.mockReturnValue({ data: undefined, mutate: refetchJob });
     apiFetchMock.mockResolvedValue({ ...baseJob, status: "queued" });
     await renderFilmstrip();
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Start processing" }));
+      fireEvent.click(screen.getByRole("button", { name: "Start reconstruction" }));
     });
 
     expect(apiFetchMock).toHaveBeenCalledWith("/api/v1/splats/splat-1/process", "POST", "test-token");

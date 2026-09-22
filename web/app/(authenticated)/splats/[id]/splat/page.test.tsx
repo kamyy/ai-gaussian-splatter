@@ -16,8 +16,11 @@ vi.mock("@/components/viewer/SplatViewer", () => ({
   SplatViewerLoading: () => <div data-testid="splat-loading" />,
 }));
 
-const { useSplatMock } = vi.hoisted(() => ({ useSplatMock: vi.fn() }));
-vi.mock("@/lib/hooks", () => ({ useSplat: useSplatMock }));
+const { useSplatMock, useLatestJobMock } = vi.hoisted(() => ({
+  useSplatMock: vi.fn(),
+  useLatestJobMock: vi.fn(),
+}));
+vi.mock("@/lib/hooks", () => ({ useSplat: useSplatMock, useLatestJob: useLatestJobMock }));
 
 const { useSWRMock } = vi.hoisted(() => ({ useSWRMock: vi.fn() }));
 vi.mock("swr", () => ({ default: useSWRMock }));
@@ -46,6 +49,7 @@ async function renderPage() {
 describe("SplatPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useLatestJobMock.mockReturnValue({ data: undefined });
   });
 
   it("shows a not-ready message before the splat completes", async () => {
@@ -57,14 +61,25 @@ describe("SplatPage", () => {
     expect(screen.getByText(/Not ready yet/i)).toBeInTheDocument();
   });
 
-  it("shows a distinct failure message for a failed splat, not the generic not-ready one", async () => {
+  it("shows a generic failure message when the job has no error message yet", async () => {
     useSplatMock.mockReturnValue({ data: { ...baseSplat, status: "failed" }, isLoading: false });
     useSWRMock.mockReturnValue({ data: undefined, error: undefined });
 
     await renderPage();
 
-    expect(screen.getByText(/Processing failed/i)).toBeInTheDocument();
+    expect(screen.getByText("Processing failed.")).toBeInTheDocument();
     expect(screen.queryByText(/Not ready yet/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the job's error message directly, not just the dismissible toast", async () => {
+    // web/components/job/JobStatusSnackbar.tsx's toast can be dismissed; this is what's left once it is.
+    useSplatMock.mockReturnValue({ data: { ...baseSplat, status: "failed" }, isLoading: false });
+    useSWRMock.mockReturnValue({ data: undefined, error: undefined });
+    useLatestJobMock.mockReturnValue({ data: { errorMessage: "COLMAP registered only 40% of photos" } });
+
+    await renderPage();
+
+    expect(screen.getByText("Processing failed: COLMAP registered only 40% of photos")).toBeInTheDocument();
   });
 
   it("surfaces a splat fetch failure instead of spinning forever", async () => {

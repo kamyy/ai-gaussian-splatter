@@ -23,6 +23,9 @@ vi.mock("@/lib/uploadPhotos", () => ({ uploadPhotos: uploadPhotosMock }));
 const { mutateMock } = vi.hoisted(() => ({ mutateMock: vi.fn() }));
 vi.mock("swr", () => ({ mutate: mutateMock }));
 
+const { enqueueSnackbarMock } = vi.hoisted(() => ({ enqueueSnackbarMock: vi.fn() }));
+vi.mock("@/lib/useAppSnackbar", () => ({ useAppSnackbar: () => ({ enqueueSnackbar: enqueueSnackbarMock }) }));
+
 function renderModal(onClose = vi.fn()) {
   render(
     <ThemeProvider theme={theme}>
@@ -41,6 +44,7 @@ describe("CreateSplatModal", () => {
 
   it("disables Create until a name is entered", () => {
     renderModal();
+    expect(screen.getByRole("heading", { name: "Create new splat" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Coffee mug" } });
@@ -66,7 +70,7 @@ describe("CreateSplatModal", () => {
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Coffee mug" } });
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
-    await waitFor(() => expect(screen.getByText("Name already taken")).toBeInTheDocument());
+    await waitFor(() => expect(enqueueSnackbarMock).toHaveBeenCalledWith("Name already taken", { variant: "error" }));
     expect(onClose).not.toHaveBeenCalled();
   });
 
@@ -98,10 +102,35 @@ describe("CreateSplatModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() =>
-      expect(screen.getByText(/"Coffee mug" was created, but photo upload failed/i)).toBeInTheDocument(),
+      expect(enqueueSnackbarMock).toHaveBeenCalledWith(
+        expect.stringMatching(/"Coffee mug" was created, but photo upload failed/i),
+        { variant: "error" },
+      ),
     );
     expect(mutateMock).toHaveBeenCalledWith("splats");
     expect(onClose).not.toHaveBeenCalled();
     expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it("reuses the already-created splat on retry instead of re-POSTing a duplicate", async () => {
+    // The first Create click creates the splat successfully but fails to upload the photo. A retry click must not
+    // send a second POST /api/v1/splats for the same name.
+    uploadPhotosMock.mockRejectedValueOnce(new Error("S3 upload failed: Forbidden"));
+    renderModal();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Coffee mug" } });
+
+    const file = new File(["fake"], "photo.jpg", { type: "image/jpeg" });
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    await waitFor(() => expect(screen.getByText("1 photo selected")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(uploadPhotosMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(uploadPhotosMock).toHaveBeenCalledTimes(2));
+
+    expect(apiFetchMock).toHaveBeenCalledTimes(1);
+    expect(uploadPhotosMock).toHaveBeenNthCalledWith(2, "new-splat-1", [file], "test-token");
   });
 });

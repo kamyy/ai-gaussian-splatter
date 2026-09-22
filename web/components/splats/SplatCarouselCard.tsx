@@ -8,6 +8,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Link from "next/link";
 
+import { CARD_SHADOW } from "@/components/layout/Card";
 import { Center } from "@/components/layout/Center";
 import { rem } from "@/lib/rem";
 import type { SplatListItem } from "@/lib/types";
@@ -35,38 +36,59 @@ export function SplatCarouselCard({ splat }: SplatCarouselCardProps) {
         </Stack>
       </Stack>
 
-      {splat.thumbnailPhotoUrl ? (
-        // Sized by width (height: "auto"), not a fixed box. Unlike the horizontally-scrolling filmstrip in
-        // web/components/splats/PhotoFilmstrip.tsx, this card has no scroll to absorb a wider photo, so the thumbnail
-        // fills the card's content width and grows or shrinks in height to match, at its own aspect ratio. No
-        // cropping and no letterboxing.
-        // biome-ignore lint/performance/noImgElement: presigned S3 URL has no fixed domain for next/image.
-        <img
-          src={splat.thumbnailPhotoUrl}
-          alt=""
-          draggable={false}
-          style={{
-            marginTop: rem(10),
-            width: "100%",
-            height: "auto",
-            borderRadius: rem(4),
-          }}
-        />
-      ) : (
-        <Center
-          sx={{
-            marginTop: rem(10),
-            width: "100%",
-            aspectRatio: "1",
-            borderRadius: rem(4),
-            backgroundColor: "action.hover",
-          }}
-        >
-          <Typography variant="caption" color="text.secondary">
-            No photos
-          </Typography>
-        </Center>
-      )}
+      {/* The mat border is a print mount, distinct from the Card it sits on (background.paper), so
+      background.default reads as a frame in both modes. The active card also gets a grease-pencil ring around it,
+      like a frame circled for printing on a real contact sheet. */}
+      <Box
+        sx={{
+          position: "relative",
+          marginTop: rem(10),
+          bgcolor: "background.default",
+          p: 0.5,
+        }}
+      >
+        {isActive && (
+          <Box
+            sx={{
+              position: "absolute",
+              inset: rem(-6),
+              border: `${rem(2)} solid`,
+              borderColor: "primary.main",
+              borderRadius: "50%",
+              pointerEvents: "none",
+            }}
+          />
+        )}
+        {splat.thumbnailPhotoUrl ? (
+          // Sized by width (height: "auto"), not a fixed box. Unlike the horizontally-scrolling filmstrip in
+          // web/components/splats/PhotoFilmstrip.tsx, this card has no scroll to absorb a wider photo, so the
+          // thumbnail fills the card's content width and grows or shrinks in height to match, at its own aspect
+          // ratio. No cropping and no letterboxing.
+          // biome-ignore lint/performance/noImgElement: presigned S3 URL has no fixed domain for next/image.
+          <img
+            src={splat.thumbnailPhotoUrl}
+            alt=""
+            draggable={false}
+            style={{
+              width: "100%",
+              height: "auto",
+              display: "block",
+            }}
+          />
+        ) : (
+          <Center
+            sx={{
+              width: "100%",
+              aspectRatio: "1",
+              backgroundColor: "action.hover",
+            }}
+          >
+            <Typography variant="caption" color="text.secondary">
+              No photos
+            </Typography>
+          </Center>
+        )}
+      </Box>
     </Box>
   );
 
@@ -75,10 +97,14 @@ export function SplatCarouselCard({ splat }: SplatCarouselCardProps) {
   // remount the whole workspace chrome for no reason. Rendered as a plain Card instead, with no href, when it's the
   // one already open.
   if (isActive) {
-    return <Card variant="outlined">{content}</Card>;
+    return (
+      <Card variant="outlined" sx={{ boxShadow: CARD_SHADOW }}>
+        {content}
+      </Card>
+    );
   }
   return (
-    <Card variant="outlined">
+    <Card variant="outlined" sx={{ boxShadow: CARD_SHADOW }}>
       <CardActionArea component={Link} href={`/splats/${splat.id}`} draggable={false}>
         {content}
       </CardActionArea>

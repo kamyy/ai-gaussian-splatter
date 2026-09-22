@@ -61,7 +61,8 @@ describe("PointCloudPage", () => {
 
     await renderPage();
 
-    expect(screen.getByText(/Review the point cloud below/i)).toBeInTheDocument();
+    expect(screen.getByTestId("splat-viewer")).toHaveTextContent("https://s3/point_cloud.ply");
+    expect(screen.getByRole("button", { name: "Start training" })).toBeInTheDocument();
   });
 
   it("shows a checking message while the point cloud presign hasn't arrived yet", async () => {
@@ -71,6 +72,40 @@ describe("PointCloudPage", () => {
     await renderPage();
 
     expect(screen.getByText(/isn't ready yet/i)).toBeInTheDocument();
+  });
+
+  it("shows a loading placeholder, not the viewer's own 'not available', while the presign is still in flight", async () => {
+    // A job past awaiting_training always has pointCloudS3Key set (the reconstruct phase produced one), so a null
+    // pointCloudUrl here means the presign fetch hasn't resolved yet, not that there is nothing to show.
+    useLatestJobMock.mockReturnValue({
+      data: { ...baseJob, status: "training_running" },
+      error: undefined,
+      isLoading: false,
+      mutate: vi.fn(),
+    });
+    useSWRMock.mockReturnValue({ data: undefined, error: undefined, mutate: vi.fn() });
+
+    await renderPage();
+
+    expect(screen.getByTestId("splat-loading")).toBeInTheDocument();
+    expect(screen.queryByTestId("splat-viewer")).not.toBeInTheDocument();
+  });
+
+  it("renders the viewer (which reports 'not available') when the job genuinely has no point cloud yet", async () => {
+    // Before reconstruct produces one, pointCloudS3Key is null and the presign hook never fetches (its SWR key is
+    // null), so pointCloudUrl staying null here is a real absence, not a loading gap.
+    useLatestJobMock.mockReturnValue({
+      data: { ...baseJob, status: "reconstruction_running", pointCloudS3Key: null },
+      error: undefined,
+      isLoading: false,
+      mutate: vi.fn(),
+    });
+    useSWRMock.mockReturnValue({ data: undefined, error: undefined, mutate: vi.fn() });
+
+    await renderPage();
+
+    expect(screen.getByTestId("splat-viewer")).toBeInTheDocument();
+    expect(screen.queryByTestId("splat-loading")).not.toBeInTheDocument();
   });
 
   it("renders the plain viewer once training has moved past the review pause", async () => {

@@ -147,10 +147,40 @@ export function useDragMomentumScroll<T extends HTMLElement>({ axis }: UseDragMo
     }
   }
 
+  // Shared by the "scroll to first/last" edge buttons (web/components/splats/ScrollEdgeButton.tsx) in both callers,
+  // axis-aware so each caller doesn't have to duplicate its own left/top branch.
+  function scrollToStart() {
+    stopMomentum();
+    const el = elementRef.current;
+    if (!el) {
+      return;
+    }
+    if (axis === "x") {
+      el.scrollTo({ left: 0, behavior: "smooth" });
+    } else {
+      el.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
+  function scrollToEnd() {
+    stopMomentum();
+    const el = elementRef.current;
+    if (!el) {
+      return;
+    }
+    if (axis === "x") {
+      el.scrollTo({ left: el.scrollWidth, behavior: "smooth" });
+    } else {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    }
+  }
+
   return {
     elementRef,
     isPanning,
     stopMomentum,
+    scrollToStart,
+    scrollToEnd,
     dragHandlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp },
   };
 }

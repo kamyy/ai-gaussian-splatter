@@ -14,6 +14,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/components/splats/PhotoFilmstrip", () => ({
   PhotoFilmstrip: () => <div data-testid="photo-filmstrip" />,
+  HANDLE_HEIGHT: 40,
 }));
 
 const { useSplatMock, useLatestJobMock } = vi.hoisted(() => ({
@@ -112,5 +113,21 @@ describe("SplatLayout", () => {
     await renderLayout();
 
     expect(screen.getByText("child content")).toBeInTheDocument();
+  });
+
+  it("shows a cancelled confirmation, the one terminal status with no other UI surface", async () => {
+    setup({ splatStatus: "failed", job: { ...baseJob, status: "cancelled" } });
+    await renderLayout();
+
+    expect(screen.getByText("Cancelled")).toBeInTheDocument();
+  });
+
+  it("does not show the job status card once a non-cancelled job has loaded", async () => {
+    // awaiting_training/complete have their own UI elsewhere in the route; in-progress/failed have the snackbar.
+    setup({ splatStatus: "processing", job: baseJob });
+    await renderLayout();
+
+    expect(screen.queryByText(/Loading job status/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Cancelled")).not.toBeInTheDocument();
   });
 });
