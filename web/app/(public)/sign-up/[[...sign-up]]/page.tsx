@@ -1,6 +1,6 @@
-import { SignUp } from "@clerk/nextjs";
 import type { Metadata } from "next";
 
+import { ThemedSignUp } from "@/components/auth/ThemedSignUp";
 import { Center } from "@/components/layout/Center";
 
 export const metadata: Metadata = {
@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export default function SignUpPage() {
   return (
     <Center sx={{ py: 4 }}>
-      <SignUp />
+      <ThemedSignUp />
     </Center>
   );
 }
