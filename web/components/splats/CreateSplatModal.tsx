@@ -141,8 +141,11 @@ export function CreateSplatModal({ opened, onClose }: CreateSplatModalProps) {
           <Box
             {...getRootProps()}
             sx={{
+              // "divider" is tuned for a 1px separator against an adjacent surface, not a dashed outline standing
+              // alone in open space — in dark mode it sits too close to background.paper's own tone to read as a
+              // drop-zone edge. text.secondary keeps a legible boundary in both modes.
               border: "1px dashed",
-              borderColor: isDragReject ? "error.main" : "divider",
+              borderColor: isDragReject ? "error.main" : "text.secondary",
               borderRadius: 1,
               p: 3,
               textAlign: "center",
