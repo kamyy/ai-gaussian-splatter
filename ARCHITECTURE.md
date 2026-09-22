@@ -40,7 +40,7 @@ Why the system is shaped this way: decisions, alternatives rejected, costs accep
 1. User uploads discrete multi-angle photos of one object — not a panorama, individual stills taken while walking around it.
    - Quality tracks angular coverage and overlap between neighboring views, not raw photo count.
    - Gaps in coverage surface as a low COLMAP registered ratio (step 2, below).
-   - [Capture](RUNBOOK.md#16-capture) procedure.
+   - [Capture](RUNBOOK.md#15-capture) procedure.
 2. **COLMAP** (`worker/pipeline/sfm.py`): exhaustive matching → camera poses + sparse cloud.
    - Accuracy over speed, since the object-centric photo sets are small.
    - `worker/run_job.py` fails below 50% registered images. That reflects capture quality, not a pipeline bug.
@@ -112,7 +112,7 @@ A baked AMI would attack the smaller half — fixed overhead, not training. Trai
   - Prisma's `upsert()` can race unless its `update` clause is non-empty.
   - Drizzle also needs no codegen step or query-engine binary.
   - Cons: there's no `@@map` equivalent for enum members, so Postgres labels and TypeScript unions must match exactly (see status values, below).
-- JSON field *names* are camelCase. Status *values* are snake_case (`colmap_running`), because `pgEnum` values are both the DB labels and the TS members — one spelling end to end.
+- JSON field *names* are camelCase. Status *values* are snake_case (`reconstruction_running`), because `pgEnum` values are both the DB labels and the TS members — one spelling end to end.
 - The GPU worker callback accepts snake_case request fields (`error_message`, `result_s3_key`, …) and remaps them to camelCase for Drizzle. Status *values* need no translation, since they're already the shared spelling.
 
 ---
@@ -293,7 +293,7 @@ Three tiers (`.github/workflows/ci.yml`):
 
 Milestones (`M0`…`M10`) name phases, not a schedule, and they are not built in order. Definitions here; status in [State / what's next](AGENTS.md#10-state--whats-next).
 
-- **M0** — shoot one real object per [Capture](RUNBOOK.md#16-capture); hand-run COLMAP → gsplat → export; view in a standalone page.
+- **M0** — shoot one real object per [Capture](RUNBOOK.md#15-capture); hand-run COLMAP → gsplat → export; view in a standalone page.
 - **M1** — Same run via scripted `worker/pipeline/` modules.
 - **M2** — Schema + CRUD endpoints.
 - **M3** — S3 presign/complete against a real bucket.

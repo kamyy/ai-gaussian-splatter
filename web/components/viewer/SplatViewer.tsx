@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { type Box3, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 
+import { CARD_SHADOW } from "@/components/layout/Card";
 import { Center } from "@/components/layout/Center";
 import { AXES_HELPER_SIZE } from "./constants";
 import { PointCloudScene } from "./PointCloudScene";
@@ -192,30 +193,56 @@ export function SplatViewer({ mode, splatUrl, pointCloudUrl, height = "70vh" }: 
   const hasAsset = mode === "colmap_points" ? pointCloudUrl !== null : splatUrl !== null;
 
   return (
-    <Box sx={{ width: "100%", height, position: "relative" }}>
-      {/* flat/linear: R3F's default ACESFilmicToneMapping + SRGBColorSpace runs the splat shader's raw, untoneMapped
-          color output through a curve it was never designed for. This library predates R3F's color-managed
-          defaults. */}
-      <Canvas flat linear camera={{ up: [0, -1, -0.6] }}>
-        <ViewerSceneManager
-          mode={mode}
-          splatUrl={splatUrl}
-          pointCloudUrl={pointCloudUrl}
-          onError={handleError}
-          controlsRef={controlsRef}
-        />
-        <OrbitControls ref={controlsRef} makeDefault />
-      </Canvas>
-      {activeError && (
-        <Center sx={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-          <Typography color="error">{activeError}</Typography>
-        </Center>
-      )}
-      {!activeError && !hasAsset && (
-        <Center sx={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-          <Typography color="text.secondary">Not available for this splat.</Typography>
-        </Center>
-      )}
+    // The mat/mount border is a print frame around the viewport, matching the rest of the Contact Sheet direction
+    // (AGENTS.md) — background.paper for contrast against the page ground the caller renders this on, plus the same
+    // drop shadow web/components/layout/Card.tsx uses so the mounted frame reads as sitting above the page rather
+    // than flush with it.
+    <Box
+      sx={{
+        width: "100%",
+        height,
+        p: 1,
+        boxSizing: "border-box",
+        bgcolor: "background.paper",
+        boxShadow: CARD_SHADOW,
+      }}
+    >
+      <Box
+        sx={{
+          width: "100%",
+          height: "100%",
+          position: "relative",
+          // theme.vars (not theme.palette) so this tracks the active scheme rather than freezing to
+          // defaultColorScheme; mainChannel + rgba() composes the alpha since a var() reference can't be
+          // string-suffixed with hex alpha digits the way a literal hex color could.
+          backgroundImage: theme =>
+            `radial-gradient(ellipse at 50% 50%, rgba(${theme.vars.palette.primary.mainChannel} / 0.071), transparent 65%)`,
+        }}
+      >
+        {/* flat/linear: R3F's default ACESFilmicToneMapping + SRGBColorSpace runs the splat shader's raw, untoneMapped
+            color output through a curve it was never designed for. This library predates R3F's color-managed
+            defaults. */}
+        <Canvas flat linear camera={{ up: [0, -1, -0.6] }}>
+          <ViewerSceneManager
+            mode={mode}
+            splatUrl={splatUrl}
+            pointCloudUrl={pointCloudUrl}
+            onError={handleError}
+            controlsRef={controlsRef}
+          />
+          <OrbitControls ref={controlsRef} makeDefault />
+        </Canvas>
+        {activeError && (
+          <Center sx={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+            <Typography color="error">{activeError}</Typography>
+          </Center>
+        )}
+        {!activeError && !hasAsset && (
+          <Center sx={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+            <Typography color="text.secondary">Not available for this splat.</Typography>
+          </Center>
+        )}
+      </Box>
     </Box>
   );
 }

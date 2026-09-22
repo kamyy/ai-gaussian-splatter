@@ -68,7 +68,7 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
   - A **worker job** is one splat's run through the pipeline: a `jobs` row, plus a GPU spot instance per stage. Say "worker job" for the run, "worker instance" for the EC2 instance, and "stage" for the reconstruct or train half that one instance runs.
 - **Every heading is numbered — `## 2.`, `### 2.3` — and a `---` rule goes immediately before every `##`.**
   - The number is what tells the reader which section a subsection belongs to once its parent has scrolled off. The rule marks where each top-level section starts.
-  - Headings stop at `###`, because GitHub renders `####` at body size, where it stops reading as a heading at all. Where a section needs steps, each step becomes a `###` of its own and the parent opens with an ordered list linking them, as [Worker (local pipeline run)](RUNBOOK.md#14-worker-local-pipeline-run) and [Configuring continuous deployment](RUNBOOK.md#23-configuring-continuous-deployment) do.
+  - Headings stop at `###`, because GitHub renders `####` at body size, where it stops reading as a heading at all. Where a section needs steps, each step becomes a `###` of its own and the parent opens with an ordered list linking them, as [Deploying to production](RUNBOOK.md#2-deploying-to-production) and [Configuring continuous deployment](RUNBOOK.md#23-configuring-continuous-deployment) do.
   - Renumbering moves every anchor below the change, so inserting or reordering a section means repointing the links into the ones after it. The ToC labels carry the number; prose links keep the plain section name.
   - Put the rule under a blank line. Directly below text, `---` turns that text into a heading instead.
 - **When prose names another section — in the same doc or a different one — link it, don't just quote or bold the name.**
@@ -243,7 +243,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 ### 6.5 Testing
 
 - `scripts/dev/run-tests.sh` runs every lint, typecheck, and test suite.
-  - Postgres-dependent web tests need `TEST_DATABASE_URL` (see [`RUNBOOK.md`](RUNBOOK.md#110-full-test-suite)). Run the relevant subset of its commands after changes.
+  - Postgres-dependent web tests need `TEST_DATABASE_URL` (see [`RUNBOOK.md`](RUNBOOK.md#19-full-test-suite)). Run the relevant subset of its commands after changes.
 - `scripts:check` also runs `scripts/dev/terraform-test-lib.sh`, which checks the HCL scrapers in `scripts/lib/terraform.sh` against `infra/variables.tf` and against fixtures. `.github/workflows/deploy.yml` signs with `tf_get_aws_region`, so a spelling in `infra/variables.tf` that it no longer reads breaks a deploy rather than a plan.
 - `pnpm biome:ci` is a single workspace-wide command (root's `biome.json` covers `scripts/*.js` and `web/**` in one pass), used by CI's `lint-format` job and by the pre-commit hook.
   - `web:check`/`worker:check`/`infra:check` are root package.json scripts, one per package — the same scripts CI's `web`/`worker`/`infra` jobs call. `infra:check` runs `scripts/dev/terraform-check.sh` so it uses the pinned CLI in `scripts/lib/terraform.sh`, not whichever `terraform` is first on PATH.

@@ -10,7 +10,8 @@ import { useSplats } from "@/lib/hooks";
 import { defaultSubRoute } from "@/lib/splatDefaultRoute";
 
 // The carousel (rendered by the ancestor layout, web/app/(authenticated)/splats/layout.tsx) already provides the
-// splat list and the "New Splat" entry point, so this is only what /splats itself renders with nothing selected.
+// splat list and the "Create new splat" entry point, so this is only what /splats itself renders with nothing
+// selected.
 // useSplats() returns newest first, so if any splat exists this redirects straight to the most recent one's default
 // sub-route instead of making a returning user pick one every time — including right after sign-in, since
 // web/app/page.tsx sends a signed-in visitor here first. Only an account with no splats at all sees the message
@@ -42,7 +43,7 @@ export default function NoSplatsPage() {
 
   return (
     <Center sx={{ height: "100%" }}>
-      <Typography color="text.secondary">Select a splat, or click New Splat to create one.</Typography>
+      <Typography color="text.secondary">Select a splat, or click Create new splat to create one.</Typography>
     </Center>
   );
 }

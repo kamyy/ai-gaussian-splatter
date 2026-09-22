@@ -34,7 +34,7 @@ describe("GET /api/v1/splats/[splatId]/point-cloud", () => {
   }
 
   it("404s before the reconstruct phase has produced a point cloud key", async () => {
-    const { splat } = await seed("colmap_running", null);
+    const { splat } = await seed("reconstruction_running", null);
 
     const res = await GET({} as never, ctx(splat.id));
     expect(res.status).toBe(404);

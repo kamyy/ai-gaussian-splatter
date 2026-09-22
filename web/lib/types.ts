@@ -13,20 +13,58 @@ export type SplatStatus = (typeof SPLAT_STATUSES)[number];
 
 export const PHOTO_UPLOAD_STATUSES = ["pending", "uploaded", "failed"] as const;
 
-export const JOB_STATUSES = [
-  "queued",
-  "launching",
-  "colmap_running",
-  "awaiting_training",
-  "training_running",
-  "uploading_result",
-  "complete",
-  "failed",
-  "cancelled",
-] as const;
-export type JobStatus = (typeof JOB_STATUSES)[number];
+// Named so a comparison uses a member (JobStatus.queued) rather than repeating the label as a string.
+export const JobStatus = {
+  queued: "queued",
+  launching: "launching",
+  reconstruction_running: "reconstruction_running",
+  awaiting_training: "awaiting_training",
+  training_running: "training_running",
+  uploading_result: "uploading_result",
+  complete: "complete",
+  failed: "failed",
+  cancelled: "cancelled",
+} as const;
 
-export const JOB_ENDED_STATUSES: JobStatus[] = ["complete", "failed", "cancelled"];
+// Derived from JobStatus's own values rather than hand-listed a second time, so the two can't drift. The cast is a
+// literal tuple, not a plain `JobStatus[]`, because pgEnum (web/lib/server/db/schema.ts) requires a
+// `[string, ...string[]]` shape that Object.values()'s inferred `JobStatus[]` doesn't satisfy on its own.
+export const JOB_STATUSES = Object.values(JobStatus) as [JobStatus, ...JobStatus[]];
+export type JobStatus = (typeof JobStatus)[keyof typeof JobStatus];
+
+// The one status value the app renamed: a worker built before that rename can still be running against a new
+// database (a worker instance runs for up to WORKER_MAX_LIFETIME_MINUTES, which can outlast a deploy), and its
+// callback still sends this name. web/app/api/v1/internal/jobs/[jobId]/status/route.ts is the only place that reads
+// this — it normalizes an incoming "colmap_running" to JobStatus.reconstruction_running before anything else in the
+// app sees it, so nothing else ever needs to know the old name existed.
+export const LEGACY_COLMAP_RUNNING_STATUS = "colmap_running";
+
+// The Postgres enum's own label set: every value the type has ever had, in the order each was added, rather than
+// JOB_STATUSES' own (cleaner, but different) order. LEGACY_COLMAP_RUNNING_STATUS stays a valid column value so a
+// stale worker's callback still writes instead of getting rejected, even though JobStatus itself no longer names
+// it. Postgres has no cheap way to drop an enum label (only recreating the whole type), so once added it stays
+// rather than getting removed in a later release the way a column or constraint would.
+//
+// Written out in this exact historical order, not derived from JOB_STATUSES, so `pnpm db:generate` sees the new
+// value as a plain append and emits a single ALTER TYPE … ADD VALUE — reordering the existing values here instead
+// makes drizzle-kit conclude the type needs dropping and recreating around the column, which the db-migration
+// skill flags as unsafe against a live table.
+type JobStatusDbValue = JobStatus | typeof LEGACY_COLMAP_RUNNING_STATUS;
+
+export const JOB_STATUS_DB_VALUES = [
+  JobStatus.queued,
+  JobStatus.launching,
+  LEGACY_COLMAP_RUNNING_STATUS,
+  JobStatus.awaiting_training,
+  JobStatus.training_running,
+  JobStatus.uploading_result,
+  JobStatus.complete,
+  JobStatus.failed,
+  JobStatus.cancelled,
+  JobStatus.reconstruction_running,
+] as [JobStatusDbValue, ...JobStatusDbValue[]];
+
+export const JOB_ENDED_STATUSES: JobStatus[] = [JobStatus.complete, JobStatus.failed, JobStatus.cancelled];
 
 export interface Splat {
   id: string;

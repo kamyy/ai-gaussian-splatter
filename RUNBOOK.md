@@ -7,12 +7,11 @@ Most procedures below run a script from `scripts/dev/` or `scripts/prod/`, and e
   - [1.2 Web (frontend + REST API)](#12-web-frontend--rest-api)
   - [1.3 Building and running the splat-web container locally](#13-building-and-running-the-splat-web-container-locally)
   - [1.4 Worker (local pipeline run)](#14-worker-local-pipeline-run)
-  - [1.5 One-time GPU passthrough setup](#15-one-time-gpu-passthrough-setup)
-  - [1.6 Capture](#16-capture)
-  - [1.7 Running the pipeline](#17-running-the-pipeline)
-  - [1.8 Triggering the worker from pnpm dev](#18-triggering-the-worker-from-pnpm-dev)
-  - [1.9 Installing Terraform](#19-installing-terraform)
-  - [1.10 Full test suite](#110-full-test-suite)
+  - [1.5 Capture](#15-capture)
+  - [1.6 Running the pipeline](#16-running-the-pipeline)
+  - [1.7 Triggering the worker from pnpm dev](#17-triggering-the-worker-from-pnpm-dev)
+  - [1.8 Installing Terraform](#18-installing-terraform)
+  - [1.9 Full test suite](#19-full-test-suite)
 - [2. Deploying to production](#2-deploying-to-production)
   - [2.1 Signing in to AWS](#21-signing-in-to-aws)
   - [2.2 Creating account prerequisites](#22-creating-account-prerequisites)
@@ -45,13 +44,14 @@ scripts/dev/create-resources.sh
 
 ### 1.2 Web (frontend + REST API)
 
-Start Postgres before running `pnpm dev`. `scripts/dev/db-up.sh` creates/starts the `splat-pg` container if needed before creating the empty `ai_gaussian_splatter` and `ai_gaussian_splatter_test` databases within it. `scripts/dev/db-down.sh` stops and removes the container and the `splat-pg-data` volume, taking the dev and test databases with it.
+Start Postgres before running `pnpm dev`. The `splat-pg` container holds the dev database `ai_gaussian_splatter` and the test database `ai_gaussian_splatter_test`, both created empty.
 
 ```bash
-scripts/dev/db-up.sh
+scripts/dev/db-up.sh    # creates or starts the splat-pg container, then any missing database
+scripts/dev/db-down.sh  # removes the splat-pg container, the data volume, and both databases with it
 ```
 
-`pnpm dev` and `drizzle-kit` reach that container on `localhost:5432`, since they run on the host rather than in a container. The [`splat-web` container](#13-building-and-running-the-splat-web-container-locally) reaches it on `host.containers.internal:5432` instead. Data is stored at `/var/lib/postgresql`.
+`pnpm dev`, `pnpm db:migrate` and `pnpm db:studio` reach `splat-pg` on `localhost:5432`, since they run on the host rather than in a container. The [splat-web container](#13-building-and-running-the-splat-web-container-locally) reaches it on `host.containers.internal:5432` instead. Data is stored at `/var/lib/postgresql`.
 
 One-time setup: [Dev AWS resources](#11-dev-aws-resources) creates `web/.env` along with the dev buckets and IAM user. Fill in its Clerk keys. The `DATABASE_*` values already match the container above.
 
@@ -81,20 +81,15 @@ scripts/dev/run-web-container.sh
 
 A real Nvidia GPU is required. Both worker images carry a CUDA runtime, and `splat-worker-reconstruct` carries a CUDA-enabled COLMAP build as well, so only the Nvidia GPU driver and `nvidia-container-toolkit` have to be installed locally.
 
-A local run covers the four sections below. The last two are alternatives: the stage scripts, or the app's Process button.
-
-1. [One-time GPU passthrough setup](#15-one-time-gpu-passthrough-setup)
-2. [Capture](#16-capture)
-3. [Running the pipeline](#17-running-the-pipeline)
-4. [Triggering the worker from pnpm dev](#18-triggering-the-worker-from-pnpm-dev)
-
-### 1.5 One-time GPU passthrough setup
+Run just once to allow podman to pass the host's Nvidia GPU through to containers:
 
 ```bash
 scripts/dev/setup-gpu-passthrough.sh
 ```
 
-### 1.6 Capture
+Then shoot a set of photos ([Capture](#15-capture)) and run it through the pipeline, either with the stage scripts ([Running the pipeline](#16-running-the-pipeline)) or from the web app's Start button ([Triggering the worker from pnpm dev](#17-triggering-the-worker-from-pnpm-dev)).
+
+### 1.5 Capture
 
 Walk around the object shooting individual stills — every side, a couple of heights, each shot overlapping its neighbors. Aim for ~50. The API's floor of 20 (`MIN_PHOTOS_PER_SPLAT`, HTTP 400 below it) is a hard minimum, not a quality target: extra frames only help where they close a coverage gap, and near-duplicates just add COLMAP matching cost.
 
@@ -113,7 +108,7 @@ When a set registers poorly, `worker/jobdir/colmap/database.db` says why — gue
 
 Very few of either points at blur, low texture, or an orbit that doesn't connect, rather than a pipeline bug. No healthy thresholds are recorded yet, so read the counts relative to each other rather than against a known-good baseline.
 
-### 1.7 Running the pipeline
+### 1.6 Running the pipeline
 
 The pipeline can run standalone — nothing has to be listening at `APP_PUBLIC_URL`.
 
@@ -124,9 +119,9 @@ scripts/dev/worker-reconstruct.sh              # photos from worker/photos, or p
 scripts/dev/worker-train.sh <splat-id>         # add --fast for a 20-iteration smoke test
 ```
 
-### 1.8 Triggering the worker from pnpm dev
+### 1.7 Triggering the worker from pnpm dev
 
-Set `WORKER_LOCAL_LAUNCH=true` in `web/.env` to make the web app's Process button run the worker on your own GPU instead of launching a real EC2 spot instance. Output lands in `worker/jobdir/<jobId>/worker.log`, for the same [registration debugging](#16-capture) the manual flow uses. Needs the one-time [GPU passthrough setup](#15-one-time-gpu-passthrough-setup) and an image already built — this path never builds one for you.
+Set `WORKER_LOCAL_LAUNCH=true` in `web/.env` to make the web app's Start button run the worker on your own GPU instead of launching a real EC2 spot instance. Output lands in `worker/jobdir/<jobId>/worker.log`, for the same [registration debugging](#15-capture) the manual flow uses. Needs the one-time GPU passthrough setup ([Worker (local pipeline run)](#14-worker-local-pipeline-run)) and an image already built — this path never builds one for you.
 
 ```bash
 cd worker
@@ -136,9 +131,9 @@ cd ../web
 pnpm dev
 ```
 
-Upload photos and click Process in the browser as normal. The worker job goes through the same DB rows, callback token, and `/api/v1/internal/jobs/[jobId]/status` route a real EC2 run would use, so its status updates in the dashboard live. Leave `WORKER_LOCAL_LAUNCH` unset (or `false`) to go back to launching a real spot instance.
+Upload photos and click Start in the browser as normal. The worker job goes through the same DB rows, callback token, and `/api/v1/internal/jobs/[jobId]/status` route a real EC2 run would use, so its status updates in the dashboard live. Leave `WORKER_LOCAL_LAUNCH` unset (or `false`) to go back to launching a real spot instance.
 
-### 1.9 Installing Terraform
+### 1.8 Installing Terraform
 
 `infra/providers.tf` pins an exact `required_version`, so any other CLI version fails `terraform init`. Install that exact release as a standalone binary:
 
@@ -146,7 +141,7 @@ Upload photos and click Process in the browser as normal. The worker job goes th
 scripts/dev/terraform-install.sh
 ```
 
-### 1.10 Full test suite
+### 1.9 Full test suite
 
 ```bash
 scripts/dev/run-tests.sh

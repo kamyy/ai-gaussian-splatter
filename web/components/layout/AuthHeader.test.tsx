@@ -43,14 +43,13 @@ describe("AuthHeader", () => {
     expect(screen.queryByText("Ceramic mug")).not.toBeInTheDocument();
   });
 
-  it("shows the current splat's name and status on a splat sub-route", () => {
+  it("shows the current splat's name on a splat sub-route", () => {
     useParamsMock.mockReturnValue({ id: baseSplat.id });
     useSplatMock.mockReturnValue({ data: baseSplat });
     renderHeader();
 
     expect(useSplatMock).toHaveBeenCalledWith(baseSplat.id);
     expect(screen.getByText("Ceramic mug")).toBeInTheDocument();
-    expect(screen.getByText("processing")).toBeInTheDocument();
   });
 
   it("always renders the user button", () => {

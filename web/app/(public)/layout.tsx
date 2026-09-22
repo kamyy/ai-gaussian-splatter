@@ -1,7 +1,9 @@
 import { Show, UserButton } from "@clerk/nextjs";
 import Box from "@mui/material/Box";
+import Stack from "@mui/material/Stack";
 
 import { NavMenu } from "@/components/layout/NavMenu";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { rem } from "@/lib/rem";
 import { theme } from "../../theme";
 
@@ -43,9 +45,12 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
         >
           <NavMenu />
 
-          <Show when="signed-in">
-            <UserButton />
-          </Show>
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+            <ThemeToggle />
+            <Show when="signed-in">
+              <UserButton />
+            </Show>
+          </Stack>
         </Box>
       </Box>
       <Box

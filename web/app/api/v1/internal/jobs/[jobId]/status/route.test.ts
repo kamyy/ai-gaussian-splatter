@@ -44,11 +44,11 @@ describe("worker status callback", () => {
     const { job } = await seed();
     expect(job.status).toBe("queued");
 
-    const res = await PATCH(req("tok", { status: "colmap_running" }), ctx(job.id));
+    const res = await PATCH(req("tok", { status: "reconstruction_running" }), ctx(job.id));
     expect(res.status).toBe(204);
 
     const [updated] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
-    expect(updated.status).toBe("colmap_running");
+    expect(updated.status).toBe("reconstruction_running");
     expect(updated.colmapStartedAt).not.toBeNull();
     // updatedAt only moves via .$onUpdate(); nothing in the database does it.
     expect(updated.updatedAt.getTime()).toBeGreaterThan(job.updatedAt.getTime());
@@ -61,7 +61,7 @@ describe("worker status callback", () => {
     const { job } = await seed();
     await getDb().update(jobs).set({ status: "cancelled" }).where(eq(jobs.id, job.id));
 
-    const res = await PATCH(req("tok", { status: "colmap_running" }), ctx(job.id));
+    const res = await PATCH(req("tok", { status: "reconstruction_running" }), ctx(job.id));
     expect(res.status).toBe(204);
 
     const [updated] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
@@ -71,10 +71,10 @@ describe("worker status callback", () => {
 
   it("does not overwrite a stage timestamp when a callback is duplicated", async () => {
     const { job } = await seed();
-    await PATCH(req("tok", { status: "colmap_running" }), ctx(job.id));
+    await PATCH(req("tok", { status: "reconstruction_running" }), ctx(job.id));
     const [first] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
 
-    await PATCH(req("tok", { status: "colmap_running" }), ctx(job.id));
+    await PATCH(req("tok", { status: "reconstruction_running" }), ctx(job.id));
     const [second] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
 
     expect(second.colmapStartedAt?.getTime()).toBe(first.colmapStartedAt?.getTime());
@@ -84,7 +84,7 @@ describe("worker status callback", () => {
     // awaiting_training can sit for hours while the user decides whether to train. Stamping colmapFinishedAt on
     // training_running instead would fold that think-time into COLMAP's own wall clock.
     const { job } = await seed();
-    await PATCH(req("tok", { status: "colmap_running" }), ctx(job.id));
+    await PATCH(req("tok", { status: "reconstruction_running" }), ctx(job.id));
 
     await PATCH(req("tok", { status: "awaiting_training", point_cloud_s3_key: "p.ply" }), ctx(job.id));
     const [afterAwaiting] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
@@ -113,6 +113,20 @@ describe("worker status callback", () => {
     expect(updatedJob.resultS3Key).toBe("r.ply");
     expect(updatedSplat.status).toBe("complete");
     expect(updatedSplat.thumbnailS3Key).toBe("t.jpg");
+  });
+
+  it("normalizes a stale worker's pre-rename status value instead of rejecting it", async () => {
+    // A worker built before "colmap_running" was renamed can still be running against this database (worker
+    // instances run for up to WORKER_MAX_LIFETIME_MINUTES, which can outlast a deploy). Its callback must still
+    // write, as the renamed value, not 422.
+    const { job } = await seed();
+
+    const res = await PATCH(req("tok", { status: "colmap_running" }), ctx(job.id));
+    expect(res.status).toBe(204);
+
+    const [updated] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
+    expect(updated.status).toBe("reconstruction_running");
+    expect(updated.colmapStartedAt).not.toBeNull();
   });
 
   it("rejects a status value that is not a database enum label", async () => {

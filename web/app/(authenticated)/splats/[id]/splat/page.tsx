@@ -6,15 +6,17 @@ import Typography from "@mui/material/Typography";
 import { use } from "react";
 import useSWR from "swr";
 
+import { VIEWER_BOTTOM_GAP, VIEWER_TOP_GAP } from "@/components/splats/PhotoFilmstrip";
 import { SplatViewer, SplatViewerLoading } from "@/components/viewer/SplatViewer";
 import { apiFetch } from "@/lib/apiFetch";
-import { useSplat } from "@/lib/hooks";
+import { useLatestJob, useSplat } from "@/lib/hooks";
 import { rem } from "@/lib/rem";
 
 export default function SplatPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { getToken } = useAuth();
   const { data: splat } = useSplat(id);
+  const { data: job } = useLatestJob(id);
 
   const { data: splatUrl, error: splatUrlError } = useSWR(
     splat?.status === "complete" ? ["splat-download", id] : null,
@@ -30,9 +32,13 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
   );
 
   if (splat?.status === "failed") {
+    // Read directly from the job, not left to web/components/job/JobStatusSnackbar.tsx's toast: that toast is
+    // dismissible, and dismissing it would otherwise drop the only copy of the message.
     return (
       <Box sx={{ pt: rem(76), pl: rem(24) }}>
-        <Typography color="error">Processing failed — see job status for details.</Typography>
+        <Typography color="error">
+          {job?.errorMessage ? `Processing failed: ${job.errorMessage}` : "Processing failed."}
+        </Typography>
       </Box>
     );
   }
@@ -54,5 +60,14 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
     return <SplatViewerLoading />;
   }
 
-  return <SplatViewer mode="splat" splatUrl={splatUrl} pointCloudUrl={null} height="100%" />;
+  // VIEWER_TOP_GAP/VIEWER_BOTTOM_GAP (web/components/splats/PhotoFilmstrip.tsx) keep the viewer close to the
+  // header above and clear of the collapsed filmstrip below, with room for the viewer's own drop shadow
+  // (web/components/viewer/SplatViewer.tsx) in the gap — without the bottom one, the viewer's own bottom edge
+  // sits exactly where the filmstrip's closed handle is painted, and the handle (later in the DOM, so on top)
+  // hides it.
+  return (
+    <Box sx={{ height: "100%", pt: rem(VIEWER_TOP_GAP), pb: rem(VIEWER_BOTTOM_GAP), pl: rem(24), pr: rem(24) }}>
+      <SplatViewer mode="splat" splatUrl={splatUrl} pointCloudUrl={null} height="100%" />
+    </Box>
+  );
 }

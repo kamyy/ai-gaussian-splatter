@@ -1,6 +1,6 @@
-import { SignIn } from "@clerk/nextjs";
 import type { Metadata } from "next";
 
+import { ThemedSignIn } from "@/components/auth/ThemedSignIn";
 import { Center } from "@/components/layout/Center";
 
 export const metadata: Metadata = {
@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export default function SignInPage() {
   return (
     <Center sx={{ py: 4 }}>
-      <SignIn />
+      <ThemedSignIn />
     </Center>
   );
 }

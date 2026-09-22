@@ -1,19 +1,31 @@
+import KeyboardDoubleArrowDown from "@mui/icons-material/KeyboardDoubleArrowDown";
+import KeyboardDoubleArrowLeft from "@mui/icons-material/KeyboardDoubleArrowLeft";
+import KeyboardDoubleArrowRight from "@mui/icons-material/KeyboardDoubleArrowRight";
+import KeyboardDoubleArrowUp from "@mui/icons-material/KeyboardDoubleArrowUp";
 import IconButton from "@mui/material/IconButton";
 
-import { ChevronEdgeIcon } from "./ChevronEdgeIcon";
+export type ScrollEdgeDirection = "up" | "down" | "left" | "right";
+
+const DIRECTION_ICON = {
+  up: KeyboardDoubleArrowUp,
+  down: KeyboardDoubleArrowDown,
+  left: KeyboardDoubleArrowLeft,
+  right: KeyboardDoubleArrowRight,
+} as const;
 
 interface ScrollEdgeButtonProps {
   label: string;
-  rotation: number;
+  direction: ScrollEdgeDirection;
   onClick: () => void;
 }
 
-// Shared by web/components/splats/SplatCarousel.tsx and web/components/splats/PhotoFilmstrip.tsx: a small button that
-// jumps a scroll container to one end, rotating the same chevron-with-bar glyph per direction/orientation.
-export function ScrollEdgeButton({ label, rotation, onClick }: ScrollEdgeButtonProps) {
+// Shared by web/components/splats/SplatCarousel.tsx and web/components/splats/PhotoFilmstrip.tsx: a small button
+// that jumps a scroll container to one end.
+export function ScrollEdgeButton({ label, direction, onClick }: ScrollEdgeButtonProps) {
+  const Icon = DIRECTION_ICON[direction];
   return (
     <IconButton size="small" sx={{ color: "text.secondary" }} aria-label={label} onClick={onClick}>
-      <ChevronEdgeIcon size={16} style={{ transform: `rotate(${rotation}deg)` }} />
+      <Icon fontSize="small" />
     </IconButton>
   );
 }
