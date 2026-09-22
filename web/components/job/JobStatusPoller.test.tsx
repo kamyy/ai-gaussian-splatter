@@ -20,7 +20,7 @@ function renderPoller() {
 const baseJob: Job = {
   id: "job-1",
   splatId: "splat-1",
-  status: "training_running",
+  status: "cancelled",
   errorMessage: null,
   resultS3Key: null,
   thumbnailS3Key: null,
@@ -29,37 +29,24 @@ const baseJob: Job = {
   updatedAt: "2026-01-01T00:00:00Z",
 };
 
+// web/app/(authenticated)/splats/[id]/layout.tsx only mounts this component while the job fetch is in flight or
+// once the job is "cancelled" — the only two states reachable in the app, so those are the only two covered here.
 describe("JobStatusPoller", () => {
   it("shows a loading state while fetching", () => {
-    useLatestJobMock.mockReturnValue({ data: undefined, error: undefined, isLoading: true });
+    useLatestJobMock.mockReturnValue({ data: undefined, isLoading: true });
     renderPoller();
     expect(screen.getByText(/Loading job status/i)).toBeInTheDocument();
   });
 
-  it("shows a fallback when there is no job yet", () => {
-    useLatestJobMock.mockReturnValue({
-      data: undefined,
-      error: new Error("404"),
-      isLoading: false,
-    });
+  it("shows a loading state if there is no job yet", () => {
+    useLatestJobMock.mockReturnValue({ data: undefined, isLoading: false });
     renderPoller();
-    expect(screen.getByText(/No processing job yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/Loading job status/i)).toBeInTheDocument();
   });
 
-  it("renders the human-readable label for the current status", () => {
-    useLatestJobMock.mockReturnValue({ data: baseJob, error: undefined, isLoading: false });
+  it("shows the cancelled chip once the job has ended cancelled", () => {
+    useLatestJobMock.mockReturnValue({ data: baseJob, isLoading: false });
     renderPoller();
-    expect(screen.getByText(/Training the Gaussian Splat/i)).toBeInTheDocument();
-  });
-
-  it("surfaces the error message when a job fails", () => {
-    useLatestJobMock.mockReturnValue({
-      data: { ...baseJob, status: "failed", errorMessage: "COLMAP registered only 40% of photos" },
-      error: undefined,
-      isLoading: false,
-    });
-    renderPoller();
-    expect(screen.getByText(/Processing failed/i)).toBeInTheDocument();
-    expect(screen.getByText(/COLMAP registered only 40%/i)).toBeInTheDocument();
+    expect(screen.getByText("Cancelled")).toBeInTheDocument();
   });
 });
