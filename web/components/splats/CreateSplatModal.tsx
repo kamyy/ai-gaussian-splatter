@@ -99,6 +99,13 @@ export function CreateSplatModal({ opened, onClose }: CreateSplatModalProps) {
     try {
       if (files.length > 0) {
         await uploadPhotos(splat.id, files, token);
+        // The earlier mutate("splats") above ran before any photo existed, so the sidebar card still shows no
+        // thumbnail/"Photos" chip without this. The photos key also needs its own revalidation: PhotoFilmstrip
+        // (web/components/splats/PhotoFilmstrip.tsx) can already be mounted for this splat by the time upload
+        // finishes, since a first-ever splat's creation retargets web/app/(authenticated)/splats/page.tsx's redirect
+        // as soon as the splat row exists, well before its photos do.
+        await mutate("splats");
+        await mutate(["photos", splat.id]);
       }
       reset();
       onClose();

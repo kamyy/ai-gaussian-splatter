@@ -112,6 +112,23 @@ describe("CreateSplatModal", () => {
     expect(pushMock).not.toHaveBeenCalled();
   });
 
+  it("revalidates the splats list and the new splat's photos after a successful upload", async () => {
+    const onClose = renderModal();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Coffee mug" } });
+
+    const file = new File(["fake"], "photo.jpg", { type: "image/jpeg" });
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    await waitFor(() => expect(screen.getByText("1 photo selected")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/splats/new-splat-1"));
+    expect(mutateMock).toHaveBeenCalledWith("splats");
+    expect(mutateMock).toHaveBeenCalledWith(["photos", "new-splat-1"]);
+    expect(onClose).toHaveBeenCalled();
+  });
+
   it("reuses the already-created splat on retry instead of re-POSTing a duplicate", async () => {
     // The first Create click creates the splat successfully but fails to upload the photo. A retry click must not
     // send a second POST /api/v1/splats for the same name.
