@@ -1,8 +1,10 @@
 "use client";
 
 import CssBaseline from "@mui/material/CssBaseline";
-import { ThemeProvider } from "@mui/material/styles";
+import { ThemeProvider as MuiThemeProvider } from "@mui/material/styles";
 import { AppRouterCacheProvider } from "@mui/material-nextjs/v16-appRouter";
+import { TooltipProvider } from "@radix-ui/react-tooltip";
+import { ThemeProvider as NextThemesProvider } from "next-themes";
 import { SnackbarProvider } from "notistack";
 
 import { AlertSnackbar } from "@/components/layout/AlertSnackbar";
@@ -25,15 +27,27 @@ const SNACKBAR_COMPONENTS = {
 //
 // modeStorageKey/colorSchemeStorageKey are left at MUI's own defaults, which is what web/app/layout.tsx's
 // <InitColorSchemeScript /> and web/theme.ts's colorSchemeSelector both already assume.
+//
+// This is the AI Gaussian Splatter → Tailwind migration's mid-flight state: MUI's ThemeProvider still drives every
+// component that hasn't moved to Tailwind yet, while NextThemesProvider independently sets [data-theme] for the
+// components that have. web/components/layout/ThemeToggle.tsx drives both from one click so the two attributes never
+// disagree. Once every component has moved, this collapses down to just NextThemesProvider + SnackbarProvider.
 export function ThemeRegistry({ children }: { children: React.ReactNode }) {
   return (
-    <AppRouterCacheProvider options={{ key: "mui" }}>
-      <ThemeProvider theme={theme} defaultMode="system" disableTransitionOnChange>
-        <CssBaseline />
-        <SnackbarProvider anchorOrigin={{ vertical: "bottom", horizontal: "left" }} Components={SNACKBAR_COMPONENTS}>
-          {children}
-        </SnackbarProvider>
-      </ThemeProvider>
-    </AppRouterCacheProvider>
+    <NextThemesProvider attribute="data-theme" defaultTheme="system" enableSystem disableTransitionOnChange>
+      <AppRouterCacheProvider options={{ key: "mui" }}>
+        <MuiThemeProvider theme={theme} defaultMode="system" disableTransitionOnChange>
+          <CssBaseline />
+          <TooltipProvider delayDuration={200}>
+            <SnackbarProvider
+              anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+              Components={SNACKBAR_COMPONENTS}
+            >
+              {children}
+            </SnackbarProvider>
+          </TooltipProvider>
+        </MuiThemeProvider>
+      </AppRouterCacheProvider>
+    </NextThemesProvider>
   );
 }
