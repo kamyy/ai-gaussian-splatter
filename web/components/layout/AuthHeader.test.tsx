@@ -1,9 +1,7 @@
-import { ThemeProvider } from "@mui/material/styles";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { Splat } from "@/lib/types";
-import { theme } from "@/theme";
 import { AuthHeader } from "./AuthHeader";
 
 vi.mock("@clerk/nextjs", () => ({
@@ -26,11 +24,7 @@ const baseSplat: Splat = {
 };
 
 function renderHeader() {
-  return render(
-    <ThemeProvider theme={theme}>
-      <AuthHeader />
-    </ThemeProvider>,
-  );
+  return render(<AuthHeader />);
 }
 
 describe("AuthHeader", () => {

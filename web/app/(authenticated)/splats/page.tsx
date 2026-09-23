@@ -1,7 +1,5 @@
 "use client";
 
-import Skeleton from "@mui/material/Skeleton";
-import Typography from "@mui/material/Typography";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -30,20 +28,20 @@ export default function NoSplatsPage() {
   // Also covers the redirect above: the effect only fires after this renders once, so without this the "select a
   // splat" text below would flash for a frame before the redirect kicks in.
   if (isLoading || mostRecent) {
-    return <Skeleton variant="rectangular" sx={{ height: "100%" }} />;
+    return <div className="h-full animate-pulse bg-divider" />;
   }
 
   if (error) {
     return (
       <Center className="h-full">
-        <Typography color="error">Failed to load splats.</Typography>
+        <p className="text-error">Failed to load splats.</p>
       </Center>
     );
   }
 
   return (
     <Center className="h-full">
-      <Typography color="text.secondary">Select a splat, or click Create new splat to create one.</Typography>
+      <p className="text-muted-foreground">Select a splat, or click Create new splat to create one.</p>
     </Center>
   );
 }

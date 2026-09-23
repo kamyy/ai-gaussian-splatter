@@ -1,14 +1,11 @@
 "use client";
 
-import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
-import Skeleton from "@mui/material/Skeleton";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
 import { useState } from "react";
 
 import { Card } from "@/components/layout/Card";
 import { Center } from "@/components/layout/Center";
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/cn";
 import { useSplats } from "@/lib/hooks";
 import { CreateSplatModal } from "./CreateSplatModal";
 import { ScrollEdgeButton } from "./ScrollEdgeButton";
@@ -34,79 +31,50 @@ export function SplatCarousel() {
   });
 
   return (
-    <Box sx={{ p: 1.5, height: "100%", position: "relative" }}>
-      <Stack spacing={0.5} sx={{ height: "100%" }}>
-        <Stack direction="row" spacing={1} sx={{ alignItems: "center", px: 0.5, pb: 0.5 }}>
+    <div className="relative h-full p-3">
+      <div className="flex h-full flex-col gap-1">
+        <div className="flex items-center gap-2 px-1 pb-1">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <rect x="3" y="6" width="18" height="12" stroke="currentColor" strokeWidth="1.6" />
             <circle cx="12" cy="12" r="3.4" stroke="currentColor" strokeWidth="1.6" />
           </svg>
-          {/* variant="h6" for the display font (theme h1-h6 override in web/theme.ts), component="span" since this
-          is a sidebar label, not a document heading. */}
-          <Typography variant="h6" component="span" color="text.secondary" sx={{ fontSize: "0.875rem" }}>
-            AI Gaussian Splatter
-          </Typography>
-        </Stack>
+          <span className="font-display text-sm text-muted-foreground">AI Gaussian Splatter</span>
+        </div>
         <Card className="flex justify-center">
           <Button variant="contained" size="small" onClick={() => setModalOpened(true)}>
             Create new splat
           </Button>
         </Card>
-        {isLoading && <Skeleton variant="rectangular" sx={{ flex: 1 }} />}
-        {!isLoading && error && (
-          <Typography variant="body2" color="error" sx={{ textAlign: "center", py: 2 }}>
-            Failed to load splats.
-          </Typography>
-        )}
+        {isLoading && <div className="flex-1 animate-pulse bg-divider" />}
+        {!isLoading && error && <p className="py-4 text-center text-sm text-error">Failed to load splats.</p>}
         {!isLoading && !error && splats && splats.length === 0 && (
-          <Typography variant="body2" color="text.secondary" sx={{ textAlign: "center", py: 2 }}>
-            No splats yet.
-          </Typography>
+          <p className="py-4 text-center text-sm text-muted-foreground">No splats yet.</p>
         )}
         {!isLoading && !error && splats && splats.length > 0 && (
           <>
             <Center>
               <ScrollEdgeButton label="Scroll to first splat" direction="up" onClick={scrollCarouselToStart} />
             </Center>
-            <Stack
+            <div
               ref={scrollRef}
               {...dragHandlers}
-              spacing={1}
-              className="thin-scrollbar"
-              sx={{
-                flex: 1,
-                minHeight: 0,
-                overflowY: "auto",
-                // MUI Card sets overflow: hidden, which makes a flex item's min-height: auto compute as 0. The
-                // cards then shrink to fit this column instead of overflowing it, so there is nothing to scroll
-                // and they stack on top of each other. Keep each card at its content height.
-                "& > *": { flexShrink: 0 },
-                // Reserves the scrollbar's gutter unconditionally, so a list that grows past the viewport doesn't
-                // shrink every card's (and thumbnail's, since those are width 100% / height auto) width the moment
-                // a scrollbar appears. A previous version tried to counter that reserved gutter with a matching
-                // negative margin so cards stayed exactly as wide as the "Create new splat" button above them, but
-                // the margin was sized off the parent Box's own padding, not the actual (browser/OS-dependent)
-                // scrollbar width, so it either under- or over-corrected depending on platform. Left uncorrected,
-                // cards in this list are consistently a few pixels narrower than that button; that's a smaller,
-                // constant cosmetic gap rather than a value that silently drifted with whatever the real gutter
-                // happened to be.
-                scrollbarGutter: "stable",
-                cursor: isPanning ? "grabbing" : "grab",
-                userSelect: isPanning ? "none" : undefined,
-              }}
+              className={cn(
+                "thin-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto [scrollbar-gutter:stable] [&>*]:shrink-0",
+                isPanning ? "cursor-grabbing select-none" : "cursor-grab",
+              )}
             >
               {splats.map(splat => (
                 <SplatCarouselCard key={splat.id} splat={splat} />
               ))}
-            </Stack>
+            </div>
             <Center>
               <ScrollEdgeButton label="Scroll to last splat" direction="down" onClick={scrollCarouselToEnd} />
             </Center>
           </>
         )}
-      </Stack>
+      </div>
 
       <CreateSplatModal opened={modalOpened} onClose={() => setModalOpened(false)} />
-    </Box>
+    </div>
   );
 }

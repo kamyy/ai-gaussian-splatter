@@ -1,8 +1,6 @@
-import { ThemeProvider } from "@mui/material/styles";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { theme } from "@/theme";
 import { CreateSplatModal } from "./CreateSplatModal";
 
 vi.mock("@clerk/nextjs", () => ({
@@ -27,11 +25,7 @@ const { enqueueSnackbarMock } = vi.hoisted(() => ({ enqueueSnackbarMock: vi.fn()
 vi.mock("@/lib/useAppSnackbar", () => ({ useAppSnackbar: () => ({ enqueueSnackbar: enqueueSnackbarMock }) }));
 
 function renderModal(onClose = vi.fn()) {
-  render(
-    <ThemeProvider theme={theme}>
-      <CreateSplatModal opened onClose={onClose} />
-    </ThemeProvider>,
-  );
+  render(<CreateSplatModal opened onClose={onClose} />);
   return onClose;
 }
 

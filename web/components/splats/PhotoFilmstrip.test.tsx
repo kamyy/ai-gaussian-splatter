@@ -1,9 +1,7 @@
-import { ThemeProvider } from "@mui/material/styles";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Job, PhotoListItem } from "@/lib/types";
-import { theme } from "@/theme";
 import { PhotoFilmstrip } from "./PhotoFilmstrip";
 
 vi.mock("@clerk/nextjs", () => ({
@@ -35,11 +33,7 @@ const baseJob: Job = {
 
 async function renderFilmstrip() {
   await act(async () => {
-    render(
-      <ThemeProvider theme={theme}>
-        <PhotoFilmstrip splatId="splat-1" />
-      </ThemeProvider>,
-    );
+    render(<PhotoFilmstrip splatId="splat-1" />);
   });
 }
 

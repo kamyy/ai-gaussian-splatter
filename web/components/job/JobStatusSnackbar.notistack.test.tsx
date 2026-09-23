@@ -1,4 +1,3 @@
-import { ThemeProvider } from "@mui/material/styles";
 import { render, screen } from "@testing-library/react";
 import { SnackbarProvider } from "notistack";
 import { StrictMode } from "react";
@@ -6,7 +5,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AlertSnackbar } from "@/components/layout/AlertSnackbar";
 import type { Job } from "@/lib/types";
-import { theme } from "@/theme";
 import { JobStatusSnackbar } from "./JobStatusSnackbar";
 
 const { useLatestJobMock } = vi.hoisted(() => ({ useLatestJobMock: vi.fn() }));
@@ -28,11 +26,9 @@ const FAILURE_TEXT = "Processing failed: COLMAP registered only 40% of photos";
 
 function Frame({ shown }: { shown: boolean }) {
   return (
-    <ThemeProvider theme={theme}>
-      <SnackbarProvider Components={{ info: AlertSnackbar, error: AlertSnackbar }}>
-        {shown ? <JobStatusSnackbar splatId="splat-1" /> : null}
-      </SnackbarProvider>
-    </ThemeProvider>
+    <SnackbarProvider Components={{ info: AlertSnackbar, error: AlertSnackbar }}>
+      {shown ? <JobStatusSnackbar splatId="splat-1" /> : null}
+    </SnackbarProvider>
   );
 }
 

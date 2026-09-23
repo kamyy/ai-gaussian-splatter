@@ -1,7 +1,6 @@
 import "./globals.css";
 
 import { ClerkProvider } from "@clerk/nextjs";
-import InitColorSchemeScript from "@mui/material/InitColorSchemeScript";
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 
@@ -20,14 +19,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    // suppressHydrationWarning: InitColorSchemeScript below sets data-mui-color-scheme here before React hydrates,
-    // so the attribute React finds on this element during hydration deliberately doesn't match what it rendered on
-    // the server — the standard escape hatch for a color-mode bootstrap script.
+    // suppressHydrationWarning: next-themes (inside ThemeRegistry) sets [data-theme] here before React hydrates, so
+    // the attribute React finds on this element during hydration deliberately doesn't match what it rendered on the
+    // server — the standard escape hatch for a color-mode bootstrap script.
     <html lang="en" suppressHydrationWarning>
       <body className={`${displayFont.variable} ${bodyFont.variable}`}>
-        {/* Runs before hydration and sets [data-mui-color-scheme] from the stored preference or the OS setting, so
-        web/theme.ts's CSS variables resolve to the right scheme on first paint with no flash. */}
-        <InitColorSchemeScript />
         <ThemeRegistry>
           <ClerkProvider
             localization={{

@@ -1,10 +1,8 @@
-import { ThemeProvider } from "@mui/material/styles";
 import { act, render, screen } from "@testing-library/react";
 import { Suspense } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Splat } from "@/lib/types";
-import { theme } from "@/theme";
 import SplatPage from "./page";
 
 vi.mock("@clerk/nextjs", () => ({
@@ -37,11 +35,9 @@ const baseSplat: Splat = {
 async function renderPage() {
   await act(async () => {
     render(
-      <ThemeProvider theme={theme}>
-        <Suspense fallback={null}>
-          <SplatPage params={Promise.resolve({ id: "splat-1" })} />
-        </Suspense>
-      </ThemeProvider>,
+      <Suspense fallback={null}>
+        <SplatPage params={Promise.resolve({ id: "splat-1" })} />
+      </Suspense>,
     );
   });
 }

@@ -1,6 +1,5 @@
 "use client";
 
-import Skeleton from "@mui/material/Skeleton";
 import { useRouter } from "next/navigation";
 import { use, useEffect } from "react";
 
@@ -22,5 +21,5 @@ export default function SplatDefaultRoutePage({ params }: { params: Promise<{ id
     }
   }, [splat, id, router]);
 
-  return <Skeleton variant="rectangular" sx={{ height: "100%" }} />;
+  return <div className="h-full animate-pulse bg-divider" />;
 }

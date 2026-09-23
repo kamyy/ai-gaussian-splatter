@@ -1,10 +1,9 @@
-import { ThemeProvider } from "@mui/material/styles";
 import { act, render, screen } from "@testing-library/react";
 import { Suspense } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { Job } from "@/lib/types";
-import { theme } from "@/theme";
 import PointCloudPage from "./page";
 
 vi.mock("@clerk/nextjs", () => ({
@@ -41,11 +40,11 @@ const baseJob: Job = {
 async function renderPage() {
   await act(async () => {
     render(
-      <ThemeProvider theme={theme}>
+      <TooltipProvider>
         <Suspense fallback={null}>
           <PointCloudPage params={Promise.resolve({ id: "splat-1" })} />
         </Suspense>
-      </ThemeProvider>,
+      </TooltipProvider>,
     );
   });
 }

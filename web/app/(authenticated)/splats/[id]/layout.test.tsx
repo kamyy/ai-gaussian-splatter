@@ -1,10 +1,8 @@
-import { ThemeProvider } from "@mui/material/styles";
 import { act, render, screen } from "@testing-library/react";
 import { Suspense } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Job, Splat, SplatStatus } from "@/lib/types";
-import { theme } from "@/theme";
 import SplatLayout from "./layout";
 
 vi.mock("next/navigation", () => ({
@@ -59,13 +57,11 @@ function setup(options: { splat?: Splat | undefined; splatStatus?: SplatStatus; 
 async function renderLayout() {
   await act(async () => {
     render(
-      <ThemeProvider theme={theme}>
-        <Suspense fallback={null}>
-          <SplatLayout params={Promise.resolve({ id: baseSplat.id })}>
-            <div>child content</div>
-          </SplatLayout>
-        </Suspense>
-      </ThemeProvider>,
+      <Suspense fallback={null}>
+        <SplatLayout params={Promise.resolve({ id: baseSplat.id })}>
+          <div>child content</div>
+        </SplatLayout>
+      </Suspense>,
     );
   });
 }
