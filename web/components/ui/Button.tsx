@@ -11,9 +11,8 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
 }
 
-// Reproduces web/theme.ts's former MuiButton override: flat print look (rounded-[2px], not fully square, not MUI's
-// own default radius), no uppercase transform, and a shorter minWidth/padding than MUI's own defaults sized for
-// short labels like "Create" rather than a generic action bar.
+// Flat print look (rounded-[2px], not fully square), no uppercase transform, and a minWidth/padding sized for short
+// labels like "Create" rather than a generic action bar.
 const VARIANT: Record<ButtonVariant, string> = {
   contained: "bg-primary text-primary-foreground hover:opacity-90",
   outlined: "border border-primary text-primary hover:bg-primary/10",

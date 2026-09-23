@@ -92,9 +92,9 @@ describe("JobStatusSnackbar failure snackbar", () => {
     );
 
     expect(screen.getAllByText("Reconstructing camera positions (COLMAP)…").length).toBeGreaterThan(0);
-    // AlertSnackbar's progress spinner is a decorative aria-hidden svg with an adjacent sr-only label, not an MUI
-    // CircularProgress with role="progressbar" — this queries the same "duplicate rendered once per snackbar
-    // instance" fact through that label's text instead.
+    // AlertSnackbar's progress spinner is a decorative aria-hidden svg with an adjacent sr-only label, not a
+    // role="progressbar" element — this queries the "duplicate rendered once per snackbar instance" fact through
+    // that label's text instead.
     expect(screen.getAllByText("In progress").length).toBeGreaterThan(0);
     expect(duplicateKeyWarnings(errors)).toEqual([]);
 

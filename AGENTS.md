@@ -10,7 +10,7 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
 - [2. Structure](#2-structure)
 - [3. Auth (Clerk)](#3-auth-clerk)
 - [4. Next.js & TypeScript](#4-nextjs--typescript)
-- [5. MUI & React Server Components](#5-mui--react-server-components)
+- [5. Tailwind & theming](#5-tailwind--theming)
 - [6. CI & repo tooling](#6-ci--repo-tooling)
   - [6.1 Workflows & branch protection](#61-workflows--branch-protection)
   - [6.2 Formatting & linting](#62-formatting--linting)
@@ -83,7 +83,7 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
 
 Monorepo, three independent packages:
 
-- `web/` — Next.js 16 (App Router) + MUI + SWR + Zustand + react-three-fiber, **and** the REST API as Route Handlers under `app/api/v1/` backed by Drizzle.
+- `web/` — Next.js 16 (App Router) + Tailwind CSS + SWR + Zustand + react-three-fiber, **and** the REST API as Route Handlers under `app/api/v1/` backed by Drizzle.
 - `worker/` — COLMAP + gsplat pipeline, runs on an EC2 GPU spot instance per worker-job stage.
 - `infra/` — Terraform. Network, registry, data, worker IAM, web, and budgets in separate `.tf` files, one state.
 
@@ -109,7 +109,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - **This Clerk SDK has no `<SignedIn>` / `<SignedOut>`.** Use `<Show when="signed-in">` (`web/components/layout/NavMenu.tsx`).
   - Pass `fallback` for the signed-out UI.
   - While Clerk is still loading the session, `<Show>` renders nothing — not the fallback.
-- **Use the Clerk MCP `clerk_sdk_snippet` tool before writing or answering Clerk SDK questions, not a raw docs fetch.** Same reasoning as the MUI MCP tools above: training data lags the API and the MCP is already scoped to this project's installed SDK.
+- **Use the Clerk MCP `clerk_sdk_snippet` tool before writing or answering Clerk SDK questions, not a raw docs fetch.** Training data lags the API, and the MCP is already scoped to this project's installed SDK.
   - Call it with one feature slug (`use-user`, `use-auth`). Never pass a bundle (`b2b-saas`, `custom-flows`, `organizations`, `auth-basics`, `server-side`).
   - Skip `list_clerk_sdk_snippets` when the slug is known. A bundle is a whole guide. Fetching one is how these servers exhaust the context window.
 - **Set `NEXT_PUBLIC_CLERK_SIGN_IN_URL` and `NEXT_PUBLIC_CLERK_SIGN_UP_URL` at build time**, or Clerk sends users to its hosted Account Portal instead of the app's own sign-in pages.
@@ -144,26 +144,24 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 ---
 
-## 5. MUI & React Server Components
+## 5. Tailwind & theming
 
-- **Don't pass a component reference as a prop across the Server→Client boundary** (e.g. `<CardActionArea component={Link}>` from an async Server Component). Nest `<Link>` around the component instead.
-- **`ThemeProvider` must live inside a dedicated Client Component that imports the theme itself** (`web/components/layout/ThemeRegistry.tsx`), not one fed the theme object as a prop from a Server Component.
-  - The root layout (`web/app/layout.tsx`) is a Server Component; passing the `theme` object (it carries functions like `theme.breakpoints.up`) as a prop into `<ThemeProvider theme={theme}>` there crosses the RSC boundary with non-serializable values and fails the build with "Functions cannot be passed directly to Client Components."
-  - Reading a primitive off `theme` (e.g. `theme.zIndex.appBar`, `theme.spacing(2)`) inside a Server Component's own `sx` object is fine — only passing the whole theme object itself as a prop is the problem.
-- **Use the MUI MCP `fetchDocs` tool before writing or answering MUI API questions, not a raw `llms.txt` fetch.** Training data lags the API. The MCP sources the same `llms.txt` files but resolves the version.
-  - Pass the `@mui/material` version from `web/package.json` rather than trusting its default.
-  - Call `fetchDocs` with exactly one URL. Prefer the API page (`https://mui.com/material-ui/api/<name>/`) over the overview (`https://mui.com/material-ui/react-<name>/`).
-  - Skip `useMuiDocs` when the URL is already known. That tool returns the whole package catalog (~25k tokens). One overview page can be larger than the rest of the chat.
-- **Size things in rem, not raw px, so the UI scales with a user's browser zoom/font-size setting.**
-  - `web/theme.ts` overrides `theme.spacing()` to emit rem instead of MUI's px default, so any `sx`/`spacing` prop that goes through it (`p`, `m`, `gap`, `<Stack spacing={n}>`) already scales correctly.
-  - A free-standing pixel value inside a `style={{}}`/`sx={{}}` object doesn't go through that — wrap it with `web/lib/rem.ts`'s `rem()` export instead of hand-writing a `"…rem"` string.
-  - The exception is a value that has to match a browser API that only accepts raw pixels — `Element.scrollBy()`, or arithmetic against `PointerEvent.clientY` in a drag handler — where there is nothing to convert.
-- **`Stack` and `Box` in this MUI version have no `alignItems`/`justifyContent`/`flexWrap` shorthand props** — only `direction`, `spacing`, `divider`, and `sx` are real props on `Stack`; everything else goes through `sx`.
-  - Passing them as bare JSX props type-checks as a totally unrelated overload error (`Property 'alignItems' does not exist on type '...'`), not a missing-prop error, so the fix is easy to miss on first read.
-- **Prefer `Box` + `sx` over a raw `<div>`/`<button>` for layout and styling.**
-  - There's no dedicated `Flex` component — a flex container is `Box`/`Stack` with `sx={{ display: "flex", ... }}`.
-  - `ButtonBase` is a real `<button>` with MUI's styling hooks but the default button chrome (border, background, padding) already stripped, for a button that needs its own look.
-  - Reach for a plain element only where the semantics genuinely need to differ, e.g. a real `<img>` rather than `next/image`'s fallback behavior.
+- **Every Contact Sheet color is a CSS custom property, not a Tailwind class keyed by scheme.** `web/app/globals.css` defines each token under `:root` (dark, the default) and overrides it under `[data-theme="light"]`; a `@theme inline` block re-exports each as a Tailwind utility (`bg-background`, `text-foreground`, …).
+  - A component never needs a `dark:` variant — every color utility already resolves through the variable that changes per `[data-theme]`. Writing `dark:bg-*` alongside one of these tokens is dead code, since Tailwind's `dark:` selector strategy isn't configured at all here.
+  - A one-off color that needs the same scheme-awareness (a `radial-gradient` stop, a value handed to a non-Tailwind API like Clerk's `appearance.variables`) reads the variable directly — `var(--color-primary)` or `color-mix(in srgb, var(--color-primary) 10% , transparent)` — rather than a literal hex.
+- **`next-themes` (`web/components/layout/ThemeRegistry.tsx`) owns `[data-theme]`, with its own pre-hydration script setting the attribute before React hydrates.** `web/app/layout.tsx`'s `<html suppressHydrationWarning>` is required for that: the attribute the script sets deliberately doesn't match what the server rendered, and removing `suppressHydrationWarning` turns that expected mismatch into a hydration warning on every page load.
+  - `web/components/layout/ThemeToggle.tsx` reads `resolvedTheme` (falls back to `"dark"` for the server render and the very first client render, before `next-themes` has resolved anything) and calls `setTheme`.
+- **`ThemeRegistry` is the one Client Component boundary the provider tree needs**, so `web/app/layout.tsx` itself stays a Server Component free to do server-only work (font loading, metadata). It composes `next-themes`' `ThemeProvider`, the Radix `TooltipProvider` (`web/components/ui/Tooltip.tsx`), and notistack's `SnackbarProvider` — nothing above it in the tree needs to be a Client Component too.
+- **Each Radix primitive in use is unstyled, so it gets a thin `"use client"` wrapper applying the app's Tailwind classes** via `web/lib/cn.ts`'s `cn()` (a `clsx` wrapper), rather than being styled ad hoc at each call site:
+  - `web/components/ui/Dialog.tsx`
+  - `web/components/ui/DropdownMenu.tsx`
+  - `web/components/ui/Tooltip.tsx`
+  - `DropdownMenu.Item`'s `asChild` merges its props/ref onto a rendered `<Link>` rather than requiring a literal `<button>` child, which is what keeps roving-tabindex/typeahead keyboard navigation working between menu items built from links (`web/components/layout/NavMenu.tsx`).
+  - A `Tooltip.Trigger` needs its child to keep firing pointer events even while the wrapped element is `disabled` — wrap it in a `<span>` (`web/components/viewer/AwaitingTrainingPanel.tsx`), since a genuinely disabled native `<button>` stops dispatching pointer/focus events regardless of which tooltip library is asking.
+- **Three Radix portal layers plus two fixed-position layers share one flat z-index scale, since Tailwind has no built-in `zIndex` scale to reach for.** `z-[1100]` (the public header), `z-[1200]` (dropdown/tooltip portals), `z-[1300]` (the dialog overlay/content), and `z-[90]` (the authenticated splat workspace's fixed overlay) are the values in use; slot a new floating layer in between the two it needs to sit between, not the top of the scale by default.
+- **Size things in rem, not raw px, so the UI scales with a user's browser zoom/font-size setting.** Prefer a Tailwind class (its default spacing scale is already rem-based) over an inline style.
+  - `web/lib/rem.ts`'s `rem()` export is for the cases a static class can't cover: a value computed at runtime from state/refs/pointer events (a drag offset, a `ResizeObserver`-measured height) and fed into an inline `style` object.
+  - The same carve-out applies to a value that has to match a browser API that only accepts raw pixels — `Element.scrollBy()`, or arithmetic against `PointerEvent.clientY` in a drag handler — where there is nothing to convert.
 
 ---
 

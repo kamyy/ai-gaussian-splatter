@@ -14,9 +14,8 @@ interface SubNavProps {
   onChange: (value: string) => void;
 }
 
-// Replaces MuiToggleButtonGroup/MuiToggleButton for web/components/splats/SplatSubNav.tsx's underline-tab look.
-// Deliberately a plain <button aria-pressed>, not role="tab"/role="tablist": MUI's own ToggleButton never used tab
-// semantics either, and web/components/splats/SplatSubNav.test.tsx already queries getByRole("button", { name }).
+// Underline-tab look for web/components/splats/SplatSubNav.tsx. Deliberately a plain <button aria-pressed>, not
+// role="tab"/role="tablist": web/components/splats/SplatSubNav.test.tsx queries getByRole("button", { name }).
 export function SubNav({ items, value, onChange }: SubNavProps) {
   return (
     <div className="flex gap-5">

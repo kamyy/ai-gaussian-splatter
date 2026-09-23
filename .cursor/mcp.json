@@ -5,12 +5,6 @@
       "command": "${workspaceFolder}/node_modules/.bin/clerk",
       "args": ["mcp", "run"],
       "env": {}
-    },
-    "mui-mcp": {
-      "type": "stdio",
-      "command": "${workspaceFolder}/node_modules/.bin/mcp",
-      "args": [],
-      "env": {}
     }
   }
 }

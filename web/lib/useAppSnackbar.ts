@@ -27,9 +27,9 @@ interface AppSnackbarOptions {
 }
 
 // Wraps notistack's useSnackbar so this one dismiss policy holds everywhere instead of each call site having to
-// remember it: an error always persists until the visitor closes it (the close button AlertSnackbar's underlying
-// MUI Alert renders automatically once it's given an onClose), no matter what the caller passes. Every other
-// variant times out on its own unless that caller explicitly asks it to persist too — e.g.
+// remember it: an error always persists until the visitor closes it (AlertSnackbar renders a close button unless the
+// snack is marked `progress`), no matter what the caller passes. Every other variant times out on its own unless
+// that caller explicitly asks it to persist too — e.g.
 // web/components/job/JobStatusSnackbar.tsx, which persists a non-error status deliberately because it tracks an
 // ongoing job stage, not a one-off event.
 export function useAppSnackbar() {

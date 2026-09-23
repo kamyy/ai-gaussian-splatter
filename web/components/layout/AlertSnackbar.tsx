@@ -42,8 +42,7 @@ export const AlertSnackbar = forwardRef<HTMLDivElement, AlertSnackbarProps>(func
       {/* Only rendered without `progress`: a progress snack (an ongoing job stage, persist: true) has no close
       button, since dismissing it would leave no in-progress UI for the rest of that stage — JobStatusSnackbar's
       effect only re-enqueues when the stage itself changes, and the closed floating card this replaced could not be
-      dismissed either. aria-label is explicit here; MUI's Alert supplied "Close" implicitly via its own closeText
-      default. */}
+      dismissed either. */}
       {!progress && (
         <button
           type="button"

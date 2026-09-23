@@ -23,8 +23,8 @@ export default async function RootPage() {
       </div>
       <div className="flex flex-col items-center gap-8">
         <HeroPointCloud />
-        {/* MUI's sm breakpoint (600px) becomes Tailwind's default sm: (640px) here — a deliberate, cosmetically
-        negligible shift for a single headline breakpoint, not worth a custom breakpoint override. */}
+        {/* Tailwind's default sm: (640px) is fine as-is for this one headline breakpoint, not worth a custom
+        override. */}
         <h1 className="text-center font-display text-[2.25rem] sm:text-[3.25rem]">
           <span className="block">Convert photos into a</span>
           <span className="block text-primary">3D Gaussian Splat</span>
