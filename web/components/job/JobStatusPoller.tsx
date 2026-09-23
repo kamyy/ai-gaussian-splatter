@@ -1,8 +1,6 @@
 "use client";
 
-import Chip from "@mui/material/Chip";
-import Typography from "@mui/material/Typography";
-
+import { Chip } from "@/components/ui/Chip";
 import { useLatestJob } from "@/lib/hooks";
 import { statusColor } from "@/lib/statusColor";
 import { JobStatus } from "@/lib/types";
@@ -19,7 +17,7 @@ export function JobStatusPoller({ splatId }: JobStatusPollerProps) {
   const { data: job, isLoading } = useLatestJob(splatId);
 
   if (isLoading || !job) {
-    return <Typography color="text.secondary">Loading job status…</Typography>;
+    return <p className="text-muted-foreground">Loading job status…</p>;
   }
   return <Chip color={statusColor(job.status)} label={STATUS_LABELS[job.status]} />;
 }

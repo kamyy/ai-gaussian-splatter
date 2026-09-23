@@ -1,9 +1,6 @@
 "use client";
 
-import Box from "@mui/material/Box";
-import { useColorScheme } from "@mui/material/styles";
-
-import { rem } from "@/lib/rem";
+import { useTheme } from "next-themes";
 
 const DARK_STOPS = ["#3A2318", "#B5602E", "#F0C68A"];
 const LIGHT_STOPS = ["#6B4226", "#B5602E", "#E8A96B"];
@@ -90,46 +87,42 @@ function generatePoints(stops: string[]): Point[] {
 }
 
 // The signed-out hero's visual: a client component (not inlined in the Server Component web/app/page.tsx) because
-// its color stops depend on useColorScheme(), which needs the client-side ThemeRegistry context.
+// its color stops depend on next-themes' useTheme(), which needs the client-side ThemeRegistry context.
 //
-// mode/systemMode are undefined on the server and on the first client render; this falls back to "dark" until that
-// resolves, matching web/theme.ts's own defaultColorScheme.
+// resolvedTheme is undefined on the server and on the first client render; this falls back to "dark" until that
+// resolves, matching web/app/globals.css's own :root (unthemed) default.
 export function HeroPointCloud() {
-  const { mode, systemMode } = useColorScheme();
-  const resolvedMode = (mode === "system" ? systemMode : mode) ?? "dark";
-  const points = generatePoints(resolvedMode === "dark" ? DARK_STOPS : LIGHT_STOPS);
+  const { resolvedTheme } = useTheme();
+  const mode = resolvedTheme ?? "dark";
+  const points = generatePoints(mode === "dark" ? DARK_STOPS : LIGHT_STOPS);
 
   return (
-    <Box sx={{ position: "relative", width: rem(288), height: rem(263) }} aria-hidden="true">
-      <Box
-        sx={{
-          position: "absolute",
-          inset: 0,
-          // theme.vars (not theme.palette) so this tracks the active scheme rather than freezing to
-          // defaultColorScheme; mainChannel + rgba() composes the alpha since a var() reference can't be
-          // string-suffixed with hex alpha digits the way a literal hex color could.
-          backgroundImage: theme =>
-            `radial-gradient(ellipse at 50% 50%, rgba(${theme.vars.palette.primary.mainChannel} / 0.102), transparent 68%)`,
+    <div className="relative h-[16.4375rem] w-[18rem]" aria-hidden="true">
+      <div
+        className="absolute inset-0"
+        style={{
+          // color-mix() (not a literal hex) so this tracks the active [data-theme] rather than freezing to one.
+          backgroundImage:
+            "radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--color-primary) 10.2%, transparent), transparent 68%)",
         }}
       />
       {points.map((point, index) => (
-        <Box
+        <div
           // Index is stable and safe here: this list never reorders, filters, or adds/removes items — it's a
           // fixed decorative scatter generated once per mode.
           // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length decorative scatter, never reordered
           key={index}
-          sx={{
-            position: "absolute",
+          className="absolute rounded-full"
+          style={{
             left: point.left,
             top: point.top,
             width: point.size,
             height: point.size,
-            borderRadius: "50%",
             backgroundColor: point.color,
             opacity: point.opacity,
           }}
         />
       ))}
-    </Box>
+    </div>
   );
 }

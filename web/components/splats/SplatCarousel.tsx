@@ -47,7 +47,7 @@ export function SplatCarousel() {
             AI Gaussian Splatter
           </Typography>
         </Stack>
-        <Card sx={{ display: "flex", justifyContent: "center" }}>
+        <Card className="flex justify-center">
           <Button variant="contained" size="small" onClick={() => setModalOpened(true)}>
             Create new splat
           </Button>

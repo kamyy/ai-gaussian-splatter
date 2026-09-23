@@ -51,11 +51,11 @@ export function AwaitingTrainingPanel({ splatId, pointCloudUrl, onTrainStarted }
     <Box sx={{ position: "relative", width: "100%", height: "100%" }}>
       <SplatViewer mode="colmap_points" splatUrl={null} pointCloudUrl={pointCloudUrl} height="100%" />
 
-      {/* right: rem(-8) looks wrong in isolation, but this panel sits inside its route page's own pr: rem(24)
+      {/* -right-2 (-0.5rem = -8px) looks wrong in isolation, but this panel sits inside its route page's own pr-6
       gutter (web/app/(authenticated)/splats/[id]/{point-cloud,splat}/page.tsx), unlike the viewport-fixed overlay
       web/app/(authenticated)/splats/[id]/layout.tsx positions its own cards against. 16 - 24 = -8 cancels that
       gutter out so this card's right edge lines up with theirs instead of sitting 24px further left. */}
-      <Card sx={{ position: "absolute", bottom: rem(16), right: rem(-8) }}>
+      <Card className="absolute -right-2 bottom-4">
         <Tooltip
           placement="top-end"
           title={

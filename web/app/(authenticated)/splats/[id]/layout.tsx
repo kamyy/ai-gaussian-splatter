@@ -10,8 +10,8 @@ import { JobStatusSnackbar } from "@/components/job/JobStatusSnackbar";
 import { Card } from "@/components/layout/Card";
 import { PhotoFilmstrip } from "@/components/splats/PhotoFilmstrip";
 import { SplatSubNav } from "@/components/splats/SplatSubNav";
+import { cn } from "@/lib/cn";
 import { useLatestJob, useSplat } from "@/lib/hooks";
-import { rem } from "@/lib/rem";
 import { JOB_ENDED_STATUSES, JobStatus } from "@/lib/types";
 
 interface SplatLayoutProps {
@@ -56,32 +56,21 @@ export default function SplatLayout({ children, params }: SplatLayoutProps) {
 
       <Box sx={{ position: "fixed", inset: 0, zIndex: 90, pointerEvents: "none" }}>
         {showJobStatusCard && (
-          <Card
-            sx={{
-              pointerEvents: "auto",
-              position: "absolute",
-              top: rem(86),
-              right: rem(16),
-              width: rem(320),
-            }}
-          >
+          <Card className="pointer-events-auto absolute top-[5.375rem] right-4 w-80">
             <JobStatusPoller splatId={id} />
           </Card>
         )}
 
         {/* Stacked under the card when it's shown, and back up to the card's own position when it isn't. The
-        bottom of the viewport belongs to PhotoFilmstrip. */}
+        bottom of the viewport belongs to PhotoFilmstrip. Two underline tabs read as a much shorter control than the
+        default card padding was built for; py-1 overrides the base p-3 on just the vertical axis (Tailwind's own
+        stylesheet ordering resolves the more specific one regardless of class order) so this card doesn't tower
+        over its own single-line content. */}
         <Card
-          sx={{
-            pointerEvents: "auto",
-            position: "absolute",
-            top: showJobStatusCard ? rem(190) : rem(86),
-            right: rem(16),
-            // Two underline tabs read as a much shorter control than the default card padding was built for; py
-            // overrides the base p on just the vertical axis (MUI resolves the more specific one regardless of
-            // object order) so this card doesn't tower over its own single-line content.
-            py: 0.5,
-          }}
+          className={cn(
+            "pointer-events-auto absolute right-4 py-1",
+            showJobStatusCard ? "top-[11.875rem]" : "top-[5.375rem]",
+          )}
         >
           <SplatSubNav
             splatId={id}

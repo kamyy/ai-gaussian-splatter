@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function SignUpPage() {
   return (
-    <Center sx={{ py: 4 }}>
+    <Center className="py-8">
       <ThemedSignUp />
     </Center>
   );

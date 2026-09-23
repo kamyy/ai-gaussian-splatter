@@ -35,14 +35,14 @@ export default function NoSplatsPage() {
 
   if (error) {
     return (
-      <Center sx={{ height: "100%" }}>
+      <Center className="h-full">
         <Typography color="error">Failed to load splats.</Typography>
       </Center>
     );
   }
 
   return (
-    <Center sx={{ height: "100%" }}>
+    <Center className="h-full">
       <Typography color="text.secondary">Select a splat, or click Create new splat to create one.</Typography>
     </Center>
   );

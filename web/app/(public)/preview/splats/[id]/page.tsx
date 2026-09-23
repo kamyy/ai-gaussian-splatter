@@ -1,5 +1,3 @@
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
@@ -38,11 +36,9 @@ export default async function PublicSplatViewPage({ params }: Props) {
   }
 
   return (
-    <Stack spacing={2} sx={{ p: 2 }}>
-      <Typography variant="h2" component="h2">
-        {splat.title}
-      </Typography>
+    <div className="flex flex-col gap-4 p-4">
+      <h2 className="font-display text-6xl">{splat.title}</h2>
       <SplatViewer mode="splat" splatUrl={splat.splatUrl} pointCloudUrl={null} />
-    </Stack>
+    </div>
   );
 }

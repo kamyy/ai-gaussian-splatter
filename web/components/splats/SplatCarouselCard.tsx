@@ -76,13 +76,7 @@ export function SplatCarouselCard({ splat }: SplatCarouselCardProps) {
             }}
           />
         ) : (
-          <Center
-            sx={{
-              width: "100%",
-              aspectRatio: "1",
-              backgroundColor: "action.hover",
-            }}
-          >
+          <Center className="aspect-square w-full bg-divider/30">
             <Typography variant="caption" color="text.secondary">
               No photos
             </Typography>

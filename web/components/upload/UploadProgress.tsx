@@ -1,17 +1,14 @@
 "use client";
 
-import Box from "@mui/material/Box";
-import LinearProgress from "@mui/material/LinearProgress";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
+import { cn } from "@/lib/cn";
 import type { UploadItemStatus } from "@/lib/store";
 import { useAppStore } from "@/lib/store";
 
-const STATUS_COLOR: Record<UploadItemStatus, "primary" | "info" | "success" | "error"> = {
-  pending: "primary",
-  uploading: "info",
-  uploaded: "success",
-  failed: "error",
+const STATUS_COLOR: Record<UploadItemStatus, string> = {
+  pending: "bg-primary",
+  uploading: "bg-info",
+  uploaded: "bg-success",
+  failed: "bg-error",
 };
 
 export function UploadProgress() {
@@ -23,40 +20,23 @@ export function UploadProgress() {
   }
 
   return (
-    <Stack spacing={1}>
+    <div className="flex flex-col gap-2">
       {items.map(item => (
-        <Stack
-          key={item.filename}
-          direction="row"
-          spacing={1}
-          sx={{ justifyContent: "space-between", flexWrap: "nowrap", alignItems: "center" }}
-        >
-          <Typography variant="body2" noWrap sx={{ flex: 1 }}>
-            {item.filename}
-          </Typography>
-          <LinearProgress
-            variant="determinate"
-            value={item.progress}
-            color={STATUS_COLOR[item.status]}
-            sx={{ width: 120 }}
-          />
-          <Box
-            sx={{
-              width: 24,
-              height: 24,
-              borderRadius: "50%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              bgcolor: `${STATUS_COLOR[item.status]}.main`,
-            }}
+        <div key={item.filename} className="flex flex-nowrap items-center justify-between gap-2">
+          <p className="flex-1 truncate text-sm">{item.filename}</p>
+          <div className="h-1 w-30 overflow-hidden rounded-full bg-divider">
+            <div
+              className={cn("h-full rounded-full transition-[width]", STATUS_COLOR[item.status])}
+              style={{ width: `${item.progress}%` }}
+            />
+          </div>
+          <div
+            className={cn("flex h-6 w-6 items-center justify-center rounded-full text-xs", STATUS_COLOR[item.status])}
           >
-            <Typography variant="caption">
-              {item.status === "uploaded" ? "✓" : item.status === "failed" ? "✕" : "…"}
-            </Typography>
-          </Box>
-        </Stack>
+            {item.status === "uploaded" ? "✓" : item.status === "failed" ? "✕" : "…"}
+          </div>
+        </div>
       ))}
-    </Stack>
+    </div>
   );
 }

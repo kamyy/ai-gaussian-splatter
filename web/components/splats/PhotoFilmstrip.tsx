@@ -226,7 +226,7 @@ export function PhotoFilmstrip({ splatId }: PhotoFilmstripProps) {
           onClick={handleClick}
           sx={{ height: HANDLE_HEIGHT, width: "100%", cursor: "grab", touchAction: "none" }}
         >
-          <Center sx={{ height: "100%", width: "100%" }}>
+          <Center className="h-full w-full">
             <Stack spacing={0.5} sx={{ alignItems: "center" }}>
               <Box sx={{ width: rem(36), height: rem(4), borderRadius: rem(2), backgroundColor: "divider" }} />
               <Typography variant="caption" color="text.secondary">
@@ -305,14 +305,7 @@ export function PhotoFilmstrip({ splatId }: PhotoFilmstripProps) {
       </Paper>
 
       {canStartReconstruction && (
-        <Card
-          sx={{
-            pointerEvents: "auto",
-            position: "absolute",
-            bottom: `calc(${rem(HANDLE_HEIGHT)} + 1rem)`,
-            right: rem(16),
-          }}
-        >
+        <Card className="pointer-events-auto absolute right-4 bottom-14">
           <Button variant="contained" onClick={handleStartReconstruction} loading={starting}>
             Start reconstruction
           </Button>
