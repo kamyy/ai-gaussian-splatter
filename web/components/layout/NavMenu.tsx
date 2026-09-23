@@ -1,18 +1,37 @@
 "use client";
 
 import { Show } from "@clerk/nextjs";
-import MuiMenuIcon from "@mui/icons-material/Menu";
-import Divider from "@mui/material/Divider";
-import IconButton from "@mui/material/IconButton";
-import ListItemIcon from "@mui/material/ListItemIcon";
-import ListItemText from "@mui/material/ListItemText";
-import ListSubheader from "@mui/material/ListSubheader";
-import Menu from "@mui/material/Menu";
-import MenuItem from "@mui/material/MenuItem";
 import Link from "next/link";
 import { useState } from "react";
 
-// Inline rather than an icon library dependency: the only icon this app uses besides @mui/icons-material's Menu glyph.
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/DropdownMenu";
+
+// Inline rather than an icon library dependency, matching web/components/layout/ThemeToggle.tsx's Sun/MoonIcon.
+function MenuIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  );
+}
+
 function HomeIcon() {
   return (
     <svg
@@ -33,41 +52,47 @@ function HomeIcon() {
   );
 }
 
-// A client component because MUI's Menu is controlled (anchorEl/open/onClose) and needs local state — extracted out
-// of PublicLayout (a Server Component) so that layout keeps rendering its static chrome server-side.
+// Radix's DropdownMenu.Item asChild merges its own props/ref onto the rendered child (here, next/link's <Link>,
+// which forwards its ref to the underlying <a>), and its roving-tabindex/typeahead logic reads the actual rendered
+// DOM node via its own Collection context rather than requiring a literal <button> — so arrow-key navigation between
+// items keeps working with no extra wiring, the same guarantee MUI's `component={Link}` trick gave us.
 export function NavMenu() {
-  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const [open, setOpen] = useState(false);
 
   function closeMenu() {
-    setAnchorEl(null);
+    setOpen(false);
   }
 
   return (
-    <>
-      <IconButton size="small" aria-label="Open navigation menu" onClick={event => setAnchorEl(event.currentTarget)}>
-        <MuiMenuIcon fontSize="small" />
-      </IconButton>
-      <Menu anchorEl={anchorEl} open={anchorEl !== null} onClose={closeMenu}>
-        <ListSubheader>AI Gaussian Splatter</ListSubheader>
-        <Divider />
-        {/* component={Link} keeps MenuItem as MenuList's direct child, which MUI clones to wire up roving-tabIndex
-            keyboard navigation between items — wrapping MenuItem in a <Link> instead (this file is already
-            "use client", so there's no Server→Client boundary reason to avoid `component`) breaks arrow-key
-            navigation between menu items. */}
-        <MenuItem component={Link} href="/" onClick={closeMenu}>
-          <ListItemIcon>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label="Open navigation menu"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-primary/10"
+        >
+          <MenuIcon />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuLabel>AI Gaussian Splatter</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/" onClick={closeMenu} className="flex items-center gap-2">
             <HomeIcon />
-          </ListItemIcon>
-          <ListItemText>Home</ListItemText>
-        </MenuItem>
+            Home
+          </Link>
+        </DropdownMenuItem>
         {/* <Show> resolves the session on the client, so this stays correct without the layout reading auth() itself.
             It renders nothing at all while auth is still loading — neither branch. */}
         <Show when="signed-in">
-          <MenuItem component={Link} href="/splats" onClick={closeMenu}>
-            My splats
-          </MenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/splats" onClick={closeMenu}>
+              My splats
+            </Link>
+          </DropdownMenuItem>
         </Show>
-      </Menu>
-    </>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

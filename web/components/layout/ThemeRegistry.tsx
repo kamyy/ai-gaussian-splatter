@@ -3,11 +3,11 @@
 import CssBaseline from "@mui/material/CssBaseline";
 import { ThemeProvider as MuiThemeProvider } from "@mui/material/styles";
 import { AppRouterCacheProvider } from "@mui/material-nextjs/v16-appRouter";
-import { TooltipProvider } from "@radix-ui/react-tooltip";
 import { ThemeProvider as NextThemesProvider } from "next-themes";
 import { SnackbarProvider } from "notistack";
 
 import { AlertSnackbar } from "@/components/layout/AlertSnackbar";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import { theme } from "@/theme";
 
 // Every status/error message in the app (job failures, upload/processing failures, etc.) goes through this one
