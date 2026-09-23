@@ -51,6 +51,14 @@
           "next": "recommended"
         }
       }
+    },
+    {
+      "includes": ["web/**/*.css"],
+      "css": {
+        "parser": {
+          "tailwindDirectives": true
+        }
+      }
     }
   ]
 }

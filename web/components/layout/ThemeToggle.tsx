@@ -2,6 +2,7 @@
 
 import IconButton from "@mui/material/IconButton";
 import { useColorScheme } from "@mui/material/styles";
+import { useTheme } from "next-themes";
 
 // Inline rather than an icon library dependency, matching web/components/layout/NavMenu.tsx's HomeIcon.
 function SunIcon() {
@@ -48,13 +49,24 @@ function MoonIcon() {
 // useColorScheme()'s mode/systemMode are undefined on the server and on the very first client render (its own
 // hydration-safety guarantee), so this falls back to "dark" until that resolves, matching web/theme.ts's own
 // defaultColorScheme.
+//
+// Drives both MUI's mode (still read by every component not yet migrated to Tailwind) and next-themes' theme (read
+// by every component that has) from one click, so [data-mui-color-scheme] and [data-theme] never disagree during the
+// Tailwind migration. MUI's mode/systemMode stays the source of truth for the resolved/fallback logic; setTheme just
+// mirrors the decision.
 export function ThemeToggle() {
   const { mode, systemMode, setMode } = useColorScheme();
+  const { setTheme } = useTheme();
   const resolvedMode = (mode === "system" ? systemMode : mode) ?? "dark";
   const nextMode = resolvedMode === "dark" ? "light" : "dark";
 
+  function handleClick() {
+    setMode(nextMode);
+    setTheme(nextMode);
+  }
+
   return (
-    <IconButton size="small" aria-label={`Switch to ${nextMode} mode`} onClick={() => setMode(nextMode)}>
+    <IconButton size="small" aria-label={`Switch to ${nextMode} mode`} onClick={handleClick}>
       {resolvedMode === "dark" ? <SunIcon /> : <MoonIcon />}
     </IconButton>
   );
