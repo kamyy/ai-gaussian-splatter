@@ -1,6 +1,5 @@
 "use client";
 
-import IconButton from "@mui/material/IconButton";
 import { useColorScheme } from "@mui/material/styles";
 import { useTheme } from "next-themes";
 
@@ -66,8 +65,13 @@ export function ThemeToggle() {
   }
 
   return (
-    <IconButton size="small" aria-label={`Switch to ${nextMode} mode`} onClick={handleClick}>
+    <button
+      type="button"
+      aria-label={`Switch to ${nextMode} mode`}
+      onClick={handleClick}
+      className="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-primary/10"
+    >
       {resolvedMode === "dark" ? <SunIcon /> : <MoonIcon />}
-    </IconButton>
+    </button>
   );
 }
