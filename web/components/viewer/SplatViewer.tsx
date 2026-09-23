@@ -1,9 +1,6 @@
 "use client";
 
 import { DropInViewer, SceneFormat } from "@mkkellogg/gaussian-splats-3d";
-import Box from "@mui/material/Box";
-import CircularProgress from "@mui/material/CircularProgress";
-import Typography from "@mui/material/Typography";
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -12,6 +9,7 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 
 import { CARD_SHADOW } from "@/components/layout/Card";
 import { Center } from "@/components/layout/Center";
+import { Spinner } from "@/components/ui/Spinner";
 import { AXES_HELPER_SIZE } from "./constants";
 import { PointCloudScene } from "./PointCloudScene";
 
@@ -194,29 +192,16 @@ export function SplatViewer({ mode, splatUrl, pointCloudUrl, height = "70vh" }: 
 
   return (
     // The mat/mount border is a print frame around the viewport, matching the rest of the Contact Sheet direction
-    // (AGENTS.md) — background.paper for contrast against the page ground the caller renders this on, plus the same
-    // drop shadow web/components/layout/Card.tsx uses so the mounted frame reads as sitting above the page rather
-    // than flush with it.
-    <Box
-      sx={{
-        width: "100%",
-        height,
-        p: 1,
-        boxSizing: "border-box",
-        bgcolor: "background.paper",
-        boxShadow: CARD_SHADOW,
-      }}
-    >
-      <Box
-        sx={{
-          width: "100%",
-          height: "100%",
-          position: "relative",
-          // theme.vars (not theme.palette) so this tracks the active scheme rather than freezing to
-          // defaultColorScheme; mainChannel + rgba() composes the alpha since a var() reference can't be
-          // string-suffixed with hex alpha digits the way a literal hex color could.
-          backgroundImage: theme =>
-            `radial-gradient(ellipse at 50% 50%, rgba(${theme.vars.palette.primary.mainChannel} / 0.071), transparent 65%)`,
+    // (AGENTS.md) — bg-paper for contrast against the page ground the caller renders this on, plus the same drop
+    // shadow web/components/layout/Card.tsx uses so the mounted frame reads as sitting above the page rather than
+    // flush with it.
+    <div className="box-border w-full bg-paper p-2" style={{ height, boxShadow: CARD_SHADOW }}>
+      <div
+        className="relative h-full w-full"
+        style={{
+          // color-mix() (not a literal hex) so this tracks the active [data-theme] rather than freezing to one.
+          backgroundImage:
+            "radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--color-primary) 7.1%, transparent), transparent 65%)",
         }}
       >
         {/* flat/linear: R3F's default ACESFilmicToneMapping + SRGBColorSpace runs the splat shader's raw, untoneMapped
@@ -233,24 +218,24 @@ export function SplatViewer({ mode, splatUrl, pointCloudUrl, height = "70vh" }: 
           <OrbitControls ref={controlsRef} makeDefault />
         </Canvas>
         {activeError && (
-          <Center sx={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-            <Typography color="error">{activeError}</Typography>
+          <Center className="pointer-events-none absolute inset-0">
+            <p className="text-error">{activeError}</p>
           </Center>
         )}
         {!activeError && !hasAsset && (
-          <Center sx={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-            <Typography color="text.secondary">Not available for this splat.</Typography>
+          <Center className="pointer-events-none absolute inset-0">
+            <p className="text-muted-foreground">Not available for this splat.</p>
           </Center>
         )}
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }
 
 export function SplatViewerLoading() {
   return (
-    <Center sx={{ width: "100%", height: "70vh" }}>
-      <CircularProgress />
+    <Center className="h-[70vh] w-full">
+      <Spinner className="h-8 w-8 text-muted-foreground" />
     </Center>
   );
 }
