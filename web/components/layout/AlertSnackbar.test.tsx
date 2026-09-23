@@ -1,10 +1,8 @@
-import { ThemeProvider } from "@mui/material/styles";
 import { render, screen } from "@testing-library/react";
 import { SnackbarProvider, useSnackbar } from "notistack";
 import { useEffect } from "react";
 import { describe, expect, it } from "vitest";
 
-import { theme } from "@/theme";
 import { AlertSnackbar } from "./AlertSnackbar";
 
 function Trigger({ message, progress }: { message: string; progress?: boolean }) {
@@ -17,11 +15,9 @@ function Trigger({ message, progress }: { message: string; progress?: boolean })
 
 function renderSnackbar(props: { message: string; progress?: boolean }) {
   return render(
-    <ThemeProvider theme={theme}>
-      <SnackbarProvider Components={{ info: AlertSnackbar }}>
-        <Trigger {...props} />
-      </SnackbarProvider>
-    </ThemeProvider>,
+    <SnackbarProvider Components={{ info: AlertSnackbar }}>
+      <Trigger {...props} />
+    </SnackbarProvider>,
   );
 }
 

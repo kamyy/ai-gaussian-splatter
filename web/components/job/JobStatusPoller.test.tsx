@@ -1,20 +1,14 @@
-import { ThemeProvider } from "@mui/material/styles";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { Job } from "@/lib/types";
-import { theme } from "@/theme";
 import { JobStatusPoller } from "./JobStatusPoller";
 
 const { useLatestJobMock } = vi.hoisted(() => ({ useLatestJobMock: vi.fn() }));
 vi.mock("@/lib/hooks", () => ({ useLatestJob: useLatestJobMock }));
 
 function renderPoller() {
-  return render(
-    <ThemeProvider theme={theme}>
-      <JobStatusPoller splatId="splat-1" />
-    </ThemeProvider>,
-  );
+  return render(<JobStatusPoller splatId="splat-1" />);
 }
 
 const baseJob: Job = {

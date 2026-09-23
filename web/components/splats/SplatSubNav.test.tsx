@@ -1,8 +1,6 @@
-import { ThemeProvider } from "@mui/material/styles";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { theme } from "@/theme";
 import { SplatSubNav } from "./SplatSubNav";
 
 vi.mock("next/navigation", () => ({
@@ -11,11 +9,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 function renderNav(props: Partial<{ pointCloudEnabled: boolean; splatEnabled: boolean }> = {}) {
-  return render(
-    <ThemeProvider theme={theme}>
-      <SplatSubNav splatId="splat-1" pointCloudEnabled={false} splatEnabled={false} {...props} />
-    </ThemeProvider>,
-  );
+  return render(<SplatSubNav splatId="splat-1" pointCloudEnabled={false} splatEnabled={false} {...props} />);
 }
 
 describe("SplatSubNav", () => {

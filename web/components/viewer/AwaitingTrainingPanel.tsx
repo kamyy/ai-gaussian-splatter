@@ -1,15 +1,12 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
-import Tooltip from "@mui/material/Tooltip";
-import Typography from "@mui/material/Typography";
 import { useState } from "react";
 
 import { Card } from "@/components/layout/Card";
+import { Button } from "@/components/ui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip";
 import { apiFetch } from "@/lib/apiFetch";
-import { rem } from "@/lib/rem";
 import type { Job } from "@/lib/types";
 import { useAppSnackbar } from "@/lib/useAppSnackbar";
 import { SplatViewer } from "./SplatViewer";
@@ -48,7 +45,7 @@ export function AwaitingTrainingPanel({ splatId, pointCloudUrl, onTrainStarted }
   }
 
   return (
-    <Box sx={{ position: "relative", width: "100%", height: "100%" }}>
+    <div className="relative h-full w-full">
       <SplatViewer mode="colmap_points" splatUrl={null} pointCloudUrl={pointCloudUrl} height="100%" />
 
       {/* -right-2 (-0.5rem = -8px) looks wrong in isolation, but this panel sits inside its route page's own pr-6
@@ -56,29 +53,26 @@ export function AwaitingTrainingPanel({ splatId, pointCloudUrl, onTrainStarted }
       web/app/(authenticated)/splats/[id]/layout.tsx positions its own cards against. 16 - 24 = -8 cancels that
       gutter out so this card's right edge lines up with theirs instead of sitting 24px further left. */}
       <Card className="absolute -right-2 bottom-4">
-        <Tooltip
-          placement="top-end"
-          title={
-            <Box sx={{ maxWidth: rem(260), p: 0.5 }}>
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                Ready to train
-              </Typography>
-              <Typography variant="caption">
-                COLMAP finished reconstructing camera positions from the point cloud above. Training is the expensive,
-                GPU-bound step.
-              </Typography>
-            </Box>
-          }
-        >
-          {/* A span, not the Button directly: Tooltip needs its child to keep firing pointer events even while the
-          button is disabled by its own `loading` state, which a disabled native button element otherwise blocks. */}
-          <span>
-            <Button variant="contained" onClick={handleTrain} loading={isStarting}>
-              Start training
-            </Button>
-          </span>
+        <Tooltip>
+          {/* A span, not the Button directly: the tooltip needs its child to keep firing pointer events even while
+          the button is disabled by its own `loading` state, which a disabled native button element otherwise
+          blocks. */}
+          <TooltipTrigger asChild>
+            <span>
+              <Button variant="contained" onClick={handleTrain} loading={isStarting}>
+                Start training
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" align="end" className="max-w-[16.25rem]">
+            <p className="font-semibold text-sm">Ready to train</p>
+            <p className="text-xs">
+              COLMAP finished reconstructing camera positions from the point cloud above. Training is the expensive,
+              GPU-bound step.
+            </p>
+          </TooltipContent>
         </Tooltip>
       </Card>
-    </Box>
+    </div>
   );
 }

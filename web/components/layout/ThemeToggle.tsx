@@ -1,6 +1,5 @@
 "use client";
 
-import { useColorScheme } from "@mui/material/styles";
 import { useTheme } from "next-themes";
 
 // Inline rather than an icon library dependency, matching web/components/layout/NavMenu.tsx's HomeIcon.
@@ -45,33 +44,21 @@ function MoonIcon() {
 // web/app/(public)/layout.tsx (signed-out hero, sign-in/up, the public share page) and
 // web/components/layout/AuthHeader.tsx (the signed-in splat workspace).
 //
-// useColorScheme()'s mode/systemMode are undefined on the server and on the very first client render (its own
-// hydration-safety guarantee), so this falls back to "dark" until that resolves, matching web/theme.ts's own
-// defaultColorScheme.
-//
-// Drives both MUI's mode (still read by every component not yet migrated to Tailwind) and next-themes' theme (read
-// by every component that has) from one click, so [data-mui-color-scheme] and [data-theme] never disagree during the
-// Tailwind migration. MUI's mode/systemMode stays the source of truth for the resolved/fallback logic; setTheme just
-// mirrors the decision.
+// resolvedTheme is undefined on the server and on the very first client render (next-themes' own hydration-safety
+// guarantee), so this falls back to "dark" until that resolves, matching web/app/globals.css's :root default.
 export function ThemeToggle() {
-  const { mode, systemMode, setMode } = useColorScheme();
-  const { setTheme } = useTheme();
-  const resolvedMode = (mode === "system" ? systemMode : mode) ?? "dark";
-  const nextMode = resolvedMode === "dark" ? "light" : "dark";
-
-  function handleClick() {
-    setMode(nextMode);
-    setTheme(nextMode);
-  }
+  const { resolvedTheme, setTheme } = useTheme();
+  const mode = resolvedTheme ?? "dark";
+  const nextMode = mode === "dark" ? "light" : "dark";
 
   return (
     <button
       type="button"
       aria-label={`Switch to ${nextMode} mode`}
-      onClick={handleClick}
+      onClick={() => setTheme(nextMode)}
       className="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-primary/10"
     >
-      {resolvedMode === "dark" ? <SunIcon /> : <MoonIcon />}
+      {mode === "dark" ? <SunIcon /> : <MoonIcon />}
     </button>
   );
 }

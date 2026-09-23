@@ -1,22 +1,16 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
-import DialogContent from "@mui/material/DialogContent";
-import DialogTitle from "@mui/material/DialogTitle";
-import Stack from "@mui/material/Stack";
-import TextField from "@mui/material/TextField";
-import Typography from "@mui/material/Typography";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { mutate } from "swr";
-
+import { Button } from "@/components/ui/Button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
 import { UploadProgress } from "@/components/upload/UploadProgress";
 import { apiFetch } from "@/lib/apiFetch";
-import { rem } from "@/lib/rem";
+import { cn } from "@/lib/cn";
 import { useAppStore } from "@/lib/store";
 import type { Splat } from "@/lib/types";
 import { uploadPhotos } from "@/lib/uploadPhotos";
@@ -123,58 +117,49 @@ export function CreateSplatModal({ opened, onClose }: CreateSplatModalProps) {
   }
 
   return (
-    <Dialog open={opened} onClose={handleClose} fullWidth>
-      <DialogTitle>Create new splat</DialogTitle>
-      {/* MUI zeros DialogContent's padding-top when it follows DialogTitle (`.MuiDialogTitle-root + &`), which
-      clips the outlined TextField's floating "Name" label. A plain `pt` loses that selector; `&&` is enough to
-      restore the notch. */}
-      <DialogContent sx={{ "&&": { pt: 1.5 } }}>
-        <Stack spacing={2}>
-          <TextField
+    <Dialog open={opened} onOpenChange={next => !next && handleClose()}>
+      <DialogContent>
+        <DialogTitle>Create new splat</DialogTitle>
+        <div className="flex flex-col gap-4">
+          <Input
             label="Name"
             placeholder="e.g. Coffee mug"
             value={name}
             onChange={event => setName(event.target.value)}
             autoFocus
-            fullWidth
           />
-          <Box
+          <div
             {...getRootProps()}
-            sx={{
+            className={cn(
               // "divider" is tuned for a 1px separator against an adjacent surface, not a dashed outline standing
-              // alone in open space — in dark mode it sits too close to background.paper's own tone to read as a
-              // drop-zone edge. text.secondary keeps a legible boundary in both modes.
-              border: "1px dashed",
-              borderColor: isDragReject ? "error.main" : "text.secondary",
-              borderRadius: 1,
-              p: 3,
-              textAlign: "center",
-              cursor: submitting ? "not-allowed" : "pointer",
-            }}
+              // alone in open space — in dark mode it sits too close to bg-paper's own tone to read as a drop-zone
+              // edge. text-muted-foreground keeps a legible boundary in both modes.
+              "rounded-sm border border-dashed p-6 text-center",
+              isDragReject ? "border-error" : "border-muted-foreground",
+              submitting ? "cursor-not-allowed" : "cursor-pointer",
+            )}
           >
             <input {...getInputProps()} />
-            <Stack sx={{ minHeight: rem(100), justifyContent: "center", pointerEvents: "none" }}>
+            <div className="flex min-h-[6.25rem] flex-col justify-center pointer-events-none">
               {isDragReject ? (
-                <Typography variant="body2" color="error">
-                  Only image files are accepted
-                </Typography>
+                <p className="text-sm text-error">Only image files are accepted</p>
               ) : isDragAccept ? (
-                <Typography variant="body2">Drop photos here</Typography>
+                <p className="text-sm">Drop photos here</p>
               ) : (
-                <Typography variant="body2" color="text.secondary">
+                <p className="text-sm text-muted-foreground">
                   Drag photos here, or click to select files — optional now, but this is the only chance to add them
-                </Typography>
+                </p>
               )}
-            </Stack>
-          </Box>
-          <Typography variant="body2" color="text.secondary">
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground">
             {files.length} photo{files.length === 1 ? "" : "s"} selected
-          </Typography>
+          </p>
           <UploadProgress />
           <Button onClick={handleCreate} disabled={name.trim().length === 0 || submitting} loading={submitting}>
             Create
           </Button>
-        </Stack>
+        </div>
       </DialogContent>
     </Dialog>
   );

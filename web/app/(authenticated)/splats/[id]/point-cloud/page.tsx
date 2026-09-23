@@ -1,8 +1,6 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import Box from "@mui/material/Box";
-import Typography from "@mui/material/Typography";
 import { use } from "react";
 import useSWR from "swr";
 
@@ -11,7 +9,6 @@ import { AwaitingTrainingPanel } from "@/components/viewer/AwaitingTrainingPanel
 import { SplatViewer, SplatViewerLoading } from "@/components/viewer/SplatViewer";
 import { apiFetch } from "@/lib/apiFetch";
 import { useLatestJob } from "@/lib/hooks";
-import { rem } from "@/lib/rem";
 import { JobStatus } from "@/lib/types";
 
 // SWR is left on its defaults here: this route mounts once per navigation, so the presign fetch it triggers on mount
@@ -38,24 +35,20 @@ export default function PointCloudPage({ params }: { params: Promise<{ id: strin
   // The review step: the point cloud plus the button that pays for training.
   if (job?.status === JobStatus.awaiting_training) {
     return (
-      <Box
-        sx={{
-          height: "100%",
-          overflowY: "auto",
-          pt: rem(VIEWER_TOP_GAP),
-          pb: rem(VIEWER_BOTTOM_GAP),
-          pl: rem(24),
-          pr: rem(24),
-        }}
+      // pt/pb come from PhotoFilmstrip's own exported constants, not a static Tailwind class, so this stays in
+      // lockstep if either constant there ever changes.
+      <div
+        className="h-full overflow-y-auto px-6"
+        style={{ paddingTop: VIEWER_TOP_GAP, paddingBottom: VIEWER_BOTTOM_GAP }}
       >
         {pointCloudError && (
-          <Typography color="text.secondary">The point cloud isn&apos;t ready yet — still checking.</Typography>
+          <p className="text-muted-foreground">The point cloud isn&apos;t ready yet — still checking.</p>
         )}
         {!pointCloudUrl && !pointCloudError && <SplatViewerLoading />}
         {pointCloudUrl && (
           <AwaitingTrainingPanel splatId={id} pointCloudUrl={pointCloudUrl} onTrainStarted={() => void refetchJob()} />
         )}
-      </Box>
+      </div>
     );
   }
 
@@ -67,12 +60,12 @@ export default function PointCloudPage({ params }: { params: Promise<{ id: strin
 
   // Same top/bottom clearance as the awaiting_training branch above.
   return (
-    <Box sx={{ height: "100%", pt: rem(VIEWER_TOP_GAP), pb: rem(VIEWER_BOTTOM_GAP), pl: rem(24), pr: rem(24) }}>
+    <div className="h-full px-6" style={{ paddingTop: VIEWER_TOP_GAP, paddingBottom: VIEWER_BOTTOM_GAP }}>
       {pointCloudPending ? (
         <SplatViewerLoading />
       ) : (
         <SplatViewer mode="colmap_points" splatUrl={null} pointCloudUrl={pointCloudUrl ?? null} height="100%" />
       )}
-    </Box>
+    </div>
   );
 }

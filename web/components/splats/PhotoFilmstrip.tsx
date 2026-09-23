@@ -1,20 +1,14 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
-import ButtonBase from "@mui/material/ButtonBase";
-import Paper from "@mui/material/Paper";
-import Skeleton from "@mui/material/Skeleton";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
 import { useLayoutEffect, useRef, useState } from "react";
 
 import { CARD_SHADOW, Card } from "@/components/layout/Card";
 import { Center } from "@/components/layout/Center";
+import { Button } from "@/components/ui/Button";
 import { apiFetch } from "@/lib/apiFetch";
+import { cn } from "@/lib/cn";
 import { useLatestJob, usePhotos } from "@/lib/hooks";
-import { rem } from "@/lib/rem";
 import { type Job, JobStatus } from "@/lib/types";
 import { useAppSnackbar } from "@/lib/useAppSnackbar";
 import { ScrollEdgeButton } from "./ScrollEdgeButton";
@@ -22,22 +16,20 @@ import { useDragMomentumScroll } from "./useDragMomentumScroll";
 
 // The filmstrip's signature motif: a row of small holes along the strip's edge, like film run through a
 // projector gate. A repeating radial-gradient needs no image asset. Used above and below the photo row, inside
-// the same scrollable element as the photos (see the `filmstripRef` Box below) so the holes scroll along with
+// the same scrollable element as the photos (see the `filmstripRef` div below) so the holes scroll along with
 // the film rather than staying fixed while only the photos move.
 function SprocketStrip() {
   return (
-    <Box
-      sx={{
-        height: rem(10),
-        mx: 2,
-        // theme.vars (not theme.palette) so this tracks the active scheme rather than freezing to
-        // defaultColorScheme.
-        backgroundImage: theme =>
-          `radial-gradient(circle, ${theme.vars.palette.text.secondary} 2px, transparent 2.5px)`,
+    <div
+      className="mx-4 h-[0.625rem]"
+      style={{
+        // var(--color-muted-foreground) (not a literal hex) so this tracks the active [data-theme] rather than
+        // freezing to one.
+        backgroundImage: "radial-gradient(circle, var(--color-muted-foreground) 2px, transparent 2.5px)",
         // backgroundPosition is always half of backgroundSize's width, so the first hole lands centered in its own
         // tile instead of clipped at the strip's left edge.
-        backgroundSize: `${rem(40)} ${rem(10)}`,
-        backgroundPosition: `${rem(20)} center`,
+        backgroundSize: "2.5rem 0.625rem",
+        backgroundPosition: "1.25rem center",
       }}
     />
   );
@@ -192,31 +184,24 @@ export function PhotoFilmstrip({ splatId }: PhotoFilmstripProps) {
 
   return (
     <>
-      <Paper
-        variant="outlined"
-        sx={{
-          pointerEvents: "auto",
-          position: "absolute",
-          // 208 is the navbar width web/app/(authenticated)/splats/layout.tsx gives the splat carousel (200) plus
-          // the same 8 `right` leaves below, so the panel clears the navbar with a matching gap on each side. That
-          // layout exports no width constant, so the two numbers are kept in step by hand.
-          left: rem(208),
-          right: rem(8),
-          bottom: 0,
+      <div
+        // 208 is the navbar width web/app/(authenticated)/splats/layout.tsx gives the splat carousel (200) plus
+        // the same 8 `right` leaves below, so the panel clears the navbar with a matching gap on each side. That
+        // layout exports no width constant, so the two numbers are kept in step by hand (left-52 = 13rem = 208px,
+        // right-2 = 0.5rem = 8px).
+        className="pointer-events-auto absolute right-2 bottom-0 left-52 border border-divider bg-paper"
+        style={{
           // HANDLE_HEIGHT/bodyHeight and translateY stay raw px, not rem: they're compared against and driven by
           // PointerEvent.clientY in the drag handlers below, which browsers always report in real CSS pixels
           // regardless of root font-size. Converting only the height here would desync the panel's drawn size from
           // its own drag thresholds under a non-default browser zoom.
           height: HANDLE_HEIGHT + bodyHeight,
-          borderBottomLeftRadius: 0,
-          borderBottomRightRadius: 0,
           boxShadow: CARD_SHADOW,
           transform: `translateY(${translateY}px)`,
           transition: dragY === null ? "transform 150ms ease" : "none",
         }}
       >
-        <ButtonBase
-          disableRipple
+        <button
           type="button"
           aria-expanded={opened}
           aria-label={opened ? "Close photos panel" : "Open photos panel"}
@@ -224,85 +209,78 @@ export function PhotoFilmstrip({ splatId }: PhotoFilmstripProps) {
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onClick={handleClick}
-          sx={{ height: HANDLE_HEIGHT, width: "100%", cursor: "grab", touchAction: "none" }}
+          className="h-10 w-full cursor-grab touch-none"
         >
           <Center className="h-full w-full">
-            <Stack spacing={0.5} sx={{ alignItems: "center" }}>
-              <Box sx={{ width: rem(36), height: rem(4), borderRadius: rem(2), backgroundColor: "divider" }} />
-              <Typography variant="caption" color="text.secondary">
+            <div className="flex flex-col items-center gap-1">
+              <div className="h-1 w-9 rounded-[0.125rem] bg-divider" />
+              <span className="text-xs text-muted-foreground">
                 {photoCount} photo{photoCount === 1 ? "" : "s"}
-              </Typography>
-            </Stack>
+              </span>
+            </div>
           </Center>
-        </ButtonBase>
+        </button>
 
         {/* Not given an explicit height: it needs to size itself naturally so the ResizeObserver above can measure
-        that natural size and hand it to the Paper below instead. Forcing this element to bodyHeight would clamp it
+        that natural size and hand it to the panel above instead. Forcing this element to bodyHeight would clamp it
         to whatever was last measured, so ResizeObserver would just keep reporting that same number back. */}
-        <Stack ref={bodyRef} spacing={1.5} sx={{ px: 2, pb: 2 }}>
+        <div ref={bodyRef} className="flex flex-col gap-3 px-4 pb-4">
           {isLoading && (
-            <Skeleton variant="rectangular" sx={{ height: FILMSTRIP_PHOTO_HEIGHT, width: FILMSTRIP_PHOTO_HEIGHT }} />
+            <div
+              className="animate-pulse bg-divider"
+              style={{ height: FILMSTRIP_PHOTO_HEIGHT, width: FILMSTRIP_PHOTO_HEIGHT }}
+            />
           )}
           {!isLoading && photos && photos.length === 0 && (
-            <Typography color="text.secondary">No photos uploaded yet.</Typography>
+            <p className="text-muted-foreground">No photos uploaded yet.</p>
           )}
           {!isLoading && photos && photos.length > 0 && (
-            <Stack direction="row" spacing={1} sx={{ flexWrap: "nowrap", alignItems: "center" }}>
+            <div className="flex flex-nowrap items-center gap-2">
               <ScrollEdgeButton label="Scroll to first photo" direction="left" onClick={scrollFilmstripToStart} />
-              <Box
+              <div
                 ref={filmstripRef}
                 onWheel={handleWheel}
                 {...dragHandlers}
-                className="thin-scrollbar"
-                sx={{
-                  flex: 1,
-                  minWidth: 0,
-                  overflowX: "auto",
-                  bgcolor: "action.hover",
-                  cursor: isPanningFilmstrip ? "grabbing" : "grab",
-                  userSelect: isPanningFilmstrip ? "none" : undefined,
-                }}
+                className={cn(
+                  "thin-scrollbar min-w-0 flex-1 overflow-x-auto bg-divider/20",
+                  isPanningFilmstrip ? "cursor-grabbing select-none" : "cursor-grab",
+                )}
               >
-                {/* width: "fit-content" so the sprocket strips below stretch to exactly the photo row's own
-                rendered width, not the (narrower) visible scroll viewport — since all three are inside the same
-                scrollable Box, they scroll together as one strip instead of the holes staying fixed while only the
-                photos move. */}
-                <Stack spacing={1} sx={{ width: "fit-content" }}>
+                {/* w-fit so the sprocket strips below stretch to exactly the photo row's own rendered width, not
+                the (narrower) visible scroll viewport — since all three are inside the same scrollable div, they
+                scroll together as one strip instead of the holes staying fixed while only the photos move. */}
+                <div className="flex w-fit flex-col gap-2">
                   <SprocketStrip />
-                  <Stack direction="row" spacing={1.5} sx={{ flexWrap: "nowrap" }}>
+                  <div className="flex flex-row flex-nowrap gap-3">
                     {photos.map((photo, index) => (
-                      <Stack key={photo.id} spacing={0.5} sx={{ alignItems: "center", flexShrink: 0 }}>
-                        <Typography variant="caption" color="text.secondary" sx={{ fontStyle: "italic" }}>
+                      <div key={photo.id} className="flex shrink-0 flex-col items-center gap-1">
+                        <span className="text-xs text-muted-foreground italic">
                           {String(index + 1).padStart(2, "0")}
-                        </Typography>
+                        </span>
                         {/* The mat border is a print mount, distinct from the panel it sits on (this panel is
-                        itself background.paper), so background.default reads as a frame in both modes with no
-                        separate light/dark logic needed here. */}
-                        <Box sx={{ bgcolor: "background.default", p: 0.5 }}>
+                        itself bg-paper), so bg-background reads as a frame in both modes with no separate
+                        light/dark logic needed here. */}
+                        <div className="bg-background p-1">
                           {/* biome-ignore lint/performance/noImgElement: presigned S3 URL has no fixed domain for next/image. */}
                           <img
                             src={photo.url}
                             alt={photo.originalFilename}
                             loading="lazy"
                             draggable={false}
-                            style={{
-                              height: rem(FILMSTRIP_PHOTO_HEIGHT),
-                              width: "auto",
-                              display: "block",
-                            }}
+                            className="block h-[9.375rem] w-auto"
                           />
-                        </Box>
-                      </Stack>
+                        </div>
+                      </div>
                     ))}
-                  </Stack>
+                  </div>
                   <SprocketStrip />
-                </Stack>
-              </Box>
+                </div>
+              </div>
               <ScrollEdgeButton label="Scroll to last photo" direction="right" onClick={scrollFilmstripToEnd} />
-            </Stack>
+            </div>
           )}
-        </Stack>
-      </Paper>
+        </div>
+      </div>
 
       {canStartReconstruction && (
         <Card className="pointer-events-auto absolute right-4 bottom-14">

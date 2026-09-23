@@ -1,8 +1,5 @@
 "use client";
 
-import Alert from "@mui/material/Alert";
-import Box from "@mui/material/Box";
-import Skeleton from "@mui/material/Skeleton";
 import { use, useEffect } from "react";
 
 import { JobStatusPoller } from "@/components/job/JobStatusPoller";
@@ -36,12 +33,12 @@ export default function SplatLayout({ children, params }: SplatLayoutProps) {
   }, [job, refetchSplat]);
 
   if (isLoading) {
-    return <Skeleton variant="rectangular" sx={{ height: "100%" }} />;
+    return <div className="h-full animate-pulse bg-divider" />;
   }
   // Deliberately not `!splat` combined with an error check: a failed revalidation leaves the last good splat in
   // `data`, and SWR retries on its own.
   if (!splat) {
-    return <Alert severity="error">Splat not found.</Alert>;
+    return <p className="p-4 text-error">Splat not found.</p>;
   }
 
   // In-progress statuses and a failure are web/components/job/JobStatusSnackbar.tsx. awaiting_training and complete
@@ -51,10 +48,10 @@ export default function SplatLayout({ children, params }: SplatLayoutProps) {
   const showJobStatusCard = (job === undefined && jobLoading) || job?.status === JobStatus.cancelled;
 
   return (
-    <Box sx={{ position: "relative", width: "100%", height: "100%" }}>
-      <Box sx={{ position: "absolute", inset: 0 }}>{children}</Box>
+    <div className="relative h-full w-full">
+      <div className="absolute inset-0">{children}</div>
 
-      <Box sx={{ position: "fixed", inset: 0, zIndex: 90, pointerEvents: "none" }}>
+      <div className="pointer-events-none fixed inset-0 z-[90]">
         {showJobStatusCard && (
           <Card className="pointer-events-auto absolute top-[5.375rem] right-4 w-80">
             <JobStatusPoller splatId={id} />
@@ -81,7 +78,7 @@ export default function SplatLayout({ children, params }: SplatLayoutProps) {
 
         <JobStatusSnackbar splatId={id} />
         <PhotoFilmstrip splatId={id} />
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }

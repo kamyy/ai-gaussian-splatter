@@ -1,8 +1,8 @@
 "use client";
 
-import ToggleButton from "@mui/material/ToggleButton";
-import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import { usePathname, useRouter } from "next/navigation";
+
+import { SubNav } from "@/components/ui/SubNav";
 
 interface SplatSubNavProps {
   splatId: string;
@@ -21,23 +21,13 @@ export function SplatSubNav({ splatId, pointCloudEnabled, splatEnabled }: SplatS
   const router = useRouter();
 
   return (
-    <ToggleButtonGroup
-      exclusive
+    <SubNav
       value={activeSubRoute(pathname)}
-      onChange={(_event, value: SubRoute | null) => {
-        // Exclusive-mode ToggleButtonGroup fires onChange with value === null when the already-selected button is
-        // clicked again — guard against navigating to a "null" sub-route.
-        if (value !== null) {
-          router.push(`/splats/${splatId}/${value}`);
-        }
-      }}
-    >
-      <ToggleButton value="point-cloud" disabled={!pointCloudEnabled}>
-        Point cloud
-      </ToggleButton>
-      <ToggleButton value="splat" disabled={!splatEnabled}>
-        Splat
-      </ToggleButton>
-    </ToggleButtonGroup>
+      onChange={value => router.push(`/splats/${splatId}/${value}`)}
+      items={[
+        { value: "point-cloud", label: "Point cloud", disabled: !pointCloudEnabled },
+        { value: "splat", label: "Splat", disabled: !splatEnabled },
+      ]}
+    />
   );
 }

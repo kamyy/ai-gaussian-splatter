@@ -1,9 +1,7 @@
-import { ThemeProvider } from "@mui/material/styles";
 import { render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Job } from "@/lib/types";
-import { theme } from "@/theme";
 import { JobStatusSnackbar } from "./JobStatusSnackbar";
 
 const { useLatestJobMock } = vi.hoisted(() => ({ useLatestJobMock: vi.fn() }));
@@ -18,11 +16,7 @@ vi.mock("@/lib/useAppSnackbar", () => ({
 }));
 
 function renderSnackbar() {
-  return render(
-    <ThemeProvider theme={theme}>
-      <JobStatusSnackbar splatId="splat-1" />
-    </ThemeProvider>,
-  );
+  return render(<JobStatusSnackbar splatId="splat-1" />);
 }
 
 const baseJob: Job = {
@@ -94,11 +88,7 @@ describe("JobStatusSnackbar", () => {
     const firstKey = enqueueSnackbarMock.mock.calls[0][1].key;
 
     useLatestJobMock.mockReturnValue({ data: { ...baseJob, status: "training_running" } });
-    rerender(
-      <ThemeProvider theme={theme}>
-        <JobStatusSnackbar splatId="splat-1" />
-      </ThemeProvider>,
-    );
+    rerender(<JobStatusSnackbar splatId="splat-1" />);
 
     const secondKey = enqueueSnackbarMock.mock.calls[1][1].key;
     expect(firstKey).not.toBe(secondKey);

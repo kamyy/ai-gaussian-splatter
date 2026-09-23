@@ -1,8 +1,6 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import Box from "@mui/material/Box";
-import Typography from "@mui/material/Typography";
 import { use } from "react";
 import useSWR from "swr";
 
@@ -10,7 +8,6 @@ import { VIEWER_BOTTOM_GAP, VIEWER_TOP_GAP } from "@/components/splats/PhotoFilm
 import { SplatViewer, SplatViewerLoading } from "@/components/viewer/SplatViewer";
 import { apiFetch } from "@/lib/apiFetch";
 import { useLatestJob, useSplat } from "@/lib/hooks";
-import { rem } from "@/lib/rem";
 
 export default function SplatPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -35,25 +32,25 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
     // Read directly from the job, not left to web/components/job/JobStatusSnackbar.tsx's toast: that toast is
     // dismissible, and dismissing it would otherwise drop the only copy of the message.
     return (
-      <Box sx={{ pt: rem(76), pl: rem(24) }}>
-        <Typography color="error">
+      <div className="pt-19 pl-6">
+        <p className="text-error">
           {job?.errorMessage ? `Processing failed: ${job.errorMessage}` : "Processing failed."}
-        </Typography>
-      </Box>
+        </p>
+      </div>
     );
   }
   if (splat?.status !== "complete") {
     return (
-      <Box sx={{ pt: rem(76), pl: rem(24) }}>
-        <Typography color="text.secondary">Not ready yet.</Typography>
-      </Box>
+      <div className="pt-19 pl-6">
+        <p className="text-muted-foreground">Not ready yet.</p>
+      </div>
     );
   }
   if (splatUrlError) {
     return (
-      <Box sx={{ pt: rem(76), pl: rem(24) }}>
-        <Typography color="text.secondary">The splat isn&apos;t ready yet — still checking.</Typography>
-      </Box>
+      <div className="pt-19 pl-6">
+        <p className="text-muted-foreground">The splat isn&apos;t ready yet — still checking.</p>
+      </div>
     );
   }
   if (!splatUrl) {
@@ -64,10 +61,11 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
   // header above and clear of the collapsed filmstrip below, with room for the viewer's own drop shadow
   // (web/components/viewer/SplatViewer.tsx) in the gap — without the bottom one, the viewer's own bottom edge
   // sits exactly where the filmstrip's closed handle is painted, and the handle (later in the DOM, so on top)
-  // hides it.
+  // hides it. pt/pb come from those exported constants, not a static Tailwind class, so this stays in lockstep if
+  // either constant there ever changes.
   return (
-    <Box sx={{ height: "100%", pt: rem(VIEWER_TOP_GAP), pb: rem(VIEWER_BOTTOM_GAP), pl: rem(24), pr: rem(24) }}>
+    <div className="h-full px-6" style={{ paddingTop: VIEWER_TOP_GAP, paddingBottom: VIEWER_BOTTOM_GAP }}>
       <SplatViewer mode="splat" splatUrl={splatUrl} pointCloudUrl={null} height="100%" />
-    </Box>
+    </div>
   );
 }
