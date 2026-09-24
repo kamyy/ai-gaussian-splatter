@@ -6,9 +6,9 @@ import { Bricolage_Grotesque, Inter } from "next/font/google";
 
 import { ThemeRegistry } from "@/components/layout/ThemeRegistry";
 
-// Named for their role (display/body), not the specific family, so a future type change — like this one, which
-// replaced the original serif Fraunces + Work Sans pairing — is a one-line swap here rather than a rename sweep
-// across every file that references the CSS variable.
+// Named for their role (display/body), not the specific family, so a future type change — like this one, which replaced
+// the original serif Fraunces + Work Sans pairing — is a one-line swap here rather than a rename sweep across every
+// file that references the CSS variable.
 const displayFont = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-display" });
 const bodyFont = Inter({ subsets: ["latin"], variable: "--font-body" });
 
@@ -19,18 +19,18 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    // suppressHydrationWarning: next-themes (inside ThemeRegistry) sets [data-theme] here before React hydrates, so
-    // the attribute React finds on this element during hydration deliberately doesn't match what it rendered on the
-    // server — the standard escape hatch for a color-mode bootstrap script.
+    // suppressHydrationWarning: next-themes (inside ThemeRegistry) sets [data-theme] here before React hydrates, so the
+    // attribute React finds on this element during hydration deliberately doesn't match what it rendered on the server
+    // — the standard escape hatch for a color-mode bootstrap script.
     <html lang="en" suppressHydrationWarning>
       <body className={`${displayFont.variable} ${bodyFont.variable}`}>
         <ThemeRegistry>
           <ClerkProvider
             localization={{
-              // Clerk's default sign-in header ("Sign in to ai-gaussian-splatter") uses the instance's raw
-              // kebab-case application name from the Clerk dashboard, not a human-readable one.
-              // title/titleCombined cover both the separate sign-in/sign-up pages and Clerk's combined
-              // sign-in/sign-up variant, in case that's ever enabled.
+              // Clerk's default sign-in header ("Sign in to ai-gaussian-splatter") uses the instance's raw kebab-case
+              // application name from the Clerk dashboard, not a human-readable one. title/titleCombined cover both the
+              // separate sign-in/sign-up pages and Clerk's combined sign-in/sign-up variant, in case that's ever
+              // enabled.
               signIn: {
                 start: {
                   title: "Sign in to AI Gaussian Splatter",

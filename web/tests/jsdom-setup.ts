@@ -6,7 +6,7 @@ import { afterEach } from "vitest";
 // every render stays in the document and later tests match elements left behind by earlier ones.
 afterEach(cleanup);
 
-// jsdom doesn't implement matchMedia, which some MUI internals probe for.
+// jsdom doesn't implement matchMedia, which next-themes probes for to detect the OS color-scheme preference.
 if (typeof window !== "undefined" && !window.matchMedia) {
   window.matchMedia = (query: string) => ({
     matches: false,

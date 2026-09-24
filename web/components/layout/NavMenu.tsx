@@ -55,7 +55,7 @@ function HomeIcon() {
 // Radix's DropdownMenu.Item asChild merges its own props/ref onto the rendered child (here, next/link's <Link>,
 // which forwards its ref to the underlying <a>), and its roving-tabindex/typeahead logic reads the actual rendered
 // DOM node via its own Collection context rather than requiring a literal <button> — so arrow-key navigation between
-// items keeps working with no extra wiring, the same guarantee MUI's `component={Link}` trick gave us.
+// items keeps working with no extra wiring.
 export function NavMenu() {
   const [open, setOpen] = useState(false);
 

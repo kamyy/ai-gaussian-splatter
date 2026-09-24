@@ -17,7 +17,7 @@ export function TooltipContent({
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Content
         sideOffset={sideOffset}
-        className={cn("z-[1200] max-w-[260px] bg-paper p-2 text-sm", className)}
+        className={cn("z-1200 max-w-65 bg-paper p-2 text-sm", className)}
         {...props}
       />
     </TooltipPrimitive.Portal>

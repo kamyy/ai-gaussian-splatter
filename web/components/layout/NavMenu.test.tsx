@@ -8,10 +8,9 @@ vi.mock("@clerk/nextjs", () => ({
   Show: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-// Confirms Radix's DropdownMenu.Item asChild + next/link preserves the roving-tabindex keyboard navigation MUI's
-// component={Link} trick used to guarantee — the one behavior most at risk in the Radix swap (see AGENTS.md).
-// userEvent (not fireEvent) is required: Radix's trigger opens on pointerdown, which fireEvent.click alone never
-// dispatches.
+// Confirms Radix's DropdownMenu.Item asChild + next/link preserves roving-tabindex keyboard navigation between
+// items. userEvent (not fireEvent) is required: Radix's trigger opens on pointerdown, which fireEvent.click alone
+// never dispatches.
 describe("NavMenu", () => {
   it("opens the menu and renders Home and My splats as real links", async () => {
     const user = userEvent.setup();

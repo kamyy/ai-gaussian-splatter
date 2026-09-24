@@ -33,8 +33,8 @@ export function CreateSplatModal({ opened, onClose }: CreateSplatModalProps) {
   const [name, setName] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  // Set once the POST below succeeds, so a retry after a photo-upload failure reuses this splat instead of
-  // creating a second one.
+  // Set once the POST below succeeds, so a retry after a photo-upload failure reuses this splat instead of creating a
+  // second one.
   const [createdSplat, setCreatedSplat] = useState<Splat | null>(null);
 
   const { getRootProps, getInputProps, isDragAccept, isDragReject } = useDropzone({
@@ -84,8 +84,8 @@ export function CreateSplatModal({ opened, onClose }: CreateSplatModalProps) {
         return;
       }
 
-      // The splat now exists server-side no matter what happens below, so the carousel must show it, and a retry
-      // click reuses it via createdSplat above instead of re-POSTing a duplicate.
+      // The splat now exists server-side no matter what happens below, so the carousel must show it, and a retry click
+      // reuses it via createdSplat above instead of re-POSTing a duplicate.
       setCreatedSplat(splat);
       await mutate("splats");
     }
@@ -95,9 +95,9 @@ export function CreateSplatModal({ opened, onClose }: CreateSplatModalProps) {
         await uploadPhotos(splat.id, files, token);
         // The earlier mutate("splats") above ran before any photo existed, so the sidebar card still shows no
         // thumbnail/"Photos" chip without this. The photos key also needs its own revalidation: PhotoFilmstrip
-        // (web/components/splats/PhotoFilmstrip.tsx) can already be mounted for this splat by the time upload
-        // finishes, since a first-ever splat's creation retargets web/app/(authenticated)/splats/page.tsx's redirect
-        // as soon as the splat row exists, well before its photos do.
+        // (web/components/splats/PhotoFilmstrip.tsx) can already be mounted for this splat by the time upload finishes,
+        // since a first-ever splat's creation retargets web/app/(authenticated)/splats/page.tsx's redirect as soon as
+        // the splat row exists, well before its photos do.
         await mutate("splats");
         await mutate(["photos", splat.id]);
       }
@@ -131,16 +131,16 @@ export function CreateSplatModal({ opened, onClose }: CreateSplatModalProps) {
           <div
             {...getRootProps()}
             className={cn(
-              // "divider" is tuned for a 1px separator against an adjacent surface, not a dashed outline standing
-              // alone in open space — in dark mode it sits too close to bg-paper's own tone to read as a drop-zone
-              // edge. text-muted-foreground keeps a legible boundary in both modes.
+              // "divider" is tuned for a 1px separator against an adjacent surface, not a dashed outline standing alone
+              // in open space — in dark mode it sits too close to bg-paper's own tone to read as a drop-zone edge.
+              // text-muted-foreground keeps a legible boundary in both modes.
               "rounded-sm border border-dashed p-6 text-center",
               isDragReject ? "border-error" : "border-muted-foreground",
               submitting ? "cursor-not-allowed" : "cursor-pointer",
             )}
           >
             <input {...getInputProps()} />
-            <div className="flex min-h-[6.25rem] flex-col justify-center pointer-events-none">
+            <div className="flex min-h-25 flex-col justify-center pointer-events-none">
               {isDragReject ? (
                 <p className="text-sm text-error">Only image files are accepted</p>
               ) : isDragAccept ? (

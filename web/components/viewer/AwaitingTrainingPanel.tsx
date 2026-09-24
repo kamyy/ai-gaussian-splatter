@@ -64,7 +64,7 @@ export function AwaitingTrainingPanel({ splatId, pointCloudUrl, onTrainStarted }
               </Button>
             </span>
           </TooltipTrigger>
-          <TooltipContent side="top" align="end" className="max-w-[16.25rem]">
+          <TooltipContent side="top" align="end" className="max-w-65">
             <p className="font-semibold text-sm">Ready to train</p>
             <p className="text-xs">
               COLMAP finished reconstructing camera positions from the point cloud above. Training is the expensive,

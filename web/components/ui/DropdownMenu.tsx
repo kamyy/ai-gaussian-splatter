@@ -16,7 +16,7 @@ export function DropdownMenuContent({
       <DropdownMenuPrimitive.Content
         sideOffset={4}
         align="start"
-        className={cn("z-[1200] min-w-[200px] border border-divider bg-paper p-1", className)}
+        className={cn("z-1200 min-w-50 border border-divider bg-paper p-1", className)}
         {...props}
       />
     </DropdownMenuPrimitive.Portal>

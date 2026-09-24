@@ -24,8 +24,8 @@ export default function SplatLayout({ children, params }: SplatLayoutProps) {
   const { data: splat, isLoading, mutate: refetchSplat } = useSplat(id);
   const { data: job, isLoading: jobLoading } = useLatestJob(id);
 
-  // Only the job is polled, but the worker's callback moves the job row and the splat row in one transaction, so a
-  // job that has ended means this splat is stale.
+  // Only the job is polled, but the worker's callback moves the job row and the splat row in one transaction, so a job
+  // that has ended means this splat is stale.
   useEffect(() => {
     if (job && JOB_ENDED_STATUSES.includes(job.status)) {
       void refetchSplat();
@@ -35,8 +35,8 @@ export default function SplatLayout({ children, params }: SplatLayoutProps) {
   if (isLoading) {
     return <div className="h-full animate-pulse bg-divider" />;
   }
-  // Deliberately not `!splat` combined with an error check: a failed revalidation leaves the last good splat in
-  // `data`, and SWR retries on its own.
+  // Deliberately not `!splat` combined with an error check: a failed revalidation leaves the last good splat in `data`,
+  // and SWR retries on its own.
   if (!splat) {
     return <p className="p-4 text-error">Splat not found.</p>;
   }
@@ -51,9 +51,9 @@ export default function SplatLayout({ children, params }: SplatLayoutProps) {
     <div className="relative h-full w-full">
       <div className="absolute inset-0">{children}</div>
 
-      <div className="pointer-events-none fixed inset-0 z-[90]">
+      <div className="pointer-events-none fixed inset-0 z-90">
         {showJobStatusCard && (
-          <Card className="pointer-events-auto absolute top-[5.375rem] right-4 w-80">
+          <Card className="pointer-events-auto absolute top-21.5 right-4 w-80">
             <JobStatusPoller splatId={id} />
           </Card>
         )}
@@ -63,12 +63,7 @@ export default function SplatLayout({ children, params }: SplatLayoutProps) {
         default card padding was built for; py-1 overrides the base p-3 on just the vertical axis (Tailwind's own
         stylesheet ordering resolves the more specific one regardless of class order) so this card doesn't tower
         over its own single-line content. */}
-        <Card
-          className={cn(
-            "pointer-events-auto absolute right-4 py-1",
-            showJobStatusCard ? "top-[11.875rem]" : "top-[5.375rem]",
-          )}
-        >
+        <Card className={cn("pointer-events-auto absolute right-4 py-1", showJobStatusCard ? "top-47.5" : "top-21.5")}>
           <SplatSubNav
             splatId={id}
             pointCloudEnabled={job?.pointCloudS3Key != null || job?.status === JobStatus.awaiting_training}

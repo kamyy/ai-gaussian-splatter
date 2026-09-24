@@ -41,8 +41,8 @@ interface Point {
   color: string;
 }
 
-// A mug-shaped scatter of soft dots standing in for a real Gaussian Splat render, deterministic (seeded) so it's
-// stable across renders. Colored by depth from the ground, echoing how the real point-cloud/splat viewer
+// A mug-shaped scatter of soft dots standing in for a real Gaussian Splat render, deterministic (seeded) so it's stable
+// across renders. Colored by depth from the ground, echoing how the real point-cloud/splat viewer
 // (web/components/viewer/SplatViewer.tsx) reads distance.
 function generatePoints(stops: string[]): Point[] {
   const rand = seededRandom(42);
@@ -86,8 +86,8 @@ function generatePoints(stops: string[]): Point[] {
   return points;
 }
 
-// The signed-out hero's visual: a client component (not inlined in the Server Component web/app/page.tsx) because
-// its color stops depend on next-themes' useTheme(), which needs the client-side ThemeRegistry context.
+// The signed-out hero's visual: a client component (not inlined in the Server Component web/app/page.tsx) because its
+// color stops depend on next-themes' useTheme(), which needs the client-side ThemeRegistry context.
 //
 // resolvedTheme is undefined on the server and on the first client render; this falls back to "dark" until that
 // resolves, matching web/app/globals.css's own :root (unthemed) default.
@@ -97,7 +97,7 @@ export function HeroPointCloud() {
   const points = generatePoints(mode === "dark" ? DARK_STOPS : LIGHT_STOPS);
 
   return (
-    <div className="relative h-[16.4375rem] w-[18rem]" aria-hidden="true">
+    <div className="relative h-65.75 w-72" aria-hidden="true">
       <div
         className="absolute inset-0"
         style={{
@@ -106,12 +106,10 @@ export function HeroPointCloud() {
             "radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--color-primary) 10.2%, transparent), transparent 68%)",
         }}
       />
-      {points.map((point, index) => (
+      {points.map(point => (
         <div
-          // Index is stable and safe here: this list never reorders, filters, or adds/removes items — it's a
-          // fixed decorative scatter generated once per mode.
-          // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length decorative scatter, never reordered
-          key={index}
+          // Left, top, and size together are unique for this seeded scatter, so they identify the dot.
+          key={`${point.left}:${point.top}:${point.size}`}
           className="absolute rounded-full"
           style={{
             left: point.left,

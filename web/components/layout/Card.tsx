@@ -18,7 +18,7 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
 // (web/components/splats/PhotoFilmstrip.tsx's "Start reconstruction", plus
 // web/app/(authenticated)/splats/[id]/layout.tsx's JobStatusPoller/SplatSubNav cards). `className`/`style` carry
 // whatever each caller needs on top of that shared look, most often floating positioning. No rounded-* class: the
-// former MUI sx={{ borderRadius: 2 }} was multiplied by theme.shape.borderRadius (0), so it always rendered flat.
+// flat print look this app uses never rounds corners.
 export function Card({ children, className, style, ...props }: CardProps) {
   return (
     <div
