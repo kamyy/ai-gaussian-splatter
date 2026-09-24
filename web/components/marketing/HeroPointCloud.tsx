@@ -106,12 +106,10 @@ export function HeroPointCloud() {
             "radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--color-primary) 10.2%, transparent), transparent 68%)",
         }}
       />
-      {points.map((point, index) => (
+      {points.map(point => (
         <div
-          // Index is stable and safe here: this list never reorders, filters, or adds/removes items — it's a fixed
-          // decorative scatter generated once per mode. biome-ignore lint/suspicious/noArrayIndexKey: fixed-length
-          // decorative scatter, never reordered
-          key={index}
+          // Left, top, and size together are unique for this seeded scatter, so they identify the dot.
+          key={`${point.left}:${point.top}:${point.size}`}
           className="absolute rounded-full"
           style={{
             left: point.left,
