@@ -11,7 +11,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
 }
 
-// Flat print look (rounded-[2px], not fully square), no uppercase transform, and a minWidth/padding sized for short
+// Flat print look (rounded-xs, not fully square), no uppercase transform, and a minWidth/padding sized for short
 // labels like "Create" rather than a generic action bar.
 const VARIANT: Record<ButtonVariant, string> = {
   contained: "bg-primary text-primary-foreground hover:opacity-90",
@@ -39,7 +39,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       className={cn(
-        "inline-flex min-w-10 items-center justify-center gap-2 rounded-[2px] font-body normal-case transition-colors disabled:pointer-events-none disabled:opacity-50",
+        "inline-flex min-w-10 items-center justify-center gap-2 rounded-xs font-body normal-case transition-colors disabled:pointer-events-none disabled:opacity-50",
         VARIANT[variant],
         SIZE[size],
         className,

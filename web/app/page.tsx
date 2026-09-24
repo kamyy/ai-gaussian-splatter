@@ -25,11 +25,11 @@ export default async function RootPage() {
         <HeroPointCloud />
         {/* Tailwind's default sm: (640px) is fine as-is for this one headline breakpoint, not worth a custom
         override. */}
-        <h1 className="text-center font-display text-[2.25rem] sm:text-[3.25rem]">
+        <h1 className="text-center font-display text-4xl sm:text-5xl">
           <span className="block">Convert photos into a</span>
           <span className="block text-primary">3D Gaussian Splat</span>
         </h1>
-        <p className="max-w-[35rem] text-center text-muted-foreground">
+        <p className="max-w-140 text-center text-muted-foreground">
           Upload multi-angle photos of a physical object. Get back a real-time 3D reconstruction via AI, ready to view
           and share right in the browser.
         </p>

@@ -10,10 +10,10 @@ export const Dialog = DialogPrimitive.Root;
 export function DialogContent({ className, children, ...props }: React.ComponentProps<typeof DialogPrimitive.Content>) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-[1300] bg-black/50" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-1300 bg-black/50" />
       <DialogPrimitive.Content
         className={cn(
-          "fixed top-1/2 left-1/2 z-[1300] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 bg-paper p-4 focus:outline-none",
+          "fixed top-1/2 left-1/2 z-1300 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 bg-paper p-4 focus:outline-none",
           className,
         )}
         style={{ boxShadow: CARD_SHADOW }}

@@ -21,7 +21,7 @@ import { useDragMomentumScroll } from "./useDragMomentumScroll";
 function SprocketStrip() {
   return (
     <div
-      className="mx-4 h-[0.625rem]"
+      className="mx-4 h-2.5"
       style={{
         // var(--color-muted-foreground) (not a literal hex) so this tracks the active [data-theme] rather than
         // freezing to one.
@@ -213,7 +213,7 @@ export function PhotoFilmstrip({ splatId }: PhotoFilmstripProps) {
         >
           <Center className="h-full w-full">
             <div className="flex flex-col items-center gap-1">
-              <div className="h-1 w-9 rounded-[0.125rem] bg-divider" />
+              <div className="h-1 w-9 rounded-xs bg-divider" />
               <span className="text-xs text-muted-foreground">
                 {photoCount} photo{photoCount === 1 ? "" : "s"}
               </span>
@@ -267,7 +267,7 @@ export function PhotoFilmstrip({ splatId }: PhotoFilmstripProps) {
                             alt={photo.originalFilename}
                             loading="lazy"
                             draggable={false}
-                            className="block h-[9.375rem] w-auto"
+                            className="block h-37.5 w-auto"
                           />
                         </div>
                       </div>

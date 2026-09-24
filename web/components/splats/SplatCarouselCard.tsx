@@ -28,7 +28,7 @@ export function SplatCarouselCard({ splat }: SplatCarouselCardProps) {
       {/* The mat border is a print mount, distinct from the card it sits on (bg-paper), so bg-background reads as
       a frame in both modes. The active card also gets a grease-pencil ring around it, like a frame circled for
       printing on a real contact sheet. */}
-      <div className="relative mt-[0.625rem] bg-background p-1">
+      <div className="relative mt-2.5 bg-background p-1">
         {isActive && <div className="pointer-events-none absolute -inset-1.5 rounded-full border-2 border-primary" />}
         {splat.thumbnailPhotoUrl ? (
           // Sized by width (height: "auto"), not a fixed box. Unlike the horizontally-scrolling filmstrip in
