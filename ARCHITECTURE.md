@@ -94,11 +94,11 @@ A baked AMI would attack the smaller half — fixed overhead, not training. Trai
 ## 5. Frontend
 
 - Next.js App Router: Open Graph needs server `generateMetadata`, since crawlers don't run JS.
-- UI: **Tailwind CSS**, with **Radix UI** primitives for the few components needing real accessibility behavior (`Dialog`, `DropdownMenu`, `Tooltip`).
+- UI: **Tailwind CSS**, with **Radix UI** primitives for the few components needing real accessibility behavior (`Dialog`, `Tooltip`).
   - Tailwind compiles to static CSS at build time: no CSS-in-JS runtime, and no SSR style-injection-order problem to work around under the App Router.
-  - The app's visual identity (flat print look, italic status chips, an underline-tab sub-nav) is bespoke rather than a stock component look, which a utility-first approach expresses directly instead of overriding a component library's own defaults for each one.
-  - Radix's primitives ship unstyled, so accessibility (focus trap, roving-tabindex, hover/focus tooltips) stays decoupled from styling: only the three components that need that behavior pull in a Radix package, rather than a whole component library's runtime for every static element too.
-  - Trade-off accepted: no ready-made component catalog. Each interactive primitive (`Button`, `Chip`, `SubNav`, `Input`, plus the three Radix wrappers) is a small hand-built file (`web/components/ui/`) instead of an import.
+  - The app's visual identity (a serif display face, pill-shaped controls, recessed viewer surfaces) is bespoke rather than a stock component look, which a utility-first approach expresses directly instead of overriding a component library's own defaults for each one.
+  - Radix's primitives ship unstyled, so accessibility (focus trap, hover/focus tooltips) stays decoupled from styling: only the two components that need that behavior pull in a Radix package, rather than a whole component library's runtime for every static element too.
+  - Trade-off accepted: no ready-made component catalog. Each interactive primitive (`Button`, `Chip`, `SubNav`, `Input`, plus the two Radix wrappers) is a small hand-built file (`web/components/ui/`) instead of an import.
 - SWR for server-derived data (worker-job polling via `refreshInterval`).
 - Zustand, not Redux, for pure client UI (upload progress, banners). Zustand needs less boilerplate.
 - `@mkkellogg/gaussian-splats-3d`'s `DropInViewer` runs in r3f via `<primitive>`. It drives itself with Three.js's `onBeforeRender`.

@@ -2,10 +2,15 @@ import { auth } from "@clerk/nextjs/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { Center } from "@/components/layout/Center";
-import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { SiteHeader } from "@/components/layout/SiteHeader";
 import { HeroPointCloud } from "@/components/marketing/HeroPointCloud";
-import { Button } from "@/components/ui/Button";
+import { buttonClassName } from "@/components/ui/Button";
+
+const STEPS = [
+  { numeral: "i.", title: "Photograph", body: "A slow lap around the object, with lots of overlap." },
+  { numeral: "ii.", title: "Check", body: "Look over a rough sketch of the shape before the slow part runs." },
+  { numeral: "iii.", title: "Share", body: "One link, viewable in any browser. No app to install." },
+];
 
 export default async function RootPage() {
   const { userId } = await auth();
@@ -14,38 +19,43 @@ export default async function RootPage() {
   }
 
   return (
-    <Center className="relative min-h-screen px-4 py-8">
-      {/* This page renders with no header chrome at all (it's a sibling of web/app/(public)/layout.tsx's route
-      group, not a descendant of it), so it's the one place ThemeToggle needs placing by hand rather than
-      inheriting it from a shared header. */}
-      <div className="absolute top-4 right-4">
-        <ThemeToggle />
-      </div>
-      <div className="flex flex-col items-center gap-8">
-        <HeroPointCloud />
-        {/* Tailwind's default sm: (640px) is fine as-is for this one headline breakpoint, not worth a custom
-        override. */}
-        <h1 className="text-center font-display text-4xl sm:text-5xl">
-          <span className="block">Convert photos into a</span>
-          <span className="block text-primary">3D Gaussian Splat</span>
-        </h1>
-        <p className="max-w-140 text-center text-muted-foreground">
-          Upload multi-angle photos of a physical object. Get back a real-time 3D reconstruction via AI, ready to view
-          and share right in the browser.
-        </p>
-        <div className="flex flex-row gap-4">
-          <Link href="/sign-up">
-            <Button size="large" variant="contained">
-              Sign up free
-            </Button>
-          </Link>
-          <Link href="/sign-in">
-            <Button size="large" variant="outlined">
-              Sign in
-            </Button>
-          </Link>
+    <>
+      <SiteHeader />
+      <main className="grid flex-1 gap-8 px-4 py-8 sm:px-12 lg:grid-cols-2">
+        <div className="flex flex-col justify-between gap-12 lg:py-10">
+          <div className="flex flex-col gap-7">
+            <h1 className="font-display text-6xl leading-none tracking-tight sm:text-8xl">
+              Every object,
+              <br />
+              <span className="italic">in the round.</span>
+            </h1>
+            <p className="max-w-120 text-lg text-muted-foreground">
+              Photograph something from every side. AI Gaussian Splatter turns it into a 3D Gaussian Splat anyone can
+              turn over in their browser.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <Link href="/sign-up" className={buttonClassName("contained", "large")}>
+                Make your first splat
+              </Link>
+              <Link href="/sign-in" className={buttonClassName("outlined", "large")}>
+                Sign in
+              </Link>
+            </div>
+          </div>
+          <ol className="grid gap-6 sm:grid-cols-3">
+            {STEPS.map(step => (
+              <li key={step.title} className="flex flex-col gap-1">
+                <span className="font-display text-4xl text-primary">{step.numeral}</span>
+                <span className="text-sm font-semibold">{step.title}</span>
+                <span className="text-sm text-muted-foreground">{step.body}</span>
+              </li>
+            ))}
+          </ol>
         </div>
-      </div>
-    </Center>
+        <figure className="flex min-h-120 items-center justify-center rounded-4xl bg-muted">
+          <HeroPointCloud />
+        </figure>
+      </main>
+    </>
   );
 }

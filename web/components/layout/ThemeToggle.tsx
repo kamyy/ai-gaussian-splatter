@@ -1,8 +1,9 @@
 "use client";
 
 import { useTheme } from "next-themes";
+import { useEffect, useState } from "react";
 
-// Inline rather than an icon library dependency, matching web/components/layout/NavMenu.tsx's HomeIcon.
+// Inline rather than an icon library dependency.
 function SunIcon() {
   return (
     <svg
@@ -40,15 +41,16 @@ function MoonIcon() {
 }
 
 // Shows the icon for the mode a click switches to, not the current one — a moon in light mode ("turn dark on"), a
-// sun in dark mode ("turn dark off"). Placed beside the user avatar in both header chromes this app has:
-// web/app/(public)/layout.tsx (signed-out hero, sign-in/up, the public share page) and
-// web/components/layout/AuthHeader.tsx (the signed-in splat workspace).
+// sun in dark mode ("turn dark off"). Rendered by web/components/layout/SiteHeader.tsx, the one header every page shares.
 //
-// resolvedTheme is undefined on the server and on the very first client render (next-themes' own hydration-safety
-// guarantee), so this falls back to "dark" until that resolves, matching web/app/globals.css's :root default.
+// The server can't know the visitor's theme, so the first client render has to match the server's "light" (web/app/
+// globals.css's :root default) or React reports a hydration mismatch. next-themes already knows resolvedTheme on that
+// first client render, so it is only trusted once mounted.
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
-  const mode = resolvedTheme ?? "dark";
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const mode = mounted ? (resolvedTheme ?? "light") : "light";
   const nextMode = mode === "dark" ? "light" : "dark";
 
   return (
@@ -56,7 +58,7 @@ export function ThemeToggle() {
       type="button"
       aria-label={`Switch to ${nextMode} mode`}
       onClick={() => setTheme(nextMode)}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-primary/10"
+      className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-divider hover:bg-muted"
     >
       {mode === "dark" ? <SunIcon /> : <MoonIcon />}
     </button>

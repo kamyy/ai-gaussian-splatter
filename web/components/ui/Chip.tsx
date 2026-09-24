@@ -1,28 +1,31 @@
 import { cn } from "@/lib/cn";
 
 type ChipColor = "default" | "primary" | "success" | "error" | "info";
-type ChipSize = "small" | "medium";
 
 const COLOR: Record<ChipColor, string> = {
-  default: "text-muted-foreground",
-  primary: "text-primary",
-  success: "text-success",
-  error: "text-error",
-  info: "text-info",
+  default: "bg-muted text-muted-foreground",
+  primary: "bg-primary text-primary-foreground",
+  success: "bg-success/15 text-success",
+  error: "bg-error/15 text-error",
+  info: "bg-info/15 text-info",
 };
 
 interface ChipProps {
   color?: ChipColor;
-  size?: ChipSize;
   label: string;
   className?: string;
 }
 
-// Reproduces web/theme.ts's former MuiChip override: transparent background, italic, color carried by the text
-// rather than a filled pill.
-export function Chip({ color = "default", size = "medium", label, className }: ChipProps) {
+// A filled status pill. "primary" is solid rather than tinted, reserved for a status that needs the visitor to act.
+export function Chip({ color = "default", label, className }: ChipProps) {
   return (
-    <span className={cn("italic font-normal", COLOR[color], size === "small" ? "text-xs" : "text-sm", className)}>
+    <span
+      className={cn(
+        "inline-flex h-6.5 items-center rounded-full px-2.5 text-xs font-semibold",
+        COLOR[color],
+        className,
+      )}
+    >
       {label}
     </span>
   );

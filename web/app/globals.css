@@ -1,37 +1,38 @@
 @import "tailwindcss";
 
-/* Contact Sheet color tokens (ported from web/theme.ts's darkTokens/lightTokens). :root holds the dark palette, since
-that's the app's default for a visitor who never gets [data-theme] set (JS disabled, pre-hydration). next-themes sets
-[data-theme] on <html> before paint (web/components/layout/ThemeRegistry.tsx), the same role MUI's own
-[data-mui-color-scheme] attribute plays for as-yet-unmigrated components — both attributes are driven by one
-ThemeToggle click until MUI is fully removed. --scrollbar-thumb has no Tailwind token equivalent, so it stays a plain
-var here, keyed off the same attribute so it can't drift out of sync with which theme is actually active. */
+/* Gallery color tokens. :root holds the light palette, the default for a visitor who never gets [data-theme] set (JS
+disabled, pre-hydration). next-themes sets [data-theme] on <html> before paint (web/components/layout/ThemeRegistry.tsx).
+--color-muted is the recessed surface the 3D viewers and thumbnails sit on, one step off the page ground. --scrollbar-thumb
+has no Tailwind token equivalent, so it stays a plain var, keyed off the same attribute so it can't drift out of sync with
+which theme is actually active. */
 :root {
-  --color-background: #2b2119;
-  --color-paper: #362a20;
-  --color-divider: #4f3c2e;
-  --color-foreground: #f2e9de;
-  --color-muted-foreground: #a69485;
-  --color-primary: #d99a45;
-  --color-primary-foreground: #241a12;
-  --color-success: #7c9a6b;
-  --color-error: #b33a2e;
-  --color-info: #6f91b3;
-  --scrollbar-thumb: #6b5a4c;
+  --color-background: #f4f2ed;
+  --color-paper: #fdfcf9;
+  --color-muted: #e9e5dc;
+  --color-divider: #dedad2;
+  --color-foreground: #161616;
+  --color-muted-foreground: #6b6862;
+  --color-primary: #a84b24;
+  --color-primary-foreground: #ffffff;
+  --color-success: #2f7a4a;
+  --color-error: #b3261e;
+  --color-info: #23389e;
+  --scrollbar-thumb: #c9c3b7;
 }
 
-[data-theme="light"] {
-  --color-background: #f2e9da;
-  --color-paper: #fbf6ec;
-  --color-divider: #d9cbb8;
-  --color-foreground: #2b2018;
-  --color-muted-foreground: #7a6a5a;
-  --color-primary: #b5602e;
-  --color-primary-foreground: #fbf6ec;
-  --color-success: #4f7a44;
-  --color-error: #a13327;
-  --color-info: #3d6690;
-  --scrollbar-thumb: #b7a48f;
+[data-theme="dark"] {
+  --color-background: #1a1816;
+  --color-paper: #24211d;
+  --color-muted: #2a2622;
+  --color-divider: #36322c;
+  --color-foreground: #f1ede6;
+  --color-muted-foreground: #a39d93;
+  --color-primary: #e08a5c;
+  --color-primary-foreground: #1a1816;
+  --color-success: #9fd4ae;
+  --color-error: #f08a7e;
+  --color-info: #aab8f0;
+  --scrollbar-thumb: #5a544c;
 }
 
 /* `inline` re-reads each var against whichever [data-theme] is active at paint time, instead of inlining today's
@@ -39,6 +40,7 @@ value at build time — required since Tailwind can't otherwise know these token
 @theme inline {
   --color-background: var(--color-background);
   --color-paper: var(--color-paper);
+  --color-muted: var(--color-muted);
   --color-divider: var(--color-divider);
   --color-foreground: var(--color-foreground);
   --color-muted-foreground: var(--color-muted-foreground);
@@ -47,7 +49,7 @@ value at build time — required since Tailwind can't otherwise know these token
   --color-success: var(--color-success);
   --color-error: var(--color-error);
   --color-info: var(--color-info);
-  --font-display: var(--font-display), Arial, Helvetica, sans-serif;
+  --font-display: var(--font-display), Georgia, serif;
   --font-body: var(--font-body), Arial, Helvetica, sans-serif;
 }
 
@@ -72,9 +74,13 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+/* In the base layer so Tailwind's utilities (a link styled as a button, web/components/ui/Button.tsx's
+buttonClassName) can override it. An unlayered rule beats every layered one regardless of specificity. */
+@layer base {
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 }
 
 /* Used by the splat carousel (web/components/splats/SplatCarousel.tsx) and the photo filmstrip

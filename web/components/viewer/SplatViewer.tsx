@@ -7,7 +7,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { type Box3, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 
-import { CARD_SHADOW } from "@/components/layout/Card";
 import { Center } from "@/components/layout/Center";
 import { Spinner } from "@/components/ui/Spinner";
 import { AXES_HELPER_SIZE } from "./constants";
@@ -191,43 +190,30 @@ export function SplatViewer({ mode, splatUrl, pointCloudUrl, height = "70vh" }: 
   const hasAsset = mode === "colmap_points" ? pointCloudUrl !== null : splatUrl !== null;
 
   return (
-    // The mat/mount border is a print frame around the viewport, matching the rest of the Contact Sheet direction
-    // (AGENTS.md) — bg-paper for contrast against the page ground the caller renders this on, plus the same drop
-    // shadow web/components/layout/Card.tsx uses so the mounted frame reads as sitting above the page rather than
-    // flush with it.
-    <div className="box-border w-full bg-paper p-2" style={{ height, boxShadow: CARD_SHADOW }}>
-      <div
-        className="relative h-full w-full"
-        style={{
-          // color-mix() (not a literal hex) so this tracks the active [data-theme] rather than freezing to one.
-          backgroundImage:
-            "radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--color-primary) 7.1%, transparent), transparent 65%)",
-        }}
-      >
-        {/* flat/linear: R3F's default ACESFilmicToneMapping + SRGBColorSpace runs the splat shader's raw, untoneMapped
-            color output through a curve it was never designed for. This library predates R3F's color-managed
-            defaults. */}
-        <Canvas flat linear camera={{ up: [0, -1, -0.6] }}>
-          <ViewerSceneManager
-            mode={mode}
-            splatUrl={splatUrl}
-            pointCloudUrl={pointCloudUrl}
-            onError={handleError}
-            controlsRef={controlsRef}
-          />
-          <OrbitControls ref={controlsRef} makeDefault />
-        </Canvas>
-        {activeError && (
-          <Center className="pointer-events-none absolute inset-0">
-            <p className="text-error">{activeError}</p>
-          </Center>
-        )}
-        {!activeError && !hasAsset && (
-          <Center className="pointer-events-none absolute inset-0">
-            <p className="text-muted-foreground">Not available for this splat.</p>
-          </Center>
-        )}
-      </div>
+    <div className="relative w-full overflow-hidden rounded-3xl bg-muted" style={{ height }}>
+      {/* flat/linear: R3F's default ACESFilmicToneMapping + SRGBColorSpace runs the splat shader's raw, untoneMapped
+          color output through a curve it was never designed for. This library predates R3F's color-managed
+          defaults. */}
+      <Canvas flat linear camera={{ up: [0, -1, -0.6] }}>
+        <ViewerSceneManager
+          mode={mode}
+          splatUrl={splatUrl}
+          pointCloudUrl={pointCloudUrl}
+          onError={handleError}
+          controlsRef={controlsRef}
+        />
+        <OrbitControls ref={controlsRef} makeDefault />
+      </Canvas>
+      {activeError && (
+        <Center className="pointer-events-none absolute inset-0">
+          <p className="text-error">{activeError}</p>
+        </Center>
+      )}
+      {!activeError && !hasAsset && (
+        <Center className="pointer-events-none absolute inset-0">
+          <p className="text-muted-foreground">Not available for this splat.</p>
+        </Center>
+      )}
     </div>
   );
 }

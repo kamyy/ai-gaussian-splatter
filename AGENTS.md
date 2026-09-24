@@ -106,7 +106,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - The API is protected by `requireUser()` / `requireClerkUserId()` in each handler, not by this layout.
   - Next reuses layouts when navigating between sibling routes (`/splats/[id]/point-cloud` → `/splats/[id]/splat`, both under `web/app/(authenticated)/splats/[id]/layout.tsx`), so `auth.protect()` will not re-run.
   - If a page starts rendering protected data on the server, that page needs its own `auth.protect()`.
-- **This Clerk SDK has no `<SignedIn>` / `<SignedOut>`.** Use `<Show when="signed-in">` (`web/components/layout/NavMenu.tsx`).
+- **This Clerk SDK has no `<SignedIn>` / `<SignedOut>`.** Use `<Show when="signed-in">` (`web/components/layout/SiteHeader.tsx`).
   - Pass `fallback` for the signed-out UI.
   - While Clerk is still loading the session, `<Show>` renders nothing — not the fallback.
 - **Use the Clerk MCP `clerk_sdk_snippet` tool before writing or answering Clerk SDK questions, not a raw docs fetch.** Training data lags the API, and the MCP is already scoped to this project's installed SDK.
@@ -146,19 +146,18 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 ## 5. Tailwind & theming
 
-- **Every Contact Sheet color is a CSS custom property, not a Tailwind class keyed by scheme.** `web/app/globals.css` defines each token under `:root` (dark, the default) and overrides it under `[data-theme="light"]`; a `@theme inline` block re-exports each as a Tailwind utility (`bg-background`, `text-foreground`, …).
+- **Every theme color is a CSS custom property, not a Tailwind class keyed by scheme.** `web/app/globals.css` defines each token under `:root` (light, the default) and overrides it under `[data-theme="dark"]`; a `@theme inline` block re-exports each as a Tailwind utility (`bg-background`, `text-foreground`, …).
   - A component never needs a `dark:` variant — every color utility already resolves through the variable that changes per `[data-theme]`. Writing `dark:bg-*` alongside one of these tokens is dead code, since Tailwind's `dark:` selector strategy isn't configured at all here.
   - A one-off color that needs the same scheme-awareness (a `radial-gradient` stop, a value handed to a non-Tailwind API like Clerk's `appearance.variables`) reads the variable directly — `var(--color-primary)` or `color-mix(in srgb, var(--color-primary) 10% , transparent)` — rather than a literal hex.
 - **`next-themes` (`web/components/layout/ThemeRegistry.tsx`) owns `[data-theme]`, with its own pre-hydration script setting the attribute before React hydrates.** `web/app/layout.tsx`'s `<html suppressHydrationWarning>` is required for that: the attribute the script sets deliberately doesn't match what the server rendered, and removing `suppressHydrationWarning` turns that expected mismatch into a hydration warning on every page load.
-  - `web/components/layout/ThemeToggle.tsx` reads `resolvedTheme` (falls back to `"dark"` for the server render and the very first client render, before `next-themes` has resolved anything) and calls `setTheme`.
+  - `web/components/layout/ThemeToggle.tsx` renders as `"light"` until it has mounted, then reads `resolvedTheme` and calls `setTheme`. `next-themes` already knows `resolvedTheme` on the first client render, so reading it before mount mismatches the server's HTML for every dark-mode visitor.
+- **Global element rules in `web/app/globals.css` go inside `@layer base`.** An unlayered rule beats every Tailwind utility regardless of specificity, so an unlayered `a { color: inherit }` silently overrides the text color of every link styled with `buttonClassName()` (`web/components/ui/Button.tsx`).
 - **`ThemeRegistry` is the one Client Component boundary the provider tree needs**, so `web/app/layout.tsx` itself stays a Server Component free to do server-only work (font loading, metadata). It composes `next-themes`' `ThemeProvider`, the Radix `TooltipProvider` (`web/components/ui/Tooltip.tsx`), and notistack's `SnackbarProvider` — nothing above it in the tree needs to be a Client Component too.
 - **Each Radix primitive in use is unstyled, so it gets a thin `"use client"` wrapper applying the app's Tailwind classes** via `web/lib/cn.ts`'s `cn()` (a `clsx` wrapper), rather than being styled ad hoc at each call site:
   - `web/components/ui/Dialog.tsx`
-  - `web/components/ui/DropdownMenu.tsx`
   - `web/components/ui/Tooltip.tsx`
-  - `DropdownMenu.Item`'s `asChild` merges its props/ref onto a rendered `<Link>` rather than requiring a literal `<button>` child, which is what keeps roving-tabindex/typeahead keyboard navigation working between menu items built from links (`web/components/layout/NavMenu.tsx`).
   - A `Tooltip.Trigger` needs its child to keep firing pointer events even while the wrapped element is `disabled` — wrap it in a `<span>` (`web/components/viewer/AwaitingTrainingPanel.tsx`), since a genuinely disabled native `<button>` stops dispatching pointer/focus events regardless of which tooltip library is asking.
-- **Three Radix portal layers plus two fixed-position layers share one flat z-index scale, since Tailwind has no built-in `zIndex` scale to reach for.** `z-1100` (the public header), `z-1200` (dropdown/tooltip portals), `z-1300` (the dialog overlay/content), and `z-90` (the authenticated splat workspace's fixed overlay) are the values in use; slot a new floating layer in between the two it needs to sit between, not the top of the scale by default.
+- **Two Radix portal layers plus two fixed-position layers share one flat z-index scale, since Tailwind has no built-in `zIndex` scale to reach for.** `z-1100` (the sticky site header), `z-1200` (tooltip portals), `z-1300` (the dialog overlay/content), and `z-90` (the authenticated splat workspace's fixed overlay) are the values in use; slot a new floating layer in between the two it needs to sit between, not the top of the scale by default.
 - **Size things in rem, not raw px, so the UI scales with a user's browser zoom/font-size setting.** Prefer a Tailwind class (its default spacing scale is already rem-based) over an inline style.
   - Write a spacing value as a `--spacing` multiple (`h-12.5`, `max-w-90`), not an arbitrary `h-[3.125rem]`. Tailwind accepts any multiple of 0.25 steps.
   - Font sizes and radii have their own named scales instead (`text-4xl`, `rounded-xs`). Pick the nearest named size rather than an arbitrary value.

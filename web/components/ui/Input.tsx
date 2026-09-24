@@ -13,15 +13,15 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input({ l
   const inputId = id ?? generatedId;
 
   return (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={inputId} className="text-sm text-muted-foreground">
+    <div className="flex flex-col gap-2">
+      <label htmlFor={inputId} className="text-sm font-semibold">
         {label}
       </label>
       <input
         ref={ref}
         id={inputId}
         className={cn(
-          "border border-divider bg-transparent px-3 py-2 text-sm focus:border-primary focus:outline-none",
+          "h-12 rounded-full border border-divider bg-paper px-4.5 text-base focus:border-primary focus:outline-none",
           className,
         )}
         {...props}
