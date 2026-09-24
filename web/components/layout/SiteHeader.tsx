@@ -12,7 +12,7 @@ import { cn } from "@/lib/cn";
 // layout reading auth() itself. While Clerk is still loading, neither the signed-in nor the signed-out branch renders.
 export function SiteHeader() {
   const pathname = usePathname();
-  const inLibrary = pathname.startsWith("/splats");
+  const inLibrary = pathname === "/splats";
 
   return (
     <header className="sticky top-0 z-1100 flex h-18 flex-none items-center gap-4 border-divider border-b bg-background px-4 sm:gap-8 sm:px-12">
@@ -41,6 +41,11 @@ export function SiteHeader() {
           </Link>
           <Link href="/sign-up" className={buttonClassName("ink")}>
             Sign up free
+          </Link>
+        </Show>
+        <Show when="signed-in">
+          <Link href="/splats/new" className={buttonClassName("ink")}>
+            New splat
           </Link>
         </Show>
         <ThemeToggle />

@@ -8,8 +8,8 @@ import { jobs, photos, splats, users } from "@/lib/server/db/schema";
 import { GET } from "./route";
 
 /**
- * Requires a real Postgres (TEST_DATABASE_URL). Covers the badge/thumbnail aggregation GET /api/v1/splats adds on
- * top of the plain splat list: it runs two extra queries (uploaded photos, latest job) batched with inArray() over
+ * Requires a real Postgres (TEST_DATABASE_URL). Covers the photo-count/job-status/thumbnail aggregation
+ * GET /api/v1/splats adds on top of the plain splat list: it runs two extra queries (uploaded photos, latest job) batched with inArray() over
  * every splat id, then reduces each in JS to one row per splat — these tests exercise that reduction's correctness
  * rather than the query count directly.
  */
@@ -25,7 +25,7 @@ describe("GET /api/v1/splats", () => {
     await closeDb();
   });
 
-  it("reports no badges and no thumbnail for a splat with nothing uploaded", async () => {
+  it("reports no photos, no job, and no thumbnail for a splat with nothing uploaded", async () => {
     const user = await getOrCreateUser("clerk-user-1");
     await getDb().insert(splats).values({ userId: user.id, name: "Empty" });
 
@@ -35,14 +35,13 @@ describe("GET /api/v1/splats", () => {
     expect(body).toHaveLength(1);
     expect(body[0]).toMatchObject({
       name: "Empty",
-      hasUploadedPhotos: false,
-      hasPointCloud: false,
-      hasTrainedSplat: false,
+      photoCount: 0,
+      latestJobStatus: null,
       thumbnailPhotoUrl: null,
     });
   });
 
-  it("reports hasUploadedPhotos and a thumbnail from the first uploaded photo, ignoring pending ones", async () => {
+  it("counts uploaded photos and takes the thumbnail from the first one, ignoring pending ones", async () => {
     const user = await getOrCreateUser("clerk-user-1");
     const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "With photos" }).returning();
     await getDb()
@@ -77,11 +76,11 @@ describe("GET /api/v1/splats", () => {
     const res = await GET();
     const [item] = await res.json();
 
-    expect(item.hasUploadedPhotos).toBe(true);
+    expect(item.photoCount).toBe(2);
     expect(item.thumbnailPhotoUrl).toContain("first.jpg");
   });
 
-  it("reports hasPointCloud/hasTrainedSplat from the latest job only", async () => {
+  it("reports the latest job's status only", async () => {
     const user = await getOrCreateUser("clerk-user-1");
     const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "Processed" }).returning();
     await getDb()
@@ -90,10 +89,9 @@ describe("GET /api/v1/splats", () => {
         splatId: splat.id,
         status: "failed",
         callbackToken: "token-1",
-        pointCloudS3Key: "splats/x/point_cloud.ply",
         createdAt: new Date("2026-01-01T00:00:00Z"),
       });
-    // A later retry with neither key — the response should reflect this one, not the earlier failed job.
+    // A later retry — the response should reflect this one, not the earlier failed job.
     await getDb()
       .insert(jobs)
       .values({
@@ -106,26 +104,7 @@ describe("GET /api/v1/splats", () => {
     const res = await GET();
     const [item] = await res.json();
 
-    expect(item.hasPointCloud).toBe(false);
-    expect(item.hasTrainedSplat).toBe(false);
-  });
-
-  it("reports hasTrainedSplat once the latest job carries a result key", async () => {
-    const user = await getOrCreateUser("clerk-user-1");
-    const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "Complete" }).returning();
-    await getDb().insert(jobs).values({
-      splatId: splat.id,
-      status: "complete",
-      callbackToken: "token-1",
-      resultS3Key: "splats/x/result.ply",
-      pointCloudS3Key: "splats/x/point_cloud.ply",
-    });
-
-    const res = await GET();
-    const [item] = await res.json();
-
-    expect(item.hasPointCloud).toBe(true);
-    expect(item.hasTrainedSplat).toBe(true);
+    expect(item.latestJobStatus).toBe("queued");
   });
 
   it("scopes results to the calling user", async () => {

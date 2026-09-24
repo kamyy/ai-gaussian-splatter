@@ -1,6 +1,6 @@
 import { cn } from "@/lib/cn";
 
-type ChipColor = "default" | "primary" | "success" | "error" | "info";
+export type ChipColor = "default" | "primary" | "success" | "error" | "info";
 
 const COLOR: Record<ChipColor, string> = {
   default: "bg-muted text-muted-foreground",

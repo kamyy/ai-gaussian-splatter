@@ -83,10 +83,9 @@ buttonClassName) can override it. An unlayered rule beats every layered one rega
   }
 }
 
-/* Used by the splat carousel (web/components/splats/SplatCarousel.tsx) and the photo filmstrip
-(web/components/splats/PhotoFilmstrip.tsx) — both are native overflow-scroll containers, not a JS carousel library, so
-the browser's own scrollbar is the only affordance; this just narrows it instead of leaving each platform's default
-width. `scrollbar-width` covers Firefox, the `::-webkit-scrollbar*` rules cover Chromium/WebKit. */
+/* Used by the photo filmstrip (web/components/splats/PhotoFilmstrip.tsx), a native overflow-scroll container, not a JS
+carousel library, so the browser's own scrollbar is the only affordance; this just narrows it instead of leaving each
+platform's default width. `scrollbar-width` covers Firefox, the `::-webkit-scrollbar*` rules cover Chromium/WebKit. */
 .thin-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) transparent;

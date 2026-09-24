@@ -51,13 +51,10 @@ export function useSplats() {
   });
 }
 
-// splatId is nullable so AuthHeader (web/components/layout/AuthHeader.tsx) can call this unconditionally with
-// whatever id it parses out of the current path, or null off a route with no splat in it, rather than skipping the
-// hook call — conditional hook calls aren't allowed.
-export function useSplat(splatId: string | null) {
+export function useSplat(splatId: string) {
   const { getToken } = useAuth();
 
-  return useSWR(splatId ? ["splat", splatId] : null, async () => {
+  return useSWR(["splat", splatId], async () => {
     const token = await getToken();
     if (token) {
       return apiFetch<Splat>(`/api/v1/splats/${splatId}`, "GET", token);

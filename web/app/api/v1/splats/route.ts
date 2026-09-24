@@ -66,13 +66,15 @@ export const GET = withErrorHandling(async () => {
     getDb().select(jobColumns).from(jobs).where(inArray(jobs.splatId, ids)).orderBy(jobs.splatId, desc(jobs.createdAt)),
   ]);
 
-  // hasUploadedPhotos is answered by this same map (has() finds a row iff at least one "uploaded" photo exists for
-  // that splat) rather than a separate grouped-count query — the two would otherwise need to stay consistent by hand.
+  // photoCount is counted from these same rows rather than a separate grouped-count query, which would otherwise
+  // need to agree with the thumbnail's "uploaded" filter by hand.
   const firstPhotoBySplat = new Map<string, (typeof photoRows)[number]>();
+  const photoCountBySplat = new Map<string, number>();
   for (const row of photoRows) {
     if (!firstPhotoBySplat.has(row.splatId)) {
       firstPhotoBySplat.set(row.splatId, row);
     }
+    photoCountBySplat.set(row.splatId, (photoCountBySplat.get(row.splatId) ?? 0) + 1);
   }
 
   const latestJobBySplat = new Map<string, (typeof jobRows)[number]>();
@@ -88,9 +90,8 @@ export const GET = withErrorHandling(async () => {
       const firstPhoto = firstPhotoBySplat.get(splat.id);
       return {
         ...splat,
-        hasUploadedPhotos: firstPhotoBySplat.has(splat.id),
-        hasPointCloud: latestJob?.pointCloudS3Key != null,
-        hasTrainedSplat: latestJob?.resultS3Key != null,
+        photoCount: photoCountBySplat.get(splat.id) ?? 0,
+        latestJobStatus: latestJob?.status ?? null,
         thumbnailPhotoUrl: firstPhoto ? await presignPhotoDownload(firstPhoto.s3Key) : null,
       };
     }),

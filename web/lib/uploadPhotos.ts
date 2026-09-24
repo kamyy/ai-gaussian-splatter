@@ -1,4 +1,4 @@
-// Presign -> PUT -> complete upload loop, used by web/components/splats/CreateSplatModal.tsx right after creating a
+// Presign -> PUT -> complete upload loop, used by web/components/splats/NewSplatForm.tsx right after creating a
 // splat — the only place photos can be added. Progress is reported through Zustand's vanilla store API so this plain
 // async function works the same from that caller's event handler, with no hook of its own.
 
@@ -41,7 +41,7 @@ export async function uploadPhotos(splatId: string, files: File[], token: string
   );
 
   // Each failure is already recorded per-file via setUploadStatus above, which web/components/upload/UploadProgress.tsx
-  // renders. This throw is what lets web/components/splats/CreateSplatModal.tsx learn that at least one upload didn't
+  // renders. This throw is what lets web/components/splats/NewSplatForm.tsx learn that at least one upload didn't
   // make it, instead of treating a fully-failed batch as success.
   const failedCount = results.filter(ok => !ok).length;
   if (failedCount > 0) {

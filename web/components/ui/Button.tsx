@@ -34,9 +34,8 @@ export function buttonClassName(variant: ButtonVariant = "text", size: ButtonSiz
   return cn(BASE, VARIANT[variant], SIZE[size], className);
 }
 
-// type="button" is hardcoded rather than left to the native default ("submit"): no current usage relies on native
-// form submission, and a future Dialog use (web/components/splats/CreateSplatModal.tsx) needs to not submit a form
-// by accident.
+// type defaults to "button" rather than the native "submit", so a Button inside a form submits it only when the caller
+// passes type="submit".
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   { className, variant = "text", size = "medium", loading, disabled, children, ...props },
   ref,

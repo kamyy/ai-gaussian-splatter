@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-// Shared by web/components/splats/SplatCarousel.tsx (vertical) and web/components/splats/PhotoFilmstrip.tsx
-// (horizontal): click-and-drag panning for a scrollable element, on top of its native scrollbar/wheel scrolling, plus
+// Used by web/components/splats/PhotoFilmstrip.tsx: click-and-drag panning for a scrollable element, on top of its native scrollbar/wheel scrolling, plus
 // momentum after release. Mouse only — touch and pen
 // already pan a scrollable element natively, and handling those too would fight the browser's own gesture. Wheel
 // input deliberately has no momentum of its own; only a drag release hands off to runMomentum.
@@ -19,8 +18,7 @@ const MOMENTUM_MIN_VELOCITY = 0.02;
 const MOMENTUM_MAX_DURATION_MS = 4000;
 // A plain click always moves the mouse by a pixel or two between press and release. Panning from the very first
 // pointermove — capturing the pointer and writing scrollTop/scrollLeft — makes the browser treat that as a scroll
-// gesture and drop the synthetic click it would otherwise fire on release, which breaks any link or button (e.g. a
-// SplatCarouselCard) nested inside the scrollable element. Below this threshold a move is just click jitter, not a
+// gesture and drop the synthetic click it would otherwise fire on release, which breaks any link or button nested inside the scrollable element. Below this threshold a move is just click jitter, not a
 // drag, so it's ignored instead of starting a pan.
 const PAN_THRESHOLD_PX = 4;
 

@@ -13,9 +13,8 @@ interface ScrollEdgeButtonProps {
   onClick: () => void;
 }
 
-// Shared by web/components/splats/SplatCarousel.tsx and web/components/splats/PhotoFilmstrip.tsx: a small button
-// that jumps a scroll container to one end. Inline double-chevron SVGs (not an icon library), matching
-// web/components/layout/NavMenu.tsx/ThemeToggle.tsx's own inline icons.
+// Used by web/components/splats/PhotoFilmstrip.tsx: a small button that jumps a scroll container to one end. Inline
+// double-chevron SVGs (not an icon library), matching web/components/layout/ThemeToggle.tsx's own inline icons.
 export function ScrollEdgeButton({ label, direction, onClick }: ScrollEdgeButtonProps) {
   return (
     <button

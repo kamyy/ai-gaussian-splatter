@@ -75,13 +75,12 @@ export interface Splat {
   createdAt: string;
 }
 
-// GET /api/v1/splats — what the carousel needs per splat without an N+1 call per card. thumbnailPhotoUrl is a
+// GET /api/v1/splats — what a library card needs per splat without an N+1 call per card. thumbnailPhotoUrl is a
 // presigned GET for the first uploaded photo, distinct from Splat.thumbnailS3Key (the worker-rendered splat preview,
-// only set once a job completes).
+// only set once a job completes). photoCount counts uploaded photos only.
 export interface SplatListItem extends Splat {
-  hasUploadedPhotos: boolean;
-  hasPointCloud: boolean;
-  hasTrainedSplat: boolean;
+  photoCount: number;
+  latestJobStatus: JobStatus | null;
   thumbnailPhotoUrl: string | null;
 }
 
