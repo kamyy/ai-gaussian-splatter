@@ -28,7 +28,7 @@ export const AlertSnackbar = forwardRef<HTMLDivElement, AlertSnackbarProps>(func
     <div
       ref={ref}
       className={cn(
-        "flex w-full max-w-90 items-center gap-2 border bg-paper px-3 py-2 text-sm text-foreground",
+        "flex w-full max-w-90 items-center gap-2 rounded-2xl border bg-paper px-4 py-3 text-sm text-foreground",
         VARIANT_COLOR[variant],
       )}
     >

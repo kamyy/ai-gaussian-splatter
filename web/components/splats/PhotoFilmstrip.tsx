@@ -3,7 +3,7 @@
 import { useAuth } from "@clerk/nextjs";
 import { useLayoutEffect, useRef, useState } from "react";
 
-import { CARD_SHADOW, Card } from "@/components/layout/Card";
+import { Card } from "@/components/layout/Card";
 import { Center } from "@/components/layout/Center";
 import { Button } from "@/components/ui/Button";
 import { apiFetch } from "@/lib/apiFetch";
@@ -189,14 +189,13 @@ export function PhotoFilmstrip({ splatId }: PhotoFilmstripProps) {
         // the same 8 `right` leaves below, so the panel clears the navbar with a matching gap on each side. That
         // layout exports no width constant, so the two numbers are kept in step by hand (left-52 = 13rem = 208px,
         // right-2 = 0.5rem = 8px).
-        className="pointer-events-auto absolute right-2 bottom-0 left-52 border border-divider bg-paper"
+        className="pointer-events-auto absolute right-2 bottom-0 left-52 rounded-t-3xl border border-divider bg-paper"
         style={{
           // HANDLE_HEIGHT/bodyHeight and translateY stay raw px, not rem: they're compared against and driven by
           // PointerEvent.clientY in the drag handlers below, which browsers always report in real CSS pixels
           // regardless of root font-size. Converting only the height here would desync the panel's drawn size from
           // its own drag thresholds under a non-default browser zoom.
           height: HANDLE_HEIGHT + bodyHeight,
-          boxShadow: CARD_SHADOW,
           transform: `translateY(${translateY}px)`,
           transition: dragY === null ? "transform 150ms ease" : "none",
         }}

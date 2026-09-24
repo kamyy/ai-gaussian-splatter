@@ -1,5 +1,5 @@
 // Best-effort mapping onto Clerk's `appearance.variables` API (https://clerk.com/docs/customization/appearance),
-// pointed at web/app/globals.css's own Contact Sheet CSS variables instead of copied hex, so a token edit there
+// pointed at web/app/globals.css's own color tokens instead of copied hex, so a token edit there
 // can't desync Clerk's colors from the rest of the app. Plain var() references, not a function of the current mode:
 // the browser resolves them against whichever [data-theme] is active, the same way every other themed element in
 // the app does. The installed @clerk/nextjs version's own types leave `appearance` typed `any` (the Clerk MCP was
@@ -14,6 +14,6 @@ export const clerkAppearanceVariables = {
   colorInputText: "var(--color-foreground)",
   colorDanger: "var(--color-error)",
   colorSuccess: "var(--color-success)",
-  borderRadius: "0.125rem",
+  borderRadius: "0.75rem",
   fontFamily: "var(--font-body), Arial, Helvetica, sans-serif",
 };

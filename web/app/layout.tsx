@@ -2,15 +2,20 @@ import "./globals.css";
 
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Inter } from "next/font/google";
+import { Instrument_Serif, Manrope } from "next/font/google";
 
 import { ThemeRegistry } from "@/components/layout/ThemeRegistry";
 
-// Named for their role (display/body), not the specific family, so a future type change — like this one, which replaced
-// the original serif Fraunces + Work Sans pairing — is a one-line swap here rather than a rename sweep across every
-// file that references the CSS variable.
-const displayFont = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-display" });
-const bodyFont = Inter({ subsets: ["latin"], variable: "--font-body" });
+// Named for their role (display/body), not the specific family, so a type change is a one-line swap here rather than a
+// rename sweep across every file that references the CSS variable. Instrument Serif ships a single weight, so display
+// text gets its emphasis from the italic style rather than from font-weight.
+const displayFont = Instrument_Serif({
+  subsets: ["latin"],
+  weight: "400",
+  style: ["normal", "italic"],
+  variable: "--font-display",
+});
+const bodyFont = Manrope({ subsets: ["latin"], variable: "--font-body" });
 
 export const metadata: Metadata = {
   title: "AI Gaussian Splatter",

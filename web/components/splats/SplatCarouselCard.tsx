@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { CARD_SHADOW } from "@/components/layout/Card";
 import { Center } from "@/components/layout/Center";
 import { Chip } from "@/components/ui/Chip";
 import type { SplatListItem } from "@/lib/types";
@@ -19,9 +18,9 @@ export function SplatCarouselCard({ splat }: SplatCarouselCardProps) {
       <div className="flex flex-col gap-1">
         <p className="truncate text-sm font-medium">{splat.name}</p>
         <div className="flex flex-row gap-1">
-          {splat.hasUploadedPhotos && <Chip size="small" color="success" label="Photos" />}
-          {splat.hasPointCloud && <Chip size="small" color="success" label="Point cloud" />}
-          {splat.hasTrainedSplat && <Chip size="small" color="success" label="Splat" />}
+          {splat.hasUploadedPhotos && <Chip color="success" label="Photos" />}
+          {splat.hasPointCloud && <Chip color="success" label="Point cloud" />}
+          {splat.hasTrainedSplat && <Chip color="success" label="Splat" />}
         </div>
       </div>
 
@@ -46,21 +45,17 @@ export function SplatCarouselCard({ splat }: SplatCarouselCardProps) {
     </div>
   );
 
-  const cardClassName = "border border-divider bg-paper";
+  const cardClassName = "rounded-2xl border border-divider bg-paper";
 
   // A Link to the splat you're already viewing would still navigate: the bare /splats/[id] route differs from the
   // sub-route (point-cloud/splat) actually showing, so it would bounce through SplatDefaultRoutePage's redirect and
   // remount the whole workspace chrome for no reason. Rendered as a plain, non-interactive card instead, with no
   // href, when it's the one already open.
   if (isActive) {
-    return (
-      <div className={cardClassName} style={{ boxShadow: CARD_SHADOW }}>
-        {content}
-      </div>
-    );
+    return <div className={cardClassName}>{content}</div>;
   }
   return (
-    <div className={cardClassName} style={{ boxShadow: CARD_SHADOW }}>
+    <div className={cardClassName}>
       <Link href={`/splats/${splat.id}`} draggable={false} className="block">
         {content}
       </Link>
