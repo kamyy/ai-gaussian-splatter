@@ -17,8 +17,7 @@ interface SplatLayoutProps {
 }
 
 // Shared by both view routes (point-cloud/splat): the splat/job fetch, the job-ended refetch effect, the job status
-// card, the view toggle, and the photos slideout. The splat's name and status are not here; they belong to the
-// header web/components/layout/AuthHeader.tsx renders above this route.
+// card, the view toggle, the photos slideout, and the splat's name.
 export default function SplatLayout({ children, params }: SplatLayoutProps) {
   const { id } = use(params);
   const { data: splat, isLoading, mutate: refetchSplat } = useSplat(id);
@@ -48,8 +47,9 @@ export default function SplatLayout({ children, params }: SplatLayoutProps) {
   const showJobStatusCard = (job === undefined && jobLoading) || job?.status === JobStatus.cancelled;
 
   return (
-    <div className="relative h-full w-full">
-      <div className="absolute inset-0">{children}</div>
+    <div className="flex h-full w-full flex-col">
+      <h1 className="flex-none truncate px-6 pt-4 font-display text-4xl">{splat.name}</h1>
+      <div className="relative min-h-0 flex-1">{children}</div>
 
       <div className="pointer-events-none fixed inset-0 z-90">
         {showJobStatusCard && (

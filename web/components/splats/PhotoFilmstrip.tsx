@@ -45,8 +45,7 @@ export const VIEWER_TOP_GAP = 16;
 // Those pages' gap below their SplatViewer: HANDLE_HEIGHT would only just clear the closed handle with nothing to
 // spare, leaving no room for the viewer's own drop shadow (web/components/viewer/SplatViewer.tsx) to show.
 export const VIEWER_BOTTOM_GAP = HANDLE_HEIGHT + 8;
-// Each photo is sized by height only, at its own natural aspect ratio (width: "auto"). Unlike the fixed-width sidebar
-// thumbnail in web/components/splats/SplatCarouselCard.tsx, there's room here to show the whole photo with no
+// Each photo is sized by height only, at its own natural aspect ratio (width: "auto"), so the whole photo shows with no
 // letterboxing and no cropping.
 const FILMSTRIP_PHOTO_HEIGHT = 150;
 // Starting guess for the body's height, used only until the ResizeObserver below reports the real one (SSR and the
@@ -60,7 +59,7 @@ interface PhotoFilmstripProps {
   splatId: string;
 }
 
-// A bottom sheet, not a route: photos can only be added in web/components/splats/CreateSplatModal.tsx, so this is
+// A bottom sheet, not a route: photos can only be added in web/components/splats/NewSplatForm.tsx, so this is
 // just a horizontal filmstrip of what got uploaded. It's rendered by web/app/(authenticated)/splats/[id]/layout.tsx
 // over every sub-route instead of living on a photos-only page. The "Start reconstruction" action floats over the
 // canvas at the bottom right instead of sitting in the panel's own body, matching the floating "Start training"
@@ -185,11 +184,7 @@ export function PhotoFilmstrip({ splatId }: PhotoFilmstripProps) {
   return (
     <>
       <div
-        // 208 is the navbar width web/app/(authenticated)/splats/layout.tsx gives the splat carousel (200) plus
-        // the same 8 `right` leaves below, so the panel clears the navbar with a matching gap on each side. That
-        // layout exports no width constant, so the two numbers are kept in step by hand (left-52 = 13rem = 208px,
-        // right-2 = 0.5rem = 8px).
-        className="pointer-events-auto absolute right-2 bottom-0 left-52 rounded-t-3xl border border-divider bg-paper"
+        className="pointer-events-auto absolute right-2 bottom-0 left-2 rounded-t-3xl border border-divider bg-paper"
         style={{
           // HANDLE_HEIGHT/bodyHeight and translateY stay raw px, not rem: they're compared against and driven by
           // PointerEvent.clientY in the drag handlers below, which browsers always report in real CSS pixels
