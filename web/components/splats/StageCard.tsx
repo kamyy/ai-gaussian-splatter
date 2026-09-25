@@ -7,6 +7,7 @@ import { mutate } from "swr";
 
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { apiFetch } from "@/lib/apiFetch";
+import { requireToken } from "@/lib/requireToken";
 import type { Stage } from "@/lib/splatStage";
 import type { CropBox, Job } from "@/lib/types";
 import { useAppSnackbar } from "@/lib/useAppSnackbar";
@@ -102,11 +103,7 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
   async function post(path: "process" | "train", failure: string, body?: unknown) {
     setPending(true);
     try {
-      const token = await getToken();
-      if (!token) {
-        throw new Error("Not signed in");
-      }
-      await apiFetch<Job>(`/api/v1/splats/${splatId}/${path}`, "POST", token, body);
+      await apiFetch<Job>(`/api/v1/splats/${splatId}/${path}`, "POST", await requireToken(getToken), body);
       onJobChanged();
       await mutate("splats");
     } catch (err) {

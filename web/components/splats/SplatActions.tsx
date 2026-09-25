@@ -8,6 +8,7 @@ import { mutate } from "swr";
 import { Button } from "@/components/ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/Dialog";
 import { apiFetch } from "@/lib/apiFetch";
+import { requireToken } from "@/lib/requireToken";
 import { useAppSnackbar } from "@/lib/useAppSnackbar";
 
 interface ConfirmButtonProps {
@@ -73,14 +74,6 @@ function ConfirmButton({ label, variant, title, description, confirmLabel, keepL
   );
 }
 
-async function authedRequest(getToken: () => Promise<string | null>, path: string, method: "POST" | "DELETE") {
-  const token = await getToken();
-  if (!token) {
-    throw new Error("Not signed in");
-  }
-  await apiFetch<unknown>(path, method, token);
-}
-
 export function DeleteSplatButton({
   splatId,
   label,
@@ -102,7 +95,7 @@ export function DeleteSplatButton({
       confirmLabel="Delete"
       keepLabel="Keep it"
       onConfirm={async () => {
-        await authedRequest(getToken, `/api/v1/splats/${splatId}`, "DELETE");
+        await apiFetch<unknown>(`/api/v1/splats/${splatId}`, "DELETE", await requireToken(getToken));
         await mutate("splats");
         router.push("/splats");
       }}
@@ -122,7 +115,7 @@ export function StopJobButton({ splatId, onJobChanged }: { splatId: string; onJo
       confirmLabel="Stop"
       keepLabel="Keep going"
       onConfirm={async () => {
-        await authedRequest(getToken, `/api/v1/splats/${splatId}/cancel`, "POST");
+        await apiFetch<unknown>(`/api/v1/splats/${splatId}/cancel`, "POST", await requireToken(getToken));
         onJobChanged();
         await mutate("splats");
       }}

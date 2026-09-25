@@ -9,6 +9,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { SplatViewer, type ViewerMode } from "@/components/viewer/SplatViewer";
 import { apiFetch } from "@/lib/apiFetch";
 import { cn } from "@/lib/cn";
+import { requireToken } from "@/lib/requireToken";
 import type { CameraPose, CropBox, Job } from "@/lib/types";
 
 interface SplatStageViewerProps {
@@ -70,11 +71,7 @@ export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onC
   const [cropping, setCropping] = useState(false);
 
   async function fetchUrl(path: string) {
-    const token = await getToken();
-    if (!token) {
-      throw new Error("Not signed in");
-    }
-    return { url: await apiFetch<string>(path, "GET", token), fetchedAt: Date.now() };
+    return { url: await apiFetch<string>(path, "GET", await requireToken(getToken)), fetchedAt: Date.now() };
   }
 
   function usableUrl(fetched: { url: string; fetchedAt: number } | undefined) {

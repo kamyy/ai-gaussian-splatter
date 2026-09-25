@@ -7,6 +7,7 @@
 import { useAuth } from "@clerk/nextjs";
 import useSWR from "swr";
 import { apiFetch } from "./apiFetch";
+import { requireToken } from "./requireToken";
 import type { CameraPose, Job, JobStatus, PhotoListItem, Splat, SplatListItem } from "./types";
 
 // Poll rate per phase; 0 is how SWR is told to stop, and only an ended status may use it. SWR keys its polling effect
@@ -42,37 +43,23 @@ function refreshInterval(job: Job | undefined) {
 export function useSplats() {
   const { getToken } = useAuth();
 
-  return useSWR("splats", async () => {
-    const token = await getToken();
-    if (token) {
-      return apiFetch<SplatListItem[]>("/api/v1/splats", "GET", token);
-    }
-    throw new Error("Not signed in");
-  });
+  return useSWR("splats", async () => apiFetch<SplatListItem[]>("/api/v1/splats", "GET", await requireToken(getToken)));
 }
 
 export function useSplat(splatId: string) {
   const { getToken } = useAuth();
 
-  return useSWR(["splat", splatId], async () => {
-    const token = await getToken();
-    if (token) {
-      return apiFetch<Splat>(`/api/v1/splats/${splatId}`, "GET", token);
-    }
-    throw new Error("Not signed in");
-  });
+  return useSWR(["splat", splatId], async () =>
+    apiFetch<Splat>(`/api/v1/splats/${splatId}`, "GET", await requireToken(getToken)),
+  );
 }
 
 export function usePhotos(splatId: string) {
   const { getToken } = useAuth();
 
-  return useSWR(["photos", splatId], async () => {
-    const token = await getToken();
-    if (token) {
-      return apiFetch<PhotoListItem[]>(`/api/v1/splats/${splatId}/photos`, "GET", token);
-    }
-    throw new Error("Not signed in");
-  });
+  return useSWR(["photos", splatId], async () =>
+    apiFetch<PhotoListItem[]>(`/api/v1/splats/${splatId}/photos`, "GET", await requireToken(getToken)),
+  );
 }
 
 export function useLatestJob(splatId: string) {
@@ -80,13 +67,7 @@ export function useLatestJob(splatId: string) {
 
   return useSWR(
     ["latest-job", splatId],
-    async () => {
-      const token = await getToken();
-      if (token) {
-        return apiFetch<Job>(`/api/v1/splats/${splatId}/jobs/latest`, "GET", token);
-      }
-      throw new Error("Not signed in");
-    },
+    async () => apiFetch<Job>(`/api/v1/splats/${splatId}/jobs/latest`, "GET", await requireToken(getToken)),
     {
       refreshInterval,
     },
@@ -100,13 +81,7 @@ export function useCameras(splatId: string, enabled: boolean) {
 
   return useSWR(
     enabled ? ["cameras", splatId] : null,
-    async () => {
-      const token = await getToken();
-      if (token) {
-        return apiFetch<CameraPose[]>(`/api/v1/splats/${splatId}/cameras`, "GET", token);
-      }
-      throw new Error("Not signed in");
-    },
+    async () => apiFetch<CameraPose[]>(`/api/v1/splats/${splatId}/cameras`, "GET", await requireToken(getToken)),
     { shouldRetryOnError: false },
   );
 }
