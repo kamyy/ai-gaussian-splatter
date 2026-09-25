@@ -101,7 +101,8 @@ A baked AMI would attack the smaller half — fixed overhead, not training. Trai
   - Trade-off accepted: no ready-made component catalog. Each primitive (`Button`, `Chip`, `Input`, plus the `Dialog` wrapper) is a small hand-built file (`web/components/ui/`) instead of an import.
 - SWR for server-derived data (worker-job polling via `refreshInterval`).
 - Zustand, not Redux, for pure client UI (upload progress). Zustand needs less boilerplate.
-- `@mkkellogg/gaussian-splats-3d`'s `DropInViewer` runs in r3f via `<primitive>`. It drives itself with Three.js's `onBeforeRender`.
+- Splats render with **Spark** (`@sparkjsdev/spark`), whose `SplatMesh` and `SparkRenderer` are plain Three.js objects added to the r3f scene via `<primitive>`.
+  - Spark renders the trained `.ply` the way gsplat does during training. `@mkkellogg/gaussian-splats-3d` smeared dense results into haze in front of the camera, and the haze grew with the Gaussian count.
 
 ---
 

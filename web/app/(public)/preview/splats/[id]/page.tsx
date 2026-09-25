@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { SplatViewer } from "@/components/viewer/SplatViewer";
 import { getPublicSplat } from "@/lib/server/data";
+import { readSplatCameras } from "@/lib/server/s3";
 
 // Reads the database per request: a shared splat must not be frozen into a build artifact.
 export const dynamic = "force-dynamic";
@@ -34,11 +35,13 @@ export default async function PublicSplatViewPage({ params }: Props) {
   if (splat === null) {
     notFound();
   }
+  // Only the poses frame the view, so the photo ids stay off this public page.
+  const cameras = (await readSplatCameras(id))?.map(({ photoId: _photoId, ...pose }) => pose) ?? null;
 
   return (
     <div className="flex flex-col gap-4 p-4">
       <h2 className="font-display text-6xl">{splat.title}</h2>
-      <SplatViewer mode="splat" splatUrl={splat.splatUrl} pointCloudUrl={null} />
+      <SplatViewer mode="splat" splatUrl={splat.splatUrl} pointCloudUrl={null} cameras={cameras} />
     </div>
   );
 }
