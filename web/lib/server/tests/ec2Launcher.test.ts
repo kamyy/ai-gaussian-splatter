@@ -8,6 +8,7 @@ const spawnMock = vi.hoisted(() =>
 vi.mock("node:child_process", () => ({ spawn: spawnMock }));
 vi.mock("node:fs", () => ({ mkdirSync: vi.fn(), openSync: vi.fn(() => 0) }));
 
+import type { CropBox } from "@/lib/types";
 import {
   generateCallbackToken,
   launchJob,
@@ -111,6 +112,21 @@ describe("launchJob", () => {
     expect(userData).toContain(params.workerImageUri);
   });
 
+  it("passes a crop box to the worker container as JSON, only when one is set", async () => {
+    ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
+    const cropBox: CropBox = { center: [1, 2, 3], size: [4, 5, 6], quaternion: [0, 0, 0, 1] };
+    await launchJob({ ...params, stage: "train", cropBox });
+
+    const userData = Buffer.from(runInstancesInput().UserData ?? "", "base64").toString();
+    expect(userData).toContain(`CROP_BOX='${JSON.stringify(cropBox)}'`);
+    expect(userData).toContain('-e CROP_BOX="$CROP_BOX" \\\n');
+
+    ec2Mock.reset();
+    ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
+    await launchJob(params);
+    expect(Buffer.from(runInstancesInput().UserData ?? "", "base64").toString()).not.toContain("CROP_BOX");
+  });
+
   it("schedules a shutdown as the first thing user-data does, ahead of docker login/run", async () => {
     ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
     await launchJob(params);
@@ -162,6 +178,17 @@ describe("launchJobLocal", () => {
     expect(args).toContain("splat-worker-reconstruct:dev");
     expect(args).not.toContain("splat-worker-train:dev");
     expect(args).toEqual(expect.arrayContaining(["-e", "STAGE=reconstruct"]));
+  });
+
+  it("passes a crop box to the worker container as JSON, only when one is set", () => {
+    launchJobLocal({ ...params, cropBox: { center: [1, 2, 3], size: [4, 5, 6], quaternion: [0, 0, 0, 1] } });
+    launchJobLocal(params);
+
+    const [[, withBox], [, withoutBox]] = spawnMock.mock.calls;
+    expect(withBox).toEqual(
+      expect.arrayContaining(["-e", 'CROP_BOX={"center":[1,2,3],"size":[4,5,6],"quaternion":[0,0,0,1]}']),
+    );
+    expect(withoutBox.some(arg => arg.startsWith("CROP_BOX="))).toBe(false);
   });
 
   it("throws if AWS credentials aren't set", () => {

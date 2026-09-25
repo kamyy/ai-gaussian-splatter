@@ -5,6 +5,7 @@ import path from "node:path";
 
 import { EC2Client, RunInstancesCommand, TerminateInstancesCommand } from "@aws-sdk/client-ec2";
 
+import type { CropBox } from "@/lib/types";
 import { getEnv } from "./env";
 
 // Direct spot-instance-per-job launch — no SQS/Batch/Step Functions. The instance profile these launches pass is
@@ -24,9 +25,14 @@ interface UserDataParams {
   ecrRegistry: string;
   awsRegion: string;
   maxLifetimeMinutes: number;
+  cropBox?: CropBox;
 }
 
 function renderUserData(p: UserDataParams): string {
+  // Single-quoted in the script. The train route's schema has already reduced the box to numbers, so its JSON holds no
+  // quote of either kind.
+  const cropBoxVar = p.cropBox ? `CROP_BOX='${JSON.stringify(p.cropBox)}'\n` : "";
+  const cropBoxArg = p.cropBox ? `    -e CROP_BOX="$CROP_BOX" \\\n` : "";
   return `#!/bin/bash
 set -euo pipefail
 
@@ -48,7 +54,7 @@ APP_PUBLIC_URL="${p.appPublicUrl}"
 UPLOADS_BUCKET="${p.uploadsBucket}"
 SPLATS_BUCKET="${p.splatsBucket}"
 STAGE="${p.stage}"
-
+${cropBoxVar}
 $(aws ecr get-login --no-include-email --region ${p.awsRegion}) || \\
     aws ecr get-login-password --region ${p.awsRegion} | docker login --username AWS --password-stdin ${p.ecrRegistry}
 
@@ -60,7 +66,7 @@ docker run --rm --gpus all \\
     -e UPLOADS_BUCKET="$UPLOADS_BUCKET" \\
     -e SPLATS_BUCKET="$SPLATS_BUCKET" \\
     -e STAGE="$STAGE" \\
-    ${p.workerImageUri}
+${cropBoxArg}    ${p.workerImageUri}
 `;
 }
 
@@ -110,6 +116,7 @@ export async function launchJob(params: {
   stage: WorkerStage;
   workerImageUri: string;
   ecrRegistry: string;
+  cropBox?: CropBox;
 }): Promise<string> {
   const env = getEnv();
   const ec2 = new EC2Client({ region: env.AWS_REGION });
@@ -126,6 +133,7 @@ export async function launchJob(params: {
     ecrRegistry: params.ecrRegistry,
     awsRegion: env.AWS_REGION,
     maxLifetimeMinutes: WORKER_MAX_LIFETIME_MINUTES,
+    cropBox: params.cropBox,
   });
 
   const response = await ec2.send(
@@ -220,6 +228,7 @@ export function launchJobLocal(params: {
   splatId: string;
   callbackToken: string;
   stage: WorkerStage;
+  cropBox?: CropBox;
 }): void {
   const env = getEnv();
   const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
@@ -267,6 +276,7 @@ export function launchJobLocal(params: {
       `AWS_SECRET_ACCESS_KEY=${secretAccessKey}`,
       "-e",
       `AWS_DEFAULT_REGION=${env.AWS_REGION}`,
+      ...(params.cropBox ? ["-e", `CROP_BOX=${JSON.stringify(params.cropBox)}`] : []),
       "-v",
       `${jobDir}:/tmp/job`,
       // worker/Dockerfile builds one image per stage, so this picks the same one scripts/lib/worker.sh's

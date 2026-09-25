@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect } from "react";
+import { use, useEffect, useState } from "react";
 
 import { PhotoGrid } from "@/components/splats/PhotoGrid";
 import { PipelineStepper } from "@/components/splats/PipelineStepper";
@@ -11,7 +11,7 @@ import { SplatStageViewer } from "@/components/splats/SplatStageViewer";
 import { StageCard } from "@/components/splats/StageCard";
 import { useCameras, useLatestJob, usePhotos, useSplat } from "@/lib/hooks";
 import { splatStage } from "@/lib/splatStage";
-import { JOB_ENDED_STATUSES } from "@/lib/types";
+import { type CropBox, JOB_ENDED_STATUSES } from "@/lib/types";
 
 export default function SplatPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -19,6 +19,8 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
   const { data: job, isLoading: jobLoading, mutate: refetchJob } = useLatestJob(id);
   const { data: photos, isLoading: photosLoading } = usePhotos(id);
   const { data: cameras } = useCameras(id, Boolean(job?.pointCloudS3Key));
+  // Drawn in the 3D view and sent with the check stage's build button, which sit on opposite sides of the page.
+  const [cropBox, setCropBox] = useState<CropBox | null>(null);
 
   // Only the job is polled, but the worker's callback moves the job row and the splat row in one transaction, so a job
   // that has ended means this splat is stale.
@@ -53,7 +55,7 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
           <h1 className="font-display text-5xl leading-none tracking-tight">{splat.name}</h1>
         </div>
         <PipelineStepper stage={stage} />
-        <StageCard splatId={id} stage={stage} onJobChanged={() => void refetchJob()} />
+        <StageCard splatId={id} stage={stage} cropBox={cropBox} onJobChanged={() => void refetchJob()} />
         {stage.kind === "complete" && splat.isShareable && <SharePanel splatId={id} />}
         {photos && photos.length > 0 && <PhotoGrid photos={photos} placedPhotoIds={placedPhotoIds} />}
         {/* The check stage's card already offers this as "Discard". */}
@@ -64,7 +66,14 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
         )}
       </div>
       <section aria-label="3D view" className="h-120 px-4 pb-6 sm:px-12 lg:h-auto lg:flex-1 lg:py-6 lg:pr-8 lg:pl-0">
-        <SplatStageViewer splatId={id} job={job} complete={splat.status === "complete"} cameras={cameras} />
+        <SplatStageViewer
+          splatId={id}
+          job={job}
+          complete={splat.status === "complete"}
+          cameras={cameras}
+          cropBox={cropBox}
+          onCropBoxChange={stage.kind === "check" ? setCropBox : undefined}
+        />
       </section>
     </div>
   );

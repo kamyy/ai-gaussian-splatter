@@ -48,6 +48,8 @@ Why the system is shaped this way: decisions, alternatives rejected, costs accep
    - Single-object, plain-background scenes converge faster, so fewer iterations suffice.
    - Apache 2.0 (INRIA's original is non-commercial).
 4. **Export** (`worker/pipeline/export.py`): viewer `.ply` plus a thumbnail from gsplat's own rasterizer, for Open Graph. Using gsplat's rasterizer avoids pulling in an extra dependency just for the thumbnail.
+   - The optional crop box is drawn on the point cloud before training but applied only here, where it drops every Gaussian centered outside it.
+   - Training still sees the whole scene. The photos show the background too, and without Gaussians there to explain those pixels, the optimizer grows floaters around the object.
 
 The "AI" here is per-object gradient descent through a differentiable rasterizer, not a pretrained inference model. COLMAP is classical CV (bundle adjustment), not ML.
 
