@@ -11,6 +11,8 @@ const baseJob: Job = {
   resultS3Key: null,
   thumbnailS3Key: null,
   pointCloudS3Key: null,
+  trainingStartedAt: null,
+  trainingProgress: null,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
 };
@@ -37,6 +39,14 @@ describe("splatStage", () => {
     expect(splatStage(job({ status }), 30).kind).toBe(kind);
   });
 
+  it("carries training progress on the building stage, and treats uploading the result as done", () => {
+    expect(splatStage(job({ status: JobStatus.training_running, trainingProgress: 40 }), 30)).toMatchObject({
+      kind: "building",
+      progress: 40,
+    });
+    expect(splatStage(job({ status: JobStatus.uploading_result }), 30)).toMatchObject({ progress: 100 });
+  });
+
   it("places a failure at the step it happened in, going by whether a point cloud exists", () => {
     expect(splatStage(job({ status: JobStatus.failed, errorMessage: "too few" }), 30)).toEqual({
       kind: "failed",
@@ -58,7 +68,7 @@ describe("currentStep", () => {
     expect(currentStep({ kind: "no_photos" })).toBe("upload");
     expect(currentStep({ kind: "ready" })).toBe("cameras");
     expect(currentStep({ kind: "check" })).toBe("check");
-    expect(currentStep({ kind: "building" })).toBe("build");
+    expect(currentStep({ kind: "building", progress: null, startedAt: null })).toBe("build");
     expect(currentStep({ kind: "failed", step: "build", message: null })).toBe("build");
     expect(currentStep({ kind: "complete" })).toBeNull();
   });

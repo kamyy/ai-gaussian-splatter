@@ -67,8 +67,30 @@ describe("StageCard", () => {
   });
 
   it("offers only Stop while a stage is running", () => {
-    render(<StageCard splatId="splat-1" stage={{ kind: "building" }} onJobChanged={vi.fn()} />);
+    render(
+      <StageCard
+        splatId="splat-1"
+        stage={{ kind: "building", progress: null, startedAt: null }}
+        onJobChanged={vi.fn()}
+      />,
+    );
     expect(screen.getByRole("progressbar", { name: "Building the splat" })).toBeInTheDocument();
     expect(screen.getAllByRole("button").map(button => button.textContent)).toEqual(["Stop"]);
+  });
+
+  it("shows training progress and a time estimate once the worker reports it", () => {
+    const startedAt = new Date(Date.now() - 10 * 60_000).toISOString();
+    render(
+      <StageCard splatId="splat-1" stage={{ kind: "building", progress: 50, startedAt }} onJobChanged={vi.fn()} />,
+    );
+    expect(screen.getByRole("progressbar", { name: "Building the splat" })).toHaveAttribute("aria-valuenow", "50");
+    expect(screen.getByText("50%")).toBeInTheDocument();
+    expect(screen.getByText("About 10 minutes left")).toBeInTheDocument();
+  });
+
+  it("holds back the estimate while there's too little of the run to project from", () => {
+    const startedAt = new Date(Date.now() - 60_000).toISOString();
+    render(<StageCard splatId="splat-1" stage={{ kind: "building", progress: 2, startedAt }} onJobChanged={vi.fn()} />);
+    expect(screen.queryByText(/left$/)).not.toBeInTheDocument();
   });
 });

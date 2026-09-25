@@ -18,13 +18,14 @@ def report_status(
     thumbnail_s3_key: str | None = None,
     point_cloud_s3_key: str | None = None,
     ec2_instance_id: str | None = None,
+    training_progress: int | None = None,
 ) -> None:
     """PATCH the job's status back to the web app. Best-effort: logs and swallows
     network errors rather than raising, since a failed status update should never
     prevent the pipeline from continuing (or from reaching the finally block that
     terminates the instance) — see worker/run_job.py.
     """
-    payload: dict[str, str] = {"status": status}
+    payload: dict[str, str | int] = {"status": status}
     if error_message is not None:
         payload["error_message"] = error_message
     if result_s3_key is not None:
@@ -35,6 +36,8 @@ def report_status(
         payload["point_cloud_s3_key"] = point_cloud_s3_key
     if ec2_instance_id is not None:
         payload["ec2_instance_id"] = ec2_instance_id
+    if training_progress is not None:
+        payload["training_progress"] = training_progress
 
     url = f"{settings.app_public_url}/api/v1/internal/jobs/{settings.job_id}/status"
     try:

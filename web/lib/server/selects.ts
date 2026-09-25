@@ -25,6 +25,8 @@ export const jobColumns = {
   resultS3Key: jobs.resultS3Key,
   thumbnailS3Key: jobs.thumbnailS3Key,
   pointCloudS3Key: jobs.pointCloudS3Key,
+  trainingStartedAt: jobs.trainingStartedAt,
+  trainingProgress: jobs.trainingProgress,
   createdAt: jobs.createdAt,
   updatedAt: jobs.updatedAt,
 };

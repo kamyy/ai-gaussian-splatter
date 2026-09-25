@@ -19,13 +19,3 @@ if (typeof window !== "undefined" && !window.matchMedia) {
     dispatchEvent: () => false,
   });
 }
-
-// jsdom doesn't implement ResizeObserver either. web/components/splats/PhotoFilmstrip.tsx uses one directly to measure
-// its own body height.
-if (typeof window !== "undefined" && !window.ResizeObserver) {
-  window.ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  };
-}

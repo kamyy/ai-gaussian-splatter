@@ -6,6 +6,7 @@ import {
   integer,
   pgEnum,
   pgTable,
+  smallint,
   text,
   timestamp,
   uniqueIndex,
@@ -97,6 +98,9 @@ export const jobs = pgTable(
     colmapFinishedAt: timestamp("colmap_finished_at", { withTimezone: true, precision: 6 }),
     trainingStartedAt: timestamp("training_started_at", { withTimezone: true, precision: 6 }),
     trainingFinishedAt: timestamp("training_finished_at", { withTimezone: true, precision: 6 }),
+    // Percent of gsplat's iterations done, 0-100, reported by the train stage's worker as it goes. Null before
+    // training starts.
+    trainingProgress: smallint("training_progress"),
 
     createdAt: timestamp("created_at", { withTimezone: true, precision: 6 }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true, precision: 6 })

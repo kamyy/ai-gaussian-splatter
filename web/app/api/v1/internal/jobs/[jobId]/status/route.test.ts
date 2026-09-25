@@ -98,6 +98,17 @@ describe("worker status callback", () => {
     expect(afterTraining.trainingStartedAt).not.toBeNull();
   });
 
+  it("records training progress, and rejects a value outside 0-100", async () => {
+    const { job } = await seed();
+
+    await PATCH(req("tok", { status: "training_running", training_progress: 35 }), ctx(job.id));
+    const [updated] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
+    expect(updated.trainingProgress).toBe(35);
+
+    const res = await PATCH(req("tok", { status: "training_running", training_progress: 140 }), ctx(job.id));
+    expect(res.status).toBe(422);
+  });
+
   it("moves the job and its splat together on completion", async () => {
     const { splat, job } = await seed();
 
