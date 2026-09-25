@@ -442,6 +442,5 @@ Known gaps, priority order:
    - `infra/variables.tf`'s validation now catches a non-email string outright (a blank value, a stray flag, a copy-paste mistake), but a typo'd-and-still-email-shaped address (`alert+email@gmial.com`) is syntactically fine and passes it.
    - Deliverability can't be checked at apply time either way. The AWS Budget emails that address directly, with no subscription-confirmation state to check via the CLI, so the first sign of that class of typo is a budget alert that never arrives.
    - Watching for a real alert once spend crosses a threshold, or temporarily lowering `monthly_budget_limit_usd` to force one, is the only way to check.
-6. **`_densify_and_prune` discards optimizer state.** `worker/pipeline/train.py` rebuilds the Adam optimizer after each densification round, dropping its moment estimates every `iterations // 10` steps. Suspect this before raising the iteration count if 10k under-converges — raising it is the expensive fix.
 
 **M0 has run locally:** a real capture has been through COLMAP→gsplat and opened in the viewer on a local GPU, via the `scripts/dev/worker-*.sh` runs in [Worker (local pipeline run)](RUNBOOK.md#14-worker-local-pipeline-run). Nothing has run on AWS (gap 2), and no run's wall clock has been recorded.
