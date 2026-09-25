@@ -46,6 +46,9 @@
     // dedup and path "." nests the other four — leaving them all enabled would double up. .vscode/settings.json
     // overrides it back to true just for ".", whose single LSP session already covers the whole repo tree.
     "biome.enabled": false,
+    // VS Code's built-in CSS validator doesn't know Tailwind's at-rules (@theme) and flags them as unknown. Biome
+    // already lints the CSS with tailwindDirectives on (biome.json), so the built-in one only adds false warnings.
+    "css.validate": false,
     //
     "[typescript]": {
       "editor.defaultFormatter": "biomejs.biome",

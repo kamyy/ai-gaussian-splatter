@@ -12,7 +12,7 @@ import type { CameraPose, CropBox } from "@/lib/types";
 import { CameraFrustums } from "./CameraFrustums";
 import { CropBoxGizmo, cropBoxFromBounds } from "./CropBoxGizmo";
 import { framingFromCameras, trimmedBox } from "./cameraFraming";
-import { PointCloudScene } from "./PointCloudScene";
+import { DEFAULT_POINT_SIZE, PointCloudScene } from "./PointCloudScene";
 
 export type ViewerMode = "splat" | "colmap_points";
 
@@ -24,6 +24,8 @@ interface SplatViewerProps {
   cameras?: Omit<CameraPose, "photoId">[] | null;
   // Draws the cameras as frustums, in the point cloud view only.
   showCameras?: boolean;
+  // How big each point of the point cloud is drawn, in world units.
+  pointSize?: number;
   // Shows a crop box over the point cloud, which the visitor moves, rotates, and resizes. A null box while cropping is
   // replaced by one fitted to the point cloud once it loads, through onCropBoxChange.
   cropping?: boolean;
@@ -119,6 +121,7 @@ function ViewerSceneManager({
   splatUrl,
   pointCloudUrl,
   cameras,
+  pointSize,
   onError,
   onPointCloudLoad,
 }: {
@@ -126,6 +129,7 @@ function ViewerSceneManager({
   splatUrl: string | null;
   pointCloudUrl: string | null;
   cameras: Omit<CameraPose, "photoId">[] | null;
+  pointSize: number;
   onError: (message: string) => void;
   onPointCloudLoad: (box: Box3) => void;
 }) {
@@ -184,7 +188,13 @@ function ViewerSceneManager({
   }
   if (mode === "colmap_points" && pointCloudUrl) {
     return (
-      <PointCloudScene key="colmap_points" url={pointCloudUrl} onError={onError} onFirstLoad={onPointCloudFirstLoad} />
+      <PointCloudScene
+        key="colmap_points"
+        url={pointCloudUrl}
+        pointSize={pointSize}
+        onError={onError}
+        onFirstLoad={onPointCloudFirstLoad}
+      />
     );
   }
   return null;
@@ -196,6 +206,7 @@ export function SplatViewer({
   pointCloudUrl,
   cameras = null,
   showCameras = false,
+  pointSize = DEFAULT_POINT_SIZE,
   cropping = false,
   cropBox = null,
   onCropBoxChange,
@@ -262,6 +273,7 @@ export function SplatViewer({
           splatUrl={splatUrl}
           pointCloudUrl={pointCloudUrl}
           cameras={cameras}
+          pointSize={pointSize}
           onError={handleError}
           onPointCloudLoad={setPointCloudBounds}
         />

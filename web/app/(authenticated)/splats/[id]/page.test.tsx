@@ -16,7 +16,7 @@ vi.mock("@/components/splats/SplatActions", () => ({
   DeleteSplatButton: ({ label }: { label: string }) => <button type="button">{label}</button>,
 }));
 vi.mock("@/components/splats/SharePanel", () => ({
-  SharePanel: () => <div data-testid="share-panel" />,
+  SharePanel: ({ children }: { children?: React.ReactNode }) => <div data-testid="share-panel">{children}</div>,
 }));
 
 const { useSplatMock, useLatestJobMock, usePhotosMock, useCamerasMock } = vi.hoisted(() => ({

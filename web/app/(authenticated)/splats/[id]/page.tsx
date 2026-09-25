@@ -45,9 +45,17 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
   const stage = splatStage(job, photos?.length ?? 0);
   const placedPhotoIds = cameras ? new Set(cameras.map(camera => camera.photoId)) : null;
 
-  // The check stage's card already offers this as "Discard".
+  // The share panel shows the delete button beside its download button. The check stage's card already offers it as
+  // "Discard".
+  let sharePanel: React.ReactNode = null;
   let deleteButton: React.ReactNode = null;
-  if (stage.kind !== "check") {
+  if (stage.kind === "complete" && splat.isShareable) {
+    sharePanel = (
+      <SharePanel splatId={id}>
+        <DeleteSplatButton splatId={id} label="Delete splat" variant="outlined" />
+      </SharePanel>
+    );
+  } else if (stage.kind !== "check") {
     deleteButton = (
       <div className="mt-auto pt-2">
         <DeleteSplatButton splatId={id} label="Delete splat" variant="text" />
@@ -66,7 +74,7 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
         </div>
         <PipelineStepper stage={stage} />
         <StageCard splatId={id} stage={stage} cropBox={cropBox} onJobChanged={() => void refetchJob()} />
-        {stage.kind === "complete" && splat.isShareable ? <SharePanel splatId={id} /> : null}
+        {sharePanel}
         {photos && photos.length > 0 ? <PhotoGrid photos={photos} placedPhotoIds={placedPhotoIds} /> : null}
         {deleteButton}
       </div>
