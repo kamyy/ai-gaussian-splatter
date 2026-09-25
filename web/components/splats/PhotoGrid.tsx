@@ -18,29 +18,38 @@ interface PhotoGridProps {
 export function PhotoGrid({ photos, placedPhotoIds }: PhotoGridProps) {
   const [expanded, setExpanded] = useState(false);
   const isUnplaced = (photo: PhotoListItem) => placedPhotoIds !== null && !placedPhotoIds.has(photo.id);
-  const unplacedCount = photos.filter(isUnplaced).length;
+  const unplaced = photos.filter(isUnplaced);
+  const unplacedCount = unplaced.length;
   // Unplaced photos lead, so they're visible without expanding the grid.
-  const ordered = [...photos.filter(isUnplaced), ...photos.filter(photo => !isUnplaced(photo))];
+  const ordered = [...unplaced, ...photos.filter(photo => !isUnplaced(photo))];
   const shown = expanded ? ordered : ordered.slice(0, COLLAPSED_COUNT);
+
+  let unplacedNote: React.ReactNode = null;
+  if (unplacedCount > 0) {
+    unplacedNote = <span className="font-medium text-error"> · {unplacedCount} couldn&apos;t be placed</span>;
+  }
+
+  let expandToggle: React.ReactNode = null;
+  if (photos.length > COLLAPSED_COUNT) {
+    expandToggle = (
+      <button
+        type="button"
+        onClick={() => setExpanded(e => !e)}
+        className="text-sm font-medium text-primary hover:underline"
+      >
+        {expanded ? "Show fewer" : `See all ${photos.length}`}
+      </button>
+    );
+  }
 
   return (
     <section aria-labelledby="photos-heading" className="flex flex-col gap-2.5">
       <div className="flex items-baseline justify-between">
         <h2 id="photos-heading" className="text-sm font-semibold">
           {photos.length} photo{photos.length === 1 ? "" : "s"}
-          {unplacedCount > 0 && (
-            <span className="font-medium text-error"> · {unplacedCount} couldn&apos;t be placed</span>
-          )}
+          {unplacedNote}
         </h2>
-        {photos.length > COLLAPSED_COUNT && (
-          <button
-            type="button"
-            onClick={() => setExpanded(e => !e)}
-            className="text-sm font-medium text-primary hover:underline"
-          >
-            {expanded ? "Show fewer" : `See all ${photos.length}`}
-          </button>
-        )}
+        {expandToggle}
       </div>
       <ul className="grid grid-cols-4 gap-1.5 sm:grid-cols-6 lg:grid-cols-4">
         {shown.map(photo => (

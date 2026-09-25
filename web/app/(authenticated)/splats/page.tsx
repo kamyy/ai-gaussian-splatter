@@ -16,6 +16,32 @@ const FILTERS: { value: LibraryFilter | "all"; label: string }[] = [
   { value: "complete", label: "Complete" },
 ];
 
+// Shared by the loaded list and its skeleton, so the placeholders sit exactly where the cards will.
+const GRID = "grid gap-x-6 gap-y-7 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+
+function SplatGridSkeleton() {
+  return (
+    <div className={GRID} aria-hidden="true">
+      {[0, 1, 2, 3].map(i => (
+        <div key={i} className="h-59 animate-pulse rounded-3xl bg-muted" />
+      ))}
+    </div>
+  );
+}
+
+function EmptyLibrary() {
+  return (
+    <div className="flex flex-col items-start gap-4">
+      <p className="max-w-120 text-lg text-muted-foreground">
+        No splats yet. Photograph an object from every side and upload the photos to make your first one.
+      </p>
+      <Link href="/splats/new" className={buttonClassName("contained", "large")}>
+        Make your first splat
+      </Link>
+    </div>
+  );
+}
+
 export default function LibraryPage() {
   const { data: splats, isLoading, error } = useSplats();
   const [filter, setFilter] = useState<LibraryFilter | "all">("all");
@@ -33,7 +59,7 @@ export default function LibraryPage() {
       shown.length === 0 ? (
         <p className="text-muted-foreground">Nothing here right now.</p>
       ) : (
-        <ul className="grid gap-x-6 gap-y-7 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <ul className={GRID}>
           {shown.map(splat => (
             <li key={splat.id}>
               <SplatCard splat={splat} />
@@ -43,58 +69,41 @@ export default function LibraryPage() {
       );
   }
 
+  let filters: React.ReactNode = null;
+  if (splats && splats.length > 0) {
+    filters = (
+      // Buttons with aria-pressed rather than a tablist: each option re-filters one list, there are no separate tab
+      // panels for a tablist to point at.
+      <fieldset className="flex max-w-full gap-0.5 overflow-x-auto rounded-full border border-divider bg-paper p-1">
+        <legend className="sr-only">Filter</legend>
+        {FILTERS.map(option => (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={filter === option.value}
+            onClick={() => setFilter(option.value)}
+            className={cn(
+              "h-9 rounded-full px-3 text-sm font-semibold whitespace-nowrap sm:px-4",
+              filter === option.value ? "bg-foreground text-background" : "hover:bg-muted",
+            )}
+          >
+            {option.label}
+          </button>
+        ))}
+      </fieldset>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-8 px-4 py-10 sm:px-12">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <h1 className="font-display text-5xl tracking-tight sm:text-6xl">
-          Your splats {splats && splats.length > 0 && <span className="text-muted-foreground">{splats.length}</span>}
+          Your splats{" "}
+          {splats && splats.length > 0 ? <span className="text-muted-foreground">{splats.length}</span> : null}
         </h1>
-        {splats && splats.length > 0 && (
-          // Buttons with aria-pressed rather than a tablist: each option re-filters one list, there are no separate
-          // tab panels for a tablist to point at.
-          <fieldset className="flex max-w-full gap-0.5 overflow-x-auto rounded-full border border-divider bg-paper p-1">
-            <legend className="sr-only">Filter</legend>
-            {FILTERS.map(option => (
-              <button
-                key={option.value}
-                type="button"
-                aria-pressed={filter === option.value}
-                onClick={() => setFilter(option.value)}
-                className={cn(
-                  "h-9 rounded-full px-3 text-sm font-semibold whitespace-nowrap sm:px-4",
-                  filter === option.value ? "bg-foreground text-background" : "hover:bg-muted",
-                )}
-              >
-                {option.label}
-              </button>
-            ))}
-          </fieldset>
-        )}
+        {filters}
       </div>
       {body}
-    </div>
-  );
-}
-
-function SplatGridSkeleton() {
-  return (
-    <div className="grid gap-x-6 gap-y-7 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" aria-hidden="true">
-      {[0, 1, 2, 3].map(i => (
-        <div key={i} className="h-59 animate-pulse rounded-3xl bg-muted" />
-      ))}
-    </div>
-  );
-}
-
-function EmptyLibrary() {
-  return (
-    <div className="flex flex-col items-start gap-4">
-      <p className="max-w-120 text-lg text-muted-foreground">
-        No splats yet. Photograph an object from every side and upload the photos to make your first one.
-      </p>
-      <Link href="/splats/new" className={buttonClassName("contained", "large")}>
-        Make your first splat
-      </Link>
     </div>
   );
 }

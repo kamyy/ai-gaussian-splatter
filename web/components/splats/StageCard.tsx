@@ -7,6 +7,8 @@ import { mutate } from "swr";
 
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { apiFetch } from "@/lib/apiFetch";
+import { cn } from "@/lib/cn";
+import { requireToken } from "@/lib/requireToken";
 import type { Stage } from "@/lib/splatStage";
 import type { CropBox, Job } from "@/lib/types";
 import { useAppSnackbar } from "@/lib/useAppSnackbar";
@@ -21,6 +23,77 @@ interface StageCardProps {
   onJobChanged: () => void;
 }
 
+function StageShell({
+  title,
+  tone = "default",
+  children,
+}: {
+  title: string;
+  tone?: "default" | "error";
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      aria-labelledby="stage-heading"
+      className="flex flex-col gap-3.5 rounded-3xl border border-divider bg-paper p-6 text-sm text-muted-foreground"
+    >
+      <h2
+        id="stage-heading"
+        className={cn("font-display text-3xl", tone === "error" ? "text-error" : "text-foreground")}
+      >
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+// For a stage that doesn't report how far along it is: this only shows that something is running.
+function WorkingBar({ label }: { label: string }) {
+  return (
+    <div role="progressbar" aria-label={label} className="h-2 overflow-hidden rounded-full bg-divider">
+      <div className="h-full w-1/3 animate-working motion-reduce:animate-none rounded-full bg-primary" />
+    </div>
+  );
+}
+
+// Below this the elapsed time says too little about the rest of the run to project from.
+const MIN_PERCENT_FOR_ESTIMATE = 5;
+
+function timeLeft(percent: number, startedAt: string | null): string | null {
+  if (startedAt === null || percent < MIN_PERCENT_FOR_ESTIMATE || percent >= 100) {
+    return null;
+  }
+  const elapsedMs = Date.now() - new Date(startedAt).getTime();
+  const minutes = Math.round((elapsedMs * (100 - percent)) / percent / 60_000);
+  if (minutes < 1) {
+    return "Less than a minute left";
+  }
+  return `About ${minutes} minute${minutes === 1 ? "" : "s"} left`;
+}
+
+function ProgressBar({ label, percent, startedAt }: { label: string; percent: number; startedAt: string | null }) {
+  const estimate = timeLeft(percent, startedAt);
+  return (
+    <div className="flex flex-col gap-2">
+      <div
+        role="progressbar"
+        aria-label={label}
+        aria-valuenow={percent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        className="h-2 overflow-hidden rounded-full bg-divider"
+      >
+        <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${percent}%` }} />
+      </div>
+      <div className="flex justify-between text-xs">
+        <span>{percent}%</span>
+        {estimate ? <span>{estimate}</span> : null}
+      </div>
+    </div>
+  );
+}
+
 // What the visitor can do, or is waiting on, at the current stage. The complete stage has no card of its own; the
 // share panel takes its place.
 export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: StageCardProps) {
@@ -31,11 +104,7 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
   async function post(path: "process" | "train", failure: string, body?: unknown) {
     setPending(true);
     try {
-      const token = await getToken();
-      if (!token) {
-        throw new Error("Not signed in");
-      }
-      await apiFetch<Job>(`/api/v1/splats/${splatId}/${path}`, "POST", token, body);
+      await apiFetch<Job>(`/api/v1/splats/${splatId}/${path}`, "POST", await requireToken(getToken), body);
       onJobChanged();
       await mutate("splats");
     } catch (err) {
@@ -97,39 +166,47 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
           <p className="text-xs">Building takes a while. You can close this tab and come back.</p>
         </StageShell>
       );
-    case "building":
+    case "building": {
+      let bar: React.ReactNode;
+      if (stage.progress === null) {
+        bar = <WorkingBar label="Building the splat" />;
+      } else {
+        bar = <ProgressBar label="Building the splat" percent={stage.progress} startedAt={stage.startedAt} />;
+      }
       return (
         <StageShell title="Building your 3D splat">
           <p>
             A cloud GPU is turning the sketch into a 3D splat. You can close this tab. It keeps going, and this page
             will be ready when you come back.
           </p>
-          {stage.progress === null ? (
-            <WorkingBar label="Building the splat" />
-          ) : (
-            <ProgressBar label="Building the splat" percent={stage.progress} startedAt={stage.startedAt} />
-          )}
+          {bar}
           <div className="self-start">
             <StopJobButton splatId={splatId} onJobChanged={onJobChanged} />
           </div>
         </StageShell>
       );
+    }
     case "complete":
       return null;
-    case "failed":
+    case "failed": {
+      let reshootHint: React.ReactNode = null;
+      if (stage.step === "cameras") {
+        reshootHint = (
+          <p>
+            If placing the cameras fails again, the photos probably need more overlap. Start a new splat and re-shoot.
+          </p>
+        );
+      }
       return (
         <StageShell title="Something went wrong" tone="error">
           <p>{stage.message ?? "Processing stopped before it finished."}</p>
-          {stage.step === "cameras" && (
-            <p>
-              If placing the cameras fails again, the photos probably need more overlap. Start a new splat and re-shoot.
-            </p>
-          )}
+          {reshootHint}
           <Button variant="contained" onClick={startProcessing} loading={pending} className="self-start">
             Try again
           </Button>
         </StageShell>
       );
+    }
     case "cancelled":
       return (
         <StageShell title="Cancelled">
@@ -140,75 +217,4 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
         </StageShell>
       );
   }
-}
-
-function StageShell({
-  title,
-  tone = "default",
-  children,
-}: {
-  title: string;
-  tone?: "default" | "error";
-  children: React.ReactNode;
-}) {
-  return (
-    <section
-      aria-labelledby="stage-heading"
-      className="flex flex-col gap-3.5 rounded-3xl border border-divider bg-paper p-6 text-sm text-muted-foreground"
-    >
-      <h2
-        id="stage-heading"
-        className={tone === "error" ? "font-display text-3xl text-error" : "font-display text-3xl text-foreground"}
-      >
-        {title}
-      </h2>
-      {children}
-    </section>
-  );
-}
-
-// For a stage that doesn't report how far along it is: this only shows that something is running.
-function WorkingBar({ label }: { label: string }) {
-  return (
-    <div role="progressbar" aria-label={label} className="h-2 overflow-hidden rounded-full bg-divider">
-      <div className="h-full w-1/3 animate-working motion-reduce:animate-none rounded-full bg-primary" />
-    </div>
-  );
-}
-
-// Below this the elapsed time says too little about the rest of the run to project from.
-const MIN_PERCENT_FOR_ESTIMATE = 5;
-
-function timeLeft(percent: number, startedAt: string | null): string | null {
-  if (startedAt === null || percent < MIN_PERCENT_FOR_ESTIMATE || percent >= 100) {
-    return null;
-  }
-  const elapsedMs = Date.now() - new Date(startedAt).getTime();
-  const minutes = Math.round((elapsedMs * (100 - percent)) / percent / 60_000);
-  if (minutes < 1) {
-    return "Less than a minute left";
-  }
-  return `About ${minutes} minute${minutes === 1 ? "" : "s"} left`;
-}
-
-function ProgressBar({ label, percent, startedAt }: { label: string; percent: number; startedAt: string | null }) {
-  const estimate = timeLeft(percent, startedAt);
-  return (
-    <div className="flex flex-col gap-2">
-      <div
-        role="progressbar"
-        aria-label={label}
-        aria-valuenow={percent}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        className="h-2 overflow-hidden rounded-full bg-divider"
-      >
-        <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${percent}%` }} />
-      </div>
-      <div className="flex justify-between text-xs">
-        <span>{percent}%</span>
-        {estimate && <span>{estimate}</span>}
-      </div>
-    </div>
-  );
 }

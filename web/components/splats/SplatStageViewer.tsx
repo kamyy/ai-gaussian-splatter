@@ -9,6 +9,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { SplatViewer, type ViewerMode } from "@/components/viewer/SplatViewer";
 import { apiFetch } from "@/lib/apiFetch";
 import { cn } from "@/lib/cn";
+import { requireToken } from "@/lib/requireToken";
 import type { CameraPose, CropBox, Job } from "@/lib/types";
 
 interface SplatStageViewerProps {
@@ -20,6 +21,33 @@ interface SplatStageViewerProps {
   cropBox: CropBox | null;
   // Set only while the crop box can still change what gets built, which is what offers the Crop toggle.
   onCropBoxChange?: (box: CropBox | null) => void;
+}
+
+function ModeButton({
+  label,
+  selected,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  selected: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "h-10 rounded-full px-4.5 text-sm font-semibold whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-40",
+        selected ? "bg-foreground text-background" : "hover:bg-muted",
+      )}
+    >
+      {label}
+    </button>
+  );
 }
 
 // The page's 3D view, with a toggle between the finished splat and the point cloud (the "shape sketch") COLMAP
@@ -43,11 +71,7 @@ export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onC
   const [cropping, setCropping] = useState(false);
 
   async function fetchUrl(path: string) {
-    const token = await getToken();
-    if (!token) {
-      throw new Error("Not signed in");
-    }
-    return { url: await apiFetch<string>(path, "GET", token), fetchedAt: Date.now() };
+    return { url: await apiFetch<string>(path, "GET", await requireToken(getToken)), fetchedAt: Date.now() };
   }
 
   function usableUrl(fetched: { url: string; fetchedAt: number } | undefined) {
@@ -117,6 +141,49 @@ export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onC
     );
   }
 
+  let cameraToggle: React.ReactNode = null;
+  if (mode === "colmap_points" && cameras && cameras.length > 0) {
+    cameraToggle = (
+      <label className="flex h-10 items-center gap-2 border-divider border-l pr-3.5 pl-3 text-sm font-semibold whitespace-nowrap">
+        <input
+          type="checkbox"
+          checked={showCameras}
+          onChange={event => setShowCameras(event.target.checked)}
+          className="h-4.5 w-4.5 accent-primary"
+        />
+        Camera positions
+      </label>
+    );
+  }
+  let cropToggle: React.ReactNode = null;
+  if (canCrop) {
+    cropToggle = (
+      <label className="flex h-10 items-center gap-2 border-divider border-l pr-3.5 pl-3 text-sm font-semibold whitespace-nowrap">
+        <input
+          type="checkbox"
+          checked={cropping}
+          onChange={event => {
+            setCropping(event.target.checked);
+            // Cleared rather than kept hidden, so an unticked box never reaches the build.
+            if (!event.target.checked) {
+              onCropBoxChange?.(null);
+            }
+          }}
+          className="h-4.5 w-4.5 accent-primary"
+        />
+        Crop
+      </label>
+    );
+  }
+  let orbitHint: React.ReactNode = null;
+  if (available && url) {
+    orbitHint = (
+      <p className="pointer-events-none absolute top-5 right-6 text-xs text-muted-foreground">
+        Drag to orbit · scroll to zoom
+      </p>
+    );
+  }
+
   return (
     <div className="relative h-full">
       {body}
@@ -133,67 +200,10 @@ export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onC
           disabled={!hasPointCloud}
           onClick={() => setChosen("colmap_points")}
         />
-        {mode === "colmap_points" && cameras && cameras.length > 0 && (
-          <label className="flex h-10 items-center gap-2 border-divider border-l pr-3.5 pl-3 text-sm font-semibold whitespace-nowrap">
-            <input
-              type="checkbox"
-              checked={showCameras}
-              onChange={event => setShowCameras(event.target.checked)}
-              className="h-4.5 w-4.5 accent-primary"
-            />
-            Camera positions
-          </label>
-        )}
-        {canCrop && (
-          <label className="flex h-10 items-center gap-2 border-divider border-l pr-3.5 pl-3 text-sm font-semibold whitespace-nowrap">
-            <input
-              type="checkbox"
-              checked={cropping}
-              onChange={event => {
-                setCropping(event.target.checked);
-                // Cleared rather than kept hidden, so an unticked box never reaches the build.
-                if (!event.target.checked) {
-                  onCropBoxChange?.(null);
-                }
-              }}
-              className="h-4.5 w-4.5 accent-primary"
-            />
-            Crop
-          </label>
-        )}
+        {cameraToggle}
+        {cropToggle}
       </div>
-      {available && url && (
-        <p className="pointer-events-none absolute top-5 right-6 text-xs text-muted-foreground">
-          Drag to orbit · scroll to zoom
-        </p>
-      )}
+      {orbitHint}
     </div>
-  );
-}
-
-function ModeButton({
-  label,
-  selected,
-  disabled,
-  onClick,
-}: {
-  label: string;
-  selected: boolean;
-  disabled: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      disabled={disabled}
-      onClick={onClick}
-      className={cn(
-        "h-10 rounded-full px-4.5 text-sm font-semibold whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-40",
-        selected ? "bg-foreground text-background" : "hover:bg-muted",
-      )}
-    >
-      {label}
-    </button>
   );
 }

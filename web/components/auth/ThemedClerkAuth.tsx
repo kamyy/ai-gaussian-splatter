@@ -1,15 +1,15 @@
 "use client";
 
-import type { SignIn, SignUp } from "@clerk/nextjs";
+import { SignIn, SignUp } from "@clerk/nextjs";
 
 import { clerkAppearanceVariables } from "@/lib/clerkAppearance";
 
-interface ThemedClerkAuthProps {
-  Component: typeof SignIn | typeof SignUp;
+// Client wrappers, not a plain "use client" on the sign-in and sign-up pages, so those pages can keep their Server
+// Component `metadata` exports.
+export function ThemedSignIn() {
+  return <SignIn appearance={{ variables: clerkAppearanceVariables }} />;
 }
 
-// Shared by web/components/auth/ThemedSignIn.tsx and ThemedSignUp.tsx, which are otherwise identical apart from
-// which Clerk component they render.
-export function ThemedClerkAuth({ Component }: ThemedClerkAuthProps) {
-  return <Component appearance={{ variables: clerkAppearanceVariables }} />;
+export function ThemedSignUp() {
+  return <SignUp appearance={{ variables: clerkAppearanceVariables }} />;
 }

@@ -124,7 +124,7 @@ describe("useLatestJob", () => {
 
   it("keeps polling while paused at awaiting_training", () => {
     // The pause is open-ended and nothing moves server-side until the user proceeds, but the poll is what leaves the
-    // timer armed for the training run that "Start training" starts.
+    // timer armed for the training run that the check stage's build button starts.
     renderHook(() => useLatestJob("splat-1"));
     const { refreshInterval } = capturedConfig();
 

@@ -7,18 +7,23 @@ import type { SplatListItem } from "@/lib/types";
 export function SplatCard({ splat }: { splat: SplatListItem }) {
   const badge = splatBadge(splat);
 
+  let thumbnail: React.ReactNode = null;
+  if (splat.thumbnailPhotoUrl) {
+    thumbnail = (
+      // biome-ignore lint/performance/noImgElement: presigned S3 URL has no fixed domain for next/image.
+      <img
+        src={splat.thumbnailPhotoUrl}
+        alt=""
+        draggable={false}
+        className="h-full w-full object-cover transition-transform group-hover:scale-102"
+      />
+    );
+  }
+
   return (
     <Link href={`/splats/${splat.id}`} className="group flex flex-col gap-3">
       <div className="relative h-59 overflow-hidden rounded-3xl bg-muted">
-        {splat.thumbnailPhotoUrl && (
-          // biome-ignore lint/performance/noImgElement: presigned S3 URL has no fixed domain for next/image.
-          <img
-            src={splat.thumbnailPhotoUrl}
-            alt=""
-            draggable={false}
-            className="h-full w-full object-cover transition-transform group-hover:scale-102"
-          />
-        )}
+        {thumbnail}
         {/* The tinted chip colors are translucent, so a paper backing keeps them legible over any photo. */}
         <span className="absolute top-3.5 left-3.5 rounded-full bg-paper">
           <Chip color={badge.color} label={badge.label} />

@@ -35,9 +35,9 @@ const trainSchema = z.object({
 });
 
 /**
- * The "Start training" trigger — launches the second EC2 spot instance for a job whose reconstruct phase already
- * self-terminated at "awaiting_training", reusing that job's own id/callbackToken rather than creating a new job row
- * (see worker/run_job.py's stage split).
+ * The check stage's build button calls this. It launches the second EC2 spot instance for a job whose reconstruct phase
+ * already self-terminated at "awaiting_training", reusing that job's own id/callbackToken rather than creating a new
+ * job row (see worker/run_job.py's stage split).
  */
 export const POST = withErrorHandling(
   async (request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/train">) => {
@@ -115,8 +115,8 @@ export const POST = withErrorHandling(
       }
     } catch (err) {
       // Reverted rather than left at "launching": the reconstruct phase's own output (sparse model, point cloud) is
-      // untouched, so the user can just hit "Start training" again. Left at "launching" the job blocks on
-      // POST /process's JOB_STALE_AFTER_MS sweep instead, which is hours away and cancels the job outright.
+      // untouched, so the user can just click the check stage's build button again. Left at "launching" the job blocks
+      // on POST /process's JOB_STALE_AFTER_MS sweep instead, which is hours away and cancels the job outright.
       await getDb().update(jobs).set({ status: "awaiting_training" }).where(eq(jobs.id, flipped.id));
       throw err;
     }

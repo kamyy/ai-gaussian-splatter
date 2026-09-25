@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { apiFetch } from "@/lib/apiFetch";
+import { requireToken } from "@/lib/requireToken";
 import { useAppSnackbar } from "@/lib/useAppSnackbar";
 
 // Shown once a splat is complete. The link is the public view (web/app/(public)/preview/splats/[id]/page.tsx), which
@@ -30,10 +31,7 @@ export function SharePanel({ splatId }: { splatId: string }) {
   async function download() {
     setDownloading(true);
     try {
-      const token = await getToken();
-      if (!token) {
-        throw new Error("Not signed in");
-      }
+      const token = await requireToken(getToken);
       window.location.assign(await apiFetch<string>(`/api/v1/splats/${splatId}/download`, "GET", token));
     } catch (err) {
       enqueueSnackbar(err instanceof Error ? err.message : "Download failed", { variant: "error" });

@@ -1,12 +1,13 @@
 "use client";
 
-// SWR hooks — owns all server-derived data (splats list, job status via refreshInterval). SWR rather than React Query
-// because it is lighter. Job-status polling is the one piece of async complexity here worth a fetching library over a
-// hand-rolled setInterval/useEffect.
+// SWR hooks for the splat, photo, camera, and job data the pages read. SWR rather than React Query because it is
+// lighter. Job-status polling is the one piece of async complexity here worth a fetching library over a hand-rolled
+// setInterval/useEffect.
 
 import { useAuth } from "@clerk/nextjs";
 import useSWR from "swr";
 import { apiFetch } from "./apiFetch";
+import { requireToken } from "./requireToken";
 import type { CameraPose, Job, JobStatus, PhotoListItem, Splat, SplatListItem } from "./types";
 
 // Poll rate per phase; 0 is how SWR is told to stop, and only an ended status may use it. SWR keys its polling effect
@@ -20,8 +21,8 @@ const JOB_POLL_INTERVAL_MS: Record<JobStatus, number> = {
   queued: 30_000,
   launching: 30_000,
   reconstruction_running: 30_000,
-  // Nothing moves here until the user hits "Start training", and that click mutates the cache directly. Polling
-  // continues anyway: it is what leaves the timer armed for the training run the click starts.
+  // Nothing moves here until the visitor clicks the check stage's build button, and that click mutates the cache
+  // directly. Polling continues anyway: it is what leaves the timer armed for the training run the click starts.
   awaiting_training: 30_000,
   training_running: 30_000,
   uploading_result: 3_000,
@@ -42,37 +43,23 @@ function refreshInterval(job: Job | undefined) {
 export function useSplats() {
   const { getToken } = useAuth();
 
-  return useSWR("splats", async () => {
-    const token = await getToken();
-    if (token) {
-      return apiFetch<SplatListItem[]>("/api/v1/splats", "GET", token);
-    }
-    throw new Error("Not signed in");
-  });
+  return useSWR("splats", async () => apiFetch<SplatListItem[]>("/api/v1/splats", "GET", await requireToken(getToken)));
 }
 
 export function useSplat(splatId: string) {
   const { getToken } = useAuth();
 
-  return useSWR(["splat", splatId], async () => {
-    const token = await getToken();
-    if (token) {
-      return apiFetch<Splat>(`/api/v1/splats/${splatId}`, "GET", token);
-    }
-    throw new Error("Not signed in");
-  });
+  return useSWR(["splat", splatId], async () =>
+    apiFetch<Splat>(`/api/v1/splats/${splatId}`, "GET", await requireToken(getToken)),
+  );
 }
 
 export function usePhotos(splatId: string) {
   const { getToken } = useAuth();
 
-  return useSWR(["photos", splatId], async () => {
-    const token = await getToken();
-    if (token) {
-      return apiFetch<PhotoListItem[]>(`/api/v1/splats/${splatId}/photos`, "GET", token);
-    }
-    throw new Error("Not signed in");
-  });
+  return useSWR(["photos", splatId], async () =>
+    apiFetch<PhotoListItem[]>(`/api/v1/splats/${splatId}/photos`, "GET", await requireToken(getToken)),
+  );
 }
 
 export function useLatestJob(splatId: string) {
@@ -80,13 +67,7 @@ export function useLatestJob(splatId: string) {
 
   return useSWR(
     ["latest-job", splatId],
-    async () => {
-      const token = await getToken();
-      if (token) {
-        return apiFetch<Job>(`/api/v1/splats/${splatId}/jobs/latest`, "GET", token);
-      }
-      throw new Error("Not signed in");
-    },
+    async () => apiFetch<Job>(`/api/v1/splats/${splatId}/jobs/latest`, "GET", await requireToken(getToken)),
     {
       refreshInterval,
     },
@@ -100,13 +81,7 @@ export function useCameras(splatId: string, enabled: boolean) {
 
   return useSWR(
     enabled ? ["cameras", splatId] : null,
-    async () => {
-      const token = await getToken();
-      if (token) {
-        return apiFetch<CameraPose[]>(`/api/v1/splats/${splatId}/cameras`, "GET", token);
-      }
-      throw new Error("Not signed in");
-    },
+    async () => apiFetch<CameraPose[]>(`/api/v1/splats/${splatId}/cameras`, "GET", await requireToken(getToken)),
     { shouldRetryOnError: false },
   );
 }
