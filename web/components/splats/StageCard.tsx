@@ -7,6 +7,7 @@ import { mutate } from "swr";
 
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { apiFetch } from "@/lib/apiFetch";
+import { cn } from "@/lib/cn";
 import { requireToken } from "@/lib/requireToken";
 import type { Stage } from "@/lib/splatStage";
 import type { CropBox, Job } from "@/lib/types";
@@ -38,7 +39,7 @@ function StageShell({
     >
       <h2
         id="stage-heading"
-        className={tone === "error" ? "font-display text-3xl text-error" : "font-display text-3xl text-foreground"}
+        className={cn("font-display text-3xl", tone === "error" ? "text-error" : "text-foreground")}
       >
         {title}
       </h2>

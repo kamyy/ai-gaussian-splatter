@@ -1,7 +1,6 @@
 "use client";
 
-import type { CustomContentProps } from "notistack";
-import { closeSnackbar } from "notistack";
+import { type CustomContentProps, closeSnackbar } from "notistack";
 import { forwardRef } from "react";
 
 import { cn } from "@/lib/cn";

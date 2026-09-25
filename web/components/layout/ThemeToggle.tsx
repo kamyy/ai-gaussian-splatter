@@ -4,18 +4,19 @@ import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 
 // Inline rather than an icon library dependency.
+const ICON_PROPS = {
+  width: "16",
+  height: "16",
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: "2",
+  strokeLinecap: "round",
+} as const;
+
 function SunIcon() {
   return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
+    <svg {...ICON_PROPS} aria-hidden="true">
       <circle cx="12" cy="12" r="4.5" />
       <path d="M12 2.5v2.5M12 19v2.5M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M2.5 12H5M19 12h2.5M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" />
     </svg>
@@ -24,17 +25,7 @@ function SunIcon() {
 
 function MoonIcon() {
   return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
+    <svg {...ICON_PROPS} strokeLinejoin="round" aria-hidden="true">
       <path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z" />
     </svg>
   );

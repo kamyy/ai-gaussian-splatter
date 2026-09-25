@@ -18,9 +18,10 @@ interface PhotoGridProps {
 export function PhotoGrid({ photos, placedPhotoIds }: PhotoGridProps) {
   const [expanded, setExpanded] = useState(false);
   const isUnplaced = (photo: PhotoListItem) => placedPhotoIds !== null && !placedPhotoIds.has(photo.id);
-  const unplacedCount = photos.filter(isUnplaced).length;
+  const unplaced = photos.filter(isUnplaced);
+  const unplacedCount = unplaced.length;
   // Unplaced photos lead, so they're visible without expanding the grid.
-  const ordered = [...photos.filter(isUnplaced), ...photos.filter(photo => !isUnplaced(photo))];
+  const ordered = [...unplaced, ...photos.filter(photo => !isUnplaced(photo))];
   const shown = expanded ? ordered : ordered.slice(0, COLLAPSED_COUNT);
 
   return (

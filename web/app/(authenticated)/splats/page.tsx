@@ -16,9 +16,12 @@ const FILTERS: { value: LibraryFilter | "all"; label: string }[] = [
   { value: "complete", label: "Complete" },
 ];
 
+// Shared by the loaded list and its skeleton, so the placeholders sit exactly where the cards will.
+const GRID = "grid gap-x-6 gap-y-7 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+
 function SplatGridSkeleton() {
   return (
-    <div className="grid gap-x-6 gap-y-7 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" aria-hidden="true">
+    <div className={GRID} aria-hidden="true">
       {[0, 1, 2, 3].map(i => (
         <div key={i} className="h-59 animate-pulse rounded-3xl bg-muted" />
       ))}
@@ -56,7 +59,7 @@ export default function LibraryPage() {
       shown.length === 0 ? (
         <p className="text-muted-foreground">Nothing here right now.</p>
       ) : (
-        <ul className="grid gap-x-6 gap-y-7 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <ul className={GRID}>
           {shown.map(splat => (
             <li key={splat.id}>
               <SplatCard splat={splat} />
