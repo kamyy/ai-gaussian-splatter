@@ -4,8 +4,8 @@ Simplifications relative to the original paper, made deliberately for a reduced-
 than by oversight:
 - Direct RGB colors, not full spherical-harmonics view-dependent color (sh_degree=0). That is adequate for a
   mostly-diffuse single-object capture.
-- Simplified densification (clone high-position-gradient points + prune low-opacity points on a fixed schedule) rather
-  than the paper's full clone/split heuristic.
+- Densification is gsplat's DefaultStrategy with its schedule scaled down from 30k iterations to the run's length (see
+  _build_strategy).
 - Camera radial distortion from COLMAP is not undistorted before training (see worker/pipeline/colmap_model.py). That
   is acceptable for SIMPLE_RADIAL's typically small phone-camera distortion at this quality bar, not for wide-angle
   lenses.
@@ -32,6 +32,12 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # well before a modest photo count. 1600px matches the reference 3DGS implementation's longest-edge target.
 MAX_TRAINING_EDGE = 1600
 
+# Each initial Gaussian is sized from the RMS distance to this many of its nearest COLMAP points, as in the reference
+# 3DGS implementation. A per-point distance keeps a few stray background points from inflating every Gaussian, which a
+# scene-wide extent does not.
+INIT_SCALE_NEIGHBOURS = 3
+MIN_INIT_SCALE = 1e-4
+
 
 @dataclass
 class GaussianModel:
@@ -39,7 +45,7 @@ class GaussianModel:
     scales: torch.Tensor  # (N, 3), log-space
     quats: torch.Tensor  # (N, 4)
     opacities: torch.Tensor  # (N,), logit-space
-    colors: torch.Tensor  # (N, 3), in [0, 1]
+    colors: torch.Tensor  # (N, 3), logit-space
 
 
 @dataclass
@@ -90,18 +96,17 @@ def _train_loop(sparse: SparseModel, photos_dir: Path, settings: Settings):
     instead of re-indenting this whole body.
     """
     cameras, viewmats, images_tensor = _load_views(sparse, photos_dir)
-    model = _init_gaussians(sparse)
+    # gsplat's strategy replaces entries of this dict as it clones, splits, and prunes, carrying each optimizer's
+    # state across. So nothing may hold on to an individual parameter between steps.
+    params = {name: torch.nn.Parameter(tensor.detach()) for name, tensor in vars(_init_gaussians(sparse)).items()}
+    optimizers = _build_optimizers(params)
 
     iterations = 20 if settings.fast_test_mode else settings.training_iterations
-
-    # Schedules are fractions of the run, not fixed step counts: at the default 10k these work out to the usual
-    # densify-every-1000 / log-and-report-progress-every-500 / stop-densifying-500-before-the-end, while a 20-iteration
-    # fast-test run still exercises _densify_and_prune instead of never reaching it.
-    densify_every = max(1, iterations // 10)
-    densify_until = iterations - max(1, iterations // 20)
     log_every = max(1, iterations // 20)
 
-    optimizer = _build_optimizer(model)
+    strategy = _build_strategy(iterations)
+    strategy.check_sanity(params, optimizers)
+    strategy_state = strategy.initialize_state(scene_scale=_scene_scale(viewmats))
     max_points = _max_gaussians_for_device()
 
     for step in range(iterations):
@@ -110,24 +115,28 @@ def _train_loop(sparse: SparseModel, photos_dir: Path, settings: Settings):
         viewmat = viewmats[idx]
         gt_image = images_tensor[idx]
 
-        rendered, alpha, _meta = _render(model, viewmat, K, width, height)
+        rendered, _alpha, meta = _render(GaussianModel(**params), viewmat, K, width, height)
+        strategy.step_pre_backward(params, optimizers, strategy_state, step, meta)
         loss = torch.nn.functional.l1_loss(rendered, gt_image)
-
-        optimizer.zero_grad()
         loss.backward()
-        optimizer.step()
+        for optimizer in optimizers.values():
+            optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
+
+        if len(params["means"]) >= max_points:
+            # No gradient exceeds infinity, so this stops growth while pruning carries on.
+            strategy.grow_grad2d = float("inf")
+        strategy.step_post_backward(params, optimizers, strategy_state, step, meta, packed=True)
+        if len(params["means"]) == 0:
+            raise RuntimeError("Every Gaussian's opacity decayed below the prune threshold; the model has collapsed")
 
         if step % log_every == 0:
-            logger.info("iter %d/%d loss=%.4f", step, iterations, loss.item())
+            logger.info("iter %d/%d loss=%.4f gaussians=%d", step, iterations, loss.item(), len(params["means"]))
             # On the log schedule, 20 callbacks a run, for the progress bar on the splat's page. report_status never
             # raises, so an unreachable web app costs its timeout here and nothing more.
             report_status(settings, "training_running", training_progress=step * 100 // iterations)
 
-        if step > 0 and step % densify_every == 0 and step < densify_until:
-            model = _densify_and_prune(model, max_points=max_points)
-            optimizer = _build_optimizer(model)
-
-    return model, cameras, viewmats, images_tensor
+    return GaussianModel(**params), cameras, viewmats, images_tensor
 
 
 def render_view(model: GaussianModel, viewmat: torch.Tensor, K: torch.Tensor, width: int, height: int) -> torch.Tensor:
@@ -190,11 +199,7 @@ def _init_gaussians(sparse: SparseModel) -> GaussianModel:
 
     means = torch.tensor(sparse.points_xyz, dtype=torch.float32, device=DEVICE, requires_grad=True)
 
-    # Initial scale: a small fraction of the scene's bounding-box diagonal, uniform across points — the densification
-    # loop refines this over training rather than relying on a precise per-point KNN estimate.
-    extent = float(np.linalg.norm(sparse.points_xyz.max(axis=0) - sparse.points_xyz.min(axis=0)))
-    init_scale = max(extent * 0.01, 1e-4)
-    scales = torch.full((n, 3), np.log(init_scale), dtype=torch.float32, device=DEVICE, requires_grad=True)
+    scales = _nearest_neighbour_scales(means.detach()).log()[:, None].repeat(1, 3).requires_grad_(True)
 
     quats = torch.zeros((n, 4), dtype=torch.float32, device=DEVICE)
     quats[:, 0] = 1.0
@@ -202,29 +207,66 @@ def _init_gaussians(sparse: SparseModel) -> GaussianModel:
 
     opacities = torch.full((n,), _logit(0.1), dtype=torch.float32, device=DEVICE, requires_grad=True)
 
-    colors = torch.tensor(
-        sparse.points_rgb.astype(np.float32) / 255.0, dtype=torch.float32, device=DEVICE, requires_grad=True
-    )
+    # _render applies a sigmoid to colors, so COLMAP's RGB is stored as its logit. The eps keeps pure black and white
+    # finite.
+    rgb = torch.tensor(sparse.points_rgb.astype(np.float32) / 255.0, dtype=torch.float32, device=DEVICE)
+    colors = torch.logit(rgb, eps=1e-3).requires_grad_(True)
 
     return GaussianModel(means=means, scales=scales, quats=quats, opacities=opacities, colors=colors)
 
 
-def _build_optimizer(model: GaussianModel) -> torch.optim.Optimizer:
-    return torch.optim.Adam(
-        [
-            {"params": [model.means], "lr": 1.6e-4},
-            {"params": [model.scales], "lr": 5e-3},
-            {"params": [model.quats], "lr": 1e-3},
-            {"params": [model.opacities], "lr": 5e-2},
-            {"params": [model.colors], "lr": 2.5e-3},
-        ]
+def _nearest_neighbour_scales(points: torch.Tensor) -> torch.Tensor:
+    """Per-point RMS distance to its INIT_SCALE_NEIGHBOURS nearest neighbours, shape (N,)."""
+    n = len(points)
+    k = min(INIT_SCALE_NEIGHBOURS, n - 1)
+    if k == 0:
+        return torch.full((n,), MIN_INIT_SCALE, device=points.device)
+
+    # Chunked so the pairwise distance matrix never holds more than 1024 rows at once. A full (N, N) matrix for a
+    # few hundred thousand COLMAP points would not fit in VRAM.
+    scales = []
+    for chunk in points.split(1024):
+        squared = torch.cdist(chunk, points).square()
+        # Each row's smallest distance is the point to itself, so it is dropped.
+        nearest = squared.topk(k + 1, dim=1, largest=False).values[:, 1:]
+        scales.append(nearest.mean(dim=1).sqrt())
+    return torch.cat(scales).clamp_min(MIN_INIT_SCALE)
+
+
+def _build_optimizers(params: dict[str, torch.nn.Parameter]) -> dict[str, torch.optim.Optimizer]:
+    """One Adam per parameter, which is the shape gsplat's strategy needs to resize each one's state."""
+    learning_rates = {"means": 1.6e-4, "scales": 5e-3, "quats": 1e-3, "opacities": 5e-2, "colors": 2.5e-3}
+    return {name: torch.optim.Adam([params[name]], lr=lr) for name, lr in learning_rates.items()}
+
+
+def _build_strategy(iterations: int):
+    """gsplat's defaults assume a 30k-iteration run: refine every 100 steps from step 500 to step 15k. Each is scaled
+    by the same fraction of the run here, so a 10k run keeps the reference proportions and a 20-iteration fast-test
+    run still refines.
+
+    Its reset_every never fires in gsplat 1.5.3, whose condition for it is always false, so opacities are never reset.
+    """
+    from gsplat.strategy import DefaultStrategy  # imported lazily for the same reason as in _render
+
+    return DefaultStrategy(
+        refine_start_iter=iterations * 500 // 30_000,
+        refine_stop_iter=iterations // 2,
+        refine_every=max(1, iterations * 100 // 30_000),
     )
+
+
+def _scene_scale(viewmats: list[torch.Tensor]) -> float:
+    """1.1 times the farthest camera's distance from the cameras' mean position, as the reference 3DGS implementation
+    measures it. The strategy's size thresholds for splitting and pruning are fractions of this.
+    """
+    centres = torch.stack([-(v[:3, :3].T @ v[:3, 3]) for v in viewmats])
+    return 1.1 * (centres - centres.mean(dim=0)).norm(dim=-1).max().item()
 
 
 def _render(model: GaussianModel, viewmat: torch.Tensor, K: torch.Tensor, width: int, height: int):
     """Returns (rendered_image, alpha, meta) for the single camera passed in. gsplat.rasterization is batched over
-    cameras, so batch index 0 is sliced out of the image and alpha before returning them. Meta is returned as-is,
-    since neither caller uses it.
+    cameras, so batch index 0 is sliced out of the image and alpha before returning them. Meta is returned as-is for
+    the densification strategy, which reads its 2D means and their gradients.
     """
     import gsplat  # imported lazily so the rest of the module is importable/testable without CUDA/gsplat installed
 
@@ -243,9 +285,9 @@ def _render(model: GaussianModel, viewmat: torch.Tensor, K: torch.Tensor, width:
 
 
 def _max_gaussians_for_device() -> int:
-    """A device-sized ceiling on the point count densification is allowed to grow to. Without one, cloning keeps
-    adding points on a fixed schedule all the way to densify_until regardless of how much VRAM is left, so a run on a
-    small GPU can climb for thousands of iterations before finally OOMing near the end.
+    """A device-sized ceiling on the point count densification is allowed to grow to. Without one, growth carries on
+    until the strategy's refine_stop_iter regardless of how much VRAM is left, so a run on a small GPU can climb for
+    thousands of iterations before finally OOMing.
 
     2KB/point is a deliberately conservative, unmeasured budget covering the point's own five tensors, Adam's two
     moment estimates per tensor, and gsplat's per-render tile-intersection buffers, which also scale with point
@@ -259,42 +301,6 @@ def _max_gaussians_for_device() -> int:
     free_bytes, _total_bytes = torch.cuda.mem_get_info()
     budget_bytes = free_bytes // 2
     return max(1, budget_bytes // 2048)
-
-
-def _densify_and_prune(
-    model: GaussianModel, opacity_prune_threshold: float = 0.005, max_points: int = 10**9
-) -> GaussianModel:
-    """Simplified densification (see module docstring): clone the top 5% of
-    points by position-gradient magnitude, and prune points whose opacity
-    has decayed below threshold. Cloning stops once max_points is reached.
-    Pruning keeps running regardless, since it only ever removes points.
-    Raises if every point's opacity has decayed below threshold, since
-    there would be nothing left to clone from or train.
-    """
-    with torch.no_grad():
-        grad_norm = model.means.grad.norm(dim=-1) if model.means.grad is not None else torch.zeros(len(model.means))
-        keep = torch.sigmoid(model.opacities) > opacity_prune_threshold
-        n_keep = int(keep.sum().item())
-        if n_keep == 0:
-            raise RuntimeError("Every Gaussian's opacity decayed below the prune threshold; the model has collapsed")
-
-        # available can't go negative, so n_clone (which needs at least 1 to make topk meaningful) never exceeds it.
-        available = max(0, max_points - n_keep)
-        n_clone = min(max(1, int(0.05 * n_keep)), available)
-        clone_idx = torch.topk(grad_norm * keep, n_clone).indices if n_clone > 0 else torch.empty(0, dtype=torch.long)
-
-        def _cat(t: torch.Tensor, idx: torch.Tensor) -> torch.Tensor:
-            kept = t[keep]
-            cloned = t[idx] + (torch.randn_like(t[idx]) * 1e-3 if t.dim() > 1 else 0)
-            return torch.cat([kept, cloned], dim=0).detach().requires_grad_(True)
-
-        return GaussianModel(
-            means=_cat(model.means, clone_idx),
-            scales=_cat(model.scales, clone_idx),
-            quats=_cat(model.quats, clone_idx),
-            opacities=_cat(model.opacities, clone_idx),
-            colors=_cat(model.colors, clone_idx),
-        )
 
 
 def _logit(p: float) -> float:

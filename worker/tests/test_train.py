@@ -7,10 +7,13 @@ from pipeline.colmap_model import Camera, Image, SparseModel
 from pipeline.config import Settings
 from pipeline.train import (
     MAX_TRAINING_EDGE,
-    GaussianModel,
-    _densify_and_prune,
+    MIN_INIT_SCALE,
+    _build_strategy,
+    _init_gaussians,
     _load_views,
     _max_gaussians_for_device,
+    _nearest_neighbour_scales,
+    _scene_scale,
     train,
 )
 
@@ -98,42 +101,32 @@ def test_train_translates_cuda_oom_into_a_clean_runtime_error(monkeypatch, tmp_p
     assert "CUDA out of memory" not in str(exc_info.value)
 
 
-def _make_gaussian_model(n: int) -> GaussianModel:
-    return GaussianModel(
-        means=torch.zeros(n, 3, requires_grad=True),
-        scales=torch.zeros(n, 3, requires_grad=True),
-        quats=torch.zeros(n, 4, requires_grad=True),
-        opacities=torch.full((n,), 10.0, requires_grad=True),  # sigmoid(10) ~ 1, safely above the prune threshold
-        colors=torch.zeros(n, 3, requires_grad=True),
-    )
+def test_build_strategy_refines_within_a_fast_test_run():
+    """A 20-iteration smoke test must still reach the strategy's refine steps, or it stops covering densification."""
+    strategy = _build_strategy(20)
+    refine_steps = [
+        step
+        for step in range(20)
+        if strategy.refine_start_iter < step < strategy.refine_stop_iter and step % strategy.refine_every == 0
+    ]
+    assert refine_steps
 
 
-def test_densify_and_prune_clones_five_percent_when_under_the_cap():
-    result = _densify_and_prune(_make_gaussian_model(100), max_points=1000)
-    assert len(result.means) == 105
+def test_build_strategy_keeps_the_reference_proportions_at_10k():
+    strategy = _build_strategy(10_000)
+    assert (strategy.refine_start_iter, strategy.refine_every, strategy.refine_stop_iter) == (166, 33, 5000)
 
 
-def test_densify_and_prune_stops_cloning_at_the_cap():
-    """Already at the cap: pruning still runs (it only ever removes points), but no new points get cloned in."""
-    result = _densify_and_prune(_make_gaussian_model(100), max_points=100)
-    assert len(result.means) == 100
+def test_scene_scale_is_the_farthest_camera_from_the_cameras_centre():
+    def viewmat_at(centre: list[float]) -> torch.Tensor:
+        viewmat = torch.eye(4)
+        viewmat[:3, 3] = -torch.tensor(centre)  # identity rotation, so t = -centre
+        return viewmat
 
+    scale = _scene_scale([viewmat_at([-1.0, 0.0, 0.0]), viewmat_at([1.0, 0.0, 0.0]), viewmat_at([0.0, 3.0, 0.0])])
 
-def test_densify_and_prune_clamps_cloning_to_fit_under_the_cap():
-    """5% of 100 would clone 5, but only 3 more fit under the cap."""
-    result = _densify_and_prune(_make_gaussian_model(100), max_points=103)
-    assert len(result.means) == 103
-
-
-def test_densify_and_prune_raises_when_every_point_is_pruned():
-    """Regression test: n_keep=0 used to still clone one arbitrary already-pruned point back in rather than
-    surfacing the collapse.
-    """
-    model = _make_gaussian_model(10)
-    model.opacities = torch.full((10,), -10.0, requires_grad=True)  # sigmoid(-10) ~ 0, below every threshold
-
-    with pytest.raises(RuntimeError, match="collapsed"):
-        _densify_and_prune(model, max_points=1000)
+    # The cameras' mean is (0, 1, 0), and the farthest camera from it is the one at (0, 3, 0).
+    assert scale == pytest.approx(1.1 * 2.0)
 
 
 def test_max_gaussians_for_device_has_no_cap_without_cuda(monkeypatch):
@@ -148,3 +141,35 @@ def test_max_gaussians_for_device_scales_with_free_vram(monkeypatch):
     monkeypatch.setattr("pipeline.train.torch.cuda.mem_get_info", lambda: (free_bytes, 12 * 1024**3))
 
     assert _max_gaussians_for_device() == (free_bytes // 2) // 2048
+
+
+def test_nearest_neighbour_scales_ignore_a_distant_outlier():
+    """A stray point far from the subject must not inflate the Gaussians around the subject, which a scene-wide
+    extent did.
+    """
+    grid = torch.tensor([[x, y, 0.0] for x in range(4) for y in range(4)])
+    outlier = torch.tensor([[1000.0, 0.0, 0.0]])
+
+    scales = _nearest_neighbour_scales(torch.cat([grid, outlier]))
+
+    assert scales[:16] == pytest.approx(_nearest_neighbour_scales(grid).tolist())
+    assert scales[:16].max().item() < 2.0
+
+
+def test_nearest_neighbour_scales_floor_a_single_point():
+    scales = _nearest_neighbour_scales(torch.zeros(1, 3))
+    assert scales.tolist() == pytest.approx([MIN_INIT_SCALE])
+
+
+def test_init_gaussians_renders_colmap_colors_unchanged():
+    """_render applies a sigmoid to colors, so the initial colors must be stored so that the sigmoid returns
+    COLMAP's RGB.
+    """
+    sparse = _make_sparse_model(800, 600)
+    sparse.points_xyz = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
+    sparse.points_rgb = np.array([[255, 128, 0], [10, 20, 30]], dtype=np.uint8)
+
+    model = _init_gaussians(sparse)
+
+    rendered = torch.sigmoid(model.colors).detach().cpu().numpy() * 255
+    assert rendered == pytest.approx(sparse.points_rgb.astype(np.float32), abs=0.5)
