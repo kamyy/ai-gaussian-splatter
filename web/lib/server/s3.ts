@@ -80,11 +80,7 @@ export async function deleteSplatObjects(splatId: string): Promise<void> {
   }
 }
 
-interface WorkerCamera {
-  name: string;
-  center: [number, number, number];
-  rotation: [number, number, number][];
-}
+type WorkerCamera = Omit<CameraPose, "photoId"> & { name: string };
 
 /**
  * The camera poses the reconstruct stage wrote beside the point cloud (worker/pipeline/sparse_export.py), keyed back to
@@ -109,9 +105,5 @@ export async function readSplatCameras(splatId: string): Promise<CameraPose[] | 
     return null;
   }
   const { cameras } = JSON.parse(body) as { cameras: WorkerCamera[] };
-  return cameras.map(camera => ({
-    photoId: camera.name.replace(/\.[^.]*$/, ""),
-    center: camera.center,
-    rotation: camera.rotation,
-  }));
+  return cameras.map(({ name, ...camera }) => ({ photoId: name.replace(/\.[^.]*$/, ""), ...camera }));
 }

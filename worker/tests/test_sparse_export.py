@@ -90,7 +90,7 @@ def test_export_and_upload_point_cloud_writes_raw_rgb_ply(settings, tmp_path, mo
 def test_export_and_upload_cameras_writes_world_space_centers(settings, tmp_path, monkeypatch):
     import json
 
-    from pipeline.colmap_model import Image
+    from pipeline.colmap_model import Camera, Image
     from pipeline.sparse_export import export_and_upload_cameras
 
     s3 = boto3.client("s3", region_name="us-east-1")
@@ -98,7 +98,8 @@ def test_export_and_upload_cameras_writes_world_space_centers(settings, tmp_path
 
     # Identity rotation, so the world-space center is just -tvec.
     image = Image(image_id=1, qvec=np.array([1.0, 0, 0, 0]), tvec=np.array([1.0, 2.0, 3.0]), camera_id=1, name="a.jpg")
-    fake_sparse = type("FakeSparseModel", (), {"images": {1: image}})()
+    colmap_camera = Camera(camera_id=1, width=4000, height=3000, fx=3200.0, fy=3100.0, cx=2000.0, cy=1500.0)
+    fake_sparse = type("FakeSparseModel", (), {"images": {1: image}, "cameras": {1: colmap_camera}})()
     monkeypatch.setattr("pipeline.sparse_export.read_sparse_model", lambda _dir: fake_sparse)
 
     export_and_upload_cameras(tmp_path, settings)
@@ -108,3 +109,4 @@ def test_export_and_upload_cameras_writes_world_space_centers(settings, tmp_path
     assert camera["name"] == "a.jpg"
     assert camera["center"] == [-1.0, -2.0, -3.0]
     assert camera["rotation"] == [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+    assert (camera["width"], camera["height"], camera["fx"], camera["fy"]) == (4000, 3000, 3200.0, 3100.0)

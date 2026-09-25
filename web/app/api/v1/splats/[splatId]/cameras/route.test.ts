@@ -25,6 +25,10 @@ const POSE = {
     [0, 1, 0],
     [0, 0, 1],
   ],
+  width: 4000,
+  height: 3000,
+  fx: 3200,
+  fy: 3200,
 };
 
 /** Requires a real Postgres (TEST_DATABASE_URL). The S3 read is mocked so this never touches real AWS. */

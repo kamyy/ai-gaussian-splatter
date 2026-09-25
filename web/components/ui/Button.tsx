@@ -26,8 +26,8 @@ const VARIANT: Record<ButtonVariant, string> = {
 // medium and large keep a 44px minimum height, the touch-target floor.
 const SIZE: Record<ButtonSize, string> = {
   small: "h-8 px-3 text-xs",
-  medium: "h-11 px-5 text-sm",
-  large: "h-13 px-7 text-base",
+  medium: "h-11 px-4 text-sm",
+  large: "h-12 px-6 text-base",
 };
 
 // For a next/link <Link> that should look like a button: a <button> nested inside an <a> is invalid HTML.
