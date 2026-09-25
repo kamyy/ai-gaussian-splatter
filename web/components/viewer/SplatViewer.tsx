@@ -1,11 +1,10 @@
 "use client";
 
-import { OrbitControls } from "@react-three/drei";
+import { CameraControls, PerspectiveCamera } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
 import { SparkRenderer, SplatFileType, SplatMesh } from "@sparkjsdev/spark";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type Box3, Vector3 } from "three";
-import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 
 import { Center } from "@/components/layout/Center";
 import { Spinner } from "@/components/ui/Spinner";
@@ -115,54 +114,50 @@ function ViewerSceneManager({
   pointCloudUrl,
   cameras,
   onError,
-  controlsRef,
 }: {
   mode: ViewerMode;
   splatUrl: string | null;
   pointCloudUrl: string | null;
   cameras: Omit<CameraPose, "photoId">[] | null;
   onError: (message: string) => void;
-  controlsRef: React.RefObject<OrbitControlsImpl | null>;
 }) {
-  const { camera } = useThree();
+  const camera = useThree(state => state.camera);
+  // CameraControls' makeDefault registers it here. drei's PerspectiveCamera takes over as the default camera only after
+  // the first render, so the controls are rebuilt around it once, and the framing below is re-applied to whichever
+  // controls are current.
+  const controls = useThree(state => state.controls) as CameraControls | null;
+  const [framing, setFraming] = useState<{ position: Vector3; target: Vector3; up?: Vector3 } | null>(null);
   const framedByRef = useRef<"nothing" | "box" | "cameras">("nothing");
 
-  const frame = useCallback(
-    (position: Vector3, target: Vector3, up?: Vector3) => {
-      if (up) {
-        camera.up.copy(up);
-      }
-      camera.position.copy(position);
-      camera.lookAt(target);
-      camera.updateProjectionMatrix();
-      if (controlsRef.current) {
-        controlsRef.current.target.copy(target);
-        controlsRef.current.update();
-      }
-    },
-    [camera, controlsRef],
-  );
+  useEffect(() => {
+    if (!controls || !framing) {
+      return;
+    }
+    if (framing.up) {
+      camera.up.copy(framing.up);
+      controls.updateCameraUp();
+    }
+    const { position, target } = framing;
+    void controls.setLookAt(position.x, position.y, position.z, target.x, target.y, target.z, false);
+  }, [camera, controls, framing]);
 
   useEffect(() => {
-    const framing = cameras ? framingFromCameras(cameras) : null;
-    if (framing && framedByRef.current !== "cameras") {
+    const fromCameras = cameras ? framingFromCameras(cameras) : null;
+    if (fromCameras && framedByRef.current !== "cameras") {
       framedByRef.current = "cameras";
-      frame(framing.position, framing.target, framing.up);
+      setFraming(fromCameras);
     }
-  }, [cameras, frame]);
+  }, [cameras]);
 
-  const onFirstLoad = useCallback(
-    (box: Box3) => {
-      if (framedByRef.current !== "nothing") {
-        return;
-      }
-      framedByRef.current = "box";
-      const center = box.getCenter(new Vector3());
-      const radius = box.getSize(new Vector3()).length() / 2;
-      frame(new Vector3(center.x, center.y, center.z + radius * 2.5), center);
-    },
-    [frame],
-  );
+  const onFirstLoad = useCallback((box: Box3) => {
+    if (framedByRef.current !== "nothing") {
+      return;
+    }
+    framedByRef.current = "box";
+    const center = box.getCenter(new Vector3());
+    const radius = box.getSize(new Vector3()).length() / 2;
+    setFraming({ position: new Vector3(center.x, center.y, center.z + radius * 2.5), target: center });
+  }, []);
 
   // Switching mode renders a different component here, so React unmounts one scene and mounts the other. That mount is
   // what starts a load: both scenes read their URL from a ref (see SplatScene above) rather than reloading on a prop
@@ -195,7 +190,6 @@ export function SplatViewer({
   // The failing mode is stored with the message so only that mode shows it. A bare string would leave one asset's
   // failure pinned over every other toggle position for the rest of the page's life.
   const [error, setError] = useState<{ mode: ViewerMode; message: string } | null>(null);
-  const controlsRef = useRef<OrbitControlsImpl | null>(null);
 
   // Re-created whenever the mode changes, which is deliberate: it is what tags a message with the mode that produced
   // it. The scenes take this as an effect dependency, and a mode change already remounts them, so the new identity
@@ -212,17 +206,19 @@ export function SplatViewer({
     <div className="relative w-full overflow-hidden rounded-3xl bg-muted" style={{ height }}>
       {/* flat: R3F's default ACESFilmicToneMapping would bend every color through a filmic curve. The output stays
           sRGB, which both Spark's splats and PLYLoader's linearized point colors expect. */}
-      <Canvas flat camera={{ up: [0, -1, -0.6] }}>
+      <Canvas flat>
+        {/* R3F's own default camera has a 75° field of view, which this keeps. The up direction only lasts until the
+            photos' poses replace it. */}
+        <PerspectiveCamera makeDefault fov={75} up={[0, -1, -0.6]} />
         <ViewerSceneManager
           mode={mode}
           splatUrl={splatUrl}
           pointCloudUrl={pointCloudUrl}
           cameras={cameras}
           onError={handleError}
-          controlsRef={controlsRef}
         />
         {mode === "colmap_points" && showCameras && cameras && <CameraFrustums cameras={cameras} />}
-        <OrbitControls ref={controlsRef} makeDefault />
+        <CameraControls makeDefault dollyDragInverted />
       </Canvas>
       {activeError && (
         <Center className="pointer-events-none absolute inset-0">
