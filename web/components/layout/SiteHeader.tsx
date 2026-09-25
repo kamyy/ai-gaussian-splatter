@@ -16,11 +16,11 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-1100 flex h-18 flex-none items-center gap-4 border-divider border-b bg-background px-4 sm:gap-8 sm:px-12">
-      <Link href="/" className="font-display text-2xl whitespace-nowrap sm:text-3xl">
+      <Link href="/" className="font-display text-xl whitespace-nowrap sm:text-3xl">
         AI Gaussian Splatter
       </Link>
       <Show when="signed-in">
-        <nav aria-label="Main" className="text-sm font-medium">
+        <nav aria-label="Main" className="hidden text-sm font-medium sm:block">
           <Link
             href="/splats"
             aria-current={inLibrary ? "page" : undefined}
@@ -44,8 +44,8 @@ export function SiteHeader() {
           </Link>
         </Show>
         <Show when="signed-in">
-          <Link href="/splats/new" className={buttonClassName("ink")}>
-            New splat
+          <Link href="/splats/new" className={buttonClassName("ink", "medium", "px-4 sm:px-5")}>
+            New<span className="hidden sm:inline">&nbsp;splat</span>
           </Link>
         </Show>
         <ThemeToggle />

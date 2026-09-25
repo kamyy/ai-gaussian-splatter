@@ -1,25 +1,62 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { use, useEffect } from "react";
 
-import { useSplat } from "@/lib/hooks";
-import { defaultSubRoute } from "@/lib/splatDefaultRoute";
+import { PhotoGrid } from "@/components/splats/PhotoGrid";
+import { PipelineStepper } from "@/components/splats/PipelineStepper";
+import { SharePanel } from "@/components/splats/SharePanel";
+import { SplatStageViewer } from "@/components/splats/SplatStageViewer";
+import { StageCard } from "@/components/splats/StageCard";
+import { useLatestJob, usePhotos, useSplat } from "@/lib/hooks";
+import { splatStage } from "@/lib/splatStage";
+import { JOB_ENDED_STATUSES } from "@/lib/types";
 
-// The ancestor layout (web/app/(authenticated)/splats/[id]/layout.tsx) already gates the loading/not-found states,
-// so by the time this renders, `splat` is present. This page's only job is to pick which of the two sub-routes a
-// bare /splats/[id] visit — from the library, or a bookmark — should land on. Photos aren't a sub-route: they live
-// in the PhotoFilmstrip that layout renders over every sub-route.
-export default function SplatDefaultRoutePage({ params }: { params: Promise<{ id: string }> }) {
+export default function SplatPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const router = useRouter();
-  const { data: splat } = useSplat(id);
+  const { data: splat, isLoading: splatLoading, mutate: refetchSplat } = useSplat(id);
+  const { data: job, isLoading: jobLoading, mutate: refetchJob } = useLatestJob(id);
+  const { data: photos, isLoading: photosLoading } = usePhotos(id);
 
+  // Only the job is polled, but the worker's callback moves the job row and the splat row in one transaction, so a job
+  // that has ended means this splat is stale.
   useEffect(() => {
-    if (splat) {
-      router.replace(`/splats/${id}/${defaultSubRoute(splat)}`);
+    if (job && JOB_ENDED_STATUSES.includes(job.status)) {
+      void refetchSplat();
     }
-  }, [splat, id, router]);
+  }, [job, refetchSplat]);
 
-  return <div className="h-full animate-pulse bg-divider" />;
+  // jobLoading is part of this gate, not just splatLoading: before the job's first fetch settles, `job` is undefined
+  // exactly as it is for a splat with no job at all, and the "ready" stage would offer a second POST /process for a
+  // splat whose job is already running.
+  if (splatLoading || jobLoading || photosLoading) {
+    return <div className="h-full animate-pulse bg-muted" />;
+  }
+  // Deliberately not `!splat` combined with an error check: a failed revalidation leaves the last good splat in `data`,
+  // and SWR retries on its own.
+  if (!splat) {
+    return <p className="p-12 text-error">Splat not found.</p>;
+  }
+
+  const stage = splatStage(job, photos?.length ?? 0);
+
+  return (
+    <div className="flex flex-col gap-6 lg:h-full lg:flex-row lg:gap-0">
+      <div className="flex flex-col gap-6 px-4 pt-7 sm:px-12 lg:w-120 lg:shrink-0 lg:overflow-y-auto lg:pr-10 lg:pb-7">
+        <div className="flex flex-col gap-2">
+          <Link href="/splats" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+            ← All splats
+          </Link>
+          <h1 className="font-display text-5xl leading-none tracking-tight">{splat.name}</h1>
+        </div>
+        <PipelineStepper stage={stage} />
+        <StageCard splatId={id} stage={stage} onJobChanged={() => void refetchJob()} />
+        {stage.kind === "complete" && splat.isShareable && <SharePanel splatId={id} />}
+        {photos && photos.length > 0 && <PhotoGrid photos={photos} />}
+      </div>
+      <section aria-label="3D view" className="h-120 px-4 pb-6 sm:px-12 lg:h-auto lg:flex-1 lg:py-6 lg:pr-8 lg:pl-0">
+        <SplatStageViewer splatId={id} job={job} complete={splat.status === "complete"} />
+      </section>
+    </div>
+  );
 }

@@ -52,7 +52,7 @@ export default function LibraryPage() {
         {splats && splats.length > 0 && (
           // Buttons with aria-pressed rather than a tablist: each option re-filters one list, there are no separate
           // tab panels for a tablist to point at.
-          <fieldset className="flex gap-1 rounded-full border border-divider bg-paper p-1">
+          <fieldset className="flex max-w-full gap-0.5 overflow-x-auto rounded-full border border-divider bg-paper p-1">
             <legend className="sr-only">Filter</legend>
             {FILTERS.map(option => (
               <button
@@ -61,7 +61,7 @@ export default function LibraryPage() {
                 aria-pressed={filter === option.value}
                 onClick={() => setFilter(option.value)}
                 className={cn(
-                  "h-9 rounded-full px-4 text-sm font-semibold whitespace-nowrap",
+                  "h-9 rounded-full px-3 text-sm font-semibold whitespace-nowrap sm:px-4",
                   filter === option.value ? "bg-foreground text-background" : "hover:bg-muted",
                 )}
               >
