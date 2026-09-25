@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { ThemedSignUp } from "@/components/auth/ThemedSignUp";
+import { ThemedSignUp } from "@/components/auth/ThemedClerkAuth";
 import { Center } from "@/components/layout/Center";
 
 export const metadata: Metadata = {
