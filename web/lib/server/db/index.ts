@@ -6,8 +6,8 @@ import { getEnv } from "../env";
 import * as schema from "./schema";
 
 const globalForDb = globalThis as {
-  // Cache in globalThis because the dev server re-evaluates modules on every hot reload; without it each reload opens a
-  // new connection pool and eventually exhausts Postgres's connection limit.
+  // Cached on globalThis because the dev server re-evaluates modules on every hot reload. Without it, each reload opens
+  // a new connection pool until Postgres runs out of connections.
   pgDb?: NodePgDatabase<typeof schema>;
   pool?: Pool;
 };

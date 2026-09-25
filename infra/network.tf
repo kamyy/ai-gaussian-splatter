@@ -40,9 +40,9 @@ resource "aws_subnet" "public" {
   }
 }
 
-# RDS is the only thing here — it needs no outbound internet, so its route table (below) carries no default
-# route out. It's still reachable from the public subnets over the VPC's implicit local route; the db security
-# group's one ingress rule is what actually restricts that.
+# RDS is the only thing in these subnets. It needs no outbound internet access, so their route table (below) has no
+# default route out. The public subnets can still reach RDS over the VPC's built-in local route. The database security
+# group's single ingress rule is what actually restricts that.
 resource "aws_subnet" "private" {
   for_each = { for idx, az in local.availability_zones : az => idx }
 
@@ -91,9 +91,9 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private.id
 }
 
-# A route table entry, not a billed interface endpoint — free. With no NAT gateway every S3 call otherwise
-# leaves through the internet gateway, including the workers' multi-GB splat uploads; this keeps them on AWS's
-# network.
+# A gateway endpoint is a free route table entry, not a billed interface endpoint. With no NAT gateway, every S3 call
+# would otherwise leave through the internet gateway, including the workers' multi-GB splat uploads. This keeps that
+# traffic on AWS's network.
 resource "aws_vpc_endpoint" "s3" {
   vpc_id            = aws_vpc.main.id
   service_name      = "com.amazonaws.${var.aws_region}.s3"

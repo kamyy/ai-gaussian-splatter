@@ -15,13 +15,13 @@ import {
 } from "@/lib/types";
 
 /**
- * The worker -> app status callback.
+ * The worker's status callback to the app.
  *
- * The one endpoint whose *field names* are snake_case: worker/pipeline/status.py PATCHes a literal snake_case body.
- * Most status values need no translation: they are the Postgres enum labels verbatim, so `JOB_STATUS_DB_VALUES`
- * validates the incoming value and it goes straight to the column. `LEGACY_COLMAP_RUNNING_STATUS` is the one
- * exception — see its normalization below. Changing either the field names or the status list means changing
- * worker/ in lockstep.
+ * This is the one endpoint whose field *names* are snake_case, because worker/pipeline/status.py PATCHes a literal
+ * snake_case body. Most status values need no translation. They are the Postgres enum labels as-is, so
+ * `JOB_STATUS_DB_VALUES` validates the incoming value and it goes straight into the column.
+ * `LEGACY_COLMAP_RUNNING_STATUS` is the one exception, normalized below. Changing either the field names or the status
+ * list means changing worker/ at the same time.
  *
  * Auth is the per-job bearer token, not a Clerk session.
  */

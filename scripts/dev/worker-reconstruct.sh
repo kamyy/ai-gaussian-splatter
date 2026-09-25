@@ -25,13 +25,13 @@ source "$ROOT/scripts/lib/confirm.sh"
 # worker/jobdir also holds web/lib/server/ec2Launcher.ts's launchJobLocal() job folders. Asked here rather than beside
 # the rm below, so the prompt doesn't wait behind the image build.
 if [[ -e "$ROOT/worker/jobdir" ]]; then
-  confirm "Delete worker/jobdir, including any Process-button job folders in it?"
+  confirm "Delete worker/jobdir, including any job folders the web app's local launches wrote there?"
 fi
 
 worker_use_dev_aws
 worker_build_image reconstruct
 
-# Needs to be different for every run.
+# A new splat id for every run, so each run uploads its photos under its own S3 prefix.
 SPLAT_ID=$(uuidgen)
 aws s3 sync "$PHOTOS" "s3://$UPLOADS_BUCKET/splats/$SPLAT_ID/photos/"
 

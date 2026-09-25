@@ -48,8 +48,8 @@ run "fixed_literal_names" {
 run "pass_role_targets_the_role_not_the_instance_profile" {
   command = apply
 
-  # Regression guard: RunInstances with IamInstanceProfile evaluates iam:PassRole against the underlying role's
-  # ARN, not the instance profile ARN that wraps it. Getting this wrong is a real prior AccessDenied bug.
+  # Regression guard: RunInstances with IamInstanceProfile checks iam:PassRole against the underlying role's ARN, not
+  # against the ARN of the instance profile that wraps it.
   assert {
     condition = anytrue([
       for s in jsondecode(aws_iam_role_policy.task.policy).Statement :
@@ -120,9 +120,9 @@ run "web_container_wiring" {
     error_message = "DATABASE_USER must reach the web container as a secret field, never one assembled DATABASE_URL"
   }
 
-  # Regression guard: the web service must fetch its own password at connect time (databaseUrl.ts's
-  # fetchDatabasePassword) rather than trusting a value ECS injected once at task start, which RDS's 7-day secret
-  # rotation would eventually make stale for this long-lived service.
+  # Regression guard: the web service must fetch its own password at connect time (web/lib/server/databaseUrl.ts's
+  # fetchDatabasePassword). A value ECS injected once at task start would go stale after RDS's 7-day secret rotation,
+  # because this service runs for much longer than that.
   assert {
     condition = !anytrue([
       for s in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].secrets : s.name == "DATABASE_PASSWORD"
@@ -207,8 +207,8 @@ run "web_container_wiring" {
 run "migration_task_keeps_the_static_password" {
   command = apply
 
-  # Unlike the web service, the migration task runs for seconds and exits — well inside RDS's 7-day rotation
-  # window — so it keeps using the value ECS injects once at task start instead of fetching its own.
+  # Unlike the web service, the migration task runs for seconds and exits, well inside RDS's 7-day rotation window. So
+  # it keeps using the value ECS injects once at task start instead of fetching its own.
   assert {
     condition = length([
       for s in jsondecode(aws_ecs_task_definition.migration.container_definitions)[0].secrets :
@@ -221,10 +221,10 @@ run "migration_task_keeps_the_static_password" {
 run "migration_task_role_carries_no_grants" {
   command = apply
 
-  # There is no aws_iam_role_policy resource anywhere in infra/ attached to aws_iam_role.migration_task —
-  # that's a config-level fact (the migration task role appears only in its own aws_iam_role declaration),
-  # not something re-checked at plan time here. The container only opens a TCP connection to RDS; every AWS
-  # API call the migration flow needs (ECR pull, DB secret read) runs under execution_role instead.
+  # No aws_iam_role_policy in infra/ is attached to aws_iam_role.migration_task. That is a fact about the config (the
+  # role appears only in its own aws_iam_role block), so this plan doesn't re-check it. The container only opens a TCP
+  # connection to RDS. Every AWS API call the migration needs (the ECR pull and the DB secret read) runs under
+  # execution_role instead.
   assert {
     condition     = aws_iam_role.migration_task.name != aws_iam_role.execution.name
     error_message = "the migration task role and the execution role must stay distinct"
@@ -489,10 +489,9 @@ run "rejects_a_clerk_secret_arn_from_a_different_account" {
   expect_failures = [aws_iam_role_policy.execution]
 }
 
-# mock_provider fills computed attributes with plausible-looking scalars, but leaves computed
-# lists/sets empty by default and doesn't know about format-validated fields (ARNs). These overrides
-# give the handful of computed values other resources in infra/ actually depend on (or validate
-# the shape of) something usable, so the whole plan resolves offline.
+# mock_provider fills computed attributes with plausible-looking values, but it leaves computed lists and sets empty and
+# knows nothing about format-validated fields such as ARNs. These overrides supply usable values for the few computed
+# attributes that other resources in infra/ read or validate, so the whole plan resolves offline.
 override_resource {
   target = aws_db_instance.main
   values = {

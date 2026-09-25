@@ -1,6 +1,5 @@
-// Zustand store — scoped to genuinely client-only UI state that SWR doesn't cover: upload-queue progress before the
-// server acknowledges it. Server-derived data (splats, job status) lives in SWR's cache instead — see
-// web/lib/hooks.ts.
+// Zustand store for the client-only UI state SWR doesn't cover: upload progress before the server has acknowledged it.
+// Server data (splats, job status) lives in SWR's cache instead. See web/lib/hooks.ts.
 
 import { create } from "zustand";
 

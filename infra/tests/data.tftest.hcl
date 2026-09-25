@@ -51,8 +51,8 @@ run "database_config" {
 run "bucket_cors_matches_the_app_origin" {
   command = apply
 
-  # cors_rule (and its nested attributes) come back as sets, whose elements have no addressable index — iterate
-  # with a `for` expression and check membership instead of indexing with [0].
+  # cors_rule and its nested attributes come back as sets, and set elements have no index. Loop over them with a `for`
+  # expression and check membership instead of indexing with [0].
   assert {
     condition = anytrue([
       for r in aws_s3_bucket_cors_configuration.uploads.cors_rule : toset(r.allowed_methods) == toset(["PUT"])
@@ -116,10 +116,9 @@ run "buckets_force_destroy_and_block_public_access" {
   }
 }
 
-# mock_provider fills computed attributes with plausible-looking scalars, but leaves computed
-# lists/sets empty by default and doesn't know about format-validated fields (ARNs). These overrides
-# give the handful of computed values other resources in infra/ actually depend on (or validate
-# the shape of) something usable, so the whole plan resolves offline.
+# mock_provider fills computed attributes with plausible-looking values, but it leaves computed lists and sets empty and
+# knows nothing about format-validated fields such as ARNs. These overrides supply usable values for the few computed
+# attributes that other resources in infra/ read or validate, so the whole plan resolves offline.
 override_resource {
   target = aws_db_instance.main
   values = {

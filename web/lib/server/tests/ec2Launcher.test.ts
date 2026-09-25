@@ -90,9 +90,10 @@ describe("launchJob", () => {
     ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
     await launchJob(params);
 
-    // The pipeline runs in a container, so IMDS is a hop further than the host. At EC2's default limit of 1, the token
-    // PUT in worker/pipeline/instance.py never gets a reply, terminate_self() no-ops, and the GPU instance bills until
-    // stopped by hand — logging only an INFO line that reads exactly like a legitimate local run.
+    // The pipeline runs in a container, so the instance metadata service (IMDS) is one network hop further away than it
+    // is from the host. At EC2's default hop limit of 1, the token PUT in worker/pipeline/instance.py never gets a
+    // reply and terminate_self() does nothing. The GPU instance then bills until someone stops it by hand, and the only
+    // log line is an INFO message that looks exactly like a normal local run.
     const metadata = runInstancesInput().MetadataOptions;
     expect(metadata?.HttpPutResponseHopLimit).toBe(2);
     // Only safe with the hop limit above: it drops the IMDSv1 fallback.
@@ -166,7 +167,7 @@ describe("launchJobLocal", () => {
     expect(args).toEqual(expect.arrayContaining(["-e", "SPLAT_ID=splat-456"]));
     expect(args).toEqual(expect.arrayContaining(["-e", "CALLBACK_TOKEN=tok-abc"]));
     expect(args).toEqual(expect.arrayContaining(["-e", "STAGE=train"]));
-    // Podman's alias for the host running `next dev` — see the APP_PUBLIC_URL comment in web/lib/server/ec2Launcher.ts.
+    // Podman's alias for the host running `next dev`. See the APP_PUBLIC_URL comment in web/lib/server/ec2Launcher.ts.
     expect(args).toEqual(expect.arrayContaining(["-e", "APP_PUBLIC_URL=http://host.containers.internal:3000"]));
     expect(options).toMatchObject({ detached: true });
   });

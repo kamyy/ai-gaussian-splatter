@@ -12,12 +12,11 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # One at a time, queued rather than cancelled: two pushes close together would otherwise run overlapping deploy
-    # sequences against the same ECS service and Terraform state — racing `terraform apply` calls at best, or a
-    # service rollout starting before its own migration-then-rollout sequence actually finished at worst (Terraform's
-    # own state lock only protects concurrent applies from corrupting state, not from racing each other's ECS calls).
-    # cancel-in-progress: false so an in-flight migrate-then-deploy always runs to completion rather than being cut
-    # off mid-way.
+    # Deploys run one at a time and queue rather than cancel each other. Two pushes close together would otherwise run
+    # overlapping deploys against the same ECS service and Terraform state. At best that races two `terraform apply`
+    # calls. At worst a service rollout starts before the other run's migration has finished. Terraform's state lock
+    # stops concurrent applies from corrupting the state, but it doesn't stop their ECS calls racing each other.
+    # cancel-in-progress is false so a deploy that has started always runs to the end instead of stopping halfway.
     concurrency:
       group: deploy-production
       cancel-in-progress: false
@@ -27,23 +26,24 @@ jobs:
       SERVICE_NAME: ai-gaussian-splatter-web
       MIGRATION_TASK_FAMILY: ai-gaussian-splatter-migrate
       ECR_REPO: ai-gaussian-splatter
-      # Terraform reads TF_VAR_<name> for the matching variable automatically, so every `terraform apply` below
-      # needs no repeated `-var` flags — the two-phase deploy only ever overrides web/migrate image tags per step.
+      # Terraform reads TF_VAR_<name> into the matching variable automatically, so the `terraform apply` calls below
+      # need no repeated `-var` flags. The two-phase deploy only overrides the web and migrate image tags per step.
       TF_VAR_hosted_zone_id: ${{ vars.HOSTED_ZONE_ID }}
       TF_VAR_clerk_secret_key_arn: ${{ vars.CLERK_SECRET_KEY_ARN }}
       TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
       TF_VAR_domain_zone_name: ${{ vars.DOMAIN_ZONE_NAME }}
       TF_VAR_worker_ami_id: ${{ vars.WORKER_AMI_ID }}
-      # GPU worker deployment stays manual, so this changes only when someone hand-builds and pushes a new
-      # worker image (RUNBOOK.md), not on every push to main the way web/migrate_image_tag do.
+      # GPU worker deployment stays manual. This value changes only when someone builds and pushes a new worker image by
+      # hand (RUNBOOK.md), not on every push to main like the web and migrate image tags.
       TF_VAR_worker_image_tag: ${{ vars.WORKER_IMAGE_TAG }}
     steps:
       - uses: actions/checkout@v7
 
-      # First step, before anything is built or deployed: this value is compiled into the browser bundle
-      # (web/Dockerfile), so an unset variable produces an image whose every route 500s on clerkMiddleware() rejecting
-      # the empty key — surfacing only as a circuit-breaker rollback minutes into the second terraform apply below.
-      # The `pk_` test also catches a secret key pasted into this variable, which would bake sk_* into client-side JS.
+      # This check runs first, before anything is built or deployed. The value is compiled into the browser bundle
+      # (web/Dockerfile). An unset variable produces an image where every route returns 500, because clerkMiddleware()
+      # rejects the empty key. That would only show up as a circuit-breaker rollback several minutes into the second
+      # terraform apply below. The `pk_` check also catches a secret key pasted into this variable by mistake, which
+      # would put sk_* into client-side JavaScript.
       - name: Check CLERK_PUBLISHABLE_KEY is a publishable key
         env:
           CLERK_PUBLISHABLE_KEY: ${{ vars.CLERK_PUBLISHABLE_KEY }}
@@ -180,8 +180,8 @@ jobs:
           CLERK_PUBLISHABLE_KEY: ${{ vars.CLERK_PUBLISHABLE_KEY }}
         run: |
           aws ecr get-login-password --region "$AWS_REGION" | podman login --username AWS --password-stdin "$REGISTRY"
-          # Only an unambiguous "found" skips the build — an error or empty reply falls through and builds, so a wrong
-          # answer costs a rebuild rather than deploying a tag that was never pushed.
+          # Only a clear "found" skips the build. An error or an empty reply falls through and builds, so a wrong answer
+          # costs a rebuild rather than deploying a tag that was never pushed.
           pushed() {
             [ "$(aws ecr batch-get-image --repository-name "$ECR_REPO" \
               --image-ids imageTag="$1" --query 'length(images)' --output text 2>/dev/null || true)" = "1" ]
@@ -212,11 +212,11 @@ jobs:
             exit 1
           fi
 
-      # Registers the migration task against NEW_TAG while pinning the service's own image to OLD_TAG — Terraform
-      # sees no diff for the service, so no rollout starts. This is the whole trick: it's the only way to get a
-      # runnable migration task definition for the new image without also moving the service forward before the
-      # migration exists. On the first deploy OLD_TAG is NEW_TAG, so this apply creates the whole stack and the service
-      # starts before its migration runs. Nothing older is serving yet for that to break.
+      # Registers the migration task against NEW_TAG while keeping the service's own image on OLD_TAG. Terraform then
+      # sees no change to the service, so no rollout starts. This is the only way to get a runnable migration task
+      # definition for the new image without also moving the service forward before the migration has run. On the first
+      # deploy OLD_TAG equals NEW_TAG, so this apply creates the whole stack and the service starts before its migration
+      # runs. Nothing older is serving yet, so nothing breaks.
       - name: terraform apply — migration task only (service stays on OLD_TAG)
         working-directory: infra
         env:

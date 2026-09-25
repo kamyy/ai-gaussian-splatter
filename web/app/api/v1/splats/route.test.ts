@@ -8,10 +8,10 @@ import { jobs, photos, splats, users } from "@/lib/server/db/schema";
 import { GET } from "./route";
 
 /**
- * Requires a real Postgres (TEST_DATABASE_URL). Covers the photo-count/job-status/thumbnail aggregation
- * GET /api/v1/splats adds on top of the plain splat list: it runs two extra queries (uploaded photos, latest job) batched with inArray() over
- * every splat id, then reduces each in JS to one row per splat — these tests exercise that reduction's correctness
- * rather than the query count directly.
+ * Requires a real Postgres (TEST_DATABASE_URL). Covers what GET /api/v1/splats adds on top of the plain splat list:
+ * photo counts, job statuses, and thumbnails. The route runs two extra queries (uploaded photos and latest jobs)
+ * batched with inArray() over every splat id, then reduces the rows in JS to one per splat. These tests check that
+ * reduction, not the number of queries.
  */
 describe("GET /api/v1/splats", () => {
   beforeEach(async () => {
@@ -91,7 +91,7 @@ describe("GET /api/v1/splats", () => {
         callbackToken: "token-1",
         createdAt: new Date("2026-01-01T00:00:00Z"),
       });
-    // A later retry — the response should reflect this one, not the earlier failed job.
+    // A later retry. The response should reflect this job, not the earlier failed one.
     await getDb()
       .insert(jobs)
       .values({

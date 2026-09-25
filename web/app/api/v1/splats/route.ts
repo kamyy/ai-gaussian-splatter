@@ -34,10 +34,10 @@ export const POST = withErrorHandling(async (req: Request) => {
   });
 });
 
-// Batched, not one query per splat: two extra queries scoped with inArray() over every id in the list, then reduced
-// in JS to one row per splat, rather than an N+1 fan-out or a DISTINCT ON/lateral-join query. Job/photo rows are
-// already scoped to this user because their splatId is drawn from the splats query above, which already filtered on
-// userId — no extra ownership join needed.
+// Batched rather than one query per splat: two extra queries use inArray() over every id in the list, and the rows are
+// reduced in JS to one per splat. That avoids both an N+1 fan-out and a more complex DISTINCT ON or lateral-join query.
+// The job and photo rows are already scoped to this user, because their splat ids come from the splats query above,
+// which filtered on userId. So no extra ownership join is needed.
 export const GET = withErrorHandling(async () => {
   const user = await requireUser();
 
@@ -54,8 +54,8 @@ export const GET = withErrorHandling(async () => {
 
   // Neither query depends on the other's result, so they run in parallel rather than as two sequential round trips.
   const [photoRows, jobRows] = await Promise.all([
-    // Ordered oldest-first per splat, then the loop below keeps only the first row it sees per id — the thumbnail
-    // source is the first photo uploaded, not the most recent.
+    // Ordered oldest-first per splat, and the loop below keeps only the first row it sees per id. So the thumbnail is
+    // the first photo uploaded, not the most recent.
     getDb()
       .select(photoColumns)
       .from(photos)

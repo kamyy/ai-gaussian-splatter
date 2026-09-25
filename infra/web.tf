@@ -14,14 +14,13 @@ resource "aws_iam_role" "execution" {
   assume_role_policy = local.ecs_tasks_assume_role_policy
 }
 
-# Pulls the container image, writes logs, and fetches both secrets (DB, Clerk) before handing them to the
-# container as env vars — everything ECS itself needs before the application code starts.
+# Pulls the container image, writes logs, and fetches both secrets (DB and Clerk) to hand to the container as env vars.
+# That is everything ECS itself needs before the application code starts.
 #
-# Deliberately not the AmazonECSTaskExecutionRolePolicy managed policy: it grants the logs actions at
-# Resource: "*" (every log group in the account) and the image-pull actions at Resource: "*" too (read access to
-# every ECR repo in the account). Reconstructed below instead: the logs actions scoped to the app's own two
-# log groups, and the pull actions scoped to its one ECR repository (ecr:GetAuthorizationToken stays account-wide —
-# it has no resource-level permissions to scope to).
+# This deliberately doesn't use the AmazonECSTaskExecutionRolePolicy managed policy. That policy grants the logs actions
+# on every log group in the account and the image-pull actions on every ECR repository in the account. The statements
+# below grant the logs actions on the app's own two log groups and the pull actions on its one ECR repository instead.
+# ecr:GetAuthorizationToken stays account-wide because it has no resource-level permissions to scope.
 resource "aws_iam_role_policy" "execution" {
   role = aws_iam_role.execution.id
 
@@ -71,10 +70,10 @@ resource "aws_iam_role_policy" "execution" {
     ]
   })
 
-  # var.clerk_secret_key_arn's own validation block can only check its shape, not that it names this deploy's own
-  # account/region — checked here instead, since a precondition can reference data/resources a variable
-  # validation can't. Catches a copy-paste of another account's or another environment's secret ARN at apply time
-  # rather than a stuck task at start.
+  # var.clerk_secret_key_arn's own validation block can only check the ARN's shape, not that it names this deploy's
+  # account and region. A precondition can reference data sources and resources that a variable validation can't, so
+  # that check lives here. It catches a secret ARN copied from another account or environment at apply time, rather than
+  # as a task stuck at start.
   lifecycle {
     precondition {
       condition     = strcontains(var.clerk_secret_key_arn, ":secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:")
@@ -84,12 +83,12 @@ resource "aws_iam_role_policy" "execution" {
 }
 
 # ---------------------------------------------------------------------------
-# Migration task — runs `node web/scripts/db-migrate.cjs` (web/Dockerfile's `migrator` stage) as a one-off
-# ecs:RunTask, ahead of the service's own rollout — see ARCHITECTURE.md for why migrations can't run at
-# container boot. execution_role is reused as-is: it already has ECR pull and DB-secret read, everything
-# this container needs to start. The migration task role gets its own fixed name for the same
-# RUNBOOK-literalness reason as execution_role, and needs no grants at all: the container only opens a TCP
-# connection to RDS, no AWS API calls.
+# Migration task. It runs `node web/scripts/db-migrate.cjs` (web/Dockerfile's `migrator` stage) as a one-off
+# ecs:RunTask before the service's own rollout. See ARCHITECTURE.md for why migrations can't run when a container
+# boots. execution_role is reused as-is, since it already has the ECR pull and DB secret read this container needs to
+# start. The migration task role gets its own fixed name, so RUNBOOK.md can name it literally the same way it names
+# execution_role. That role needs no grants at all, because the container only opens a TCP connection to RDS and makes
+# no AWS API calls.
 # ---------------------------------------------------------------------------
 
 resource "aws_iam_role" "migration_task" {
@@ -133,8 +132,8 @@ resource "aws_iam_role" "task" {
   assume_role_policy = local.ecs_tasks_assume_role_policy
 }
 
-# The running application code's own permissions: S3 rw on both buckets, launching and terminating the GPU
-# worker (split across several statements — see each one below), and `aws ecs execute-command` access.
+# The application code's own permissions: read/write S3 access on both buckets, launching and terminating the GPU worker
+# (split across several statements, each explained below), and `aws ecs execute-command` access.
 resource "aws_iam_role_policy" "task" {
   role = aws_iam_role.task.id
 
@@ -184,8 +183,8 @@ resource "aws_iam_role_policy" "task" {
           # be scoped past the resource type.
           "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:network-interface/*",
           "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:volume/*",
-          # IAM authorizes every Spot RunInstances call against this resource type too, tagged or not — omitting
-          # it fails every launch with nothing in the request to point at as the cause.
+          # IAM checks every Spot RunInstances call against this resource type too, tagged or not. Leaving it out fails
+          # every launch, with nothing in the request that points to the cause.
           "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:spot-instances-request/*",
         ]
       },
@@ -253,11 +252,10 @@ resource "aws_acm_certificate" "web" {
   }
 }
 
-# count = 1, not for_each: this certificate only ever has one domain name (no SANs), so the count of validation
-# records is statically known even though their content (the CNAME name/value ACM assigns) is not known until
-# apply. for_each would need to derive its instance keys from that same not-yet-known content, which Terraform
-# refuses to plan — a real limitation, not a mocking artifact. count sidesteps it because only the *number* of
-# instances has to be known up front.
+# count = 1 rather than for_each. This certificate has exactly one domain name (no SANs), so the number of validation
+# records is known at plan time, even though their content (the CNAME name and value ACM assigns) isn't known until
+# apply. for_each would have to build its keys from that unknown content, which Terraform refuses to plan. count works
+# because only the number of instances has to be known up front.
 resource "aws_route53_record" "cert_validation" {
   count = 1
 
@@ -390,8 +388,8 @@ resource "aws_lb_listener" "https" {
   load_balancer_arn = aws_lb.web.arn
   port              = 443
   protocol          = "HTTPS"
-  # Must stay set explicitly. An unset ssl_policy on the AWS side defaults to the weak 2016-08 policy, not this
-  # one — see AGENTS.md.
+  # Must stay set explicitly. When ssl_policy is unset, AWS defaults to the weak 2016-08 policy rather than this one.
+  # See AGENTS.md.
   ssl_policy      = "ELBSecurityPolicy-TLS13-1-2-2021-06"
   certificate_arn = aws_acm_certificate_validation.web.certificate_arn
 
@@ -454,8 +452,8 @@ resource "aws_ecs_cluster" "main" {
   }
 }
 
-# Fargate capacity providers must be associated with the cluster before the service below can name
-# FARGATE_SPOT in a strategy — the aws_ecs_service depends_on this explicitly to enforce that order.
+# The Fargate capacity providers must be attached to the cluster before the service below can name FARGATE_SPOT in its
+# strategy. The aws_ecs_service has an explicit depends_on on this resource to enforce that order.
 resource "aws_ecs_cluster_capacity_providers" "main" {
   cluster_name       = aws_ecs_cluster.main.name
   capacity_providers = ["FARGATE", "FARGATE_SPOT"]
@@ -512,16 +510,16 @@ resource "aws_ecs_task_definition" "web" {
       # Where the GPU worker PATCHes job status back to. Passed in rather than read off the load balancer, so
       # it stays the stable custom domain the ALB is aliased to.
       { name = "APP_PUBLIC_URL", value = local.app_origin },
-      # Read by Next's standalone server.js to override Node's 5s idle-socket close, which the ALB outlives —
-      # see AGENTS.md.
+      # Read by Next's standalone server.js to replace Node's 5-second idle-socket timeout, which the ALB's own idle
+      # timeout outlasts. See AGENTS.md.
       { name = "KEEP_ALIVE_TIMEOUT", value = local.keep_alive_timeout_ms },
       # Read by web/lib/server/databaseUrl.ts's fetchDatabasePassword to fetch the current master password at
       # connect time, instead of trusting the static value db_password_secret injects for the migration task
       # below. A plain env var naming the secret, not the secret's value itself, so no `secrets` entry is needed.
       { name = "DATABASE_SECRET_ARN", value = aws_db_instance.main.master_user_secret[0].secret_arn },
     ])
-    # Only the credentials go through Secrets Manager; the endpoint and database name above aren't secret and
-    # stay readable in the console. DATABASE_PASSWORD is deliberately absent — see DATABASE_SECRET_ARN above.
+    # Only the credentials go through Secrets Manager. The endpoint and database name above aren't secret, so they stay
+    # readable in the console. DATABASE_PASSWORD is deliberately absent. See DATABASE_SECRET_ARN above.
     secrets = concat(local.db_user_secret, [
       { name = "CLERK_SECRET_KEY", valueFrom = var.clerk_secret_key_arn },
     ])
@@ -564,8 +562,8 @@ resource "aws_ecs_service" "web" {
     rollback = true
   }
 
-  # The default 50% floors to zero healthy tasks at desired_count 1, letting ECS stop the only running task
-  # before its replacement passes health checks — a window of 503s on every deploy.
+  # The default 50% rounds down to zero healthy tasks when desired_count is 1. ECS could then stop the only running task
+  # before its replacement passes health checks, which means a window of 503s on every deploy.
   deployment_minimum_healthy_percent = 100
   deployment_maximum_percent         = 200
 

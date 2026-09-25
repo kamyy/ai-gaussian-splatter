@@ -10,12 +10,12 @@ import { apiFetch } from "./apiFetch";
 import { requireToken } from "./requireToken";
 import type { CameraPose, Job, JobStatus, PhotoListItem, Splat, SplatListItem } from "./types";
 
-// Poll rate per phase; 0 is how SWR is told to stop, and only an ended status may use it. SWR keys its polling effect
-// on this function's identity rather than on the data, so once the function returns 0 it schedules no further timer
-// and nothing but a remount starts one again. A later mutate() does not. A non-terminal status returning 0 would
-// therefore freeze the job status for the rest of the job.
+// Poll rate per phase. 0 tells SWR to stop polling, and only an ended status may use it. SWR keys its polling effect on
+// this function's identity rather than on the data, so once the function returns 0 it schedules no further timer, and
+// only a remount starts one again. A later mutate() does not. A non-terminal status returning 0 would therefore freeze
+// the job status for the rest of the job.
 //
-// uploading_result can finish inside 30s, so a poll often steps over it and completion shows up to 30s late —
+// uploading_result can finish inside 30s, so a poll often steps over it and completion shows up to 30s late. That is
 // accepted, since the phases before it run for minutes.
 const JOB_POLL_INTERVAL_MS: Record<JobStatus, number> = {
   queued: 30_000,

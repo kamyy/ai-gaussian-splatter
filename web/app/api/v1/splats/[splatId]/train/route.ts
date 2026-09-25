@@ -72,10 +72,11 @@ export const POST = withErrorHandling(
       throw new HttpError(409, "No job awaiting training for this splat");
     }
 
-    // A single conditional UPDATE, not a read-then-write, so a double-click can't launch two train-phase instances
-    // against the same job — only the request that actually flips awaiting_training -> launching gets to launch.
+    // A single conditional UPDATE rather than a read followed by a write, so a double-click can't launch two
+    // train-stage instances for the same job. Only the request that actually flips awaiting_training to launching gets
+    // to launch.
     //
-    // The flip comes before the daily cap is charged. A double-click's losing request must not consume one of the
+    // The flip happens before the daily cap is charged. A double-click's losing request must not use up one of the
     // day's GLOBAL_MAX_JOBS_PER_DAY units, or repeated clicking could exhaust the site-wide GPU budget without ever
     // launching an instance.
     const [flipped] = await getDb()

@@ -16,8 +16,8 @@ _IMDS_BASE = "http://169.254.169.254/latest"
 
 
 def get_self_instance_id() -> str | None:
-    """Returns None (rather than raising) when not actually running on EC2 —
-    e.g. a local pipeline run, where there is no real instance to terminate.
+    """Returns None rather than raising when not running on EC2, such as in a local pipeline run, where there is no
+    real instance to terminate.
     """
     try:
         token_resp = httpx.put(

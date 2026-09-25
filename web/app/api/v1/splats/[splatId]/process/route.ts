@@ -20,9 +20,9 @@ import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
 import { jobColumns } from "@/lib/server/selects";
 import { JOB_ENDED_STATUSES } from "@/lib/types";
 
-// Postgres error code 23505. drizzle-orm wraps the raw node-postgres DatabaseError (which carries `.code` directly)
-// in its own error with the failed query attached for debugging, using the driver error as `.cause` rather than
-// `.code` itself — so both layers need checking.
+// Postgres error code 23505 (unique violation). drizzle-orm wraps the raw node-postgres DatabaseError, which carries
+// `.code` itself, in its own error that adds the failed query for debugging. The driver error ends up on `.cause`
+// rather than `.code`, so both layers need checking.
 function isUniqueViolation(err: unknown): boolean {
   if (typeof err !== "object" || err === null) {
     return false;
@@ -62,12 +62,12 @@ export const POST = withErrorHandling(
       throw new HttpError(400, `Need at least ${env.MIN_PHOTOS_PER_SPLAT} uploaded photos, have ${uploaded.n}`);
     }
 
-    // `uq_jobs_splat_id_active` (web/lib/server/db/schema.ts) makes an active job block every later POST here, and
-    // nothing outside the worker itself ever moves a job on from "launching" or "reconstruction_running". A worker that dies
-    // before it reports would therefore leave its splat unprocessable for good, so a job whose status has not moved
-    // in JOB_STALE_AFTER_MS is cancelled here to free the index. The status callback ignores a job that has already
-    // ended (web/app/api/v1/internal/jobs/[jobId]/status/route.ts), so a late-waking worker cannot resurrect the row
-    // this cancels.
+    // `uq_jobs_splat_id_active` (web/lib/server/db/schema.ts) makes an active job block every later POST here. Nothing
+    // outside the worker itself ever moves a job on from "launching" or "reconstruction_running". A worker that dies
+    // before it reports would therefore leave its splat unprocessable for good, so a job whose status hasn't moved in
+    // JOB_STALE_AFTER_MS is cancelled here to free the index. The status callback ignores a job that has already ended
+    // (web/app/api/v1/internal/jobs/[jobId]/status/route.ts), so a worker that wakes up late can't bring the cancelled
+    // row back.
     await getDb()
       .update(jobs)
       .set({ status: "cancelled", errorMessage: "Worker stopped reporting; cancelled so processing could restart." })

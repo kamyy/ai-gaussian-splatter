@@ -31,8 +31,9 @@ disabled, pre-hydration). next-themes sets [data-theme] on <html> before paint (
   --color-info: #aab8f0;
 }
 
-/* `inline` re-reads each var against whichever [data-theme] is active at paint time, instead of inlining today's
-value at build time — required since Tailwind can't otherwise know these tokens are meant to change at runtime. */
+/* `inline` makes each utility read the variable at paint time, against whichever [data-theme] is active, instead of
+copying today's value in at build time. It is required because Tailwind can't otherwise know these tokens change at
+runtime. */
 @theme inline {
   --color-background: var(--color-background);
   --color-paper: var(--color-paper);

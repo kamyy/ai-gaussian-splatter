@@ -29,7 +29,7 @@ function ctx(splatId: string) {
 }
 
 /**
- * Requires a real Postgres (TEST_DATABASE_URL). launchJob is mocked so this never touches real AWS — only the atomic
+ * Requires a real Postgres (TEST_DATABASE_URL). launchJob is mocked so this never touches real AWS. Only the atomic
  * status flip and the daily-cap gate are under test here.
  */
 describe("POST /api/v1/splats/[splatId]/train", () => {

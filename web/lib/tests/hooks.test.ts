@@ -92,7 +92,8 @@ describe("useLatestJob", () => {
   });
 
   it("polls faster as the job approaches completion", () => {
-    // Never speeds up then slows down again — a later phase polling slower than an earlier one would only add latency.
+    // Polling never speeds up and then slows down again. A later phase polling slower than an earlier one would only
+    // add latency.
     renderHook(() => useLatestJob("splat-1"));
     const { refreshInterval } = capturedConfig();
 
@@ -106,10 +107,10 @@ describe("useLatestJob", () => {
   });
 
   it("stops polling once the job has ended, and only then", () => {
-    // SWR keys its polling effect on the refreshInterval function's identity, not on the data, so a 0 is permanent
-    // for the life of the mounted hook — a later mutate() does not re-arm the timer. Any non-terminal status
-    // returning 0 would therefore freeze the UI for the rest of the job. Derived from the status lists so a new
-    // status can't be added with the wrong one.
+    // SWR keys its polling effect on the refreshInterval function's identity, not on the data, so returning 0 stops
+    // polling for the life of the mounted hook. A later mutate() does not restart the timer. Any non-terminal status
+    // returning 0 would therefore freeze the UI for the rest of the job. The cases are derived from the status lists,
+    // so a new status can't be added with the wrong interval.
     renderHook(() => useLatestJob("splat-1"));
     const { refreshInterval } = capturedConfig();
 

@@ -31,7 +31,7 @@ Why the system is shaped this way: decisions, alternatives rejected, costs accep
 
 - **pnpm**, not npm or yarn, for `web/` and the root scripts. `infra/` needs no Node tooling at all: Terraform ships as a standalone CLI binary, installed directly rather than through a package manager.
 - Its content-addressable store keeps one copy of each package version on disk. Every project that needs a package gets it hard-linked in, rather than duplicating it per `node_modules`.
-- Its `node_modules` layout also only exposes packages a project actually lists in `package.json`. Code can't accidentally import an undeclared transitive dependency — the "phantom dependency" problem npm's and yarn's flat layout allows.
+- Its `node_modules` layout also only exposes packages a project actually lists in `package.json`. Code can't accidentally import an undeclared transitive dependency. npm's and yarn's flat layouts allow that, which is known as the "phantom dependency" problem.
 
 ---
 
@@ -44,14 +44,14 @@ Why the system is shaped this way: decisions, alternatives rejected, costs accep
 2. **COLMAP** (`worker/pipeline/sfm.py`): exhaustive matching → camera poses + sparse cloud.
    - Accuracy over speed, since the object-centric photo sets are small.
    - `worker/run_job.py` fails below 50% registered images. That reflects capture quality, not a pipeline bug.
-3. **gsplat** (`worker/pipeline/train.py`): the actual training step. Per-object 3DGS, default 10k iterations (`worker/pipeline/config.py`) vs. the paper's 30k — each iteration is one gradient-descent step optimizing the Gaussians against the photos.
+3. **gsplat** (`worker/pipeline/train.py`): the actual training step. It trains one 3D Gaussian Splatting (3DGS) model per object, for a default of 10k iterations (`worker/pipeline/config.py`) against the paper's 30k. Each iteration is one gradient-descent step that adjusts the Gaussians to better match the photos.
    - Single-object, plain-background scenes converge faster, so fewer iterations suffice.
    - Apache 2.0 (INRIA's original is non-commercial).
 4. **Export** (`worker/pipeline/export.py`): viewer `.ply` plus a thumbnail from gsplat's own rasterizer, for Open Graph. Using gsplat's rasterizer avoids pulling in an extra dependency just for the thumbnail.
    - The optional crop box is drawn on the point cloud before training but applied only here, where it drops every Gaussian centered outside it.
    - Training still sees the whole scene. The photos show the background too, and without Gaussians there to explain those pixels, the optimizer grows floaters around the object.
 
-The "AI" here is per-object gradient descent through a differentiable rasterizer, not a pretrained inference model. COLMAP is classical CV (bundle adjustment), not ML.
+The "AI" here is per-object gradient descent through a differentiable rasterizer, not a pretrained inference model. COLMAP is classical computer vision (bundle adjustment), not ML.
 
 ---
 
@@ -63,7 +63,7 @@ The "AI" here is per-object gradient descent through a differentiable rasterizer
   - `InstanceInitiatedShutdownBehavior = "terminate"` on the launch makes that shutdown terminate the instance rather than stop it.
   - If scheduling the shutdown fails, user-data powers the instance off immediately rather than run the stage without a ceiling. Losing one worker job costs less than a GPU instance billing with no bound.
   - A CloudWatch runtime alarm was considered for alerting when the ceiling fires. Nothing in the request path needs to *know* a worker job hung, only to stop it billing, so the ceiling was built without one. That alerting is still an open gap ([State / what's next](AGENTS.md#10-state--whats-next)).
-- No SQS, Batch, or always-on fleet — the global daily cap on worker jobs bounds their volume instead.
+- No SQS, Batch, or always-on fleet. The global daily cap on worker jobs bounds their volume instead.
 - A queue is only worth the added complexity at higher, decoupled-fleet scale.
 
 A worker job's wall clock splits into three parts:
@@ -75,7 +75,7 @@ A worker job's wall clock splits into three parts:
 - **COLMAP**: a few minutes, CPU-bound by `mapper`'s incremental bundle adjustment.
 - **Training**: the majority of wall clock.
 
-A baked AMI would attack the smaller half — fixed overhead, not training. Training cost is set by the resolution the photos are rasterized at (`MAX_TRAINING_EDGE` in `worker/pipeline/train.py`), not by boot latency. Shrinking the image and precompiling the kernels took most of what an AMI was worth here, which is why M10 is now a measurement rather than a build. Only the image size is measured. The split between the three parts is still read off the code, and no run on a `g5.xlarge` has been timed.
+A baked AMI would attack the smaller half — fixed overhead, not training. Training cost is set by the resolution the photos are rasterized at (`MAX_TRAINING_EDGE` in `worker/pipeline/train.py`), not by boot latency. Shrinking the image and precompiling the kernels took most of what an AMI was worth here, so M10 measures the fixed overhead before anyone builds an AMI. Only the image size is measured. The split between the three parts is still read off the code, and no run on a `g5.xlarge` has been timed.
 
 - Not Lambda or Fargate: neither offers GPU.
 - Not hand-rolled ECS orchestration: bin-packing shared instances doesn't fit a one-stage-one-instance model.
@@ -86,7 +86,7 @@ A baked AMI would attack the smaller half — fixed overhead, not training. Trai
 
 - REST (`web/app/api/v1/`), not GraphQL. 16 flat endpoints don't need GraphQL's query flexibility.
 - Postgres (RDS) for `users`, `splats`, `photos`, `jobs`, and rate-limit/job counters. Relational, low traffic, and needs atomic `INSERT ... ON CONFLICT`.
-- Auth: Clerk (`@clerk/nextjs`). Simple and easy to integrate — this app doesn't need enterprise features (SSO, SCIM, custom identity federation).
+- Auth: Clerk (`@clerk/nextjs`). It is simple to integrate, and this app doesn't need enterprise features (SSO, SCIM, custom identity federation).
 - API and pages share one Next.js app.
   - SSR is needed anyway for Open Graph (`generateMetadata`) and server-side share-page reads, so a long-running Node process already exists.
   - Putting the API in that same process means one deploy and one TypeScript codebase, with no separate API service whose request/response shapes need to be kept in sync by hand.
@@ -116,7 +116,7 @@ A baked AMI would attack the smaller half — fixed overhead, not training. Trai
   - Prisma's `upsert()` can race unless its `update` clause is non-empty.
   - Drizzle also needs no codegen step or query-engine binary.
   - Cons: there's no `@@map` equivalent for enum members, so Postgres labels and TypeScript unions must match exactly (see status values, below).
-- JSON field *names* are camelCase. Status *values* are snake_case (`reconstruction_running`), because `pgEnum` values are both the DB labels and the TS members — one spelling end to end.
+- JSON field *names* are camelCase. Status *values* are snake_case (`reconstruction_running`), because `pgEnum` values are both the DB labels and the TS members, so there is one spelling end to end.
 - The GPU worker callback accepts snake_case request fields (`error_message`, `result_s3_key`, …) and remaps them to camelCase for Drizzle. Status *values* need no translation, since they're already the shared spelling.
 
 ---
@@ -128,7 +128,7 @@ A baked AMI would attack the smaller half — fixed overhead, not training. Trai
 - `databaseSsl()`/`resolveDatabaseUrl()` (`web/lib/server/databaseUrl.ts`) make TLS conditional on `DATABASE_SSL_CA` being set.
 - Local dev and CI run a plain, un-TLS'd Postgres.
 - CI's Postgres starts as a plain `podman run` step (`.github/workflows/ci.yml`'s `web` job), not GitHub Actions' declarative `services:` block. The migrator-image test ([CI/CD](#11-cicd), below) needs to reach it by container name from a sibling podman container, and a Docker-managed `services:` container isn't reachable that way.
-- It runs on a dedicated podman network, not `--network host`. Host networking doesn't reliably provide true loopback under rootless podman here — verified directly against this runner setup.
+- It runs on a dedicated podman network, not `--network host`, because host networking doesn't behave as true loopback under rootless podman on GitHub's runner.
 
 ### 7.1 Master password refresh
 
@@ -146,7 +146,7 @@ The migration task (`web/scripts/db-migrate.cjs`) keeps the old static-env-var b
 ## 8. Infra
 
 - Infra: **Terraform**. One configuration (`infra/`) holding one state. The S3 bucket that state lives in is created by hand ([Creating account prerequisites](RUNBOOK.md#22-creating-account-prerequisites)). `terraform init` needs the bucket before any apply. Managing it inside `infra/` would store state in a bucket `infra/` also owns. A second Terraform module with its own local state was rejected.
-- Six logical areas, one per `.tf` file rather than one per CloudFormation-style stack — a single state resolves the dependencies between them directly, so there's no cross-stack export/import to keep in sync:
+- Six logical areas, one per `.tf` file, rather than one CloudFormation-style stack each. A single state resolves the dependencies between them directly, so there's no cross-stack export/import to keep in sync:
   - **network** — VPC, subnets, security groups.
   - **data** — RDS, S3.
   - **registry** — ECR alone, so the image can push before the service exists.
@@ -171,19 +171,19 @@ The web app runs on **Fargate** behind an **Application Load Balancer** (`infra/
 
 ### 9.2 Networking
 
-- Tasks share public subnets with the ALB and have a public IP, for EC2 API egress via the IGW. S3 calls instead go through a gateway VPC endpoint (free, no IGW hop).
+- Tasks share public subnets with the ALB and have a public IP, so they can reach the EC2 API through the internet gateway (IGW). S3 calls go through a gateway VPC endpoint instead (free, no IGW hop).
 - No NAT: it costs ~$33/mo + $0.045/GB, and a multi-GB worker ECR pull would cost more per worker job than the spot instance itself.
-- Tradeoff: `web_security_group`'s single ingress rule, from `alb_security_group` on `CONTAINER_PORT`, is the only network control between the tasks and the internet.
+- Tradeoff: the single ingress rule on `aws_security_group.web`, from `aws_security_group.alb` on `local.container_port`, is the only network control between the tasks and the internet.
 - RDS sits in a private subnet whose route table carries no default route out: it has no outbound need.
-- That route table is a resource in its own right, not inferred from the subnet — an explicit table with no `0.0.0.0/0` route is the only thing that actually blocks outbound traffic; nothing about a subnet being "private" does that on its own.
+- That route table is a resource in its own right, not inferred from the subnet. An explicit table with no `0.0.0.0/0` route is what actually blocks outbound traffic. Calling a subnet "private" doesn't do that on its own.
 - Both security groups live in `infra/network.tf`. A single Terraform state has no cross-stack boundary for declaring the ALB group elsewhere to trip over.
 
 ### 9.3 TLS & DNS
 
 - TLS terminates at the ALB (ACM cert for `local.app_hostname`, the project name under `var.domain_zone_name`; 80→443).
-- The cert is declared in `infra/web.tf` so it lands in the ALB's region — ALBs can't use out-of-region certs.
-- For ACM specifically, `us-east-1` only matters for CloudFront, which this app doesn't use — the cert stays in the ALB's own region. `us-east-1` does matter elsewhere in `infra/`, for an unrelated reason: the Budgets API (`infra/budgets.tf`) only operates there.
-- Route 53 zone is referenced by ID only (`var.hosted_zone_id`), never looked up or created — `infra/` only ever adds records to an existing zone.
+- The cert is declared in `infra/web.tf` so it lands in the ALB's region. ALBs can't use certificates from another region.
+- For ACM, `us-east-1` only matters for CloudFront, which this app doesn't use, so the cert stays in the ALB's own region. `us-east-1` does matter elsewhere in `infra/` for an unrelated reason: the Budgets API (`infra/budgets.tf`) only works there.
+- The Route 53 zone is referenced by ID only (`var.hosted_zone_id`), never looked up or created. `infra/` only ever adds records to an existing zone.
 - The app's public origin is derived (`local.app_origin`), not passed in. Taking the hostname and the callback origin as two separate inputs let them drift apart, and a mismatch shows up only as the worker's status callbacks failing against a host that doesn't answer.
 
 ### 9.4 Clerk secret
@@ -200,11 +200,11 @@ The web app runs on **Fargate** behind an **Application Load Balancer** (`infra/
 
 Three request-path layers (`web/lib/server/rateLimit.ts`). A per-user quota alone doesn't stop multi-accounting:
 
-1. Per-IP (real multi-account defense), in `presign`.
+1. Per-IP (the real defense against one person using many accounts), on the photo presign route (`web/app/api/v1/splats/[splatId]/photos/presign/route.ts`).
    - **IP is the _last_ `X-Forwarded-For` hop.** ALB appends the address it saw; trusting the first lets clients spoof.
    - Assumes one trusted proxy. Adding CloudFront in front would move that.
 2. Per-user, alongside it.
-3. Global daily cap on worker jobs, in `process` only — bounds worst-case GPU spend regardless of caller.
+3. A global daily cap on worker jobs, charged only when a worker instance launches, on the `process` and `train` routes. It bounds worst-case GPU spend whoever the caller is.
 
 Ops fallback: an AWS Budget (`infra/budgets.tf`) for spend the request path never sees.
 
@@ -228,15 +228,15 @@ Ops fallback: an AWS Budget (`infra/budgets.tf`) for spend the request path neve
 - A fixed width rather than `git rev-parse --short`, whose length is the shortest prefix unique in the local object database.
   - That length varies between CI's shallow checkout and a full clone, and it grows with the repository. An abbreviated tag is therefore not a function of the tree it names.
   - A tag that moves on its own rebuilds and rolls out code that did not change.
-- That gating is the point. Measured over twelve commits on `main`, the commit SHA moved twelve times, `infra/`'s tree three times and `web/`'s once — so tagging by commit spent 22 of 24 image builds and 11 of 12 ECS rollouts on byte-identical application code, each rollout a real task replacement and a consumed rollback slot.
-- A moving tag like `latest` would be simpler to push, but it leaves every release sharing one task definition. That disarms the deployment circuit breaker: rollback restarts the previous deployment against that same string, so Fargate re-pulls whatever was pushed most recently — the image that just failed.
+- That gating is the point. Measured over twelve commits on `main`, the commit SHA moved twelve times, `infra/`'s tree three times and `web/`'s once. Tagging by commit spent 22 of 24 image builds and 11 of 12 ECS rollouts on byte-identical application code, and each rollout was a real task replacement that used up a rollback slot.
+- A moving tag like `latest` would be simpler to push, but it leaves every release sharing one task definition. That disarms the deployment circuit breaker: rollback restarts the previous deployment against that same string, so Fargate re-pulls whatever was pushed most recently, which is the image that just failed.
 - Per-build tags make each deploy its own task definition instead. The repository is also `IMMUTABLE`, so a pushed tag can never be repointed.
 - Costs of this approach:
   - A variable is required on every `terraform apply`.
   - The tag names no commit. Map it back with `git log --format='%h' -- web`, then `git rev-parse <commit>:web | cut -c1-12` for each.
   - A build input outside `web/` reaches production only through a change under `web/`. That covers the `CLERK_PUBLISHABLE_KEY` repository variable, which `web/Dockerfile` bakes into the browser bundle, and a patched `node:24-alpine` base.
-  - The rollback window is bounded by `RELEASES_KEPT`, not unlimited.
-- Rejected alternative: **a path filter on `.github/workflows/ci.yml`'s `deploy` job**, skipping the deploy outright unless the push touched `web/` or `infra/`. It saves nothing on the common case, since `infra/` changes more often than `web/` here and an `infra/` change still has to deploy. Worse, any filter that skips a push also stops `infra/` converging. Converging `infra/` is how a new `WORKER_IMAGE_TAG` reaches the web task definition ([Building and pushing the worker image](RUNBOOK.md#27-building-and-pushing-the-worker-image)), and it does so on a `worker/`-only push — exactly the push that carries a new worker image.
+  - The rollback window is bounded by `local.releases_kept` (`infra/locals.tf`), not unlimited.
+- Rejected alternative: **a path filter on `.github/workflows/ci.yml`'s `deploy` job**, skipping the deploy outright unless the push touched `web/` or `infra/`. It saves nothing on the common case, since `infra/` changes more often than `web/` here and an `infra/` change still has to deploy. Worse, any filter that skips a push also stops `infra/` converging. Converging `infra/` is how a new `WORKER_IMAGE_TAG` reaches the web task definition ([Building and pushing the worker image](RUNBOOK.md#27-building-and-pushing-the-worker-image)), and it does so on a `worker/`-only push, which is exactly the push that carries a new worker image.
 
 ### 11.2 Migrator image
 
@@ -244,12 +244,12 @@ Ops fallback: an AWS Budget (`infra/budgets.tf`) for spend the request path neve
 - Two reasons:
   - The service runs up to 3 tasks with no advisory lock between them, so boot-time migration would race.
   - The migration SQL plus the script that applies it have no reason to bloat the lean `web` standalone build that actually serves traffic.
-- `migrator`'s `node_modules` is copied from a `deps-prod` stage — `deps` with `pnpm prune --prod` applied, plus its now-unreferenced pnpm store deleted — rather than from `deps` directly.
+- `migrator`'s `node_modules` is copied from a `deps-prod` stage rather than from `deps` directly. `deps-prod` is `deps` with `pnpm prune --prod` applied and its now-unused pnpm store deleted.
 - That's because the migration script needs only `@next/env`, `drizzle-orm`, and `pg`, which are regular dependencies. It never needs the devDependencies (`typescript`, `drizzle-kit`, `vitest`, `@playwright/test`, ...) that `deps` carries for `builder`'s build.
 
 ### 11.3 Migration ordering
 
-Two separate images are in play here: the **migrator image** (runs the one-off migration task) and the **web image** (runs the service). Both are built from the same `web/` tree, but `terraform apply` tracks their tags independently — `migrate_image_tag` for the migrator image, `web_image_tag` for the web image.
+Two separate images are in play here: the **migrator image** (runs the one-off migration task) and the **web image** (runs the service). Both are built from the same `web/` tree, but `terraform apply` tracks their tags separately: `migrate_image_tag` for the migrator image and `web_image_tag` for the web image.
 
 The core ordering problem:
 
@@ -259,12 +259,12 @@ The core ordering problem:
 
 Solved by giving the migration task its own variable (`migrate_image_tag`, defaulting to `web_image_tag` so every existing manual invocation is unaffected), then calling `terraform apply` twice:
 
-1. Apply with `migrate_image_tag` on the new tag but `web_image_tag` still on the old one. This registers the migration task against the new **migrator image** while the service stays pinned to its old **web image** — no diff on the service, so no rollout.
+1. Apply with `migrate_image_tag` on the new tag but `web_image_tag` still on the old one. This registers the migration task against the new **migrator image** while the service stays on its old **web image**. The service has no diff, so no rollout starts.
 2. Only if the migration task exits 0, apply again with `web_image_tag` also updated to the new tag (now equal to `migrate_image_tag`). This second apply is what actually moves the service onto the new **web image**.
 
-The migration task runs on every deploy, including one whose tag is unchanged. An unchanged tag says `web/drizzle/` is unchanged, not that the database matches it — the first apply can replace `aws_db_instance.main`, and a first deploy whose migration failed leaves the service already on the new tag with nothing applied. Re-applying migrations that already ran is a no-op, so running it unconditionally is cheaper than any test for whether it is needed.
+The migration task runs on every deploy, including one whose tag is unchanged. An unchanged tag says `web/drizzle/` is unchanged, not that the database matches it. The first apply can replace `aws_db_instance.main`, and a first deploy whose migration failed leaves the service already on the new tag with nothing applied. Re-applying migrations that already ran is a no-op, so running it unconditionally is cheaper than any test for whether it is needed.
 
-Terraform stays the sole owner of "what's currently deployed" — nothing calls `aws ecs update-service` out of band.
+Terraform stays the only owner of "what's currently deployed". Nothing calls `aws ecs update-service` outside it.
 
 The first deploy into an empty account skips this ordering. With no service in the Terraform state there is no older image to pin the service to, so the first apply creates it on the new image and the migration runs afterwards. Real routes 500 until the migration finishes. That costs nothing, because nothing was serving before.
 
@@ -274,10 +274,10 @@ A rolled-back *service* deployment does not undo an already-applied migration. R
 
 ### 11.4 CI authentication
 
-- CI authenticates to AWS via **GitHub OIDC**, not static IAM access keys — no long-lived credential to leak or rotate.
+- CI authenticates to AWS through **GitHub OIDC** (OpenID Connect), not static IAM access keys, so there is no long-lived credential to leak or rotate.
 - The identity token's `sub` claim scopes it specifically to `repo:<owner>@<ownerId>/<repo>@<repoId>:ref:refs/heads/main`, so PRs and forks can't assume the role.
 - That role, `ai-gaussian-splatter-ci-deploy`, is created by hand once ([Creating the OIDC provider and CI role](RUNBOOK.md#24-creating-the-oidc-provider-and-ci-role)), not by `infra/`, because it's chicken-and-egg: CI can't apply the config that grants CI its own apply permission.
-- Unlike a design that delegates through a separate bootstrap role, this role holds the AWS permissions `terraform apply` itself needs directly — ec2, ecr, rds, s3, iam, ecs, elasticloadbalancing, route53, acm, budgets, logs, secretsmanager — scoped by resource-name prefix where a service supports it. The same reasoning keeps the Clerk secret, the state bucket, and `AWSServiceRoleForEC2Spot` as hand-run one-time setup rather than Terraform-managed resources ([Creating account prerequisites](RUNBOOK.md#22-creating-account-prerequisites)). Granting broad infrastructure permissions to a CI role is a step this repo keeps out of any automated apply.
+- Unlike a design that delegates through a separate bootstrap role, this role directly holds the AWS permissions `terraform apply` needs (ec2, ecr, rds, s3, iam, ecs, elasticloadbalancing, route53, acm, budgets, logs, secretsmanager), scoped by resource-name prefix where a service supports it. The same reasoning keeps the Clerk secret, the state bucket, and `AWSServiceRoleForEC2Spot` as hand-run one-time setup rather than Terraform-managed resources ([Creating account prerequisites](RUNBOOK.md#22-creating-account-prerequisites)). Granting broad infrastructure permissions to a CI role is a step this repo keeps out of any automated apply.
 
 ---
 

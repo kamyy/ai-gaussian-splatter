@@ -24,10 +24,9 @@ function ctx(splatId: string) {
 
 /**
  * Requires a real Postgres (TEST_DATABASE_URL). launchJob is mocked so this never touches real AWS. Covers the two
- * safety properties this route relies on: uq_jobs_splat_id_active (web/lib/server/db/schema.ts) makes the
- * double-trigger guard atomic, and a launch failure moves the job/splat to "failed" rather than stranding them at
- * "queued"/"processing" — which would otherwise permanently block every future POST here for that splat under the
- * same constraint.
+ * safety properties this route relies on. First, uq_jobs_splat_id_active (web/lib/server/db/schema.ts) makes the
+ * double-trigger guard atomic. Second, a launch failure moves the job and splat to "failed" instead of leaving them at
+ * "queued" and "processing". Left there, the same constraint would block every future POST here for that splat.
  */
 describe("POST /api/v1/splats/[splatId]/process", () => {
   beforeEach(async () => {

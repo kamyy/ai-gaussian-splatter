@@ -9,10 +9,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearDatabasePasswordCache, databaseSsl, fetchDatabasePassword, resolveDatabaseUrl } from "../databaseUrl";
 
 /**
- * The production path here is untestable against real AWS, so these pin the contract instead: ECS projects the RDS
- * secret's fields into DATABASE_USER/DATABASE_PASSWORD (see the matching assertion in infra/tests/web.tftest.hcl)
- * and this assembles the URL from them. This is the path the migration task and local dev use — the long-lived web
- * service instead uses fetchDatabasePassword, below.
+ * The production path can't be tested against real AWS, so these tests pin the contract instead. ECS projects the RDS
+ * secret's fields into DATABASE_USER and DATABASE_PASSWORD (see the matching assertion in infra/tests/web.tftest.hcl),
+ * and this code assembles the URL from them. The migration task and local dev use this path. The long-lived web service
+ * uses fetchDatabasePassword instead, tested below.
  */
 describe("resolveDatabaseUrl", () => {
   it("assembles the URL from the parts ECS supplies", () => {
@@ -63,9 +63,8 @@ describe("databaseSsl", () => {
   });
 
   it("loads the CA bundle and leaves verification on", () => {
-    // rejectUnauthorized must stay at its default of true. Setting it false would connect to anything presenting a
-    // certificate, which is what shipping the bundle exists to avoid — verified against a TLS-only Postgres with a
-    // private CA: a wrong bundle is rejected.
+    // rejectUnauthorized must stay at its default of true. Setting it to false would connect to anything that presents
+    // a certificate, which is exactly what shipping the CA bundle is meant to prevent.
     const dir = mkdtempSync(join(tmpdir(), "ca-"));
     const path = join(dir, "bundle.pem");
     writeFileSync(path, "-----BEGIN CERTIFICATE-----\nnot-a-real-cert\n-----END CERTIFICATE-----\n");

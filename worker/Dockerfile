@@ -12,8 +12,8 @@
 #   reconstruct  (final)    colmap + build-reconstruct
 #   train        (final)    build-train
 #
-# Base images are registry-qualified because podman, unlike docker, does not assume Docker Hub for a bare `nvidia/cuda`.
-# Under `short-name-mode = "enforcing"` a build with no TTY — CI, or any scripted build — fails rather than choosing.
+# Base images are registry-qualified because podman, unlike docker, doesn't assume Docker Hub for a bare `nvidia/cuda`.
+# Under `short-name-mode = "enforcing"`, a build with no terminal (CI or any script) fails instead of picking a registry.
 
 # ---------------------------------------------------------------------------
 # colmap
@@ -97,7 +97,7 @@ RUN uv sync --no-dev --locked && \
 # ---------------------------------------------------------------------------
 # gsplat's PyPI wheel is pure Python and compiles its CUDA kernels on first use, costing about a minute at the start
 # of every train stage and dying with the container. The sdist build produces a real gsplat/csrc.so, which
-# gsplat/cuda/_backend.py tries before it checks for nvcc — that is what lets the final targets carry no CUDA toolkit.
+# gsplat/cuda/_backend.py tries before it checks for nvcc. That is what lets the final targets carry no CUDA toolkit.
 # Kept off `build` itself so --target reconstruct never runs this compile only to delete what it produced.
 #
 # TORCH_CUDA_ARCH_LIST is required, not a tuning knob: unset, torch targets whatever device it sees, and a builder

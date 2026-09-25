@@ -22,8 +22,8 @@ _SH_C0 = 0.28209479177387814
 
 
 def export_scene(scene: TrainedScene, settings: Settings) -> tuple[Path, Path]:
-    """Writes result.ply and thumbnail.png into local_workdir and returns
-    their paths. Does not upload — see upload_result().
+    """Writes result.ply and thumbnail.png into local_workdir and returns their paths. It doesn't upload them. See
+    upload_result().
     """
     workdir = Path(settings.local_workdir)
     ply_path = workdir / "result.ply"

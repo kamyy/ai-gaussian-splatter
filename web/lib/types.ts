@@ -32,23 +32,22 @@ export const JobStatus = {
 export const JOB_STATUSES = Object.values(JobStatus) as [JobStatus, ...JobStatus[]];
 export type JobStatus = (typeof JobStatus)[keyof typeof JobStatus];
 
-// The one status value the app renamed: a worker built before that rename can still be running against a new
-// database (a worker instance runs for up to WORKER_MAX_LIFETIME_MINUTES, which can outlast a deploy), and its
-// callback still sends this name. web/app/api/v1/internal/jobs/[jobId]/status/route.ts is the only place that reads
-// this — it normalizes an incoming "colmap_running" to JobStatus.reconstruction_running before anything else in the
-// app sees it, so nothing else ever needs to know the old name existed.
+// The one status value the app renamed. A worker built before that rename can still be running against a newer database
+// (a worker instance runs for up to WORKER_MAX_LIFETIME_MINUTES, which can outlast a deploy), and its callback still
+// sends this name. web/app/api/v1/internal/jobs/[jobId]/status/route.ts is the only place that reads it. That route
+// turns an incoming "colmap_running" into JobStatus.reconstruction_running before anything else sees it, so nothing
+// else needs to know the old name.
 export const LEGACY_COLMAP_RUNNING_STATUS = "colmap_running";
 
-// The Postgres enum's own label set: every value the type has ever had, in the order each was added, rather than
-// JOB_STATUSES' own (cleaner, but different) order. LEGACY_COLMAP_RUNNING_STATUS stays a valid column value so a
-// stale worker's callback still writes instead of getting rejected, even though JobStatus itself no longer names
-// it. Postgres has no cheap way to drop an enum label (only recreating the whole type), so once added it stays
-// rather than getting removed in a later release the way a column or constraint would.
+// The Postgres enum's own label set: every value the type has ever had, in the order each was added, rather than in
+// JOB_STATUSES' order. LEGACY_COLMAP_RUNNING_STATUS stays a valid column value so a stale worker's callback is still
+// written instead of rejected, even though JobStatus no longer names it. Postgres has no cheap way to drop an enum
+// label short of recreating the whole type, so an added label stays.
 //
-// Written out in this exact historical order, not derived from JOB_STATUSES, so `pnpm db:generate` sees the new
-// value as a plain append and emits a single ALTER TYPE … ADD VALUE — reordering the existing values here instead
-// makes drizzle-kit conclude the type needs dropping and recreating around the column, which the db-migration
-// skill flags as unsafe against a live table.
+// Written out in this exact historical order, not derived from JOB_STATUSES, so that `pnpm db:generate` sees a new
+// value as a plain append and emits a single ALTER TYPE … ADD VALUE. Reordering the existing values makes drizzle-kit
+// drop and recreate the type around the column instead, which .claude/skills/db-migration/SKILL.md flags as unsafe on a
+// live table.
 type JobStatusDbValue = JobStatus | typeof LEGACY_COLMAP_RUNNING_STATUS;
 
 export const JOB_STATUS_DB_VALUES = [
@@ -75,9 +74,9 @@ export interface Splat {
   createdAt: string;
 }
 
-// GET /api/v1/splats — what a library card needs per splat without an N+1 call per card. thumbnailPhotoUrl is a
-// presigned GET for the first uploaded photo, distinct from Splat.thumbnailS3Key (the worker-rendered splat preview,
-// only set once a job completes). photoCount counts uploaded photos only.
+// GET /api/v1/splats: what a library card needs for each splat, without one API call per card. thumbnailPhotoUrl is a
+// presigned GET for the first uploaded photo. That differs from Splat.thumbnailS3Key, the splat preview the worker
+// renders once a job completes. photoCount counts uploaded photos only.
 export interface SplatListItem extends Splat {
   photoCount: number;
   latestJobStatus: JobStatus | null;
@@ -111,10 +110,10 @@ export interface Job {
   updatedAt: string;
 }
 
-// GET /api/v1/splats/[splatId]/cameras — where each photo COLMAP placed was taken from, in the point cloud's own
-// coordinate frame. center is the camera's world-space position. rotation is COLMAP's world-to-camera rotation, three
-// rows, with the camera looking along its own +z. width, height, fx, and fy are the photo's size and focal lengths in
-// pixels, as COLMAP estimated them.
+// GET /api/v1/splats/[splatId]/cameras: where each photo COLMAP placed was taken from, in the point cloud's own
+// coordinate frame. center is the camera's position in world space. rotation is COLMAP's world-to-camera rotation as
+// three rows, with the camera looking along its own +z. width, height, fx, and fy are the photo's size and focal
+// lengths in pixels, as COLMAP estimated them.
 export interface CameraPose {
   photoId: string;
   center: [number, number, number];

@@ -5,12 +5,13 @@ import type { ConnectionOptions } from "node:tls";
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 
 /**
- * TLS settings for the Postgres connection, or undefined for a plain one. Driven by `DATABASE_SSL_CA`, a path to a PEM
- * bundle: set it (production, pointed at the bundle `web/Dockerfile` bakes in) and the connection is encrypted and
- * verified against that bundle; leave it unset (local dev, CI) and the connection is plain.
+ * TLS settings for the Postgres connection, or undefined for a plain connection. `DATABASE_SSL_CA` controls this. It is
+ * a path to a PEM certificate bundle. In production it points at the bundle `web/Dockerfile` bakes in, and the
+ * connection is encrypted and verified against that bundle. In local dev and CI it is unset, and the connection is
+ * plain.
  *
- * `rejectUnauthorized` is deliberately not passed, so it stays at Node's default `true`. Reaching for
- * `?sslmode=require` instead does not do what its name suggests here — see AGENTS.md.
+ * `rejectUnauthorized` is deliberately not passed, so it stays at Node's default of `true`. Adding `?sslmode=require`
+ * to the URL instead doesn't do what its name suggests here. See AGENTS.md.
  */
 export function databaseSsl(env: Record<string, string | undefined> = process.env): ConnectionOptions | undefined {
   const caPath = env.DATABASE_SSL_CA;
@@ -21,17 +22,17 @@ export function databaseSsl(env: Record<string, string | undefined> = process.en
 }
 
 /**
- * Resolves the Postgres connection string from `DATABASE_HOST` / `DATABASE_PORT` / `DATABASE_NAME` / `DATABASE_USER` /
- * `DATABASE_PASSWORD`, since ECS cannot itself assemble a `postgresql://` URL out of the Secrets Manager JSON blob
- * RDS generates (see `infra/web.tf`). Used by local dev, CI, `drizzle-kit`, and the migration task — not by the
- * production web service, which fetches its password at connect time instead (see `fetchDatabasePassword`, below)
- * and never assembles a single connection string.
+ * Builds the Postgres connection string from `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`, and
+ * `DATABASE_PASSWORD`. ECS can't assemble a `postgresql://` URL itself out of the JSON secret RDS generates (see
+ * `infra/web.tf`). Local dev, CI, `drizzle-kit`, and the migration task use this. The production web service doesn't:
+ * it fetches its password at connect time instead (see `fetchDatabasePassword` below) and never builds a single
+ * connection string.
  *
- * Credentials are percent-encoded: an RDS-generated password can contain `:` `?` `#` `%`, any of which would corrupt
- * the URL otherwise; `pg` decodes them back on connect.
+ * Credentials are percent-encoded, because an RDS-generated password can contain `:`, `?`, `#`, or `%`, and any of them
+ * would break the URL. `pg` decodes them again when it connects.
  *
- * Returns undefined rather than throwing when nothing is configured, so `drizzle-kit generate` — which needs no
- * database — keeps working.
+ * Returns undefined rather than throwing when nothing is configured, so `drizzle-kit generate`, which needs no
+ * database, keeps working.
  */
 export function resolveDatabaseUrl(env: Record<string, string | undefined> = process.env): string | undefined {
   const host = env.DATABASE_HOST;

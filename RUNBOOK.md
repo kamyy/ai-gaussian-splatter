@@ -91,7 +91,7 @@ Then shoot a set of photos ([Capture](#15-capture)) and run it through the pipel
 
 ### 1.5 Capture
 
-Walk around the object shooting individual stills — every side, a couple of heights, each shot overlapping its neighbors. Aim for ~50. The API's floor of 20 (`MIN_PHOTOS_PER_SPLAT`, HTTP 400 below it) is a hard minimum, not a quality target: extra frames only help where they close a coverage gap, and near-duplicates just add COLMAP matching cost.
+Walk around the object shooting individual stills: every side, a couple of heights, each shot overlapping its neighbors. Aim for ~50. The API's floor of 20 (`MIN_PHOTOS_PER_SPLAT`, HTTP 400 below it) is a hard minimum, not a quality target. Extra frames only help where they close a coverage gap, and near-duplicates just add COLMAP matching cost.
 
 Object choice matters more than photo count. COLMAP triangulates surface features that hold still, so these kinds of objects can defeat it:
 
@@ -101,7 +101,7 @@ Object choice matters more than photo count. COLMAP triangulates surface feature
 
 Pick something opaque, matte, and genuinely three-dimensional. Stand it on a patterned surface with static clutter in frame. A plain floor or wall gives the solve nothing to hold on to.
 
-When a set registers poorly, `worker/jobdir/colmap/database.db` says why — guessing from the photos doesn't. Check two tables:
+When a set registers poorly, `worker/jobdir/colmap/database.db` says why. Guessing from the photos doesn't. Check two tables:
 
 - `keypoints` — the keypoint count per image.
 - `two_view_geometries` — how many other images each image has enough inlier matches with.
@@ -110,7 +110,7 @@ Very few of either points at blur, low texture, or an orbit that doesn't connect
 
 ### 1.6 Running the pipeline
 
-The pipeline can run standalone — nothing has to be listening at `APP_PUBLIC_URL`.
+The pipeline can run standalone. Nothing has to be listening at `APP_PUBLIC_URL`.
 
 A run is two stages, one script each, and each rebuilds its own image (`splat-worker-reconstruct:dev` or `splat-worker-train:dev`) before running. Both take the dev IAM key pair, region, and bucket names from `web/.env`, which [Dev AWS resources](#11-dev-aws-resources) fills in. `scripts/dev/worker-reconstruct.sh` uploads the photos under a new splat ID, runs COLMAP, and prints the command for the train stage.
 
@@ -121,7 +121,7 @@ scripts/dev/worker-train.sh <splat-id>         # add --fast for a 20-iteration s
 
 ### 1.7 Triggering the worker from pnpm dev
 
-Set `WORKER_LOCAL_LAUNCH=true` in `web/.env` to make the web app's Start button run the worker on your own GPU instead of launching a real EC2 spot instance. Output lands in `worker/jobdir/<jobId>/worker.log`, for the same [registration debugging](#15-capture) the manual flow uses. Needs the one-time GPU passthrough setup ([Worker (local pipeline run)](#14-worker-local-pipeline-run)) and an image already built — this path never builds one for you.
+Set `WORKER_LOCAL_LAUNCH=true` in `web/.env` to make the web app's Start button run the worker on your own GPU instead of launching a real EC2 spot instance. Output lands in `worker/jobdir/<jobId>/worker.log`, for the same [registration debugging](#15-capture) the manual flow uses. Needs the one-time GPU passthrough setup ([Worker (local pipeline run)](#14-worker-local-pipeline-run)) and an image already built. This path never builds one for you.
 
 ```bash
 cd worker
@@ -260,11 +260,11 @@ On a first deploy, the service starts before the migration runs, so real routes 
 
 `deployment_minimum_healthy_percent = 100` will keep any old task serving until the new one passes health checks. If the new image fails those checks, the circuit breaker rolls back to the previous task definition. To roll back by hand, revert the change and push. A schema change gets a corrective migration instead ([Fixing a bad migration](#31-fixing-a-bad-migration)).
 
-Only the last few releases are kept (`local.releases_kept` in `infra/registry.tf`). That bounds the circuit breaker's automatic rollback and any fresh task placement onto an older task definition, both of which need the image still present. Reverting and pushing by hand reaches further back: an expired tag is free to push again, so that build is simply remade.
+Only the last few releases are kept (`local.releases_kept` in `infra/locals.tf`). That bounds the circuit breaker's automatic rollback and any fresh task placement onto an older task definition, both of which need the image still present. Reverting and pushing by hand reaches further back: an expired tag is free to push again, so that build is simply remade.
 
 ### 2.7 Building and pushing the worker image
 
-Nothing builds or pushes this image on its own — GPU worker deployment stays manual ([CI/CD](ARCHITECTURE.md#11-cicd)). Do this whenever `worker/` changes and you want worker jobs to actually pick up the new build. Its repository, `aws_ecr_repository.worker`, comes from the first deploy.
+Nothing builds or pushes this image automatically. GPU worker deployment stays manual ([CI/CD](ARCHITECTURE.md#11-cicd)). Do this whenever `worker/` changes and you want worker jobs to actually pick up the new build. Its repository, `aws_ecr_repository.worker`, comes from the first deploy.
 
 The image is tagged with the current commit, so commit any `worker/` changes first.
 
@@ -276,7 +276,7 @@ After the push, the script sets the `WORKER_IMAGE_TAG` repository variable ([Set
 
 Rerun the latest `main` run to trigger that deploy (`gh run rerun <run-id>`), because the `deploy` job reads the variable as the run starts. Pushing a commit works too, but not a docs-only one: a push touching only `.md` files or `LICENSE` skips the workflow, so nothing reads the new variable.
 
-Only the last `local.worker_releases_kept` images are kept (`infra/registry.tf`), which makes a stale `WORKER_IMAGE_TAG` the risk. Once that many newer images exist, the lifecycle policy expires the tag it names, and every worker instance then fails its image pull and bills until the `WORKER_MAX_LIFETIME_MINUTES` shutdown.
+Only the last `local.worker_releases_kept` images are kept (`infra/locals.tf`), which makes a stale `WORKER_IMAGE_TAG` the risk. Once that many newer images exist, the lifecycle policy expires the tag it names, and every worker instance then fails its image pull and bills until the `WORKER_MAX_LIFETIME_MINUTES` shutdown.
 
 ### 2.8 Running Terraform locally
 
@@ -300,14 +300,14 @@ The only supported production apply is the `deploy` job (`.github/workflows/depl
 
 Fix a bad migration the same way you'd fix any other bug: write a corrective migration following the expand/contract discipline in [Schema & migrations (Drizzle)](AGENTS.md#91-schema--migrations-drizzle) (edit `web/lib/server/db/schema.ts`, `pnpm db:generate`, review the emitted SQL in `web/drizzle/`), commit it, and land it through a normal PR to `main`. It applies when `DEPLOY_ENABLED` is `true` and that commit reaches `main` ([Going live](#26-going-live)).
 
-If the `deploy` job's migration step fails for an infra reason rather than a bad migration (a transient AWS error, a placement failure), retry the whole `deploy` job rather than reaching for manual AWS commands — it's idempotent end to end: `gh run rerun <run-id> --failed-jobs`.
+If the `deploy` job's migration step fails for an infra reason rather than a bad migration (a transient AWS error, a placement failure), retry the whole `deploy` job rather than reaching for manual AWS commands. It is idempotent (safe to repeat) end to end: `gh run rerun <run-id> --failed-jobs`.
 
 ### 3.2 Debugging a failed worker job
 
 1. Check `jobs.status` and `jobs.error_message` for the splat (`GET /api/v1/splats/{id}/jobs/latest`).
-2. If `status` is stuck (no update in ~20 min) rather than `failed`: the instance likely died without reporting — check the EC2 console for the tagged instance (`Role=worker`, `JobId=<job_id>`) and its system log.
+2. If `status` is stuck (no update in ~20 min) rather than `failed`, the instance likely died without reporting. Check the EC2 console for the tagged instance (`Role=worker`, `JobId=<job_id>`) and its system log.
 3. Confirm the instance actually went away. It self-terminates once the worker job reaches a terminal state, and `web/lib/server/ec2Launcher.ts` schedules a hard `shutdown` at `WORKER_MAX_LIFETIME_MINUTES` (2 hours) as the first thing user-data runs.
-   - **Still running well past that ceiling means cloud-init/user-data itself never started** — a boot failure (bad AMI, IMDS/networking issue), which is the one case that scheduled shutdown can't catch. Terminate it by hand.
+   - **Still running well past that ceiling means cloud-init, which runs user-data, never started.** That is a boot failure (a bad AMI, or an instance metadata or networking problem), the one case the scheduled shutdown can't catch. Terminate it by hand.
    - Nothing alerts when any of this fires ([State / what's next](AGENTS.md#10-state--whats-next)), so run this check by hand.
 4. `docker logs` on the instance (if still running) or CloudWatch Logs (once wired up) for the actual COLMAP/gsplat stack trace.
 
@@ -315,7 +315,7 @@ If the `deploy` job's migration step fails for an infra reason rather than a bad
 
 ## 4. Tearing down
 
-`scripts/prod/terraform-destroy.sh` removes everything in `infra/`'s state, including the 3 data S3 buckets (force-destroyed, contents and all) and the RDS instance (no final snapshot). It reads its variables the same way as [Running Terraform locally](#28-running-terraform-locally). `scripts/prod/terraform-delete-state-bucket.sh` below checks the `AWS_ACCOUNT_ID` one against the signed-in account. Delete the repository variables only after both have finished.
+`scripts/prod/terraform-destroy.sh` removes everything in `infra/`'s state, including the 3 S3 buckets (force-destroyed, contents and all) and the RDS instance (no final snapshot). It reads its variables the same way as [Running Terraform locally](#28-running-terraform-locally). It and `scripts/prod/terraform-delete-state-bucket.sh` below both check the signed-in account against the `AWS_ACCOUNT_ID` repository variable. Delete the repository variables only after both have finished.
 
 Turn the `deploy` job off first, or the next push to `main` finds an empty state and deploys the whole stack again. Run the `false` set below even if deploys were never turned on. Both scripts refuse while a CI run on `main` is unfinished ([CI/CD](ARCHITECTURE.md#11-cicd)).
 
@@ -334,7 +334,7 @@ Revisit that before a deploy holds real uploads or splats:
 - Add `lifecycle { prevent_destroy = true }` to the 3 buckets (`uploads` and `splats` in `infra/data.tf`, `access_logs` in `infra/web.tf`) and to `aws_db_instance.main`.
 - Drop `force_destroy` and `skip_final_snapshot`.
 
-The ECR repository (`infra/registry.tf`) is destroyed too — `force_delete = true` means every image in it goes as well.
+Both ECR repositories (`infra/registry.tf`) are destroyed too. `force_delete = true` means every image in them goes as well.
 
 Resources `infra/` never owned are untouched by `terraform destroy`. They were hand-created in [Creating account prerequisites](#22-creating-account-prerequisites) and [Configuring continuous deployment](#23-configuring-continuous-deployment), and need their own manual cleanup if you want them gone:
 
