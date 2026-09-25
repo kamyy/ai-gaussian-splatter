@@ -104,7 +104,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - **API routes check auth themselves.** Each authenticated handler calls `requireUser()` or `requireClerkUserId()` (`web/lib/server/auth.ts`). Public routes (`public/splats/[splatId]`, healthz, the worker's token callback) simply don't call those.
 - **`auth.protect()` in `web/app/(authenticated)/layout.tsx` only redirects unsigned visitors to sign-in.**
   - The API is protected by `requireUser()` / `requireClerkUserId()` in each handler, not by this layout.
-  - Next reuses layouts when navigating between sibling routes (`/splats/[id]/point-cloud` → `/splats/[id]/splat`, both under `web/app/(authenticated)/splats/[id]/layout.tsx`), so `auth.protect()` will not re-run.
+  - Next reuses a layout when navigating between the routes under it, so `auth.protect()` does not re-run on every navigation.
   - If a page starts rendering protected data on the server, that page needs its own `auth.protect()`.
 - **This Clerk SDK has no `<SignedIn>` / `<SignedOut>`.** Use `<Show when="signed-in">` (`web/components/layout/SiteHeader.tsx`).
   - Pass `fallback` for the signed-out UI.
@@ -152,17 +152,13 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - **`next-themes` (`web/components/layout/ThemeRegistry.tsx`) owns `[data-theme]`, with its own pre-hydration script setting the attribute before React hydrates.** `web/app/layout.tsx`'s `<html suppressHydrationWarning>` is required for that: the attribute the script sets deliberately doesn't match what the server rendered, and removing `suppressHydrationWarning` turns that expected mismatch into a hydration warning on every page load.
   - `web/components/layout/ThemeToggle.tsx` renders as `"light"` until it has mounted, then reads `resolvedTheme` and calls `setTheme`. `next-themes` already knows `resolvedTheme` on the first client render, so reading it before mount mismatches the server's HTML for every dark-mode visitor.
 - **Global element rules in `web/app/globals.css` go inside `@layer base`.** An unlayered rule beats every Tailwind utility regardless of specificity, so an unlayered `a { color: inherit }` silently overrides the text color of every link styled with `buttonClassName()` (`web/components/ui/Button.tsx`).
-- **`ThemeRegistry` is the one Client Component boundary the provider tree needs**, so `web/app/layout.tsx` itself stays a Server Component free to do server-only work (font loading, metadata). It composes `next-themes`' `ThemeProvider`, the Radix `TooltipProvider` (`web/components/ui/Tooltip.tsx`), and notistack's `SnackbarProvider` — nothing above it in the tree needs to be a Client Component too.
-- **Each Radix primitive in use is unstyled, so it gets a thin `"use client"` wrapper applying the app's Tailwind classes** via `web/lib/cn.ts`'s `cn()` (a `clsx` wrapper), rather than being styled ad hoc at each call site:
-  - `web/components/ui/Dialog.tsx`
-  - `web/components/ui/Tooltip.tsx`
-  - A `Tooltip.Trigger` needs its child to keep firing pointer events even while the wrapped element is `disabled` — wrap it in a `<span>` (`web/components/viewer/AwaitingTrainingPanel.tsx`), since a genuinely disabled native `<button>` stops dispatching pointer/focus events regardless of which tooltip library is asking.
-- **Two Radix portal layers plus two fixed-position layers share one flat z-index scale, since Tailwind has no built-in `zIndex` scale to reach for.** `z-1100` (the sticky site header), `z-1200` (tooltip portals), `z-1300` (the dialog overlay/content), and `z-90` (the authenticated splat workspace's fixed overlay) are the values in use; slot a new floating layer in between the two it needs to sit between, not the top of the scale by default.
+- **`ThemeRegistry` is the one Client Component boundary the provider tree needs**, so `web/app/layout.tsx` itself stays a Server Component free to do server-only work (font loading, metadata). It composes `next-themes`' `ThemeProvider` and notistack's `SnackbarProvider` — nothing above it in the tree needs to be a Client Component too.
+- **Radix's `Dialog` is unstyled, so `web/components/ui/Dialog.tsx` is a thin `"use client"` wrapper applying the app's Tailwind classes** via `web/lib/cn.ts`'s `cn()` (a `clsx` wrapper), rather than being styled ad hoc at each call site.
+- **Two layers share one flat z-index scale, since Tailwind has no built-in `zIndex` scale to reach for.** `z-1100` is the sticky site header and `z-1300` is the dialog overlay/content. Slot a new floating layer in between the two it needs to sit between, not at the top of the scale by default.
 - **Size things in rem, not raw px, so the UI scales with a user's browser zoom/font-size setting.** Prefer a Tailwind class (its default spacing scale is already rem-based) over an inline style.
   - Write a spacing value as a `--spacing` multiple (`h-12.5`, `max-w-90`), not an arbitrary `h-[3.125rem]`. Tailwind accepts any multiple of 0.25 steps.
   - Font sizes and radii have their own named scales instead (`text-4xl`, `rounded-xs`). Pick the nearest named size rather than an arbitrary value.
-  - `web/lib/rem.ts`'s `rem()` export is for the cases a static class can't cover: a value computed at runtime from state/refs/pointer events (a drag offset, a `ResizeObserver`-measured height) and fed into an inline `style` object.
-  - The same carve-out applies to a value that has to match a browser API that only accepts raw pixels — `Element.scrollBy()`, or arithmetic against `PointerEvent.clientY` in a drag handler — where there is nothing to convert.
+  - A value computed at runtime and fed into an inline `style` is the exception, such as `web/components/marketing/HeroPointCloud.tsx`'s generated dot positions. So is a value that has to match a browser API that only accepts raw pixels, like `PointerEvent.clientY`.
 
 ---
 

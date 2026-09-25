@@ -9,7 +9,6 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 
 import { Center } from "@/components/layout/Center";
 import { Spinner } from "@/components/ui/Spinner";
-import { AXES_HELPER_SIZE } from "./constants";
 import { PointCloudScene } from "./PointCloudScene";
 
 export type ViewerMode = "splat" | "colmap_points";
@@ -37,7 +36,6 @@ function SplatScene({
   onFirstLoad: (box: Box3) => void;
 }) {
   const [viewer, setViewer] = useState<DropInViewer | null>(null);
-  const [boundingBox, setBoundingBox] = useState<Box3 | null>(null);
 
   // The load effect below reads the URL from here instead of depending on it. Every presign mints a different URL
   // string for the same object (web/lib/server/s3.ts), so depending on it would restart the whole download whenever
@@ -75,7 +73,6 @@ function SplatScene({
         // NaN, silently producing a camera pointed nowhere with no error surfaced.
         const box = dropInViewer.splatMesh?.computeBoundingBox();
         if (box && !box.isEmpty()) {
-          setBoundingBox(box);
           onFirstLoad(box);
         }
       })
@@ -98,15 +95,9 @@ function SplatScene({
   }, [onError, onFirstLoad]);
 
   if (!viewer) {
-    return <axesHelper args={[AXES_HELPER_SIZE]} />;
+    return null;
   }
-  return (
-    <>
-      <primitive object={viewer} />
-      <axesHelper args={[AXES_HELPER_SIZE]} />
-      {boundingBox && <box3Helper args={[boundingBox]} />}
-    </>
-  );
+  return <primitive object={viewer} />;
 }
 
 /**

@@ -1,0 +1,132 @@
+"use client";
+
+import { useAuth } from "@clerk/nextjs";
+import { useState } from "react";
+import useSWR from "swr";
+
+import { Center } from "@/components/layout/Center";
+import { Spinner } from "@/components/ui/Spinner";
+import { SplatViewer, type ViewerMode } from "@/components/viewer/SplatViewer";
+import { apiFetch } from "@/lib/apiFetch";
+import { cn } from "@/lib/cn";
+import type { Job } from "@/lib/types";
+
+interface SplatStageViewerProps {
+  splatId: string;
+  job: Job | undefined;
+  complete: boolean;
+}
+
+// The page's 3D view, with a toggle between the finished splat and the point cloud (the "shape sketch") COLMAP
+// produced. Both URLs go to one SplatViewer, so switching keeps the camera where the visitor left it.
+//
+// SWR is left on its defaults: a presigned URL is only read once, when a scene mounts, so a revalidated one that has
+// since been re-minted is never reloaded (web/components/viewer/SplatViewer.tsx).
+export function SplatStageViewer({ splatId, job, complete }: SplatStageViewerProps) {
+  const { getToken } = useAuth();
+  const [chosen, setChosen] = useState<ViewerMode | null>(null);
+
+  async function fetchUrl(path: string) {
+    const token = await getToken();
+    if (!token) {
+      throw new Error("Not signed in");
+    }
+    return apiFetch<string>(path, "GET", token);
+  }
+
+  // pointCloudS3Key is set once by the reconstruct stage and never cleared, so the sketch stays reachable through
+  // training and after completion.
+  const hasPointCloud = Boolean(job?.pointCloudS3Key);
+  const { data: pointCloudUrl, error: pointCloudError } = useSWR(hasPointCloud ? ["point-cloud", splatId] : null, () =>
+    fetchUrl(`/api/v1/splats/${splatId}/point-cloud`),
+  );
+  // The download route collapses "not ready" and "not yours" into one 404, so a failure here is usually the result
+  // still being finalized.
+  const { data: splatUrl, error: splatUrlError } = useSWR(complete ? ["splat-download", splatId] : null, () =>
+    fetchUrl(`/api/v1/splats/${splatId}/download`),
+  );
+
+  const mode: ViewerMode = chosen ?? (complete ? "splat" : "colmap_points");
+  const available = mode === "splat" ? complete : hasPointCloud;
+  const url = mode === "splat" ? splatUrl : pointCloudUrl;
+  const urlError = mode === "splat" ? splatUrlError : pointCloudError;
+
+  let body: React.ReactNode;
+  if (!available) {
+    body = (
+      <Center className="h-full rounded-3xl bg-muted p-8 text-center">
+        <p className="max-w-80 text-muted-foreground">
+          {mode === "splat"
+            ? "The 3D splat appears here once it's built."
+            : "A sketch of the shape appears here once the cameras are placed."}
+        </p>
+      </Center>
+    );
+  } else if (urlError) {
+    body = (
+      <Center className="h-full rounded-3xl bg-muted p-8">
+        <p className="text-muted-foreground">Still getting this ready. Check back in a moment.</p>
+      </Center>
+    );
+  } else if (!url) {
+    body = (
+      <Center className="h-full rounded-3xl bg-muted">
+        <Spinner className="h-8 w-8 text-muted-foreground" />
+      </Center>
+    );
+  } else {
+    body = <SplatViewer mode={mode} splatUrl={splatUrl ?? null} pointCloudUrl={pointCloudUrl ?? null} height="100%" />;
+  }
+
+  return (
+    <div className="relative h-full">
+      {body}
+      <div className="absolute bottom-5 left-1/2 flex -translate-x-1/2 gap-1 rounded-full border border-divider bg-paper p-1">
+        <ModeButton
+          label="3D splat"
+          selected={mode === "splat"}
+          disabled={!complete}
+          onClick={() => setChosen("splat")}
+        />
+        <ModeButton
+          label="Shape sketch"
+          selected={mode === "colmap_points"}
+          disabled={!hasPointCloud}
+          onClick={() => setChosen("colmap_points")}
+        />
+      </div>
+      {available && url && (
+        <p className="pointer-events-none absolute top-5 right-6 text-xs text-muted-foreground">
+          Drag to orbit · scroll to zoom
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ModeButton({
+  label,
+  selected,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  selected: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "h-10 rounded-full px-4.5 text-sm font-semibold whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-40",
+        selected ? "bg-foreground text-background" : "hover:bg-muted",
+      )}
+    >
+      {label}
+    </button>
+  );
+}
