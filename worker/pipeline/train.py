@@ -21,6 +21,7 @@ from PIL import Image as PILImage
 
 from .colmap_model import SparseModel, qvec_to_rotmat, read_sparse_model
 from .config import Settings
+from .status import report_status
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ def train(
         sparse = read_sparse_model(sfm_sparse_dir)
 
     # Translated into a plain RuntimeError so worker/run_job.py's generic handler reports it as-is to the browser
-    # (see web/components/job/JobStatusPoller.tsx). torch's own OutOfMemoryError message is a multi-line CUDA
+    # (see web/components/splats/StageCard.tsx). torch's own OutOfMemoryError message is a multi-line CUDA
     # allocator dump aimed at a developer, not something to show a user waiting on their splat.
     try:
         model, cameras, viewmats, images_tensor = _train_loop(sparse, photos_dir, settings)
@@ -94,8 +95,8 @@ def _train_loop(sparse: SparseModel, photos_dir: Path, settings: Settings):
     iterations = 20 if settings.fast_test_mode else settings.training_iterations
 
     # Schedules are fractions of the run, not fixed step counts: at the default 10k these work out to the usual
-    # densify-every-1000 / log-every-500 / stop-densifying-500-before-the-end, while a 20-iteration fast-test run
-    # still exercises _densify_and_prune instead of never reaching it.
+    # densify-every-1000 / log-and-report-progress-every-500 / stop-densifying-500-before-the-end, while a 20-iteration
+    # fast-test run still exercises _densify_and_prune instead of never reaching it.
     densify_every = max(1, iterations // 10)
     densify_until = iterations - max(1, iterations // 20)
     log_every = max(1, iterations // 20)
@@ -118,6 +119,9 @@ def _train_loop(sparse: SparseModel, photos_dir: Path, settings: Settings):
 
         if step % log_every == 0:
             logger.info("iter %d/%d loss=%.4f", step, iterations, loss.item())
+            # On the log schedule, 20 callbacks a run, for the progress bar on the splat's page. report_status never
+            # raises, so an unreachable web app costs its timeout here and nothing more.
+            report_status(settings, "training_running", training_progress=step * 100 // iterations)
 
         if step > 0 and step % densify_every == 0 and step < densify_until:
             model = _densify_and_prune(model, max_points=max_points)

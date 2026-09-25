@@ -43,6 +43,8 @@ const job: Job = {
   resultS3Key: null,
   thumbnailS3Key: null,
   pointCloudS3Key: "pc.ply",
+  trainingStartedAt: null,
+  trainingProgress: null,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
 };

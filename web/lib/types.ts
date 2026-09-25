@@ -104,6 +104,9 @@ export interface Job {
   resultS3Key: string | null;
   thumbnailS3Key: string | null;
   pointCloudS3Key: string | null;
+  trainingStartedAt: string | null;
+  // Percent of training done, 0-100. Null until the train stage's worker first reports it.
+  trainingProgress: number | null;
   createdAt: string;
   updatedAt: string;
 }

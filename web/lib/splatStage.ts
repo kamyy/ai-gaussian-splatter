@@ -18,7 +18,8 @@ export type Stage =
   | { kind: "ready" }
   | { kind: "placing_cameras" }
   | { kind: "check" }
-  | { kind: "building" }
+  // progress is 0-100, and startedAt the training stage's start. Both are null until the worker first reports.
+  | { kind: "building"; progress: number | null; startedAt: string | null }
   | { kind: "complete" }
   | { kind: "failed"; step: StepKey; message: string | null }
   | { kind: "cancelled"; step: StepKey };
@@ -35,8 +36,9 @@ export function splatStage(job: Job | undefined, photoCount: number): Stage {
     case JobStatus.awaiting_training:
       return { kind: "check" };
     case JobStatus.training_running:
+      return { kind: "building", progress: job.trainingProgress, startedAt: job.trainingStartedAt };
     case JobStatus.uploading_result:
-      return { kind: "building" };
+      return { kind: "building", progress: 100, startedAt: job.trainingStartedAt };
     case JobStatus.complete:
       return { kind: "complete" };
     // The job keeps no record of which stage it ended in. Reconstruction is what writes the point cloud, so a job

@@ -32,6 +32,7 @@ const workerStatusSchema = z.object({
   thumbnail_s3_key: z.string().nullish(),
   point_cloud_s3_key: z.string().nullish(),
   ec2_instance_id: z.string().nullish(),
+  training_progress: z.number().int().min(0).max(100).nullish(),
 });
 
 export const PATCH = withErrorHandling(
@@ -78,6 +79,9 @@ export const PATCH = withErrorHandling(
     }
     if (body.ec2_instance_id != null) {
       jobData.ec2InstanceId = body.ec2_instance_id;
+    }
+    if (body.training_progress != null) {
+      jobData.trainingProgress = body.training_progress;
     }
 
     // Stage timestamps are only ever set once. A retried or duplicated callback must not overwrite the original start

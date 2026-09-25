@@ -101,7 +101,11 @@ export function StageCard({ splatId, stage, onJobChanged }: StageCardProps) {
             A cloud GPU is turning the sketch into a 3D splat. You can close this tab. It keeps going, and this page
             will be ready when you come back.
           </p>
-          <WorkingBar label="Building the splat" />
+          {stage.progress === null ? (
+            <WorkingBar label="Building the splat" />
+          ) : (
+            <ProgressBar label="Building the splat" percent={stage.progress} startedAt={stage.startedAt} />
+          )}
           <div className="self-start">
             <StopJobButton splatId={splatId} onJobChanged={onJobChanged} />
           </div>
@@ -160,11 +164,48 @@ function StageShell({
   );
 }
 
-// No stage reports how far along it is, so this only shows that something is running.
+// For a stage that doesn't report how far along it is: this only shows that something is running.
 function WorkingBar({ label }: { label: string }) {
   return (
     <div role="progressbar" aria-label={label} className="h-2 overflow-hidden rounded-full bg-divider">
       <div className="h-full w-1/3 animate-working motion-reduce:animate-none rounded-full bg-primary" />
+    </div>
+  );
+}
+
+// Below this the elapsed time says too little about the rest of the run to project from.
+const MIN_PERCENT_FOR_ESTIMATE = 5;
+
+function timeLeft(percent: number, startedAt: string | null): string | null {
+  if (startedAt === null || percent < MIN_PERCENT_FOR_ESTIMATE || percent >= 100) {
+    return null;
+  }
+  const elapsedMs = Date.now() - new Date(startedAt).getTime();
+  const minutes = Math.round((elapsedMs * (100 - percent)) / percent / 60_000);
+  if (minutes < 1) {
+    return "Less than a minute left";
+  }
+  return `About ${minutes} minute${minutes === 1 ? "" : "s"} left`;
+}
+
+function ProgressBar({ label, percent, startedAt }: { label: string; percent: number; startedAt: string | null }) {
+  const estimate = timeLeft(percent, startedAt);
+  return (
+    <div className="flex flex-col gap-2">
+      <div
+        role="progressbar"
+        aria-label={label}
+        aria-valuenow={percent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        className="h-2 overflow-hidden rounded-full bg-divider"
+      >
+        <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${percent}%` }} />
+      </div>
+      <div className="flex justify-between text-xs">
+        <span>{percent}%</span>
+        {estimate && <span>{estimate}</span>}
+      </div>
     </div>
   );
 }
