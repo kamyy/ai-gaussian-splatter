@@ -40,22 +40,29 @@ function ConfirmButton({ label, variant, title, description, confirmLabel, keepL
     }
   }
 
+  let trigger: React.ReactNode;
+  if (variant === "text") {
+    // A quiet link-like button, flush with the column's left edge rather than padded like a pill.
+    trigger = (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="self-start text-sm font-semibold text-muted-foreground hover:text-error"
+      >
+        {label}
+      </button>
+    );
+  } else {
+    trigger = (
+      <Button variant="outlined" onClick={() => setOpen(true)}>
+        {label}
+      </Button>
+    );
+  }
+
   return (
     <>
-      {variant === "text" ? (
-        // A quiet link-like button, flush with the column's left edge rather than padded like a pill.
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="self-start text-sm font-semibold text-muted-foreground hover:text-error"
-        >
-          {label}
-        </button>
-      ) : (
-        <Button variant="outlined" onClick={() => setOpen(true)}>
-          {label}
-        </Button>
-      )}
+      {trigger}
       <Dialog open={open} onOpenChange={next => !pending && setOpen(next)}>
         <DialogContent>
           <DialogTitle>{title}</DialogTitle>

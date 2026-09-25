@@ -141,6 +141,49 @@ export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onC
     );
   }
 
+  let cameraToggle: React.ReactNode = null;
+  if (mode === "colmap_points" && cameras && cameras.length > 0) {
+    cameraToggle = (
+      <label className="flex h-10 items-center gap-2 border-divider border-l pr-3.5 pl-3 text-sm font-semibold whitespace-nowrap">
+        <input
+          type="checkbox"
+          checked={showCameras}
+          onChange={event => setShowCameras(event.target.checked)}
+          className="h-4.5 w-4.5 accent-primary"
+        />
+        Camera positions
+      </label>
+    );
+  }
+  let cropToggle: React.ReactNode = null;
+  if (canCrop) {
+    cropToggle = (
+      <label className="flex h-10 items-center gap-2 border-divider border-l pr-3.5 pl-3 text-sm font-semibold whitespace-nowrap">
+        <input
+          type="checkbox"
+          checked={cropping}
+          onChange={event => {
+            setCropping(event.target.checked);
+            // Cleared rather than kept hidden, so an unticked box never reaches the build.
+            if (!event.target.checked) {
+              onCropBoxChange?.(null);
+            }
+          }}
+          className="h-4.5 w-4.5 accent-primary"
+        />
+        Crop
+      </label>
+    );
+  }
+  let orbitHint: React.ReactNode = null;
+  if (available && url) {
+    orbitHint = (
+      <p className="pointer-events-none absolute top-5 right-6 text-xs text-muted-foreground">
+        Drag to orbit · scroll to zoom
+      </p>
+    );
+  }
+
   return (
     <div className="relative h-full">
       {body}
@@ -157,40 +200,10 @@ export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onC
           disabled={!hasPointCloud}
           onClick={() => setChosen("colmap_points")}
         />
-        {mode === "colmap_points" && cameras && cameras.length > 0 && (
-          <label className="flex h-10 items-center gap-2 border-divider border-l pr-3.5 pl-3 text-sm font-semibold whitespace-nowrap">
-            <input
-              type="checkbox"
-              checked={showCameras}
-              onChange={event => setShowCameras(event.target.checked)}
-              className="h-4.5 w-4.5 accent-primary"
-            />
-            Camera positions
-          </label>
-        )}
-        {canCrop && (
-          <label className="flex h-10 items-center gap-2 border-divider border-l pr-3.5 pl-3 text-sm font-semibold whitespace-nowrap">
-            <input
-              type="checkbox"
-              checked={cropping}
-              onChange={event => {
-                setCropping(event.target.checked);
-                // Cleared rather than kept hidden, so an unticked box never reaches the build.
-                if (!event.target.checked) {
-                  onCropBoxChange?.(null);
-                }
-              }}
-              className="h-4.5 w-4.5 accent-primary"
-            />
-            Crop
-          </label>
-        )}
+        {cameraToggle}
+        {cropToggle}
       </div>
-      {available && url && (
-        <p className="pointer-events-none absolute top-5 right-6 text-xs text-muted-foreground">
-          Drag to orbit · scroll to zoom
-        </p>
-      )}
+      {orbitHint}
     </div>
   );
 }

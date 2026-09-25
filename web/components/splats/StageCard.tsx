@@ -88,7 +88,7 @@ function ProgressBar({ label, percent, startedAt }: { label: string; percent: nu
       </div>
       <div className="flex justify-between text-xs">
         <span>{percent}%</span>
-        {estimate && <span>{estimate}</span>}
+        {estimate ? <span>{estimate}</span> : null}
       </div>
     </div>
   );
@@ -166,39 +166,47 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
           <p className="text-xs">Building takes a while. You can close this tab and come back.</p>
         </StageShell>
       );
-    case "building":
+    case "building": {
+      let bar: React.ReactNode;
+      if (stage.progress === null) {
+        bar = <WorkingBar label="Building the splat" />;
+      } else {
+        bar = <ProgressBar label="Building the splat" percent={stage.progress} startedAt={stage.startedAt} />;
+      }
       return (
         <StageShell title="Building your 3D splat">
           <p>
             A cloud GPU is turning the sketch into a 3D splat. You can close this tab. It keeps going, and this page
             will be ready when you come back.
           </p>
-          {stage.progress === null ? (
-            <WorkingBar label="Building the splat" />
-          ) : (
-            <ProgressBar label="Building the splat" percent={stage.progress} startedAt={stage.startedAt} />
-          )}
+          {bar}
           <div className="self-start">
             <StopJobButton splatId={splatId} onJobChanged={onJobChanged} />
           </div>
         </StageShell>
       );
+    }
     case "complete":
       return null;
-    case "failed":
+    case "failed": {
+      let reshootHint: React.ReactNode = null;
+      if (stage.step === "cameras") {
+        reshootHint = (
+          <p>
+            If placing the cameras fails again, the photos probably need more overlap. Start a new splat and re-shoot.
+          </p>
+        );
+      }
       return (
         <StageShell title="Something went wrong" tone="error">
           <p>{stage.message ?? "Processing stopped before it finished."}</p>
-          {stage.step === "cameras" && (
-            <p>
-              If placing the cameras fails again, the photos probably need more overlap. Start a new splat and re-shoot.
-            </p>
-          )}
+          {reshootHint}
           <Button variant="contained" onClick={startProcessing} loading={pending} className="self-start">
             Try again
           </Button>
         </StageShell>
       );
+    }
     case "cancelled":
       return (
         <StageShell title="Cancelled">

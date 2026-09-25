@@ -154,6 +154,31 @@ export function NewSplatForm() {
     progressLabel = "Starting…";
   }
 
+  let previewGrid: React.ReactNode = null;
+  if (previews.length > 0) {
+    previewGrid = (
+      <ul className="grid grid-cols-4 gap-2 sm:grid-cols-6 lg:grid-cols-8">
+        {previews.map(({ file, url }) => (
+          <li key={fileKey(file)} className="relative aspect-square overflow-hidden rounded-xl bg-muted">
+            {/* biome-ignore lint/performance/noImgElement: a local object URL, not something next/image can optimize. */}
+            <img src={url} alt={file.name} className="h-full w-full object-cover" />
+            <button
+              type="button"
+              aria-label={`Remove ${file.name}`}
+              onClick={() => removeFile(fileKey(file))}
+              disabled={submitting}
+              className="absolute top-1 right-1 flex h-7 w-7 items-center justify-center rounded-full bg-paper text-foreground disabled:hidden"
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                <path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            </button>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit} className="flex min-w-0 flex-1 flex-col gap-6">
       <Input
@@ -193,27 +218,7 @@ export function NewSplatForm() {
             </Button>
           </div>
         </div>
-        {previews.length > 0 && (
-          <ul className="grid grid-cols-4 gap-2 sm:grid-cols-6 lg:grid-cols-8">
-            {previews.map(({ file, url }) => (
-              <li key={fileKey(file)} className="relative aspect-square overflow-hidden rounded-xl bg-muted">
-                {/* biome-ignore lint/performance/noImgElement: a local object URL, not something next/image can optimize. */}
-                <img src={url} alt={file.name} className="h-full w-full object-cover" />
-                <button
-                  type="button"
-                  aria-label={`Remove ${file.name}`}
-                  onClick={() => removeFile(fileKey(file))}
-                  disabled={submitting}
-                  className="absolute top-1 right-1 flex h-7 w-7 items-center justify-center rounded-full bg-paper text-foreground disabled:hidden"
-                >
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
-                    <path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                  </svg>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+        {previewGrid}
       </div>
 
       <div className="flex flex-wrap items-center gap-4">

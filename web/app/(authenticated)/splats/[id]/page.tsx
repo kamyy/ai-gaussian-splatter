@@ -45,6 +45,16 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
   const stage = splatStage(job, photos?.length ?? 0);
   const placedPhotoIds = cameras ? new Set(cameras.map(camera => camera.photoId)) : null;
 
+  // The check stage's card already offers this as "Discard".
+  let deleteButton: React.ReactNode = null;
+  if (stage.kind !== "check") {
+    deleteButton = (
+      <div className="mt-auto pt-2">
+        <DeleteSplatButton splatId={id} label="Delete splat" variant="text" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6 lg:h-full lg:flex-row lg:gap-0">
       <div className="flex flex-col gap-6 px-4 pt-7 sm:px-12 lg:w-120 lg:shrink-0 lg:overflow-y-auto lg:pr-10 lg:pb-7">
@@ -56,14 +66,9 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
         </div>
         <PipelineStepper stage={stage} />
         <StageCard splatId={id} stage={stage} cropBox={cropBox} onJobChanged={() => void refetchJob()} />
-        {stage.kind === "complete" && splat.isShareable && <SharePanel splatId={id} />}
-        {photos && photos.length > 0 && <PhotoGrid photos={photos} placedPhotoIds={placedPhotoIds} />}
-        {/* The check stage's card already offers this as "Discard". */}
-        {stage.kind !== "check" && (
-          <div className="mt-auto pt-2">
-            <DeleteSplatButton splatId={id} label="Delete splat" variant="text" />
-          </div>
-        )}
+        {stage.kind === "complete" && splat.isShareable ? <SharePanel splatId={id} /> : null}
+        {photos && photos.length > 0 ? <PhotoGrid photos={photos} placedPhotoIds={placedPhotoIds} /> : null}
+        {deleteButton}
       </div>
       <section aria-label="3D view" className="h-120 px-4 pb-6 sm:px-12 lg:h-auto lg:flex-1 lg:py-6 lg:pr-8 lg:pl-0">
         <SplatStageViewer

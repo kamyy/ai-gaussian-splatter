@@ -99,7 +99,7 @@ function SplatScene({
   return (
     <>
       <primitive object={spark} />
-      {mesh && <primitive object={mesh} />}
+      {mesh ? <primitive object={mesh} /> : null}
     </>
   );
 }
@@ -223,6 +223,32 @@ export function SplatViewer({
   // the alternative when it is, which is an empty canvas that looks like a load that never finishes.
   const hasAsset = mode === "colmap_points" ? pointCloudUrl !== null : splatUrl !== null;
 
+  let frustums: React.ReactNode = null;
+  let gizmo: React.ReactNode = null;
+  if (mode === "colmap_points") {
+    if (showCameras && cameras) {
+      frustums = <CameraFrustums cameras={cameras} />;
+    }
+    if (cropping && cropBox && onCropBoxChange) {
+      gizmo = <CropBoxGizmo box={cropBox} onChange={onCropBoxChange} />;
+    }
+  }
+
+  let overlay: React.ReactNode = null;
+  if (activeError) {
+    overlay = (
+      <Center className="pointer-events-none absolute inset-0">
+        <p className="text-error">{activeError}</p>
+      </Center>
+    );
+  } else if (!hasAsset) {
+    overlay = (
+      <Center className="pointer-events-none absolute inset-0">
+        <p className="text-muted-foreground">Not available for this splat.</p>
+      </Center>
+    );
+  }
+
   return (
     <div className="relative w-full overflow-hidden rounded-3xl bg-muted" style={{ height }}>
       {/* flat: R3F's default ACESFilmicToneMapping would bend every color through a filmic curve. The output stays
@@ -239,22 +265,11 @@ export function SplatViewer({
           onError={handleError}
           onPointCloudLoad={setPointCloudBounds}
         />
-        {mode === "colmap_points" && showCameras && cameras && <CameraFrustums cameras={cameras} />}
-        {mode === "colmap_points" && cropping && cropBox && onCropBoxChange && (
-          <CropBoxGizmo box={cropBox} onChange={onCropBoxChange} />
-        )}
+        {frustums}
+        {gizmo}
         <CameraControls makeDefault dollyDragInverted />
       </Canvas>
-      {activeError && (
-        <Center className="pointer-events-none absolute inset-0">
-          <p className="text-error">{activeError}</p>
-        </Center>
-      )}
-      {!activeError && !hasAsset && (
-        <Center className="pointer-events-none absolute inset-0">
-          <p className="text-muted-foreground">Not available for this splat.</p>
-        </Center>
-      )}
+      {overlay}
     </div>
   );
 }

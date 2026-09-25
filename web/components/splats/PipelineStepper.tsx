@@ -26,7 +26,7 @@ export function PipelineStepper({ stage }: { stage: Stage }) {
                 <CheckIcon className="h-2.5 w-2.5" />
                 <span className="sr-only">{step.label}: done</span>
               </span>
-              {index < STEPS.length - 1 && <span className="h-0.5 w-4.5 bg-primary" />}
+              {index < STEPS.length - 1 ? <span className="h-0.5 w-4.5 bg-primary" /> : null}
             </li>
           ))}
         </ol>
@@ -43,6 +43,11 @@ export function PipelineStepper({ stage }: { stage: Stage }) {
       {STEPS.map((step, index) => {
         const done = index < currentIndex;
         const isCurrent = index === currentIndex;
+        let connector: React.ReactNode = null;
+        if (index < STEPS.length - 1) {
+          connector = <span className={cn("min-h-2.5 w-0.5 flex-1", done ? "bg-primary" : "bg-divider")} />;
+        }
+
         return (
           <li key={step.key} aria-current={isCurrent ? "step" : undefined} className="flex min-h-8 gap-3">
             <div className="flex w-5.5 flex-col items-center">
@@ -54,12 +59,10 @@ export function PipelineStepper({ stage }: { stage: Stage }) {
                   !done && !isCurrent && "border-divider",
                 )}
               >
-                {done && <CheckIcon className="h-3 w-3" />}
-                {isCurrent && <span className={cn("h-2 w-2 rounded-full", failed ? "bg-error" : "bg-primary")} />}
+                {done ? <CheckIcon className="h-3 w-3" /> : null}
+                {isCurrent ? <span className={cn("h-2 w-2 rounded-full", failed ? "bg-error" : "bg-primary")} /> : null}
               </span>
-              {index < STEPS.length - 1 && (
-                <span className={cn("min-h-2.5 w-0.5 flex-1", done ? "bg-primary" : "bg-divider")} />
-              )}
+              {connector}
             </div>
             <span
               className={cn(
@@ -69,7 +72,7 @@ export function PipelineStepper({ stage }: { stage: Stage }) {
               )}
             >
               {step.label}
-              {done && <span className="sr-only">: done</span>}
+              {done ? <span className="sr-only">: done</span> : null}
             </span>
           </li>
         );
