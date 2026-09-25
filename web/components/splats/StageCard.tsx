@@ -21,6 +21,77 @@ interface StageCardProps {
   onJobChanged: () => void;
 }
 
+function StageShell({
+  title,
+  tone = "default",
+  children,
+}: {
+  title: string;
+  tone?: "default" | "error";
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      aria-labelledby="stage-heading"
+      className="flex flex-col gap-3.5 rounded-3xl border border-divider bg-paper p-6 text-sm text-muted-foreground"
+    >
+      <h2
+        id="stage-heading"
+        className={tone === "error" ? "font-display text-3xl text-error" : "font-display text-3xl text-foreground"}
+      >
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+// For a stage that doesn't report how far along it is: this only shows that something is running.
+function WorkingBar({ label }: { label: string }) {
+  return (
+    <div role="progressbar" aria-label={label} className="h-2 overflow-hidden rounded-full bg-divider">
+      <div className="h-full w-1/3 animate-working motion-reduce:animate-none rounded-full bg-primary" />
+    </div>
+  );
+}
+
+// Below this the elapsed time says too little about the rest of the run to project from.
+const MIN_PERCENT_FOR_ESTIMATE = 5;
+
+function timeLeft(percent: number, startedAt: string | null): string | null {
+  if (startedAt === null || percent < MIN_PERCENT_FOR_ESTIMATE || percent >= 100) {
+    return null;
+  }
+  const elapsedMs = Date.now() - new Date(startedAt).getTime();
+  const minutes = Math.round((elapsedMs * (100 - percent)) / percent / 60_000);
+  if (minutes < 1) {
+    return "Less than a minute left";
+  }
+  return `About ${minutes} minute${minutes === 1 ? "" : "s"} left`;
+}
+
+function ProgressBar({ label, percent, startedAt }: { label: string; percent: number; startedAt: string | null }) {
+  const estimate = timeLeft(percent, startedAt);
+  return (
+    <div className="flex flex-col gap-2">
+      <div
+        role="progressbar"
+        aria-label={label}
+        aria-valuenow={percent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        className="h-2 overflow-hidden rounded-full bg-divider"
+      >
+        <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${percent}%` }} />
+      </div>
+      <div className="flex justify-between text-xs">
+        <span>{percent}%</span>
+        {estimate && <span>{estimate}</span>}
+      </div>
+    </div>
+  );
+}
+
 // What the visitor can do, or is waiting on, at the current stage. The complete stage has no card of its own; the
 // share panel takes its place.
 export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: StageCardProps) {
@@ -140,75 +211,4 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
         </StageShell>
       );
   }
-}
-
-function StageShell({
-  title,
-  tone = "default",
-  children,
-}: {
-  title: string;
-  tone?: "default" | "error";
-  children: React.ReactNode;
-}) {
-  return (
-    <section
-      aria-labelledby="stage-heading"
-      className="flex flex-col gap-3.5 rounded-3xl border border-divider bg-paper p-6 text-sm text-muted-foreground"
-    >
-      <h2
-        id="stage-heading"
-        className={tone === "error" ? "font-display text-3xl text-error" : "font-display text-3xl text-foreground"}
-      >
-        {title}
-      </h2>
-      {children}
-    </section>
-  );
-}
-
-// For a stage that doesn't report how far along it is: this only shows that something is running.
-function WorkingBar({ label }: { label: string }) {
-  return (
-    <div role="progressbar" aria-label={label} className="h-2 overflow-hidden rounded-full bg-divider">
-      <div className="h-full w-1/3 animate-working motion-reduce:animate-none rounded-full bg-primary" />
-    </div>
-  );
-}
-
-// Below this the elapsed time says too little about the rest of the run to project from.
-const MIN_PERCENT_FOR_ESTIMATE = 5;
-
-function timeLeft(percent: number, startedAt: string | null): string | null {
-  if (startedAt === null || percent < MIN_PERCENT_FOR_ESTIMATE || percent >= 100) {
-    return null;
-  }
-  const elapsedMs = Date.now() - new Date(startedAt).getTime();
-  const minutes = Math.round((elapsedMs * (100 - percent)) / percent / 60_000);
-  if (minutes < 1) {
-    return "Less than a minute left";
-  }
-  return `About ${minutes} minute${minutes === 1 ? "" : "s"} left`;
-}
-
-function ProgressBar({ label, percent, startedAt }: { label: string; percent: number; startedAt: string | null }) {
-  const estimate = timeLeft(percent, startedAt);
-  return (
-    <div className="flex flex-col gap-2">
-      <div
-        role="progressbar"
-        aria-label={label}
-        aria-valuenow={percent}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        className="h-2 overflow-hidden rounded-full bg-divider"
-      >
-        <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${percent}%` }} />
-      </div>
-      <div className="flex justify-between text-xs">
-        <span>{percent}%</span>
-        {estimate && <span>{estimate}</span>}
-      </div>
-    </div>
-  );
 }

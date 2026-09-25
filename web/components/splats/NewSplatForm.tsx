@@ -25,6 +25,21 @@ function fileKey(file: File) {
   return `${file.name}:${file.size}`;
 }
 
+function PhotoMeter({ count }: { count: number }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      {/* Decorative: the count it draws is already in the "N photos added" text beside it. */}
+      <div aria-hidden="true" className="h-2 w-32 overflow-hidden rounded-full bg-divider">
+        <div
+          className="h-full rounded-full bg-primary"
+          style={{ width: `${Math.min(100, (count / TARGET_PHOTOS) * 100)}%` }}
+        />
+      </div>
+      <span className="text-xs whitespace-nowrap text-muted-foreground">aim for {TARGET_PHOTOS}+</span>
+    </div>
+  );
+}
+
 // Name plus photos in one step. This is the only place photos can be added to a splat, so it uploads them itself and
 // then starts processing, before navigating to the new splat's page. A failure at any step is reported through the
 // shared snackbar stack (web/components/layout/ThemeRegistry.tsx's SnackbarProvider).
@@ -216,20 +231,5 @@ export function NewSplatForm() {
         </span>
       </div>
     </form>
-  );
-}
-
-function PhotoMeter({ count }: { count: number }) {
-  return (
-    <div className="flex items-center gap-2.5">
-      {/* Decorative: the count it draws is already in the "N photos added" text beside it. */}
-      <div aria-hidden="true" className="h-2 w-32 overflow-hidden rounded-full bg-divider">
-        <div
-          className="h-full rounded-full bg-primary"
-          style={{ width: `${Math.min(100, (count / TARGET_PHOTOS) * 100)}%` }}
-        />
-      </div>
-      <span className="text-xs whitespace-nowrap text-muted-foreground">aim for {TARGET_PHOTOS}+</span>
-    </div>
   );
 }

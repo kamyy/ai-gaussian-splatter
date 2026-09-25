@@ -16,6 +16,29 @@ const FILTERS: { value: LibraryFilter | "all"; label: string }[] = [
   { value: "complete", label: "Complete" },
 ];
 
+function SplatGridSkeleton() {
+  return (
+    <div className="grid gap-x-6 gap-y-7 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" aria-hidden="true">
+      {[0, 1, 2, 3].map(i => (
+        <div key={i} className="h-59 animate-pulse rounded-3xl bg-muted" />
+      ))}
+    </div>
+  );
+}
+
+function EmptyLibrary() {
+  return (
+    <div className="flex flex-col items-start gap-4">
+      <p className="max-w-120 text-lg text-muted-foreground">
+        No splats yet. Photograph an object from every side and upload the photos to make your first one.
+      </p>
+      <Link href="/splats/new" className={buttonClassName("contained", "large")}>
+        Make your first splat
+      </Link>
+    </div>
+  );
+}
+
 export default function LibraryPage() {
   const { data: splats, isLoading, error } = useSplats();
   const [filter, setFilter] = useState<LibraryFilter | "all">("all");
@@ -72,29 +95,6 @@ export default function LibraryPage() {
         )}
       </div>
       {body}
-    </div>
-  );
-}
-
-function SplatGridSkeleton() {
-  return (
-    <div className="grid gap-x-6 gap-y-7 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" aria-hidden="true">
-      {[0, 1, 2, 3].map(i => (
-        <div key={i} className="h-59 animate-pulse rounded-3xl bg-muted" />
-      ))}
-    </div>
-  );
-}
-
-function EmptyLibrary() {
-  return (
-    <div className="flex flex-col items-start gap-4">
-      <p className="max-w-120 text-lg text-muted-foreground">
-        No splats yet. Photograph an object from every side and upload the photos to make your first one.
-      </p>
-      <Link href="/splats/new" className={buttonClassName("contained", "large")}>
-        Make your first splat
-      </Link>
     </div>
   );
 }

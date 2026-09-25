@@ -22,6 +22,33 @@ interface SplatStageViewerProps {
   onCropBoxChange?: (box: CropBox | null) => void;
 }
 
+function ModeButton({
+  label,
+  selected,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  selected: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "h-10 rounded-full px-4.5 text-sm font-semibold whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-40",
+        selected ? "bg-foreground text-background" : "hover:bg-muted",
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
 // The page's 3D view, with a toggle between the finished splat and the point cloud (the "shape sketch") COLMAP
 // produced. Both URLs go to one SplatViewer, so switching keeps the camera where the visitor left it.
 //
@@ -168,32 +195,5 @@ export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onC
         </p>
       )}
     </div>
-  );
-}
-
-function ModeButton({
-  label,
-  selected,
-  disabled,
-  onClick,
-}: {
-  label: string;
-  selected: boolean;
-  disabled: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      disabled={disabled}
-      onClick={onClick}
-      className={cn(
-        "h-10 rounded-full px-4.5 text-sm font-semibold whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-40",
-        selected ? "bg-foreground text-background" : "hover:bg-muted",
-      )}
-    >
-      {label}
-    </button>
   );
 }

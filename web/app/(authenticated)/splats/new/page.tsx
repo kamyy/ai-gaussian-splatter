@@ -7,19 +7,24 @@ export const metadata: Metadata = {
   title: "New splat — AI Gaussian Splatter",
 };
 
-export default function NewSplatPage() {
+function Tip({ title, body, children }: { title: string; body: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-8 px-4 py-9 sm:px-12 lg:flex-row lg:gap-12">
-      <div className="flex min-w-0 flex-1 flex-col gap-6">
-        <div className="flex flex-col gap-2">
-          <Link href="/splats" className="text-sm font-medium text-muted-foreground hover:text-foreground">
-            ← All splats
-          </Link>
-          <h1 className="font-display text-5xl tracking-tight sm:text-6xl">New splat</h1>
-        </div>
-        <NewSplatForm />
+    <div className="flex items-start gap-4">
+      <svg
+        width="72"
+        height="56"
+        viewBox="0 0 72 56"
+        fill="none"
+        strokeWidth="1.6"
+        className="shrink-0 stroke-primary"
+        aria-hidden="true"
+      >
+        {children}
+      </svg>
+      <div className="flex flex-col gap-1">
+        <span className="text-sm font-semibold">{title}</span>
+        <span className="text-sm text-muted-foreground">{body}</span>
       </div>
-      <ShootingTips />
     </div>
   );
 }
@@ -66,24 +71,19 @@ function ShootingTips() {
   );
 }
 
-function Tip({ title, body, children }: { title: string; body: string; children: React.ReactNode }) {
+export default function NewSplatPage() {
   return (
-    <div className="flex items-start gap-4">
-      <svg
-        width="72"
-        height="56"
-        viewBox="0 0 72 56"
-        fill="none"
-        strokeWidth="1.6"
-        className="shrink-0 stroke-primary"
-        aria-hidden="true"
-      >
-        {children}
-      </svg>
-      <div className="flex flex-col gap-1">
-        <span className="text-sm font-semibold">{title}</span>
-        <span className="text-sm text-muted-foreground">{body}</span>
+    <div className="flex flex-col gap-8 px-4 py-9 sm:px-12 lg:flex-row lg:gap-12">
+      <div className="flex min-w-0 flex-1 flex-col gap-6">
+        <div className="flex flex-col gap-2">
+          <Link href="/splats" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+            ← All splats
+          </Link>
+          <h1 className="font-display text-5xl tracking-tight sm:text-6xl">New splat</h1>
+        </div>
+        <NewSplatForm />
       </div>
+      <ShootingTips />
     </div>
   );
 }
