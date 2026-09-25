@@ -64,7 +64,15 @@ const refetchSplat = vi.fn();
 
 function setup(options: { splat?: Splat; job?: Job; jobLoading?: boolean; placed?: string[] }) {
   useCamerasMock.mockReturnValue({
-    data: options.placed?.map(photoId => ({ photoId, center: [0, 0, 0], rotation: [] })),
+    data: options.placed?.map(photoId => ({
+      photoId,
+      center: [0, 0, 0],
+      rotation: [],
+      width: 4,
+      height: 3,
+      fx: 4,
+      fy: 4,
+    })),
   });
   useSplatMock.mockReturnValue({ data: options.splat, isLoading: false, mutate: refetchSplat });
   useLatestJobMock.mockReturnValue({ data: options.job, isLoading: options.jobLoading ?? false, mutate: vi.fn() });

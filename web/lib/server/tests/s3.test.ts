@@ -68,6 +68,10 @@ describe("readSplatCameras", () => {
             [0, 1, 0],
             [0, 0, 1],
           ],
+          width: 4000,
+          height: 3000,
+          fx: 3200,
+          fy: 3100,
         },
       ],
     });
@@ -84,6 +88,10 @@ describe("readSplatCameras", () => {
           [0, 1, 0],
           [0, 0, 1],
         ],
+        width: 4000,
+        height: 3000,
+        fx: 3200,
+        fy: 3100,
       },
     ]);
   });

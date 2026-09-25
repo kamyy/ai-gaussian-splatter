@@ -98,8 +98,9 @@ def _cameras_key(settings: Settings) -> str:
 def export_and_upload_cameras(sfm_sparse_dir: Path, settings: Settings) -> None:
     """Uploads where each registered photo was taken from, in the point cloud's own coordinate frame.
 
-    One entry per registered image: its photo filename, the camera center in world space, and COLMAP's world-to-camera
-    rotation as three rows. A photo COLMAP couldn't place has no entry, which is how the browser flags it.
+    One entry per registered image: its photo filename, the camera center in world space, COLMAP's world-to-camera
+    rotation as three rows, and its camera's image size and focal lengths in pixels. A photo COLMAP couldn't place has
+    no entry, which is how the browser flags it.
     """
     sparse = read_sparse_model(sfm_sparse_dir)
 
@@ -107,7 +108,18 @@ def export_and_upload_cameras(sfm_sparse_dir: Path, settings: Settings) -> None:
     for image in sparse.images.values():
         rotation = qvec_to_rotmat(image.qvec)
         center = -rotation.T @ image.tvec
-        cameras.append({"name": image.name, "center": center.tolist(), "rotation": rotation.tolist()})
+        camera = sparse.cameras[image.camera_id]
+        cameras.append(
+            {
+                "name": image.name,
+                "center": center.tolist(),
+                "rotation": rotation.tolist(),
+                "width": camera.width,
+                "height": camera.height,
+                "fx": camera.fx,
+                "fy": camera.fy,
+            }
+        )
 
     s3 = boto3.client("s3")
     s3.put_object(

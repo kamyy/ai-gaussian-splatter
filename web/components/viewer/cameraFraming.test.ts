@@ -8,7 +8,7 @@ function lookingAt(center: [number, number, number], target: [number, number, nu
   const d = center.map((v, i) => target[i] - v);
   const length = Math.hypot(...d);
   const forward = d.map(v => v / length) as [number, number, number];
-  return { photoId: "p", center, rotation: [[1, 0, 0], [0, 1, 0], forward] };
+  return { photoId: "p", center, rotation: [[1, 0, 0], [0, 1, 0], forward], width: 4, height: 3, fx: 4, fy: 4 };
 }
 
 describe("framingFromCameras", () => {

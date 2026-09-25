@@ -113,11 +113,16 @@ export interface Job {
 
 // GET /api/v1/splats/[splatId]/cameras — where each photo COLMAP placed was taken from, in the point cloud's own
 // coordinate frame. center is the camera's world-space position. rotation is COLMAP's world-to-camera rotation, three
-// rows, with the camera looking along its own +z.
+// rows, with the camera looking along its own +z. width, height, fx, and fy are the photo's size and focal lengths in
+// pixels, as COLMAP estimated them.
 export interface CameraPose {
   photoId: string;
   center: [number, number, number];
   rotation: [number, number, number][];
+  width: number;
+  height: number;
+  fx: number;
+  fy: number;
 }
 
 export interface PublicSplat {
