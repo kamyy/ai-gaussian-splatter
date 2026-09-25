@@ -25,10 +25,19 @@ interface SplatStageViewerProps {
 // The page's 3D view, with a toggle between the finished splat and the point cloud (the "shape sketch") COLMAP
 // produced. Both URLs go to one SplatViewer, so switching keeps the camera where the visitor left it.
 //
-// SWR is left on its defaults: a presigned URL is only read once, when a scene mounts, so a revalidated one that has
-// since been re-minted is never reloaded (web/components/viewer/SplatViewer.tsx).
+// A presigned URL is only read once, when a scene mounts, so a revalidated one that has since been re-minted is never
+// reloaded (web/components/viewer/SplatViewer.tsx). What matters is that the URL in hand is still valid whenever a
+// scene next mounts, such as on a mode switch.
+//
+// web/lib/server/s3.ts presigns for 15 minutes, so each URL is re-minted well inside that while the page is open.
+const URL_REFRESH_MS = 5 * 60_000;
+// SWR's cache outlives the page, so a return visit starts from the last visit's URL, which may have expired. One
+// fetched longer than this before the page mounted is not used, and the page waits for SWR's revalidation instead.
+const URL_MAX_AGE_AT_MOUNT_MS = 10 * 60_000;
+
 export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onCropBoxChange }: SplatStageViewerProps) {
   const { getToken } = useAuth();
+  const [mountedAt] = useState(Date.now);
   const [chosen, setChosen] = useState<ViewerMode | null>(null);
   const [showCameras, setShowCameras] = useState(true);
   const [cropping, setCropping] = useState(false);
@@ -38,20 +47,30 @@ export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onC
     if (!token) {
       throw new Error("Not signed in");
     }
-    return apiFetch<string>(path, "GET", token);
+    return { url: await apiFetch<string>(path, "GET", token), fetchedAt: Date.now() };
+  }
+
+  function usableUrl(fetched: { url: string; fetchedAt: number } | undefined) {
+    return fetched && fetched.fetchedAt > mountedAt - URL_MAX_AGE_AT_MOUNT_MS ? fetched.url : undefined;
   }
 
   // pointCloudS3Key is set once by the reconstruct stage and never cleared, so the sketch stays reachable through
   // training and after completion.
   const hasPointCloud = Boolean(job?.pointCloudS3Key);
-  const { data: pointCloudUrl, error: pointCloudError } = useSWR(hasPointCloud ? ["point-cloud", splatId] : null, () =>
-    fetchUrl(`/api/v1/splats/${splatId}/point-cloud`),
+  const { data: pointCloudFetch, error: pointCloudError } = useSWR(
+    hasPointCloud ? ["point-cloud", splatId] : null,
+    () => fetchUrl(`/api/v1/splats/${splatId}/point-cloud`),
+    { refreshInterval: URL_REFRESH_MS },
   );
   // The download route collapses "not ready" and "not yours" into one 404, so a failure here is usually the result
   // still being finalized.
-  const { data: splatUrl, error: splatUrlError } = useSWR(complete ? ["splat-download", splatId] : null, () =>
-    fetchUrl(`/api/v1/splats/${splatId}/download`),
+  const { data: splatFetch, error: splatUrlError } = useSWR(
+    complete ? ["splat-download", splatId] : null,
+    () => fetchUrl(`/api/v1/splats/${splatId}/download`),
+    { refreshInterval: URL_REFRESH_MS },
   );
+  const pointCloudUrl = usableUrl(pointCloudFetch);
+  const splatUrl = usableUrl(splatFetch);
 
   const mode: ViewerMode = chosen ?? (complete ? "splat" : "colmap_points");
   const available = mode === "splat" ? complete : hasPointCloud;
