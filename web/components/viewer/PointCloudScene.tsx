@@ -6,13 +6,18 @@ import { PLYLoader } from "three/examples/jsm/loaders/PLYLoader.js";
 
 import { trimmedBox } from "./cameraFraming";
 
+// In world units. COLMAP's reconstruction has no fixed scale, so what looks right varies from one splat to the next,
+// which is why web/components/splats/SplatStageViewer.tsx offers a slider over it.
+export const DEFAULT_POINT_SIZE = 0.01;
+
 interface PointCloudSceneProps {
   url: string;
+  pointSize: number;
   onError: (message: string) => void;
   onFirstLoad: (box: Box3) => void;
 }
 
-export function PointCloudScene({ url, onError, onFirstLoad }: PointCloudSceneProps) {
+export function PointCloudScene({ url, pointSize, onError, onFirstLoad }: PointCloudSceneProps) {
   const [geometry, setGeometry] = useState<BufferGeometry | null>(null);
 
   // Read by the load effect below instead of being a dependency of it, for the reason SplatScene
@@ -64,7 +69,7 @@ export function PointCloudScene({ url, onError, onFirstLoad }: PointCloudScenePr
   }
   return (
     <points geometry={geometry}>
-      <pointsMaterial vertexColors size={0.01} sizeAttenuation />
+      <pointsMaterial vertexColors size={pointSize} sizeAttenuation />
     </points>
   );
 }

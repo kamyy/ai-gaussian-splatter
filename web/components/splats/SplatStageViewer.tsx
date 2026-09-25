@@ -6,6 +6,7 @@ import useSWR from "swr";
 
 import { Center } from "@/components/layout/Center";
 import { Spinner } from "@/components/ui/Spinner";
+import { DEFAULT_POINT_SIZE } from "@/components/viewer/PointCloudScene";
 import { SplatViewer, type ViewerMode } from "@/components/viewer/SplatViewer";
 import { apiFetch } from "@/lib/apiFetch";
 import { cn } from "@/lib/cn";
@@ -68,6 +69,7 @@ export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onC
   const [mountedAt] = useState(Date.now);
   const [chosen, setChosen] = useState<ViewerMode | null>(null);
   const [showCameras, setShowCameras] = useState(true);
+  const [pointSize, setPointSize] = useState(DEFAULT_POINT_SIZE);
   const [cropping, setCropping] = useState(false);
 
   async function fetchUrl(path: string) {
@@ -133,6 +135,7 @@ export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onC
         pointCloudUrl={pointCloudUrl ?? null}
         cameras={cameras ?? null}
         showCameras={showCameras}
+        pointSize={pointSize}
         cropping={canCrop && cropping}
         cropBox={cropBox}
         onCropBoxChange={onCropBoxChange}
@@ -141,18 +144,44 @@ export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onC
     );
   }
 
+  let pointSizeSlider: React.ReactNode = null;
+  if (mode === "colmap_points" && hasPointCloud) {
+    pointSizeSlider = (
+      <label className="flex h-7 items-center gap-2 rounded-full border border-divider bg-paper px-3 text-xs font-semibold whitespace-nowrap">
+        Point size
+        <input
+          type="range"
+          min={DEFAULT_POINT_SIZE / 5}
+          max={DEFAULT_POINT_SIZE * 4}
+          step={DEFAULT_POINT_SIZE / 5}
+          value={pointSize}
+          onChange={event => setPointSize(event.target.valueAsNumber)}
+          className="w-16 accent-primary"
+        />
+      </label>
+    );
+  }
   let cameraToggle: React.ReactNode = null;
   if (mode === "colmap_points" && cameras && cameras.length > 0) {
     cameraToggle = (
-      <label className="flex h-10 items-center gap-2 border-divider border-l pr-3.5 pl-3 text-sm font-semibold whitespace-nowrap">
+      <label className="flex h-7 items-center gap-2 rounded-full border border-divider bg-paper px-3 text-xs font-semibold whitespace-nowrap">
         <input
           type="checkbox"
           checked={showCameras}
           onChange={event => setShowCameras(event.target.checked)}
-          className="h-4.5 w-4.5 accent-primary"
+          className="h-3.5 w-3.5 accent-primary"
         />
-        Camera positions
+        Cameras
       </label>
+    );
+  }
+  let viewOptions: React.ReactNode = null;
+  if (pointSizeSlider || cameraToggle) {
+    viewOptions = (
+      <div className="absolute top-4 left-1/2 flex -translate-x-1/2 gap-2 sm:left-4 sm:translate-x-0">
+        {pointSizeSlider}
+        {cameraToggle}
+      </div>
     );
   }
   let cropToggle: React.ReactNode = null;
@@ -178,7 +207,7 @@ export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onC
   let orbitHint: React.ReactNode = null;
   if (available && url) {
     orbitHint = (
-      <p className="pointer-events-none absolute top-5 right-6 text-xs text-muted-foreground">
+      <p className="pointer-events-none absolute top-5 right-6 hidden text-xs text-muted-foreground sm:block">
         Drag to orbit · scroll to zoom
       </p>
     );
@@ -200,9 +229,9 @@ export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onC
           disabled={!hasPointCloud}
           onClick={() => setChosen("colmap_points")}
         />
-        {cameraToggle}
         {cropToggle}
       </div>
+      {viewOptions}
       {orbitHint}
     </div>
   );
