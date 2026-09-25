@@ -184,13 +184,7 @@ function ViewerSceneManager({
   }
   if (mode === "colmap_points" && pointCloudUrl) {
     return (
-      <PointCloudScene
-        key="colmap_points"
-        url={pointCloudUrl}
-        colorMode="raw_rgb"
-        onError={onError}
-        onFirstLoad={onPointCloudFirstLoad}
-      />
+      <PointCloudScene key="colmap_points" url={pointCloudUrl} onError={onError} onFirstLoad={onPointCloudFirstLoad} />
     );
   }
   return null;
