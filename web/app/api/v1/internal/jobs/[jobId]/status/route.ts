@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, notInArray } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -116,10 +116,15 @@ export const PATCH = withErrorHandling(
       splatData.status = splatStatus;
     }
 
-    // Both rows move together or not at all.
+    // Both rows move together or not at all. The job write is conditional on it still not having ended, so a cancel
+    // (web/lib/server/cancelJob.ts) landing between the read above and this write isn't overwritten.
     await getDb().transaction(async tx => {
-      await tx.update(jobs).set(jobData).where(eq(jobs.id, job.id));
-      if (Object.keys(splatData).length > 0) {
+      const updated = await tx
+        .update(jobs)
+        .set(jobData)
+        .where(and(eq(jobs.id, job.id), notInArray(jobs.status, JOB_ENDED_STATUSES)))
+        .returning({ id: jobs.id });
+      if (updated.length > 0 && Object.keys(splatData).length > 0) {
         await tx.update(splats).set(splatData).where(eq(splats.id, job.splatId));
       }
     });

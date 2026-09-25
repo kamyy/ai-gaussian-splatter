@@ -82,7 +82,7 @@ A baked AMI would attack the smaller half — fixed overhead, not training. Trai
 
 ## 4. API design
 
-- REST (`web/app/api/v1/`), not GraphQL. 13 flat endpoints don't need GraphQL's query flexibility.
+- REST (`web/app/api/v1/`), not GraphQL. 15 flat endpoints don't need GraphQL's query flexibility.
 - Postgres (RDS) for `users`, `splats`, `photos`, `jobs`, and rate-limit/job counters. Relational, low traffic, and needs atomic `INSERT ... ON CONFLICT`.
 - Auth: Clerk (`@clerk/nextjs`). Simple and easy to integrate — this app doesn't need enterprise features (SSO, SCIM, custom identity federation).
 - API and pages share one Next.js app.

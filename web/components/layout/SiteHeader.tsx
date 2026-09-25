@@ -45,7 +45,8 @@ export function SiteHeader() {
         </Show>
         <Show when="signed-in">
           <Link href="/splats/new" className={buttonClassName("ink", "medium", "px-4 sm:px-5")}>
-            New<span className="hidden sm:inline">&nbsp;splat</span>
+            <span className="sm:hidden">New</span>
+            <span className="hidden sm:inline">New splat</span>
           </Link>
         </Show>
         <ThemeToggle />

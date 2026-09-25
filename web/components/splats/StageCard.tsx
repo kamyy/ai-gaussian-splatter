@@ -10,6 +10,7 @@ import { apiFetch } from "@/lib/apiFetch";
 import type { Stage } from "@/lib/splatStage";
 import type { Job } from "@/lib/types";
 import { useAppSnackbar } from "@/lib/useAppSnackbar";
+import { DeleteSplatButton, StopJobButton } from "./SplatActions";
 
 interface StageCardProps {
   splatId: string;
@@ -72,6 +73,9 @@ export function StageCard({ splatId, stage, onJobChanged }: StageCardProps) {
             tab while it runs.
           </p>
           <WorkingBar label="Placing the cameras" />
+          <div className="self-start">
+            <StopJobButton splatId={splatId} onJobChanged={onJobChanged} />
+          </div>
         </StageShell>
       );
     case "check":
@@ -81,9 +85,12 @@ export function StageCard({ splatId, stage, onJobChanged }: StageCardProps) {
             This is a rough sketch of the shape. If the outline looks right, build the full 3D version. If it&apos;s a
             jumble, re-shoot with more overlap between photos.
           </p>
-          <Button variant="contained" onClick={startTraining} loading={pending} className="self-start">
-            Looks right, build it
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="contained" onClick={startTraining} loading={pending}>
+              Looks right, build it
+            </Button>
+            <DeleteSplatButton splatId={splatId} label="Discard" variant="outlined" />
+          </div>
           <p className="text-xs">Building takes a while. You can close this tab and come back.</p>
         </StageShell>
       );
@@ -95,6 +102,9 @@ export function StageCard({ splatId, stage, onJobChanged }: StageCardProps) {
             will be ready when you come back.
           </p>
           <WorkingBar label="Building the splat" />
+          <div className="self-start">
+            <StopJobButton splatId={splatId} onJobChanged={onJobChanged} />
+          </div>
         </StageShell>
       );
     case "complete":

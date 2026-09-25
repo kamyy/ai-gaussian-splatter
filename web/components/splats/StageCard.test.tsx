@@ -14,6 +14,8 @@ const { mutateMock } = vi.hoisted(() => ({ mutateMock: vi.fn() }));
 vi.mock("swr", () => ({ mutate: mutateMock }));
 
 const { enqueueSnackbarMock } = vi.hoisted(() => ({ enqueueSnackbarMock: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
 vi.mock("@/lib/useAppSnackbar", () => ({ useAppSnackbar: () => ({ enqueueSnackbar: enqueueSnackbarMock }) }));
 
 describe("StageCard", () => {
@@ -64,9 +66,9 @@ describe("StageCard", () => {
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
   });
 
-  it("offers no action while a stage is running", () => {
+  it("offers only Stop while a stage is running", () => {
     render(<StageCard splatId="splat-1" stage={{ kind: "building" }} onJobChanged={vi.fn()} />);
     expect(screen.getByRole("progressbar", { name: "Building the splat" })).toBeInTheDocument();
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button").map(button => button.textContent)).toEqual(["Stop"]);
   });
 });
