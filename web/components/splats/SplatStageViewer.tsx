@@ -222,16 +222,16 @@ export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onC
       {body}
       <div className="absolute bottom-5 left-1/2 flex -translate-x-1/2 gap-1 rounded-full border border-divider bg-paper p-1">
         <ModeButton
-          label="3D splat"
-          selected={mode === "splat"}
-          disabled={!complete}
-          onClick={() => setChosen("splat")}
-        />
-        <ModeButton
           label="Shape sketch"
           selected={mode === "colmap_points"}
           disabled={!hasPointCloud}
           onClick={() => setChosen("colmap_points")}
+        />
+        <ModeButton
+          label="3D splat"
+          selected={mode === "splat"}
+          disabled={!complete}
+          onClick={() => setChosen("splat")}
         />
         {cropToggle}
       </div>
