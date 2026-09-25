@@ -5,8 +5,8 @@ import { useState } from "react";
 import { cn } from "@/lib/cn";
 import type { PhotoListItem } from "@/lib/types";
 
-// How many photos show before "See all". Two rows of the grid below.
-const COLLAPSED_COUNT = 16;
+// How many photos show before "See all". Three rows of the grid below at four columns, two at six.
+const COLLAPSED_COUNT = 12;
 
 interface PhotoGridProps {
   photos: PhotoListItem[];
@@ -42,7 +42,7 @@ export function PhotoGrid({ photos, placedPhotoIds }: PhotoGridProps) {
           </button>
         )}
       </div>
-      <ul className="grid grid-cols-8 gap-1.5">
+      <ul className="grid grid-cols-4 gap-1.5 sm:grid-cols-6 lg:grid-cols-4">
         {shown.map(photo => (
           <li
             key={photo.id}
