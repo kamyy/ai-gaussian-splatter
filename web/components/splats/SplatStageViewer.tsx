@@ -206,9 +206,13 @@ export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onC
   }
   let orbitHint: React.ReactNode = null;
   if (available && url) {
+    // The scene behind the hint can be any color, so a dark copy offset 1px sits under a light one to keep it legible.
     orbitHint = (
-      <p className="pointer-events-none absolute top-5 right-6 hidden text-xs text-muted-foreground sm:block">
-        Drag to orbit · scroll to zoom
+      <p className="pointer-events-none absolute top-5 right-6 hidden text-xs whitespace-nowrap sm:block">
+        <span aria-hidden="true" className="absolute top-px left-px text-black/80">
+          Drag to orbit · scroll to zoom
+        </span>
+        <span className="relative text-white/90">Drag to orbit · scroll to zoom</span>
       </p>
     );
   }
