@@ -9,8 +9,8 @@ import { requireToken } from "@/lib/requireToken";
 import { useAppSnackbar } from "@/lib/useAppSnackbar";
 
 // Shown once a splat is complete. The link is the public view (web/app/(public)/preview/splats/[id]/page.tsx), which
-// needs no sign-in.
-export function SharePanel({ splatId }: { splatId: string }) {
+// needs no sign-in. Children sit in a row beside the download button.
+export function SharePanel({ splatId, children }: { splatId: string; children?: React.ReactNode }) {
   const { getToken } = useAuth();
   const { enqueueSnackbar } = useAppSnackbar();
   const [copied, setCopied] = useState(false);
@@ -58,9 +58,12 @@ export function SharePanel({ splatId }: { splatId: string }) {
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">Anyone with the link can view it. No sign-in needed.</p>
-      <Button variant="outlined" onClick={download} loading={downloading} className="mt-2 self-start">
-        Download .ply
-      </Button>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Button variant="outlined" onClick={download} loading={downloading}>
+          Download .ply
+        </Button>
+        {children}
+      </div>
     </section>
   );
 }
