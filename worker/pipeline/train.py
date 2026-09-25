@@ -245,6 +245,10 @@ def _build_strategy(iterations: int):
     run still refines.
 
     Its reset_every never fires in gsplat 1.5.3, whose condition for it is always false, so opacities are never reset.
+
+    Pruning by size is off. The Gaussians it removes are the large ones covering whatever the photos barely reach, such
+    as a ceiling or the far corners of a room. Nothing trained replaces them, so pruning them leaves holes that the
+    viewer shows as its background.
     """
     from gsplat.strategy import DefaultStrategy  # imported lazily for the same reason as in _render
 
@@ -252,12 +256,13 @@ def _build_strategy(iterations: int):
         refine_start_iter=iterations * 500 // 30_000,
         refine_stop_iter=iterations // 2,
         refine_every=max(1, iterations * 100 // 30_000),
+        prune_scale3d=float("inf"),
     )
 
 
 def _scene_scale(viewmats: list[torch.Tensor]) -> float:
     """1.1 times the farthest camera's distance from the cameras' mean position, as the reference 3DGS implementation
-    measures it. The strategy's size thresholds for splitting and pruning are fractions of this.
+    measures it. The strategy's size threshold for splitting is a fraction of this.
     """
     centres = torch.stack([-(v[:3, :3].T @ v[:3, 3]) for v in viewmats])
     return 1.1 * (centres - centres.mean(dim=0)).norm(dim=-1).max().item()
