@@ -7,6 +7,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
+import type { CameraPose } from "@/lib/types";
 import { getEnv } from "./env";
 
 // Presigned S3 URLs. Uploads always go through this API, so the rate limit is enforced before any bytes hit S3.
@@ -77,4 +78,40 @@ export async function deleteSplatObjects(splatId: string): Promise<void> {
       continuationToken = page.NextContinuationToken;
     } while (continuationToken);
   }
+}
+
+interface WorkerCamera {
+  name: string;
+  center: [number, number, number];
+  rotation: [number, number, number][];
+}
+
+/**
+ * The camera poses the reconstruct stage wrote beside the point cloud (worker/pipeline/sparse_export.py), keyed back to
+ * photo ids. The worker names each photo after its S3 key's last segment, `<photoId><extension>` (photoS3Key above), so
+ * stripping the extension recovers the id. null when the object doesn't exist, which is every job reconstructed before
+ * the worker wrote one.
+ */
+export async function readSplatCameras(splatId: string): Promise<CameraPose[] | null> {
+  let body: string | undefined;
+  try {
+    const response = await s3Client().send(
+      new GetObjectCommand({ Bucket: getEnv().SPLATS_BUCKET, Key: `splats/${splatId}/cameras.json` }),
+    );
+    body = await response.Body?.transformToString();
+  } catch (err) {
+    if (err instanceof Error && err.name === "NoSuchKey") {
+      return null;
+    }
+    throw err;
+  }
+  if (body === undefined) {
+    return null;
+  }
+  const { cameras } = JSON.parse(body) as { cameras: WorkerCamera[] };
+  return cameras.map(camera => ({
+    photoId: camera.name.replace(/\.[^.]*$/, ""),
+    center: camera.center,
+    rotation: camera.rotation,
+  }));
 }

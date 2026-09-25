@@ -9,7 +9,7 @@ import { SharePanel } from "@/components/splats/SharePanel";
 import { DeleteSplatButton } from "@/components/splats/SplatActions";
 import { SplatStageViewer } from "@/components/splats/SplatStageViewer";
 import { StageCard } from "@/components/splats/StageCard";
-import { useLatestJob, usePhotos, useSplat } from "@/lib/hooks";
+import { useCameras, useLatestJob, usePhotos, useSplat } from "@/lib/hooks";
 import { splatStage } from "@/lib/splatStage";
 import { JOB_ENDED_STATUSES } from "@/lib/types";
 
@@ -18,6 +18,7 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
   const { data: splat, isLoading: splatLoading, mutate: refetchSplat } = useSplat(id);
   const { data: job, isLoading: jobLoading, mutate: refetchJob } = useLatestJob(id);
   const { data: photos, isLoading: photosLoading } = usePhotos(id);
+  const { data: cameras } = useCameras(id, Boolean(job?.pointCloudS3Key));
 
   // Only the job is polled, but the worker's callback moves the job row and the splat row in one transaction, so a job
   // that has ended means this splat is stale.
@@ -40,6 +41,7 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
   }
 
   const stage = splatStage(job, photos?.length ?? 0);
+  const placedPhotoIds = cameras ? new Set(cameras.map(camera => camera.photoId)) : null;
 
   return (
     <div className="flex flex-col gap-6 lg:h-full lg:flex-row lg:gap-0">
@@ -53,7 +55,7 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
         <PipelineStepper stage={stage} />
         <StageCard splatId={id} stage={stage} onJobChanged={() => void refetchJob()} />
         {stage.kind === "complete" && splat.isShareable && <SharePanel splatId={id} />}
-        {photos && photos.length > 0 && <PhotoGrid photos={photos} />}
+        {photos && photos.length > 0 && <PhotoGrid photos={photos} placedPhotoIds={placedPhotoIds} />}
         {/* The check stage's card already offers this as "Discard". */}
         {stage.kind !== "check" && (
           <div className="mt-auto pt-2">
@@ -62,7 +64,7 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
         )}
       </div>
       <section aria-label="3D view" className="h-120 px-4 pb-6 sm:px-12 lg:h-auto lg:flex-1 lg:py-6 lg:pr-8 lg:pl-0">
-        <SplatStageViewer splatId={id} job={job} complete={splat.status === "complete"} />
+        <SplatStageViewer splatId={id} job={job} complete={splat.status === "complete"} cameras={cameras} />
       </section>
     </div>
   );

@@ -9,12 +9,14 @@ import { Spinner } from "@/components/ui/Spinner";
 import { SplatViewer, type ViewerMode } from "@/components/viewer/SplatViewer";
 import { apiFetch } from "@/lib/apiFetch";
 import { cn } from "@/lib/cn";
-import type { Job } from "@/lib/types";
+import type { CameraPose, Job } from "@/lib/types";
 
 interface SplatStageViewerProps {
   splatId: string;
   job: Job | undefined;
   complete: boolean;
+  // Undefined while loading, and for a job reconstructed before the worker wrote them.
+  cameras: CameraPose[] | undefined;
 }
 
 // The page's 3D view, with a toggle between the finished splat and the point cloud (the "shape sketch") COLMAP
@@ -22,9 +24,10 @@ interface SplatStageViewerProps {
 //
 // SWR is left on its defaults: a presigned URL is only read once, when a scene mounts, so a revalidated one that has
 // since been re-minted is never reloaded (web/components/viewer/SplatViewer.tsx).
-export function SplatStageViewer({ splatId, job, complete }: SplatStageViewerProps) {
+export function SplatStageViewer({ splatId, job, complete, cameras }: SplatStageViewerProps) {
   const { getToken } = useAuth();
   const [chosen, setChosen] = useState<ViewerMode | null>(null);
+  const [showCameras, setShowCameras] = useState(true);
 
   async function fetchUrl(path: string) {
     const token = await getToken();
@@ -75,7 +78,16 @@ export function SplatStageViewer({ splatId, job, complete }: SplatStageViewerPro
       </Center>
     );
   } else {
-    body = <SplatViewer mode={mode} splatUrl={splatUrl ?? null} pointCloudUrl={pointCloudUrl ?? null} height="100%" />;
+    body = (
+      <SplatViewer
+        mode={mode}
+        splatUrl={splatUrl ?? null}
+        pointCloudUrl={pointCloudUrl ?? null}
+        cameras={cameras ?? null}
+        showCameras={showCameras}
+        height="100%"
+      />
+    );
   }
 
   return (
@@ -94,6 +106,17 @@ export function SplatStageViewer({ splatId, job, complete }: SplatStageViewerPro
           disabled={!hasPointCloud}
           onClick={() => setChosen("colmap_points")}
         />
+        {mode === "colmap_points" && cameras && cameras.length > 0 && (
+          <label className="flex h-10 items-center gap-2 border-divider border-l pr-3.5 pl-3 text-sm font-semibold whitespace-nowrap">
+            <input
+              type="checkbox"
+              checked={showCameras}
+              onChange={event => setShowCameras(event.target.checked)}
+              className="h-4.5 w-4.5 accent-primary"
+            />
+            Camera positions
+          </label>
+        )}
       </div>
       {available && url && (
         <p className="pointer-events-none absolute top-5 right-6 text-xs text-muted-foreground">

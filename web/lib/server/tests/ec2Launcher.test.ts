@@ -1,4 +1,4 @@
-import { EC2Client, RunInstancesCommand } from "@aws-sdk/client-ec2";
+import { EC2Client, RunInstancesCommand, TerminateInstancesCommand } from "@aws-sdk/client-ec2";
 import { mockClient } from "aws-sdk-client-mock";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -8,7 +8,13 @@ const spawnMock = vi.hoisted(() =>
 vi.mock("node:child_process", () => ({ spawn: spawnMock }));
 vi.mock("node:fs", () => ({ mkdirSync: vi.fn(), openSync: vi.fn(() => 0) }));
 
-import { generateCallbackToken, launchJob, launchJobLocal, WORKER_MAX_LIFETIME_MINUTES } from "../ec2Launcher";
+import {
+  generateCallbackToken,
+  launchJob,
+  launchJobLocal,
+  terminateWorker,
+  WORKER_MAX_LIFETIME_MINUTES,
+} from "../ec2Launcher";
 
 // aws-sdk-client-mock is a call stub with no simulated EC2 state, so these assert on the arguments RunInstances
 // received rather than on state after.
@@ -166,5 +172,31 @@ describe("launchJobLocal", () => {
     } finally {
       process.env.AWS_ACCESS_KEY_ID = savedKey;
     }
+  });
+});
+
+describe("terminateWorker", () => {
+  it("terminates the instance", async () => {
+    ec2Mock.on(TerminateInstancesCommand).resolves({});
+
+    await terminateWorker("i-0abc123");
+
+    expect(ec2Mock.commandCalls(TerminateInstancesCommand)[0].args[0].input.InstanceIds).toEqual(["i-0abc123"]);
+  });
+
+  it("treats an instance EC2 no longer knows about as already gone", async () => {
+    ec2Mock
+      .on(TerminateInstancesCommand)
+      .rejects(Object.assign(new Error("gone"), { name: "InvalidInstanceID.NotFound" }));
+
+    await expect(terminateWorker("i-0abc123")).resolves.toBeUndefined();
+  });
+
+  it("surfaces any other failure", async () => {
+    ec2Mock
+      .on(TerminateInstancesCommand)
+      .rejects(Object.assign(new Error("denied"), { name: "UnauthorizedOperation" }));
+
+    await expect(terminateWorker("i-0abc123")).rejects.toThrow("denied");
   });
 });

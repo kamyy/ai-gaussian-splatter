@@ -1,9 +1,10 @@
 """Persists the COLMAP reconstruct phase's output across the pause before training:
 the raw sparse model (so a later, separate EC2 instance can resume training without
-re-running COLMAP) and a viewer-facing point-cloud .ply (so the browser can show it
-while the user decides whether to proceed).
+re-running COLMAP), plus a viewer-facing point-cloud .ply and camera poses (so the browser
+can show both while the user decides whether to proceed).
 """
 
+import json
 from pathlib import Path
 
 import boto3
@@ -11,7 +12,7 @@ import numpy as np
 from botocore.exceptions import ClientError
 from plyfile import PlyData, PlyElement
 
-from .colmap_model import read_sparse_model
+from .colmap_model import qvec_to_rotmat, read_sparse_model
 from .config import Settings
 
 _SPARSE_MODEL_FILES = ("cameras.bin", "images.bin", "points3D.bin")
@@ -86,3 +87,32 @@ def export_and_upload_point_cloud(sfm_sparse_dir: Path, settings: Settings) -> s
     key = f"splats/{settings.splat_id}/point_cloud.ply"
     s3.upload_file(str(ply_path), settings.splats_bucket, key)
     return key
+
+
+def _cameras_key(settings: Settings) -> str:
+    # Deterministic from splat_id alone, like _sparse_model_prefix(), so the web app's cameras route can find it with
+    # no key threaded through the status callback.
+    return f"splats/{settings.splat_id}/cameras.json"
+
+
+def export_and_upload_cameras(sfm_sparse_dir: Path, settings: Settings) -> None:
+    """Uploads where each registered photo was taken from, in the point cloud's own coordinate frame.
+
+    One entry per registered image: its photo filename, the camera center in world space, and COLMAP's world-to-camera
+    rotation as three rows. A photo COLMAP couldn't place has no entry, which is how the browser flags it.
+    """
+    sparse = read_sparse_model(sfm_sparse_dir)
+
+    cameras = []
+    for image in sparse.images.values():
+        rotation = qvec_to_rotmat(image.qvec)
+        center = -rotation.T @ image.tvec
+        cameras.append({"name": image.name, "center": center.tolist(), "rotation": rotation.tolist()})
+
+    s3 = boto3.client("s3")
+    s3.put_object(
+        Bucket=settings.splats_bucket,
+        Key=_cameras_key(settings),
+        Body=json.dumps({"cameras": cameras}).encode(),
+        ContentType="application/json",
+    )
