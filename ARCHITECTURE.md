@@ -100,7 +100,7 @@ A baked AMI would attack the smaller half — fixed overhead, not training. Trai
   - Radix's primitives ship unstyled, so accessibility (focus trap, focus return) stays decoupled from styling: only a component that needs that behavior pulls in a Radix package, rather than a whole component library's runtime for every static element too.
   - Trade-off accepted: no ready-made component catalog. Each primitive (`Button`, `Chip`, `Input`, plus the `Dialog` wrapper) is a small hand-built file (`web/components/ui/`) instead of an import.
 - SWR for server-derived data (worker-job polling via `refreshInterval`).
-- Zustand, not Redux, for pure client UI (upload progress, banners). Zustand needs less boilerplate.
+- Zustand, not Redux, for pure client UI (upload progress). Zustand needs less boilerplate.
 - `@mkkellogg/gaussian-splats-3d`'s `DropInViewer` runs in r3f via `<primitive>`. It drives itself with Three.js's `onBeforeRender`.
 
 ---
