@@ -19,7 +19,7 @@ const BASE =
 const VARIANT: Record<ButtonVariant, string> = {
   contained: "bg-primary text-primary-foreground hover:opacity-90",
   ink: "bg-foreground text-background hover:opacity-90",
-  outlined: "border border-divider text-foreground hover:bg-muted",
+  outlined: "border border-divider text-foreground hover:border-muted-foreground hover:bg-muted",
   text: "text-primary hover:bg-primary/10",
   danger: "bg-error text-background hover:opacity-90",
 };
