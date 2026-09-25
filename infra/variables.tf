@@ -25,9 +25,9 @@ variable "alert_email" {
   description = "Email address the AWS Budget notifies."
   type        = string
 
-  # Catches a non-email string outright (a blank value, a stray flag, a copy-paste mistake). It can't catch a
-  # typo'd-but-still-email-shaped address (alert+email@gmial.com) — that class of mistake still only surfaces as
-  # an alert that never arrives (AGENTS.md).
+  # Catches a string that isn't an email at all (a blank value, a stray flag, a copy-paste mistake). It can't catch a
+  # typo that still looks like an email (alert+email@gmial.com). That kind of mistake only shows up as an alert that
+  # never arrives (AGENTS.md).
   validation {
     condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.alert_email))
     error_message = "alert_email must look like an email address (local-part@domain.tld)."
@@ -49,8 +49,8 @@ variable "domain_zone_name" {
   }
 }
 
-# The hosted zone var.domain_zone_name names, referenced for the ALB's alias record and ACM's validation record
-# — see AGENTS.md. scripts/prod/set-gh-repo-variables.sh looks the id up from that name.
+# The hosted zone that var.domain_zone_name names. It is referenced for the ALB's alias record and ACM's validation
+# record (see AGENTS.md). scripts/prod/set-gh-repo-variables.sh looks the id up from that name.
 variable "hosted_zone_id" {
   description = "Route 53 hosted zone id for var.domain_zone_name. Only records are added here; the zone itself is never created or destroyed by this config."
   type        = string
@@ -63,16 +63,15 @@ variable "hosted_zone_id" {
   }
 }
 
-# The Clerk secret is created by hand before the first apply and only referenced here, so its ARN (suffix and
-# all) has to be passed in — see AGENTS.md.
+# The Clerk secret is created by hand before the first apply and only referenced here, so its full ARN, including the
+# suffix, has to be passed in. See AGENTS.md.
 variable "clerk_secret_key_arn" {
   description = "Complete ARN (including Secrets Manager's suffix) of the ai-gaussian-splatter/clerk-secret-key secret."
   type        = string
 
-  # Catches a missing suffix, a bare secret name, or the wrong secret name. A variable validation block can only
-  # see the variable's own value, not other resources, so it can't also check the ARN's account/region match this
-  # deploy's own — that cross-check is a lifecycle precondition on aws_iam_role_policy.execution in infra/web.tf
-  # instead.
+  # Catches a missing suffix, a bare secret name, or the wrong secret name. A variable's validation block can only see
+  # that variable's own value, so it can't check that the ARN's account and region match this deploy. That check is a
+  # lifecycle precondition on aws_iam_role_policy.execution in infra/web.tf instead.
   validation {
     condition     = can(regex("^arn:aws:secretsmanager:[a-z0-9-]+:\\d{12}:secret:ai-gaussian-splatter/clerk-secret-key-[A-Za-z0-9]{6}$", var.clerk_secret_key_arn))
     error_message = "clerk_secret_key_arn must be the complete ARN of ai-gaussian-splatter/clerk-secret-key, including its 6-character suffix, as returned by `aws secretsmanager create-secret` (see RUNBOOK.md)."
@@ -93,9 +92,9 @@ variable "web_image_tag" {
   }
 }
 
-# Not required like web_image_tag: it has a safe default (mirror the service's own tag), so a bare `-var web_image_tag=`
-# with no `-var migrate_image_tag=` keeps every existing manual RUNBOOK invocation working unchanged.
-# .github/workflows/deploy.yml diverges the two on purpose — see RUNBOOK.md.
+# Not required like web_image_tag, because it has a safe default: the service's own tag. A `-var web_image_tag=` with no
+# `-var migrate_image_tag=` therefore keeps every manual command in RUNBOOK.md working unchanged.
+# .github/workflows/deploy.yml sets the two to different tags on purpose (ARCHITECTURE.md, Migration ordering).
 variable "migrate_image_tag" {
   description = "Tag for the migration task's image build. Empty (the default) mirrors web_image_tag."
   type        = string

@@ -1,4 +1,5 @@
-# The Next.js app — pages plus the REST API (Route Handlers) — for ECS Fargate. Node version tracks the repo's .nvmrc.
+# The Next.js app (pages plus the REST API as Route Handlers), built for ECS Fargate. The Node version tracks the repo's
+# .nvmrc.
 
 # Five stages, two of them shipped. `--target` builds only what that target depends on, not every stage above it:
 #
@@ -41,8 +42,8 @@ FROM deps AS builder
 WORKDIR /app
 COPY . .
 
-# Next's standalone output excludes public/, so the web stage copies it separately — and COPY --from of a missing path
-# is a hard build failure. mkdir keeps that copy valid whether or not the app has a public/ directory.
+# Next's standalone output leaves out public/, so the web stage copies it separately. COPY --from fails the build when
+# the path is missing, so mkdir keeps that copy valid whether or not the app has a public/ directory.
 RUN mkdir -p public
 
 # NEXT_PUBLIC_* values are read by `pnpm run build`, so everything in this block must be set before it.
@@ -71,26 +72,26 @@ ENV NODE_ENV=production
 
 RUN addgroup -g 1001 -S app && adduser -u 1001 -S app -G app
 
-# COPYed from deps-prod rather than FROM it: OCI layers are additive, so deps-prod's own rm -rf wouldn't shrink this
-# image, only hide what an earlier layer already paid for. COPY takes just the final state — same reason `web` below
-# COPYs from `builder` instead of being FROM it.
+# COPYed from deps-prod rather than built FROM it. Image layers only add to each other, so deps-prod's own rm -rf
+# wouldn't shrink an image built FROM it. It would only hide files an earlier layer already paid for. COPY takes just
+# the final state. `web` below COPYs from `builder` for the same reason.
 COPY --from=deps-prod --chown=app:app /app/node_modules ./node_modules
 COPY --chown=app:app package.json ./package.json
 
 # A migration run needs only the .sql files in drizzle/ (plus meta/_journal.json, which orders them), the script that
-# applies them, and the one module it imports for the connection URL. drizzle.config.ts is not used here — it configures
-# the drizzle-kit CLI, which only `db:generate` and `db:studio` still run.
+# applies them, and the one module that script imports for the connection URL. drizzle.config.ts isn't used here. It
+# configures the drizzle-kit CLI, which only `db:generate` and `db:studio` use.
 COPY --chown=app:app drizzle ./drizzle
 COPY --chown=app:app lib/server/databaseUrl.ts ./lib/server/databaseUrl.ts
 COPY --chown=app:app scripts/db-migrate.cjs ./scripts/db-migrate.cjs
 
-# RDS certs chain to Amazon's own CA, absent from Node's trust store. This path must stay in step with
-# local.rds_ca_bundle_path (infra/locals.tf), which sets DATABASE_SSL_CA to it in the task definition.
+# RDS certificates chain to Amazon's own certificate authority (CA), which isn't in Node's trust store. This path must
+# stay in step with local.rds_ca_bundle_path (infra/locals.tf), which sets DATABASE_SSL_CA to it in the task definition.
 # sha256sum -c pins the download by hand rather than ADD's --checksum flag, which needs a newer buildah than the one
-# bundled with the CI runner's podman package. If AWS updates the bundle this fails, printing the digest to paste in
+# bundled with the CI runner's podman package. If AWS updates the bundle this fails and prints the digest to paste in
 # here.
 #
-# Deliberately NOT paired with `ENV DATABASE_SSL_CA=...` here: that would make every run of this image demand TLS,
+# Deliberately not paired with `ENV DATABASE_SSL_CA=...` here. That would make every run of this image demand TLS,
 # breaking a local container pointed at a plain Postgres with "The server does not support SSL connections". Using the
 # bundle is a deployment decision, so infra/locals.tf sets DATABASE_SSL_CA. Keep the two in step if /app/certs ever
 # moves.
@@ -122,9 +123,9 @@ EXPOSE 8000
 
 RUN addgroup -g 1001 -S app && adduser -u 1001 -S app -G app
 
-# As in migrator: Amazon's RDS CA bundle, at a path in step with local.rds_ca_bundle_path (infra/locals.tf). Not
-# paired with an unconditional ENV DATABASE_SSL_CA here — see migrator's stage above for why. sha256sum -c verifies the
-# download by hand; see migrator's stage above for why not ADD --checksum.
+# As in migrator, this downloads Amazon's RDS CA bundle to a path that must stay in step with local.rds_ca_bundle_path
+# (infra/locals.tf). It isn't paired with an unconditional ENV DATABASE_SSL_CA here, and sha256sum -c verifies the
+# download by hand rather than ADD --checksum. The migrator stage above explains both.
 RUN mkdir -p /app/certs \
   && wget -qO /app/certs/rds-global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
   && echo "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3  /app/certs/rds-global-bundle.pem" \

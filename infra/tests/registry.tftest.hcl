@@ -93,10 +93,9 @@ run "worker_lifecycle_keeps_far_fewer_images_than_web" {
   }
 }
 
-# mock_provider fills computed attributes with plausible-looking scalars, but leaves computed
-# lists/sets empty by default and doesn't know about format-validated fields (ARNs). These overrides
-# give the handful of computed values other resources in infra/ actually depend on (or validate
-# the shape of) something usable, so the whole plan resolves offline.
+# mock_provider fills computed attributes with plausible-looking values, but it leaves computed lists and sets empty and
+# knows nothing about format-validated fields such as ARNs. These overrides supply usable values for the few computed
+# attributes that other resources in infra/ read or validate, so the whole plan resolves offline.
 override_resource {
   target = aws_db_instance.main
   values = {

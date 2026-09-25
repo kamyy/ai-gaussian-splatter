@@ -37,7 +37,7 @@ def _make_sparse_model(width: int, height: int) -> SparseModel:
 
 def test_load_views_downscales_photos_above_the_longest_edge_cap(tmp_path):
     """A 12MP phone photo (well above MAX_TRAINING_EDGE) must come back scaled down, with fx/fy/cx/cy scaled by the
-    same factor as width/height — otherwise K no longer matches the pixels it projects onto.
+    same factor as width/height. Otherwise K no longer matches the pixels it projects onto.
     """
     width, height = 4032, 3024
     sparse = _make_sparse_model(width, height)

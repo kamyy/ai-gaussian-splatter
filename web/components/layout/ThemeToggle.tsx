@@ -31,12 +31,13 @@ function MoonIcon() {
   );
 }
 
-// Shows the icon for the mode a click switches to, not the current one — a moon in light mode ("turn dark on"), a
-// sun in dark mode ("turn dark off"). Rendered by web/components/layout/SiteHeader.tsx, the one header every page shares.
+// Shows the icon for the mode a click switches to, not the current mode: a moon in light mode ("turn dark on") and a
+// sun in dark mode ("turn dark off"). web/components/layout/SiteHeader.tsx renders it, as part of the one header every
+// page shares.
 //
-// The server can't know the visitor's theme, so the first client render has to match the server's "light" (web/app/
-// globals.css's :root default) or React reports a hydration mismatch. next-themes already knows resolvedTheme on that
-// first client render, so it is only trusted once mounted.
+// The server can't know the visitor's theme, so the first client render has to match the server's "light" (the :root
+// default in web/app/globals.css) or React reports a hydration mismatch. next-themes already knows resolvedTheme on
+// that first client render, so it is only trusted once the component has mounted.
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);

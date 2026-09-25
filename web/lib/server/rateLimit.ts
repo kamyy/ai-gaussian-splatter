@@ -25,8 +25,8 @@ export async function checkAndIncrementUser(userId: string, limitPerDay: number)
 }
 
 /**
- * The central backstop on total GPU spend — independent of user/IP identity, checked only when a job is actually about
- * to launch.
+ * The central backstop on total GPU spend. It ignores who the user is and which IP they come from, and it is checked
+ * only when a worker job is actually about to launch.
  */
 export async function checkAndIncrementGlobalDaily(maxJobsPerDay: number): Promise<void> {
   const day = truncateToDay(new Date());

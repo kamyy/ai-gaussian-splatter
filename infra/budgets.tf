@@ -1,8 +1,8 @@
-# The infra-level spend safety net: an AWS Budget, deliberately separate from the application-level rate
-# limiting/daily-cap logic in the web app.
+# The infrastructure-level spend safety net: an AWS Budget, kept separate from the web app's own rate limits and daily
+# cap.
 #
-# The Budgets API only operates against us-east-1, regardless of where the rest of the app runs — hence
-# provider = aws.billing (see infra/providers.tf).
+# The Budgets API only works in us-east-1, wherever the rest of the app runs. That is why these resources use provider =
+# aws.billing (see infra/providers.tf).
 
 resource "aws_budgets_budget" "monthly" {
   provider = aws.billing

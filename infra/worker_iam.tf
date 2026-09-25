@@ -1,11 +1,11 @@
-# The GPU spot worker's IAM role and instance profile. Both bucket grants cover the whole bucket, not just the
-# calling job's own objects, and the terminate grant matches every worker instance, not only the caller: EC2 has no
-# resource-level condition for "the calling instance" to scope either one down further.
+# The GPU spot worker's IAM role and instance profile. Both bucket grants cover the whole bucket, not just the calling
+# worker job's own objects. The terminate grant matches every worker instance, not only the caller. EC2 has no
+# resource-level condition for "the calling instance" that could narrow either one.
 #
-# AWSServiceRoleForEC2Spot is deliberately absent: it's one account-wide role shared by every other Spot workload, so
-# creating it fails outright in an account that already has one, and Terraform deleting it would break those other
-# workloads. It has to exist before web/lib/server/ec2Launcher.ts's first RunInstances call — see RUNBOOK.md for the
-# one-time setup.
+# AWSServiceRoleForEC2Spot is deliberately not managed here. It is one account-wide role shared by every other Spot
+# workload, so creating it fails in an account that already has one, and letting Terraform delete it would break those
+# other workloads. It has to exist before web/lib/server/ec2Launcher.ts's first RunInstances call. See RUNBOOK.md for
+# the one-time setup.
 
 resource "aws_iam_role" "worker" {
   name        = "ai-gaussian-splatter-worker"
@@ -26,9 +26,9 @@ resource "aws_iam_role_policy" "worker" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      # web/lib/server/ec2Launcher.ts's user-data runs `aws ecr get-login-password` then `docker run`, which
-      # pulls aws_ecr_repository.worker's image using this instance's own role — nothing else authenticates
-      # that pull. ecr:GetAuthorizationToken has no resource-level permissions to scope to.
+      # web/lib/server/ec2Launcher.ts's user-data runs `aws ecr get-login-password` and then `docker run`, which pulls
+      # aws_ecr_repository.worker's image using this instance's own role. Nothing else authenticates that pull.
+      # ecr:GetAuthorizationToken has no resource-level permissions to scope.
       {
         Sid      = "EcrAuth"
         Effect   = "Allow"

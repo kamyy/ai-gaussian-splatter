@@ -41,6 +41,7 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
   - [`RUNBOOK.md`](RUNBOOK.md) is how to run and operate it.
   - This file is what breaks if you don't know it: gotchas, conventions, and current state. Where a gotcha needs its rationale, name the other file instead of restating it.
 - **Docs and code comments describe current behavior only** — not prior libraries, old version numbers, or "this used to fail with X." Use `git log` for this instead.
+- **Write for a junior full-stack engineer.** Assume the reader knows TypeScript, React, SQL, and HTTP but not this codebase, AWS internals, or 3D graphics. Spell out an acronym or a piece of jargon the first time a doc or comment uses it, and say what a step is for rather than only what it does.
 - **Be human readable — fact plus the non-obvious reason.** Shortest accurate statement; no walkthrough of alternatives or restating the same point from multiple angles.
 - **Cut anything the reader wouldn't act on differently.**
   - A sentence that only reassures — that nothing goes wrong, or that a service accepts what the code already does — costs the reader attention and changes nothing they do.
@@ -436,7 +437,7 @@ Known gaps, priority order:
 3. **No maximum photo count or upload size.**
    - `MIN_PHOTOS_PER_SPLAT` has no counterpart and the presign body schema (`web/app/api/v1/splats/[splatId]/photos/presign/route.ts`) is `.min(1)` only.
    - COLMAP's exhaustive matching is O(n²) pairs and the instance runs until `worker/run_job.py` returns, so an oversized upload is unbounded GPU spend.
-   - The global daily cap in `process` bounds how many worker jobs run, not what each one costs ([Abuse protection](ARCHITECTURE.md#10-abuse-protection)).
+   - The global daily cap, charged by `process` and `train`, bounds how many worker instances launch, not what each one costs ([Abuse protection](ARCHITECTURE.md#10-abuse-protection)).
 4. **The worker's max-lifetime safety net has no alerting, and a real gap it can't close.**
    - `web/lib/server/ec2Launcher.ts` schedules `shutdown -h +WORKER_MAX_LIFETIME_MINUTES` as the first thing user-data does, paired with `InstanceInitiatedShutdownBehavior = "terminate"` on the launch, so a failed `docker login`/pull or a hang that never reaches `worker/pipeline/instance.py`'s own self-terminate still can't bill past that ceiling — *if user-data runs at all*.
    - If cloud-init itself never starts (bad AMI, a boot/networking failure), the `shutdown` is never scheduled and nothing inside the instance can catch it; only an external, instance-runtime CloudWatch alarm checking instance age independent of anything running on it would. That alarm still doesn't exist.

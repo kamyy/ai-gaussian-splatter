@@ -10,10 +10,11 @@ import { isUuid } from "./httpError";
 import { presignSplatDownload } from "./s3";
 
 /**
- * Public, unauthenticated reads — what the share pages render from, including generateMetadata's og:title/og:image.
+ * Public, unauthenticated reads. The share pages render from these, including the og:title and og:image from
+ * generateMetadata.
  *
- * These live outside the Route Handlers so Server Components can call them directly rather than having the server make
- * an HTTP request to itself.
+ * These live outside the Route Handlers so Server Components can call them directly, rather than the server making an
+ * HTTP request to itself.
  */
 
 const THUMBNAIL_EXPIRY_SECONDS = 3600;
@@ -27,8 +28,8 @@ async function thumbnailUrl(key: string): Promise<string> {
 }
 
 /**
- * Only exposes Complete + shareable splats — else null, which callers surface as a 404, same as if it simply didn't
- * exist.
+ * Returns only complete, shareable splats. Anything else is null, which callers turn into a 404, the same as a splat
+ * that doesn't exist.
  */
 export async function getPublicSplat(splatId: string): Promise<PublicSplat | null> {
   if (!isUuid(splatId)) {

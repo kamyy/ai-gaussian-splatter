@@ -7,10 +7,10 @@ const envSchema = z
     DATABASE_PORT: z.coerce.number().int().positive().default(5432),
     DATABASE_NAME: z.string().min(1),
     DATABASE_USER: z.string().min(1),
-    // Exactly one of these: DATABASE_PASSWORD is a static value (local dev, CI, and the migration task, which runs
-    // too briefly to hit RDS's 7-day rotation). DATABASE_SECRET_ARN is what the long-lived web service uses
-    // instead, fetching the current password from Secrets Manager on every new pg connection rather than trusting
-    // a value ECS injected once at task start — see web/lib/server/databaseUrl.ts's fetchDatabasePassword.
+    // Exactly one of these is set. DATABASE_PASSWORD is a static value, used by local dev, CI, and the migration task,
+    // which runs too briefly to hit RDS's 7-day rotation. DATABASE_SECRET_ARN is what the long-lived web service uses
+    // instead. It fetches the current password from Secrets Manager for every new pg connection rather than trusting a
+    // value ECS injected once at task start. See web/lib/server/databaseUrl.ts's fetchDatabasePassword.
     DATABASE_PASSWORD: z.string().min(1).optional(),
     DATABASE_SECRET_ARN: z.string().min(1).optional(),
 
@@ -27,7 +27,7 @@ const envSchema = z
     WORKER_SECURITY_GROUP_ID: z.string().min(1),
     WORKER_INSTANCE_PROFILE_ARN: z.string().min(1),
 
-    // Rate limiting — deliberately simple config knobs, not architecture. Tune based on real usage once deployed.
+    // Rate limiting. These are simple config knobs, not architecture. Tune them from real usage once deployed.
     RATE_LIMIT_IP_PER_HOUR: z.coerce.number().int().positive().default(5),
     RATE_LIMIT_USER_PER_DAY: z.coerce.number().int().positive().default(3),
     GLOBAL_MAX_JOBS_PER_DAY: z.coerce.number().int().positive().default(20),
@@ -46,8 +46,8 @@ export type Env = z.infer<typeof envSchema>;
 let cached: Env | null = null;
 
 /**
- * Parsed once on first use, not at module load — mirrors worker/pipeline/config.py's lazy `get_settings()`. Module-load
- * parsing would run during `next build`, where these vars legitimately aren't set.
+ * Parsed once on first use, not when the module loads. This mirrors worker/pipeline/config.py's lazy `get_settings()`.
+ * Parsing at module load would run during `next build`, where these variables are legitimately unset.
  */
 export function getEnv(): Env {
   if (cached === null) {

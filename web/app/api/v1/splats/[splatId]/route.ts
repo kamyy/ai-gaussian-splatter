@@ -14,8 +14,8 @@ export const GET = withErrorHandling(async (_request: NextRequest, ctx: RouteCon
   const { splatId } = await ctx.params;
   requireUuid(splatId, 404, "Splat not found");
 
-  // Scoped by userId, and a miss is a 404 rather than a 403 — someone else's splat is indistinguishable from a
-  // nonexistent one.
+  // Scoped by userId. A miss is a 404 rather than a 403, so someone else's splat looks exactly like one that doesn't
+  // exist.
   const [splat] = await getDb()
     .select(splatColumns)
     .from(splats)

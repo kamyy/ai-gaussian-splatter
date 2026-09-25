@@ -18,8 +18,8 @@ function fakeRequest(headers: Record<string, string>): NextRequest {
 
 describe("getClientIp", () => {
   it("uses the last hop of X-Forwarded-For", () => {
-    // The ALB appends the address it actually saw, so that is the trustworthy entry — see the note in
-    // web/lib/server/auth.ts about a second proxy invalidating this.
+    // The ALB appends the address it actually saw, so that is the entry to trust. See the note in
+    // web/lib/server/auth.ts about a second proxy breaking this.
     const req = fakeRequest({ "X-Forwarded-For": "203.0.113.5, 70.41.3.18, 150.172.238.178" });
     expect(getClientIp(req)).toBe("150.172.238.178");
   });
@@ -74,7 +74,7 @@ describe("database-backed auth helpers", () => {
     });
 
     it("does not duplicate when concurrent first-requests race", async () => {
-      // Not `users` — that name is the table import this file queries through.
+      // Not `users`, because that name is the table import this file queries through.
       const racers = await Promise.all(Array.from({ length: 10 }, () => getOrCreateUser("user_clerk_race")));
       const ids = new Set(racers.map(u => u.id));
       expect(ids.size).toBe(1);

@@ -14,10 +14,10 @@ resource "aws_ecr_repository" "web" {
   # .github/workflows/deploy.yml stays clear of that by skipping any build whose tag is already in the repository.
   image_tag_mutability = "IMMUTABLE"
 
-  # force_delete, not RETAIN: a full `terraform destroy` must not leave an orphaned repository under this fixed
-  # name — an orphan would block the next apply with a plain "repository already exists" failure that no retry
-  # clears. ECR itself refuses to delete a non-empty repository, so this is required alongside the fixed name,
-  # not just alongside destroy.
+  # force_delete rather than keeping the repository on destroy. A full `terraform destroy` must not leave an orphaned
+  # repository behind under this fixed name, because the orphan would block the next apply with a "repository already
+  # exists" error that no retry clears. ECR refuses to delete a repository that still holds images, so force_delete is
+  # what lets destroy succeed at all.
   force_delete = true
 
   image_scanning_configuration {
@@ -62,14 +62,14 @@ resource "aws_ecr_lifecycle_policy" "web" {
   })
 }
 
-# A separate repository, not more tag suffixes on the one above: the worker images are a completely different
-# build (COLMAP and gsplat rather than Next.js) with no reason to share the web repository's retention depth. They
-# aren't part of any ECS rollback mechanism either — web/lib/server/ec2Launcher.ts just reads whichever image URI it
-# is given — so worker_releases_kept (infra/locals.tf) is far shallower than releases_kept. GPU worker deployment
-# stays manual (RUNBOOK.md), so nothing pushes here automatically.
+# A separate repository rather than more tag suffixes on the one above. The worker images are a completely different
+# build (COLMAP and gsplat rather than Next.js), with no reason to share the web repository's retention depth. They
+# aren't part of any ECS rollback either, since web/lib/server/ec2Launcher.ts just reads whichever image URI it is
+# given. So worker_releases_kept (infra/locals.tf) is far smaller than releases_kept. GPU worker deployment stays manual
+# (RUNBOOK.md), so nothing pushes here automatically.
 #
-# One rule per suffix below, the same way the web repository does it, so a release's two tags are kept to the same
-# depth. A single rule counting `*` would let an unpaired push shift the window and strand one half of an older one.
+# There is one rule per suffix below, the same as the web repository, so both of a release's tags are kept to the same
+# depth. A single rule counting `*` would let an unpaired push shift the window and strand one half of an older release.
 resource "aws_ecr_repository" "worker" {
   name                 = "ai-gaussian-splatter-worker"
   image_tag_mutability = "IMMUTABLE"

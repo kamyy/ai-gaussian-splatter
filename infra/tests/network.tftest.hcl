@@ -1,5 +1,5 @@
-# Fully offline via mock_provider: terraform test never reaches real AWS here. Values below are arbitrary but
-# well-formed stand-ins for the real ones a deploy would pass — see infra/variables.tf for what each means.
+# Runs fully offline via mock_provider, so terraform test never reaches real AWS here. The values below are arbitrary
+# but well-formed stand-ins for the real ones a deploy passes. See infra/variables.tf for what each one means.
 mock_provider "aws" {}
 
 mock_provider "aws" {
@@ -19,8 +19,8 @@ variables {
 run "no_nat_gateway_or_extra_public_ingress" {
   command = apply
 
-  # There is no aws_nat_gateway/aws_eip resource anywhere in infra/ by design (see network.tf) — nothing
-  # to assert at runtime for their absence, since the plan simply never contains one.
+  # infra/ deliberately has no aws_nat_gateway or aws_eip resource (see infra/network.tf). A plan never contains one, so
+  # there is nothing to assert about their absence here.
 
   assert {
     condition     = aws_vpc_security_group_ingress_rule.alb_https.cidr_ipv4 == "0.0.0.0/0"
@@ -70,10 +70,9 @@ run "s3_gateway_endpoint_covers_both_route_tables" {
   }
 }
 
-# mock_provider fills computed attributes with plausible-looking scalars, but leaves computed
-# lists/sets empty by default and doesn't know about format-validated fields (ARNs). These overrides
-# give the handful of computed values other resources in infra/ actually depend on (or validate
-# the shape of) something usable, so the whole plan resolves offline.
+# mock_provider fills computed attributes with plausible-looking values, but it leaves computed lists and sets empty and
+# knows nothing about format-validated fields such as ARNs. These overrides supply usable values for the few computed
+# attributes that other resources in infra/ read or validate, so the whole plan resolves offline.
 override_resource {
   target = aws_db_instance.main
   values = {

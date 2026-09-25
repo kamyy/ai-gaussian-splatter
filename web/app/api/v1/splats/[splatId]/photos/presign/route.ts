@@ -37,7 +37,8 @@ export const POST = withErrorHandling(
       throw new HttpError(422, "Invalid request body");
     }
 
-    // Both checks before any S3 URL is issued — the actual multi-account defense (per-IP) plus the per-user quota.
+    // Both checks run before any S3 URL is issued. The per-IP limit is the real defense against one person using many
+    // accounts, and the per-user limit is a quota on top of it.
     await checkAndIncrementIp(getClientIp(request), env.RATE_LIMIT_IP_PER_HOUR);
     await checkAndIncrementUser(user.id, env.RATE_LIMIT_USER_PER_DAY);
 

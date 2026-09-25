@@ -34,9 +34,9 @@ class Settings(BaseSettings):
     # Single-object-against-plain-background scenes converge well below the paper's 30k default.
     training_iterations: int = 10_000
 
-    # "Fast test mode" — tiny photo set, 20 iterations, for a cheap on-demand smoke test of the plumbing without
-    # full-quality training cost. worker/pipeline/train.py scales its densify/log schedules to the iteration count,
-    # so the short run covers the same code paths as a full one.
+    # "Fast test mode": 20 training iterations instead of the full count, for a cheap smoke test of the plumbing. It
+    # uses every photo, so it doesn't reduce GPU memory. worker/pipeline/train.py scales its densify and log schedules
+    # to the iteration count, so the short run covers the same code paths as a full one.
     fast_test_mode: bool = False
 
     # Set only on a train-stage launch, as JSON in CROP_BOX. worker/pipeline/export.py drops every Gaussian whose center

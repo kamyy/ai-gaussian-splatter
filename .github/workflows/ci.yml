@@ -1,14 +1,15 @@
 name: CI
 
-# Unit and component tests run on every PR here. Playwright runs too, with no specs to run: `--pass-with-no-tests` keeps
-# it green until a seeded test database exists (AGENTS.md). Real-pipeline integration tests (COLMAP + gsplat on a real
-# GPU) are deliberately NOT run here — they cost real time/money and stay manual/milestone-gated.
+# Unit and component tests run on every PR here. Playwright runs too, but there are no specs yet, so
+# `--pass-with-no-tests` keeps it green until a seeded test database exists (AGENTS.md). Tests that run the real
+# pipeline (COLMAP and gsplat on a real GPU) are deliberately not run here. They cost real time and money, so they stay
+# manual.
 on:
   pull_request:
   push:
     branches: [main]
-    # A push to main whose commits touch only docs skips the whole workflow, including deploy — PR checks already
-    # validated the commits, so re-running lint/build/deploy here would be pure waste.
+    # A push to main whose commits touch only docs skips the whole workflow, including the deploy. The PR checks already
+    # validated those commits, so running lint, build, and deploy again would be wasted work.
     paths-ignore:
       - '**/*.md'
       - 'LICENSE'
@@ -27,10 +28,11 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      # Single Biome invocation from repo root covers both scripts/*.js and web/ in one pass — Biome doesn't need web's
-      # own node_modules to lint/format files, only its own binary.
+      # One Biome run from the repo root covers both scripts/*.js and web/. Biome needs only its own binary to lint and
+      # format files, not web/'s node_modules.
       - run: pnpm biome:ci
-      # For shellcheck, which Biome doesn't cover. Its Biome pass over scripts/ repeats part of biome:ci's.
+      # Runs shellcheck, which Biome doesn't cover. scripts:check also runs Biome over scripts/, which repeats part of
+      # what biome:ci already checked.
       - run: pnpm run scripts:check
 
   worker:
@@ -47,8 +49,8 @@ jobs:
       # install, just the pnpm CLI above to parse and run the script.
       - run: pnpm run worker:check
       - working-directory: worker
-        # No GPU/CUDA toolkit in CI runners — this is exactly the CI-cheap tier (fetch/export/status callbacks, mocked
-        # S3/HTTP), not the real COLMAP+gsplat pipeline.
+        # CI runners have no GPU or CUDA toolkit. These are the cheap tests (fetch, export, and status callbacks against
+        # mocked S3 and HTTP), not the real COLMAP and gsplat pipeline.
         run: uv run pytest -v
 
   web:
@@ -57,15 +59,15 @@ jobs:
       run:
         working-directory: web
     env:
-      # Structurally valid dummy key (base64 of "example.clerk.accounts.dev$"). It has to parse — clerkMiddleware()
-      # rejects a malformed one outright.
+      # A dummy key that is still structurally valid (the base64 of "example.clerk.accounts.dev$"). It has to parse,
+      # because clerkMiddleware() rejects a malformed key outright.
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk
       CLERK_SECRET_KEY: sk_test_fake_for_ci
-      # A pk_test_* key makes the SDK treat this as a development instance, and only the printed disclosure notice is
-      # CI-aware — collection itself is not. Without this, CI runs report telemetry.
+      # A pk_test_* key makes the Clerk SDK treat this as a development instance. The SDK hides its telemetry notice in
+      # CI but still sends the telemetry, so without this variable CI runs report it.
       NEXT_PUBLIC_CLERK_TELEMETRY_DISABLED: "1"
-      # Inlined at build time, so `next build` here needs them to match what a real image ships — otherwise the built
-      # bundle points at Clerk's hosted Account Portal rather than the app's own sign-in page.
+      # These are inlined at build time, so `next build` here needs the same values a real image ships with. Without
+      # them the built bundle sends users to Clerk's hosted Account Portal instead of the app's own sign-in page.
       NEXT_PUBLIC_CLERK_SIGN_IN_URL: /sign-in
       NEXT_PUBLIC_CLERK_SIGN_UP_URL: /sign-up
       NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: /splats
@@ -76,9 +78,9 @@ jobs:
       DATABASE_NAME: test
       DATABASE_USER: postgres
       DATABASE_PASSWORD: postgres
-      # getEnv() validates all of these on first use, and getDb() calls it — so any DB-touching page throws without
-      # them, including under the dev server Playwright starts. Dummy values: presigning is local crypto and nothing in
-      # CI reaches AWS.
+      # getEnv() validates all of these on first use, and getDb() calls getEnv(). Any page that touches the database
+      # therefore throws without them, including under the dev server Playwright starts. The values are dummies:
+      # presigning is local crypto, and nothing in CI reaches AWS.
       UPLOADS_BUCKET: test-uploads
       SPLATS_BUCKET: test-splats
       AWS_REGION: us-west-2
@@ -91,11 +93,11 @@ jobs:
       APP_PUBLIC_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v7
-      # A manual `podman run` rather than a `services:` block: the migrator-image test below runs its own podman
-      # container that needs to address Postgres by name, and a GitHub Actions `services:` container (Docker-managed)
-      # isn't reachable that way from a sibling podman container. A dedicated user-defined podman network sidesteps
-      # that rather than relying on `--network host`, which does not behave as true host networking under rootless
-      # podman here — verified directly against this runner setup.
+      # Postgres starts with a plain `podman run` rather than a `services:` block. The migrator-image test below runs
+      # its own podman container, which has to reach Postgres by container name. A GitHub Actions `services:` container
+      # is managed by Docker, so a sibling podman container can't reach it that way. A dedicated podman network solves
+      # that. `--network host` isn't used because it doesn't behave as true host networking under rootless podman on
+      # this runner.
       - name: Start Postgres
         run: |
           podman network create ci-net
@@ -115,18 +117,19 @@ jobs:
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      # web:check also runs `next typegen` before `tsc --noEmit`, required on a clean checkout since CI has never run
-      # `next dev`/`next build` to generate the App Router route types tsc needs (see AGENTS.md). It's a root
-      # package.json script, so this step overrides the job's default working-directory (web) back to the checkout root.
-      # The script itself uses `--dir web` for everything it runs, including the `biome lint .` it runs first.
+      # web:check runs `next typegen` before `tsc --noEmit`. CI never runs `next dev` or `next build`, so the App Router
+      # route types tsc needs don't exist until typegen writes them (see AGENTS.md). web:check is a root package.json
+      # script, so this step switches from the job's default working directory (web) back to the checkout root. The
+      # script itself passes `--dir web` to everything it runs, including its first step, `biome lint .`.
       - name: Check (lint + typecheck)
         working-directory: ${{ github.workspace }}
         run: pnpm run web:check
-      # A schema edit with no matching migration is otherwise invisible: the types come straight from schema.ts, so tsc
-      # stays green while the database drifts, and it surfaces as a runtime SQL error. db:generate is a no-op when the
-      # schema matches the snapshot in web/drizzle/meta/, so anything new on disk here means the migration was never
-      # generated. drizzle-kit exits 0 even when it fails. A rename makes it prompt "created or renamed?", and with no
-      # TTY to answer it prints an Error line and writes nothing, which the porcelain check alone reads as up to date.
+      # Without this check, a schema edit with no matching migration goes unnoticed. The TypeScript types come straight
+      # from schema.ts, so tsc stays green while the database drifts, and the mistake only shows up as a runtime SQL
+      # error. db:generate does nothing when the schema matches the snapshot in web/drizzle/meta/, so any new file here
+      # means the migration was never generated. drizzle-kit also exits 0 when it fails. For a rename it asks "created
+      # or renamed?", and with no terminal to answer it prints an Error line and writes nothing, which a file check
+      # alone would read as up to date.
       - name: Check migrations are up to date with the schema
         run: |
           pnpm db:generate 2>&1 | tee "$RUNNER_TEMP/db-generate.log"
@@ -140,24 +143,24 @@ jobs:
             git status --porcelain -- drizzle
             exit 1
           fi
-      # Builds and runs the actual deployable migration artifact (web/Dockerfile's `migrator` stage) against this job's
-      # real Postgres, rather than only testing the underlying `drizzle-kit migrate` script — the config-level
-      # Terraform tests in infra/tests/web.tftest.hcl assert the task definition is wired correctly, but not that the
-      # image itself applies a migration.
+      # Builds and runs the real migration image (web/Dockerfile's `migrator` stage) against this job's Postgres, rather
+      # than only testing the `drizzle-kit migrate` script underneath it. The Terraform tests in
+      # infra/tests/web.tftest.hcl check that the task definition is wired correctly, but not that the image itself
+      # applies a migration.
       - name: Build and run the migrator image against the CI database
         working-directory: web
         run: |
           podman build --target migrator -t migrator:ci .
-          # --network ci-net, addressing Postgres by container name: see the "Start Postgres" step for why --network
-          # host isn't used. No DATABASE_SSL_CA: the migrator image doesn't bake TLS on (web/Dockerfile), and this
-          # database doesn't offer it — only RDS's rds.force_ssl requires TLS.
+          # Uses --network ci-net and reaches Postgres by container name. The "Start Postgres" step explains why
+          # --network host isn't used. There is no DATABASE_SSL_CA: the migrator image doesn't turn TLS on by itself
+          # (web/Dockerfile), and this database doesn't offer TLS. Only RDS's rds.force_ssl setting requires it.
           podman run --rm --network ci-net \
             -e DATABASE_HOST=ci-postgres -e DATABASE_PORT=5432 -e DATABASE_NAME=test \
             -e DATABASE_USER=postgres -e DATABASE_PASSWORD=postgres \
             migrator:ci
-      # Re-applies migrations directly (not via the container); a no-op given the step above already applied them —
-      # drizzle-kit tracks applied migrations — so this mainly fails fast on a bad migration outside the container path
-      # too. The server test project's globalSetup also does this, once more, for the same reason.
+      # Applies the migrations again, directly rather than through the container. drizzle-kit records which migrations
+      # have run, so after the step above this changes nothing. It is here to fail fast on a bad migration outside the
+      # container path too. The server test project's globalSetup does the same once more, for the same reason.
       - run: pnpm db:migrate
       - run: pnpm test
       - run: pnpm build

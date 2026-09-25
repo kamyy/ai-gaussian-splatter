@@ -24,9 +24,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    // suppressHydrationWarning: next-themes (inside ThemeRegistry) sets [data-theme] here before React hydrates, so the
-    // attribute React finds on this element during hydration deliberately doesn't match what it rendered on the server
-    // — the standard escape hatch for a color-mode bootstrap script.
+    // suppressHydrationWarning: next-themes (inside ThemeRegistry) sets [data-theme] on this element before React
+    // hydrates. The attribute React finds during hydration therefore doesn't match what the server rendered, on
+    // purpose. This is the standard escape hatch for a script that sets the color mode before hydration.
     <html lang="en" suppressHydrationWarning>
       <body className={`${displayFont.variable} ${bodyFont.variable}`}>
         <ThemeRegistry>

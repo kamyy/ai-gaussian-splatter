@@ -20,10 +20,9 @@ def report_status(
     ec2_instance_id: str | None = None,
     training_progress: int | None = None,
 ) -> None:
-    """PATCH the job's status back to the web app. Best-effort: logs and swallows
-    network errors rather than raising, since a failed status update should never
-    prevent the pipeline from continuing (or from reaching the finally block that
-    terminates the instance) — see worker/run_job.py.
+    """PATCH the job's status back to the web app. Best effort: network errors are logged and swallowed rather than
+    raised, because a failed status update must never stop the pipeline from continuing, or from reaching the finally
+    block that terminates the instance. See worker/run_job.py.
     """
     payload: dict[str, str | int] = {"status": status}
     if error_message is not None:

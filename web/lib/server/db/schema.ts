@@ -38,8 +38,8 @@ export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   clerkUserId: text("clerk_user_id").notNull().unique(),
   createdAt: timestamp("created_at", { withTimezone: true, precision: 6 }).notNull().defaultNow(),
-  // No separate index on clerkUserId — .unique() already creates one, and a second would be maintained on every insert
-  // for nothing.
+  // No separate index on clerkUserId. .unique() already creates one, and a second index would be updated on every
+  // insert for nothing.
 });
 
 export const splats = pgTable(
@@ -110,10 +110,10 @@ export const jobs = pgTable(
   },
   table => [
     index("ix_jobs_splat_id").on(table.splatId),
-    // Enforces "at most one active job per splat" at the database level — web/app/api/v1/splats/[splatId]/process/
-    // route.ts relies on this to make its double-trigger guard atomic (a race loses at the INSERT, as a unique
-    // violation, rather than needing a read-then-write check). Keep the excluded statuses in sync with
-    // JOB_ENDED_STATUSES (web/lib/types.ts) by hand — this is a raw SQL fragment, so it can't import that constant.
+    // Enforces "at most one active job per splat" in the database. web/app/api/v1/splats/[splatId]/process/route.ts
+    // relies on this to make its double-trigger guard atomic: a racing request fails at the INSERT with a unique
+    // violation, so no separate read-then-write check is needed. Keep the excluded statuses in sync with
+    // JOB_ENDED_STATUSES (web/lib/types.ts) by hand. This is a raw SQL fragment, so it can't import that constant.
     uniqueIndex("uq_jobs_splat_id_active")
       .on(table.splatId)
       .where(sql`${table.status} not in ('complete', 'failed', 'cancelled')`),
@@ -121,9 +121,9 @@ export const jobs = pgTable(
 );
 
 /**
- * Fixed-window counters backing per-IP/per-user rate limiting. Incremented via `INSERT … ON CONFLICT … DO UPDATE …
- * RETURNING` in web/lib/server/rateLimit.ts — the unique index below is that statement's conflict target, so it is
- * load-bearing, not just an optimisation.
+ * Fixed-window counters behind the per-IP and per-user rate limits. web/lib/server/rateLimit.ts increments them with
+ * `INSERT … ON CONFLICT … DO UPDATE … RETURNING`. The unique index below is that statement's conflict target, so the
+ * statement depends on it. It is not just an optimization.
  */
 export const rateLimitCounters = pgTable(
   "rate_limit_counters",

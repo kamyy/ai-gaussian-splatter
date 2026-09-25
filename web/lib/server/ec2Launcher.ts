@@ -8,8 +8,8 @@ import { EC2Client, RunInstancesCommand, TerminateInstancesCommand } from "@aws-
 import type { CropBox } from "@/lib/types";
 import { getEnv } from "./env";
 
-// Direct spot-instance-per-job launch — no SQS/Batch/Step Functions. The instance profile these launches pass is
-// scoped externally, in infra/worker_iam.tf.
+// Launches one spot instance directly per worker-job stage, with no SQS, Batch, or Step Functions in between. The
+// instance profile these launches pass is defined in infra/worker_iam.tf.
 
 type WorkerStage = "reconstruct" | "train";
 
@@ -70,10 +70,10 @@ ${cropBoxArg}    ${p.workerImageUri}
 `;
 }
 
-// Populated from infra/'s ECR repository output once infra is deployed. Placeholders for local/pre-deploy development.
-// The stages run different images. worker/Dockerfile's reconstruct target carries COLMAP and no torch, and its train
-// target carries torch and gsplat and no COLMAP, so each stage pulls only what it runs.
-// Called by web/app/api/v1/splats/[splatId]/process/route.ts and web/app/api/v1/splats/[splatId]/train/route.ts.
+// infra/web.tf sets these from its ECR repository once infra/ is deployed. The placeholders are for local development
+// before a deploy. The stages run different images. worker/Dockerfile's reconstruct target carries COLMAP and no torch,
+// and its train target carries torch and gsplat and no COLMAP, so each stage pulls only what it runs. Called by
+// web/app/api/v1/splats/[splatId]/process/route.ts and web/app/api/v1/splats/[splatId]/train/route.ts.
 export function workerImageUri(stage: WorkerStage): string {
   if (stage === "reconstruct") {
     return process.env.WORKER_RECONSTRUCT_IMAGE_URI ?? "REPLACE_WITH_ECR_IMAGE_URI";
@@ -92,10 +92,10 @@ export function localLaunchEnabled(): boolean {
 }
 
 /**
- * A per-job token, not a static shared secret — scopes what a compromised instance can mutate to the one job it was
- * launched for.
+ * A per-job token rather than one shared secret, so a compromised instance can only change the one job it was launched
+ * for.
  *
- * base64url of 32 random bytes, matching Python's secrets.token_urlsafe(32).
+ * It is the base64url encoding of 32 random bytes, matching Python's secrets.token_urlsafe(32).
  */
 export function generateCallbackToken(): string {
   return randomBytes(32).toString("base64url");
@@ -214,14 +214,13 @@ export function stopLocalWorker(jobId: string): void {
 }
 
 /**
- * Local-dev substitute for launchJob(): runs the worker image on the caller's own GPU via Podman instead of
- * launching a real EC2 spot instance. Both launch routes gate it behind WORKER_LOCAL_LAUNCH
- * (web/app/api/v1/splats/[splatId]/process/route.ts and web/app/api/v1/splats/[splatId]/train/route.ts). It is never
- * reachable in production,
- * where the ECS task has neither a podman binary nor a GPU.
+ * Local-dev replacement for launchJob(). It runs the worker image on the caller's own GPU with Podman instead of
+ * launching a real EC2 spot instance. Both launch routes only call it when WORKER_LOCAL_LAUNCH is set
+ * (web/app/api/v1/splats/[splatId]/process/route.ts and web/app/api/v1/splats/[splatId]/train/route.ts). Production
+ * can't reach it, because the ECS task has neither a podman binary nor a GPU.
  *
- * Fire-and-forget like the EC2 launch it replaces: the worker reports its own progress back over
- * APP_PUBLIC_URL/CALLBACK_TOKEN (worker/pipeline/status.py), so this function doesn't wait on the container.
+ * Like the EC2 launch it replaces, it doesn't wait for the container. The worker reports its own progress back through
+ * APP_PUBLIC_URL and CALLBACK_TOKEN (worker/pipeline/status.py).
  */
 export function launchJobLocal(params: {
   jobId: string;
@@ -262,8 +261,9 @@ export function launchJobLocal(params: {
       `CALLBACK_TOKEN=${params.callbackToken}`,
       "-e",
       `STAGE=${params.stage}`,
-      // Inside the container "localhost" is the container itself, not the host running `next dev` — this is Podman's
-      // alias for the host, matching the APP_PUBLIC_URL scripts/lib/worker.sh passes for its local runs.
+      // Inside the container, "localhost" is the container itself, not the host running `next dev`.
+      // host.containers.internal is Podman's alias for the host, the same APP_PUBLIC_URL scripts/lib/worker.sh passes
+      // for its local runs.
       "-e",
       "APP_PUBLIC_URL=http://host.containers.internal:3000",
       "-e",

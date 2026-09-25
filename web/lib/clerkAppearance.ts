@@ -1,10 +1,9 @@
-// Best-effort mapping onto Clerk's `appearance.variables` API (https://clerk.com/docs/customization/appearance),
-// pointed at web/app/globals.css's own color tokens instead of copied hex, so a token edit there
-// can't desync Clerk's colors from the rest of the app. Plain var() references, not a function of the current mode:
-// the browser resolves them against whichever [data-theme] is active, the same way every other themed element in
-// the app does. The installed @clerk/nextjs version's own types leave `appearance` typed `any` (the Clerk MCP was
-// unavailable to confirm the exact shape against this version), so this needs a live check in the browser, in both
-// modes, rather than one tsc can catch.
+// Maps the app's theme onto Clerk's `appearance.variables` API (https://clerk.com/docs/customization/appearance) as
+// closely as that API allows. The values point at web/app/globals.css's own color tokens instead of copied hex codes,
+// so editing a token there also changes Clerk's colors. They are plain var() references rather than values computed per
+// mode. The browser resolves them against whichever [data-theme] is active, like every other themed element in the app.
+// The installed @clerk/nextjs types `appearance` as `any`, so tsc can't catch a wrong key here. Check a change in the
+// browser, in both light and dark mode.
 export const clerkAppearanceVariables = {
   colorBackground: "var(--color-paper)",
   colorText: "var(--color-foreground)",
