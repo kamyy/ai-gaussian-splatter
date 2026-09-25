@@ -9,6 +9,9 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 
 import { Center } from "@/components/layout/Center";
 import { Spinner } from "@/components/ui/Spinner";
+import type { CameraPose } from "@/lib/types";
+import { CameraFrustums } from "./CameraFrustums";
+import { framingFromCameras } from "./cameraFraming";
 import { PointCloudScene } from "./PointCloudScene";
 
 export type ViewerMode = "splat" | "colmap_points";
@@ -17,6 +20,10 @@ interface SplatViewerProps {
   mode: ViewerMode;
   splatUrl: string | null;
   pointCloudUrl: string | null;
+  // Where the photos were taken from, in the same coordinate frame as both assets. They frame the view in either mode.
+  cameras?: CameraPose[] | null;
+  // Draws the cameras as frustums, in the point cloud view only.
+  showCameras?: boolean;
   height?: string;
 }
 
@@ -102,45 +109,64 @@ function SplatScene({
 
 /**
  * Lives inside <Canvas> (needs useThree()) so it can place the camera directly, unlike SplatViewer itself. Owns the
- * one-shot-per-viewer camera framing: whichever of the two assets (splat / COLMAP points) loads first frames the
- * camera, and the other loading later — including switching the mode toggle to a not-yet-loaded asset — never
- * re-frames it. That's what makes "same camera pose across the toggle" hold with no manual save/restore: both
- * assets share one coordinate frame, since worker/pipeline/train.py seeds Gaussian means directly from COLMAP's
- * points_xyz with no rescale.
+ * camera framing, which happens once per viewer: switching the mode toggle never re-frames. That's what makes "same
+ * camera pose across the toggle" hold with no manual save/restore: both assets share one coordinate frame, since
+ * worker/pipeline/train.py seeds Gaussian means directly from COLMAP's points_xyz with no rescale.
+ *
+ * The photos' own camera poses frame it when they're known (web/components/viewer/cameraFraming.ts). Otherwise the
+ * first asset to load frames it by its bounding box. The poses arrive separately from either asset, so when they land
+ * after a bounding-box framing they replace it, once.
  */
 function ViewerSceneManager({
   mode,
   splatUrl,
   pointCloudUrl,
+  cameras,
   onError,
   controlsRef,
 }: {
   mode: ViewerMode;
   splatUrl: string | null;
   pointCloudUrl: string | null;
+  cameras: CameraPose[] | null;
   onError: (message: string) => void;
   controlsRef: React.RefObject<OrbitControlsImpl | null>;
 }) {
   const { camera } = useThree();
-  const hasFramedRef = useRef(false);
+  const framedByRef = useRef<"nothing" | "box" | "cameras">("nothing");
 
-  const onFirstLoad = useCallback(
-    (box: Box3) => {
-      if (hasFramedRef.current) {
-        return;
-      }
-      hasFramedRef.current = true;
-      const center = box.getCenter(new Vector3());
-      const radius = box.getSize(new Vector3()).length() / 2;
-      camera.position.set(center.x, center.y, center.z + radius * 2.5);
-      camera.lookAt(center);
+  const frame = useCallback(
+    (position: Vector3, target: Vector3) => {
+      camera.position.copy(position);
+      camera.lookAt(target);
       camera.updateProjectionMatrix();
       if (controlsRef.current) {
-        controlsRef.current.target.copy(center);
+        controlsRef.current.target.copy(target);
         controlsRef.current.update();
       }
     },
     [camera, controlsRef],
+  );
+
+  useEffect(() => {
+    const framing = cameras ? framingFromCameras(cameras) : null;
+    if (framing && framedByRef.current !== "cameras") {
+      framedByRef.current = "cameras";
+      frame(framing.position, framing.target);
+    }
+  }, [cameras, frame]);
+
+  const onFirstLoad = useCallback(
+    (box: Box3) => {
+      if (framedByRef.current !== "nothing") {
+        return;
+      }
+      framedByRef.current = "box";
+      const center = box.getCenter(new Vector3());
+      const radius = box.getSize(new Vector3()).length() / 2;
+      frame(new Vector3(center.x, center.y, center.z + radius * 2.5), center);
+    },
+    [frame],
   );
 
   // Switching mode renders a different component here, so React unmounts one scene and mounts the other. That mount is
@@ -163,7 +189,14 @@ function ViewerSceneManager({
   return null;
 }
 
-export function SplatViewer({ mode, splatUrl, pointCloudUrl, height = "70vh" }: SplatViewerProps) {
+export function SplatViewer({
+  mode,
+  splatUrl,
+  pointCloudUrl,
+  cameras = null,
+  showCameras = false,
+  height = "70vh",
+}: SplatViewerProps) {
   // The failing mode is stored with the message so only that mode shows it. A bare string would leave one asset's
   // failure pinned over every other toggle position for the rest of the page's life.
   const [error, setError] = useState<{ mode: ViewerMode; message: string } | null>(null);
@@ -190,9 +223,11 @@ export function SplatViewer({ mode, splatUrl, pointCloudUrl, height = "70vh" }: 
           mode={mode}
           splatUrl={splatUrl}
           pointCloudUrl={pointCloudUrl}
+          cameras={cameras}
           onError={handleError}
           controlsRef={controlsRef}
         />
+        {mode === "colmap_points" && showCameras && cameras && <CameraFrustums cameras={cameras} />}
         <OrbitControls ref={controlsRef} makeDefault />
       </Canvas>
       {activeError && (

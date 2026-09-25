@@ -7,7 +7,7 @@
 import { useAuth } from "@clerk/nextjs";
 import useSWR from "swr";
 import { apiFetch } from "./apiFetch";
-import type { Job, JobStatus, PhotoListItem, Splat, SplatListItem } from "./types";
+import type { CameraPose, Job, JobStatus, PhotoListItem, Splat, SplatListItem } from "./types";
 
 // Poll rate per phase; 0 is how SWR is told to stop, and only an ended status may use it. SWR keys its polling effect
 // on this function's identity rather than on the data, so once the function returns 0 it schedules no further timer
@@ -90,5 +90,23 @@ export function useLatestJob(splatId: string) {
     {
       refreshInterval,
     },
+  );
+}
+
+// enabled is the caller's knowledge that the reconstruct stage has run. A 404 after that is a job reconstructed before
+// the worker wrote camera poses, which retrying won't change, so errors aren't retried.
+export function useCameras(splatId: string, enabled: boolean) {
+  const { getToken } = useAuth();
+
+  return useSWR(
+    enabled ? ["cameras", splatId] : null,
+    async () => {
+      const token = await getToken();
+      if (token) {
+        return apiFetch<CameraPose[]>(`/api/v1/splats/${splatId}/cameras`, "GET", token);
+      }
+      throw new Error("Not signed in");
+    },
+    { shouldRetryOnError: false },
   );
 }

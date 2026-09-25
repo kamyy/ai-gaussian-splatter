@@ -38,9 +38,10 @@ def _run_reconstruct(settings: Settings) -> int:
             )
 
         # Persisted so a later, separate EC2 instance (the train phase) can resume without re-running COLMAP, and so
-        # the browser can show the point cloud while the user decides whether to proceed.
+        # the browser can show the point cloud and camera positions while the user decides whether to proceed.
         sparse_export.upload_sparse_model(sfm_result.sparse_dir, settings)
         point_cloud_key = sparse_export.export_and_upload_point_cloud(sfm_result.sparse_dir, settings)
+        sparse_export.export_and_upload_cameras(sfm_result.sparse_dir, settings)
 
         status.report_status(settings, "awaiting_training", point_cloud_s3_key=point_cloud_key)
         return 0

@@ -19,12 +19,18 @@ vi.mock("@/components/splats/SharePanel", () => ({
   SharePanel: () => <div data-testid="share-panel" />,
 }));
 
-const { useSplatMock, useLatestJobMock, usePhotosMock } = vi.hoisted(() => ({
+const { useSplatMock, useLatestJobMock, usePhotosMock, useCamerasMock } = vi.hoisted(() => ({
   useSplatMock: vi.fn(),
   useLatestJobMock: vi.fn(),
   usePhotosMock: vi.fn(),
+  useCamerasMock: vi.fn(),
 }));
-vi.mock("@/lib/hooks", () => ({ useSplat: useSplatMock, useLatestJob: useLatestJobMock, usePhotos: usePhotosMock }));
+vi.mock("@/lib/hooks", () => ({
+  useSplat: useSplatMock,
+  useLatestJob: useLatestJobMock,
+  usePhotos: usePhotosMock,
+  useCameras: useCamerasMock,
+}));
 
 const splat: Splat = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -49,11 +55,17 @@ const job: Job = {
   updatedAt: "2026-01-01T00:00:00Z",
 };
 
-const photos: PhotoListItem[] = [{ id: "p1", originalFilename: "a.jpg", url: "https://example.com/a.jpg" }];
+const photos: PhotoListItem[] = [
+  { id: "p1", originalFilename: "a.jpg", url: "https://example.com/a.jpg" },
+  { id: "p2", originalFilename: "b.jpg", url: "https://example.com/b.jpg" },
+];
 
 const refetchSplat = vi.fn();
 
-function setup(options: { splat?: Splat; job?: Job; jobLoading?: boolean }) {
+function setup(options: { splat?: Splat; job?: Job; jobLoading?: boolean; placed?: string[] }) {
+  useCamerasMock.mockReturnValue({
+    data: options.placed?.map(photoId => ({ photoId, center: [0, 0, 0], rotation: [] })),
+  });
   useSplatMock.mockReturnValue({ data: options.splat, isLoading: false, mutate: refetchSplat });
   useLatestJobMock.mockReturnValue({ data: options.job, isLoading: options.jobLoading ?? false, mutate: vi.fn() });
   usePhotosMock.mockReturnValue({ data: photos, isLoading: false });
@@ -90,6 +102,14 @@ describe("SplatPage", () => {
     expect(screen.queryByTestId("share-panel")).not.toBeInTheDocument();
     // The check stage's own card offers "Discard" instead.
     expect(screen.queryByRole("button", { name: "Delete splat" })).not.toBeInTheDocument();
+  });
+
+  it("flags a photo the cameras don't include as not placed", async () => {
+    setup({ splat, job, placed: ["p1"] });
+    await renderPage();
+    expect(screen.getByText(/1 couldn.t be placed/)).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "b.jpg (couldn't be placed)" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "a.jpg" })).toBeInTheDocument();
   });
 
   it("offers the share panel once the splat is complete and shareable", async () => {

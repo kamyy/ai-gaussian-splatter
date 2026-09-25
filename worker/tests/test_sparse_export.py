@@ -84,3 +84,27 @@ def test_export_and_upload_point_cloud_writes_raw_rgb_ply(settings, tmp_path, mo
     assert list(vertex["x"]) == [1.0, 4.0]
     assert list(vertex["red"]) == [10, 40]
     assert list(vertex["blue"]) == [30, 60]
+
+
+@mock_aws
+def test_export_and_upload_cameras_writes_world_space_centers(settings, tmp_path, monkeypatch):
+    import json
+
+    from pipeline.colmap_model import Image
+    from pipeline.sparse_export import export_and_upload_cameras
+
+    s3 = boto3.client("s3", region_name="us-east-1")
+    s3.create_bucket(Bucket=settings.splats_bucket)
+
+    # Identity rotation, so the world-space center is just -tvec.
+    image = Image(image_id=1, qvec=np.array([1.0, 0, 0, 0]), tvec=np.array([1.0, 2.0, 3.0]), camera_id=1, name="a.jpg")
+    fake_sparse = type("FakeSparseModel", (), {"images": {1: image}})()
+    monkeypatch.setattr("pipeline.sparse_export.read_sparse_model", lambda _dir: fake_sparse)
+
+    export_and_upload_cameras(tmp_path, settings)
+
+    body = s3.get_object(Bucket=settings.splats_bucket, Key=f"splats/{settings.splat_id}/cameras.json")["Body"].read()
+    [camera] = json.loads(body)["cameras"]
+    assert camera["name"] == "a.jpg"
+    assert camera["center"] == [-1.0, -2.0, -3.0]
+    assert camera["rotation"] == [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
