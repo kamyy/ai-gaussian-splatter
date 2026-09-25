@@ -131,7 +131,7 @@ cd ../web
 pnpm dev
 ```
 
-Upload photos and click Start in the browser as normal. The worker job goes through the same DB rows, callback token, and `/api/v1/internal/jobs/[jobId]/status` route a real EC2 run would use, so its status updates in the dashboard live. Leave `WORKER_LOCAL_LAUNCH` unset (or `false`) to go back to launching a real spot instance.
+Create a splat at `/splats/new` as normal: uploading its photos starts the worker job. The job goes through the same DB rows, callback token, and `/api/v1/internal/jobs/[jobId]/status` route a real EC2 run would use, so the splat's page shows each stage live. Leave `WORKER_LOCAL_LAUNCH` unset (or `false`) to go back to launching a real spot instance.
 
 ### 1.8 Installing Terraform
 
