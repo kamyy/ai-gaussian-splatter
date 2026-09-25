@@ -2,7 +2,7 @@ import { forwardRef } from "react";
 import { Spinner } from "@/components/ui/Spinner";
 import { cn } from "@/lib/cn";
 
-type ButtonVariant = "contained" | "ink" | "outlined" | "text";
+type ButtonVariant = "contained" | "ink" | "outlined" | "text" | "danger";
 type ButtonSize = "small" | "medium" | "large";
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -20,6 +20,7 @@ const VARIANT: Record<ButtonVariant, string> = {
   ink: "bg-foreground text-background hover:opacity-90",
   outlined: "border border-divider text-foreground hover:bg-muted",
   text: "text-primary hover:bg-primary/10",
+  danger: "bg-error text-background hover:opacity-90",
 };
 
 // medium and large keep a 44px minimum height, the touch-target floor.

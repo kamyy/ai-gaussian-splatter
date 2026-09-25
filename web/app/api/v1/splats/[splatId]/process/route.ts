@@ -10,6 +10,8 @@ import {
   launchJob,
   launchJobLocal,
   localLaunchEnabled,
+  stopLocalWorker,
+  terminateWorker,
   workerImageUri,
 } from "@/lib/server/ec2Launcher";
 import { getEnv } from "@/lib/server/env";
@@ -138,11 +140,21 @@ export const POST = withErrorHandling(
       throw err;
     }
 
+    // Conditional on the job still being "queued": a cancel (web/lib/server/cancelJob.ts) can land while the launch
+    // above is in flight, before there is an instance ID for it to terminate. That worker is stopped here instead.
     const [job] = await getDb()
       .update(jobs)
       .set({ status: "launching", ec2InstanceId: instanceId })
-      .where(eq(jobs.id, created.id))
+      .where(and(eq(jobs.id, created.id), eq(jobs.status, "queued")))
       .returning(jobColumns);
+    if (job === undefined) {
+      if (instanceId === null) {
+        stopLocalWorker(created.id);
+      } else {
+        await terminateWorker(instanceId);
+      }
+      throw new HttpError(409, "Cancelled before the worker started");
+    }
     return NextResponse.json(job, { status: 201 });
   },
 );

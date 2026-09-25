@@ -12,6 +12,9 @@ vi.mock("@/components/splats/SplatStageViewer", () => ({
 vi.mock("@/components/splats/StageCard", () => ({
   StageCard: ({ stage }: { stage: { kind: string } }) => <div data-testid="stage-card">{stage.kind}</div>,
 }));
+vi.mock("@/components/splats/SplatActions", () => ({
+  DeleteSplatButton: ({ label }: { label: string }) => <button type="button">{label}</button>,
+}));
 vi.mock("@/components/splats/SharePanel", () => ({
   SharePanel: () => <div data-testid="share-panel" />,
 }));
@@ -83,6 +86,8 @@ describe("SplatPage", () => {
     expect(screen.getByRole("list", { name: "Progress" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "a.jpg" })).toBeInTheDocument();
     expect(screen.queryByTestId("share-panel")).not.toBeInTheDocument();
+    // The check stage's own card offers "Discard" instead.
+    expect(screen.queryByRole("button", { name: "Delete splat" })).not.toBeInTheDocument();
   });
 
   it("offers the share panel once the splat is complete and shareable", async () => {
@@ -90,6 +95,7 @@ describe("SplatPage", () => {
     await renderPage();
     expect(screen.getByTestId("share-panel")).toBeInTheDocument();
     expect(screen.getByTestId("viewer")).toHaveTextContent("true");
+    expect(screen.getByRole("button", { name: "Delete splat" })).toBeInTheDocument();
   });
 
   it("refetches the splat once its job has ended", async () => {

@@ -1,9 +1,9 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mkdirSync, openSync } from "node:fs";
 import path from "node:path";
 
-import { EC2Client, RunInstancesCommand } from "@aws-sdk/client-ec2";
+import { EC2Client, RunInstancesCommand, TerminateInstancesCommand } from "@aws-sdk/client-ec2";
 
 import { getEnv } from "./env";
 
@@ -177,6 +177,35 @@ export async function launchJob(params: {
 }
 
 /**
+ * Stops a worker instance ahead of its own self-termination, for a cancelled or deleted splat. An instance EC2 no longer
+ * knows about has already gone, which is the outcome wanted. infra/web.tf's TerminateWorker grant only covers
+ * instances carrying the worker tag launchJob() applies.
+ */
+export async function terminateWorker(instanceId: string): Promise<void> {
+  const ec2 = new EC2Client({ region: getEnv().AWS_REGION });
+  try {
+    await ec2.send(new TerminateInstancesCommand({ InstanceIds: [instanceId] }));
+  } catch (err) {
+    if (err instanceof Error && err.name === "InvalidInstanceID.NotFound") {
+      return;
+    }
+    throw err;
+  }
+}
+
+function localContainerName(jobId: string): string {
+  return `splat-worker-${jobId}`;
+}
+
+/**
+ * launchJobLocal()'s counterpart to terminateWorker(). Fire-and-forget: a container that already exited (--rm removed
+ * it) makes podman fail, which is the outcome wanted.
+ */
+export function stopLocalWorker(jobId: string): void {
+  execFile("podman", ["rm", "--force", localContainerName(jobId)], () => {});
+}
+
+/**
  * Local-dev substitute for launchJob(): runs the worker image on the caller's own GPU via Podman instead of
  * launching a real EC2 spot instance. Both launch routes gate it behind WORKER_LOCAL_LAUNCH
  * (web/app/api/v1/splats/[splatId]/process/route.ts and web/app/api/v1/splats/[splatId]/train/route.ts). It is never
@@ -211,6 +240,8 @@ export function launchJobLocal(params: {
     [
       "run",
       "--rm",
+      "--name",
+      localContainerName(params.jobId),
       "--security-opt=label=disable",
       "--device",
       "nvidia.com/gpu=all",

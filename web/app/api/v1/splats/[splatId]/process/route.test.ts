@@ -3,12 +3,13 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@clerk/nextjs/server", () => ({ auth: vi.fn(async () => ({ userId: "clerk-user-1" })) }));
 
-const { launchJobMock } = vi.hoisted(() => ({
-  launchJobMock: vi.fn(async () => "i-0abc123"),
+const { launchJobMock, terminateWorkerMock } = vi.hoisted(() => ({
+  launchJobMock: vi.fn(async (_params: { jobId: string }) => "i-0abc123"),
+  terminateWorkerMock: vi.fn(async () => {}),
 }));
 vi.mock("@/lib/server/ec2Launcher", async importOriginal => {
   const actual = await importOriginal<typeof import("@/lib/server/ec2Launcher")>();
-  return { ...actual, launchJob: launchJobMock };
+  return { ...actual, launchJob: launchJobMock, terminateWorker: terminateWorkerMock };
 });
 
 import { getOrCreateUser } from "@/lib/server/auth";
@@ -32,6 +33,7 @@ describe("POST /api/v1/splats/[splatId]/process", () => {
   beforeEach(async () => {
     launchJobMock.mockClear();
     launchJobMock.mockResolvedValue("i-0abc123");
+    terminateWorkerMock.mockClear();
     await getDb().delete(jobs);
     await getDb().delete(photos);
     await getDb().delete(splats);
@@ -67,6 +69,20 @@ describe("POST /api/v1/splats/[splatId]/process", () => {
     const res = await POST({} as never, ctx(splat.id));
     expect(res.status).toBe(201);
     expect(launchJobMock).toHaveBeenCalledWith(expect.objectContaining({ splatId: splat.id, stage: "reconstruct" }));
+  });
+
+  it("terminates the worker it just launched when the job was cancelled during the launch", async () => {
+    const { splat } = await seed();
+    launchJobMock.mockImplementationOnce(async ({ jobId }) => {
+      await getDb().update(jobs).set({ status: "cancelled" }).where(eq(jobs.id, jobId));
+      return "i-0late";
+    });
+
+    const res = await POST({} as never, ctx(splat.id));
+    expect(res.status).toBe(409);
+    expect(terminateWorkerMock).toHaveBeenCalledWith("i-0late");
+    const [row] = await getDb().select().from(jobs).where(eq(jobs.splatId, splat.id));
+    expect(row.status).toBe("cancelled");
   });
 
   it("409s on a concurrent double-click — the unique index lets only one job through", async () => {

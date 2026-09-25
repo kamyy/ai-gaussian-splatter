@@ -373,6 +373,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 ### 9.2 Query patterns
 
 - **UUID-check path params before the DB** — `uuid` columns turn `/api/v1/splats/abc` into Postgres `22P02` → 500. Use `requireUuid()` (routes) or `isUuid()` (`web/lib/server/data.ts`, null → `notFound()`).
+- **A write that moves a job forward is conditional on the job not having ended** (`notInArray(jobs.status, JOB_ENDED_STATUSES)`). A cancel (`web/lib/server/cancelJob.ts`) can land between any read and write. An unconditional write resurrects the cancelled job after its worker has already been stopped.
 - **Missing row is `undefined`, not `null`.** Idiom: `const [row] = await getDb().select()…limit(1)` then `if (row === undefined)`.
 - **`onConflictDoNothing()` returns zero rows from `.returning()`.** `getOrCreateUser` uses `onConflictDoUpdate` with no-op `set: { clerkUserId }` so Postgres returns the existing row.
 - **Upsert `set` must reference the column, not a pre-read JS value** — e.g. ``count: sql`${rateLimitCounters.count} + 1` ``. A plain `{ count: n + 1 }` reopens the race. Confirm real SQL with `log_statement='all'` or `drizzle(pool, { logger: true })`.

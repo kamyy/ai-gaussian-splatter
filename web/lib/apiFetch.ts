@@ -3,7 +3,7 @@
 
 export async function apiFetch<T>(
   path: string,
-  method: "GET" | "POST" | "PUT",
+  method: "GET" | "POST" | "PUT" | "DELETE",
   token?: string,
   body?: unknown,
 ): Promise<T> {

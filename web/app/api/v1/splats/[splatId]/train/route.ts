@@ -1,14 +1,23 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, notInArray } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 
 import { requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { jobs, splats } from "@/lib/server/db/schema";
-import { ecrRegistry, launchJob, launchJobLocal, localLaunchEnabled, workerImageUri } from "@/lib/server/ec2Launcher";
+import {
+  ecrRegistry,
+  launchJob,
+  launchJobLocal,
+  localLaunchEnabled,
+  stopLocalWorker,
+  terminateWorker,
+  workerImageUri,
+} from "@/lib/server/ec2Launcher";
 import { getEnv } from "@/lib/server/env";
 import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
 import { jobColumns } from "@/lib/server/selects";
+import { JOB_ENDED_STATUSES } from "@/lib/types";
 
 /**
  * The "Start training" trigger — launches the second EC2 spot instance for a job whose reconstruct phase already
@@ -89,11 +98,21 @@ export const POST = withErrorHandling(
       throw err;
     }
 
+    // Conditional on the job not having ended: a cancel (web/lib/server/cancelJob.ts) can land while the launch above
+    // is in flight, before there is an instance ID for it to terminate. That worker is stopped here instead.
     const [job] = await getDb()
       .update(jobs)
       .set({ ec2InstanceId: instanceId })
-      .where(eq(jobs.id, flipped.id))
+      .where(and(eq(jobs.id, flipped.id), notInArray(jobs.status, JOB_ENDED_STATUSES)))
       .returning(jobColumns);
+    if (job === undefined) {
+      if (instanceId === null) {
+        stopLocalWorker(flipped.id);
+      } else {
+        await terminateWorker(instanceId);
+      }
+      throw new HttpError(409, "Cancelled before the worker started");
+    }
     return NextResponse.json(job);
   },
 );

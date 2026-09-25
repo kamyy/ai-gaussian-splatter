@@ -1,4 +1,10 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectsCommand,
+  GetObjectCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 import { getEnv } from "./env";
@@ -44,4 +50,31 @@ export async function presignPhotoDownload(uploadsBucketKey: string): Promise<st
   const env = getEnv();
   const command = new GetObjectCommand({ Bucket: env.UPLOADS_BUCKET, Key: uploadsBucketKey });
   return getSignedUrl(s3Client(), command, { expiresIn: PRESIGN_EXPIRY_SECONDS });
+}
+
+/**
+ * Deletes everything stored for a splat. Both buckets key a splat's objects under `splats/<splatId>/`: its photos in
+ * the uploads bucket (photoS3Key above), and the worker's point cloud, result and thumbnail in the splats bucket.
+ */
+export async function deleteSplatObjects(splatId: string): Promise<void> {
+  const env = getEnv();
+  const client = s3Client();
+  for (const bucket of [env.UPLOADS_BUCKET, env.SPLATS_BUCKET]) {
+    let continuationToken: string | undefined;
+    do {
+      // A list page holds at most 1000 keys, which is also DeleteObjects' per-request limit.
+      const page = await client.send(
+        new ListObjectsV2Command({
+          Bucket: bucket,
+          Prefix: `splats/${splatId}/`,
+          ContinuationToken: continuationToken,
+        }),
+      );
+      const keys = (page.Contents ?? []).flatMap(object => (object.Key ? [{ Key: object.Key }] : []));
+      if (keys.length > 0) {
+        await client.send(new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: keys, Quiet: true } }));
+      }
+      continuationToken = page.NextContinuationToken;
+    } while (continuationToken);
+  }
 }

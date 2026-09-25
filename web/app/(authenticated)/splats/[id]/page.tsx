@@ -6,6 +6,7 @@ import { use, useEffect } from "react";
 import { PhotoGrid } from "@/components/splats/PhotoGrid";
 import { PipelineStepper } from "@/components/splats/PipelineStepper";
 import { SharePanel } from "@/components/splats/SharePanel";
+import { DeleteSplatButton } from "@/components/splats/SplatActions";
 import { SplatStageViewer } from "@/components/splats/SplatStageViewer";
 import { StageCard } from "@/components/splats/StageCard";
 import { useLatestJob, usePhotos, useSplat } from "@/lib/hooks";
@@ -53,6 +54,12 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
         <StageCard splatId={id} stage={stage} onJobChanged={() => void refetchJob()} />
         {stage.kind === "complete" && splat.isShareable && <SharePanel splatId={id} />}
         {photos && photos.length > 0 && <PhotoGrid photos={photos} />}
+        {/* The check stage's card already offers this as "Discard". */}
+        {stage.kind !== "check" && (
+          <div className="mt-auto pt-2">
+            <DeleteSplatButton splatId={id} label="Delete splat" variant="text" />
+          </div>
+        )}
       </div>
       <section aria-label="3D view" className="h-120 px-4 pb-6 sm:px-12 lg:h-auto lg:flex-1 lg:py-6 lg:pr-8 lg:pl-0">
         <SplatStageViewer splatId={id} job={job} complete={splat.status === "complete"} />
