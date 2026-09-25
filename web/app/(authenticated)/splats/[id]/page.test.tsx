@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Job, PhotoListItem, Splat } from "@/lib/types";
 import SplatPage from "./page";
 
-// The viewer pulls in three.js, R3F and gaussian-splats-3d, none of which have a WebGL context under jsdom.
+// The viewer pulls in three.js, R3F and Spark, none of which have a WebGL context under jsdom.
 vi.mock("@/components/splats/SplatStageViewer", () => ({
   SplatStageViewer: ({ complete }: { complete: boolean }) => <div data-testid="viewer">{String(complete)}</div>,
 }));

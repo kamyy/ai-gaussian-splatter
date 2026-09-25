@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { type Box3, type BufferGeometry, Float32BufferAttribute } from "three";
 import { PLYLoader } from "three/examples/jsm/loaders/PLYLoader.js";
 
+import { trimmedBox } from "./cameraFraming";
+
 // The DC-term decode worker/pipeline/export.py documents: color = SH_C0 * f_dc + 0.5. Only "sh_dc" mode needs it. The
 // COLMAP point cloud already carries plain 0-255 red/green/blue, which PLYLoader decodes into a standard color
 // attribute on its own.
@@ -61,10 +63,10 @@ export function PointCloudScene({ url, colorMode, onError, onFirstLoad }: PointC
             loaded.setAttribute("color", new Float32BufferAttribute(colors, 3));
           }
         }
-        loaded.computeBoundingBox();
         setGeometry(loaded);
-        if (loaded.boundingBox && !loaded.boundingBox.isEmpty()) {
-          onFirstLoad(loaded.boundingBox);
+        const box = trimmedBox(loaded.getAttribute("position").array);
+        if (!box.isEmpty()) {
+          onFirstLoad(box);
         }
       },
       undefined,

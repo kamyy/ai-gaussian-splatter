@@ -20,7 +20,7 @@ function median(values: number[]): number {
 
 // Line-segment vertex pairs for every camera: four edges from the camera center to its far rectangle's corners, then
 // that rectangle's four sides.
-function frustumSegments(cameras: CameraPose[]): Float32Array {
+function frustumSegments(cameras: Omit<CameraPose, "photoId">[]): Float32Array {
   const centroid = cameras
     .reduce<Vec3>((sum, { center }) => [sum[0] + center[0], sum[1] + center[1], sum[2] + center[2]], [0, 0, 0])
     .map(v => v / cameras.length);
@@ -53,7 +53,7 @@ function frustumSegments(cameras: CameraPose[]): Float32Array {
   return new Float32Array(out);
 }
 
-export function CameraFrustums({ cameras }: { cameras: CameraPose[] }) {
+export function CameraFrustums({ cameras }: { cameras: Omit<CameraPose, "photoId">[] }) {
   const positions = useMemo(() => frustumSegments(cameras), [cameras]);
 
   if (cameras.length === 0) {

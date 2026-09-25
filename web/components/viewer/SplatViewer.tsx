@@ -1,9 +1,9 @@
 "use client";
 
-import { DropInViewer, SceneFormat } from "@mkkellogg/gaussian-splats-3d";
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { SparkRenderer, SplatFileType, SplatMesh } from "@sparkjsdev/spark";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type Box3, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 
@@ -11,7 +11,7 @@ import { Center } from "@/components/layout/Center";
 import { Spinner } from "@/components/ui/Spinner";
 import type { CameraPose } from "@/lib/types";
 import { CameraFrustums } from "./CameraFrustums";
-import { framingFromCameras } from "./cameraFraming";
+import { framingFromCameras, trimmedBox } from "./cameraFraming";
 import { PointCloudScene } from "./PointCloudScene";
 
 export type ViewerMode = "splat" | "colmap_points";
@@ -21,17 +21,15 @@ interface SplatViewerProps {
   splatUrl: string | null;
   pointCloudUrl: string | null;
   // Where the photos were taken from, in the same coordinate frame as both assets. They frame the view in either mode.
-  cameras?: CameraPose[] | null;
+  cameras?: Omit<CameraPose, "photoId">[] | null;
   // Draws the cameras as frustums, in the point cloud view only.
   showCameras?: boolean;
   height?: string;
 }
 
 /**
- * DropInViewer extends THREE.Group and drives its own per-frame update via Three.js's native onBeforeRender hook (see
- * gaussian-splats-3d's source: `callbackMesh.onBeforeRender = DropInViewer.onBeforeRender...`) rather than self-driven
- * requestAnimationFrame. So simply adding it to R3F's scene via <primitive> is enough; R3F's own render loop drives it
- * with no manual useFrame ticking needed.
+ * Spark draws every SplatMesh in the scene through one SparkRenderer, which has to be in the same scene and share R3F's
+ * WebGLRenderer. Both are plain Three.js objects, so R3F's own render loop drives them through <primitive>.
  */
 function SplatScene({
   splatUrl,
@@ -42,7 +40,11 @@ function SplatScene({
   onError: (message: string) => void;
   onFirstLoad: (box: Box3) => void;
 }) {
-  const [viewer, setViewer] = useState<DropInViewer | null>(null);
+  const gl = useThree(state => state.gl);
+  const spark = useMemo(() => new SparkRenderer({ renderer: gl }), [gl]);
+  useEffect(() => () => spark.dispose(), [spark]);
+
+  const [mesh, setMesh] = useState<SplatMesh | null>(null);
 
   // The load effect below reads the URL from here instead of depending on it. Every presign mints a different URL
   // string for the same object (web/lib/server/s3.ts), so depending on it would restart the whole download whenever
@@ -55,31 +57,25 @@ function SplatScene({
 
   useEffect(() => {
     let disposed = false;
-    // sharedMemoryForWorkers defaults to true in this library version, with no runtime check for
-    // self.crossOriginIsolated — only an iOS-version fallback. This app sends no COOP/COEP headers, so
-    // crossOriginIsolated is false here, and the library's SharedArrayBuffer postMessage to its sort worker throws an
-    // unhandled rejection deep inside its own promise chain: never caught, never surfaced to our onError, so the
-    // loading spinner it already showed just never clears.
-    const dropInViewer = new DropInViewer({ sharedMemoryForWorkers: false });
-    const loadSettled = dropInViewer
-      // format is required, not inferred: splatUrl is a presigned S3 URL, and the library's own extension-based
-      // detection fails on the query string that follows .ply.
-      .addSplatScenes([{ path: splatUrlRef.current, format: SceneFormat.Ply }])
+    // fileType is required, not inferred: splatUrl is a presigned S3 URL, and the query string after .ply defeats
+    // extension-based detection.
+    const splatMesh = new SplatMesh({ url: splatUrlRef.current, fileType: SplatFileType.PLY });
+    splatMesh.initialized
       .then(() => {
         if (disposed) {
           return;
         }
-        setViewer(dropInViewer);
+        setMesh(splatMesh);
 
-        // COLMAP's reconstruction scale and origin are arbitrary per capture, so a fixed camera position can end up
-        // pointed at empty space light-years from the actual splats. Framing from the loaded geometry's own bounding
-        // box instead works for any capture.
-        //
         // isEmpty() guards a degenerate box (e.g. a training collapse to a single point). Three.js represents an
         // empty Box3 as min=+Infinity/max=-Infinity, which is truthy, not null. getCenter()/getSize() on one yield
         // NaN, silently producing a camera pointed nowhere with no error surfaced.
-        const box = dropInViewer.splatMesh?.computeBoundingBox();
-        if (box && !box.isEmpty()) {
+        const centers: number[] = [];
+        splatMesh.forEachSplat((_index, center) => {
+          centers.push(center.x, center.y, center.z);
+        });
+        const box = trimmedBox(centers);
+        if (!box.isEmpty()) {
           onFirstLoad(box);
         }
       })
@@ -91,20 +87,16 @@ function SplatScene({
 
     return () => {
       disposed = true;
-      // dispose() waits on the same in-flight load promise it aborts, which never actually settles from the abort
-      // alone. Calling it immediately hangs forever with the library's own loading spinner stuck on screen. React's
-      // dev-only mount-cleanup-remount cycle triggers this on every load, so the dispose is deferred until the load
-      // has already settled above, at which point there's nothing left in flight for it to hang on. addSplatScenes()
-      // returns the library's own AbortablePromise, which has .then()/.catch() but not .finally(). Promise.resolve()
-      // adopts its state into a real Promise that does.
-      Promise.resolve(loadSettled).finally(() => dropInViewer.dispose());
+      splatMesh.dispose();
     };
   }, [onError, onFirstLoad]);
 
-  if (!viewer) {
-    return null;
-  }
-  return <primitive object={viewer} />;
+  return (
+    <>
+      <primitive object={spark} />
+      {mesh && <primitive object={mesh} />}
+    </>
+  );
 }
 
 /**
@@ -128,7 +120,7 @@ function ViewerSceneManager({
   mode: ViewerMode;
   splatUrl: string | null;
   pointCloudUrl: string | null;
-  cameras: CameraPose[] | null;
+  cameras: Omit<CameraPose, "photoId">[] | null;
   onError: (message: string) => void;
   controlsRef: React.RefObject<OrbitControlsImpl | null>;
 }) {
@@ -136,7 +128,10 @@ function ViewerSceneManager({
   const framedByRef = useRef<"nothing" | "box" | "cameras">("nothing");
 
   const frame = useCallback(
-    (position: Vector3, target: Vector3) => {
+    (position: Vector3, target: Vector3, up?: Vector3) => {
+      if (up) {
+        camera.up.copy(up);
+      }
       camera.position.copy(position);
       camera.lookAt(target);
       camera.updateProjectionMatrix();
@@ -152,7 +147,7 @@ function ViewerSceneManager({
     const framing = cameras ? framingFromCameras(cameras) : null;
     if (framing && framedByRef.current !== "cameras") {
       framedByRef.current = "cameras";
-      frame(framing.position, framing.target);
+      frame(framing.position, framing.target, framing.up);
     }
   }, [cameras, frame]);
 
@@ -215,10 +210,9 @@ export function SplatViewer({
 
   return (
     <div className="relative w-full overflow-hidden rounded-3xl bg-muted" style={{ height }}>
-      {/* flat/linear: R3F's default ACESFilmicToneMapping + SRGBColorSpace runs the splat shader's raw, untoneMapped
-          color output through a curve it was never designed for. This library predates R3F's color-managed
-          defaults. */}
-      <Canvas flat linear camera={{ up: [0, -1, -0.6] }}>
+      {/* flat: R3F's default ACESFilmicToneMapping would bend every color through a filmic curve. The output stays
+          sRGB, which both Spark's splats and PLYLoader's linearized point colors expect. */}
+      <Canvas flat camera={{ up: [0, -1, -0.6] }}>
         <ViewerSceneManager
           mode={mode}
           splatUrl={splatUrl}
