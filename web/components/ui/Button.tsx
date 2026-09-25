@@ -23,11 +23,11 @@ const VARIANT: Record<ButtonVariant, string> = {
   danger: "bg-error text-background hover:opacity-90",
 };
 
-// medium and large keep a 44px minimum height, the touch-target floor.
+// medium and large grow to 44px, the touch-target floor, only where the primary pointer is a finger.
 const SIZE: Record<ButtonSize, string> = {
   small: "h-8 px-3 text-xs",
-  medium: "h-11 px-4 text-sm",
-  large: "h-12 px-6 text-base",
+  medium: "h-9 px-4 text-sm pointer-coarse:h-11",
+  large: "h-10 px-5 text-base pointer-coarse:h-11",
 };
 
 // For a next/link <Link> that should look like a button: a <button> nested inside an <a> is invalid HTML.
