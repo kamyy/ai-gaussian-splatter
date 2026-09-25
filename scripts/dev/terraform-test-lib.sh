@@ -19,6 +19,12 @@ if [[ ${1-} == -h || ${1-} == --help ]]; then
   exit 0
 fi
 
+# Run from the pre-commit hook, git exports its own repository's location (GIT_DIR, GIT_INDEX_FILE, ...). Left set, the
+# fixture repository's init and commit below act on this repository instead. From a linked worktree that commits the
+# staged files as "no web/" and marks the repository bare.
+# shellcheck disable=SC2046
+unset $(git rev-parse --local-env-vars)
+
 REPO_ROOT=$(git rev-parse --show-toplevel)
 source "$REPO_ROOT/scripts/lib/terraform.sh"
 
