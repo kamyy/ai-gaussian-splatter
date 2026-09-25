@@ -1,5 +1,6 @@
 import { and, desc, eq, notInArray } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 
 import { requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
@@ -19,13 +20,27 @@ import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
 import { jobColumns } from "@/lib/server/selects";
 import { JOB_ENDED_STATUSES } from "@/lib/types";
 
+// Nothing but numbers survives the parse, which is what lets web/lib/server/ec2Launcher.ts single-quote the box's JSON
+// inside the user-data script.
+const trainSchema = z.object({
+  cropBox: z
+    .object({
+      center: z.tuple([z.number(), z.number(), z.number()]),
+      size: z.tuple([z.number().positive(), z.number().positive(), z.number().positive()]),
+      quaternion: z
+        .tuple([z.number(), z.number(), z.number(), z.number()])
+        .refine(quaternion => Math.hypot(...quaternion) > 1e-6, "A rotation quaternion can't be zero"),
+    })
+    .optional(),
+});
+
 /**
  * The "Start training" trigger — launches the second EC2 spot instance for a job whose reconstruct phase already
  * self-terminated at "awaiting_training", reusing that job's own id/callbackToken rather than creating a new job row
  * (see worker/run_job.py's stage split).
  */
 export const POST = withErrorHandling(
-  async (_request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/train">) => {
+  async (request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/train">) => {
     const env = getEnv();
     const user = await requireUser();
     const { splatId } = await ctx.params;
@@ -39,6 +54,13 @@ export const POST = withErrorHandling(
     if (splat === undefined) {
       throw new HttpError(404, "Splat not found");
     }
+
+    // Parsed before the flip below, so a malformed box never moves the job or charges the daily cap.
+    const parsed = trainSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
+      throw new HttpError(422, "Invalid request body");
+    }
+    const { cropBox } = parsed.data;
 
     const [latestJob] = await getDb()
       .select()
@@ -78,7 +100,7 @@ export const POST = withErrorHandling(
     let instanceId: string | null;
     try {
       if (localLaunchEnabled()) {
-        launchJobLocal({ jobId: flipped.id, splatId, callbackToken: flipped.callbackToken, stage: "train" });
+        launchJobLocal({ jobId: flipped.id, splatId, callbackToken: flipped.callbackToken, stage: "train", cropBox });
         instanceId = null;
       } else {
         instanceId = await launchJob({
@@ -88,6 +110,7 @@ export const POST = withErrorHandling(
           stage: "train",
           workerImageUri: workerImageUri("train"),
           ecrRegistry: ecrRegistry(),
+          cropBox,
         });
       }
     } catch (err) {

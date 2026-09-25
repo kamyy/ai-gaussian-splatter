@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { CropBox } from "@/lib/types";
 import { StageCard } from "./StageCard";
 
 vi.mock("@clerk/nextjs", () => ({
@@ -30,7 +31,7 @@ describe("StageCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
 
     await waitFor(() => expect(onJobChanged).toHaveBeenCalled());
-    expect(apiFetchMock).toHaveBeenCalledWith("/api/v1/splats/splat-1/process", "POST", "test-token");
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/v1/splats/splat-1/process", "POST", "test-token", undefined);
     expect(mutateMock).toHaveBeenCalledWith("splats");
   });
 
@@ -40,7 +41,17 @@ describe("StageCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Looks right, build it" }));
 
     await waitFor(() => expect(onJobChanged).toHaveBeenCalled());
-    expect(apiFetchMock).toHaveBeenCalledWith("/api/v1/splats/splat-1/train", "POST", "test-token");
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/v1/splats/splat-1/train", "POST", "test-token", {});
+  });
+
+  it("sends the crop box with the build", async () => {
+    const cropBox = { center: [1, 2, 3], size: [4, 5, 6], quaternion: [0, 0, 0, 1] } satisfies CropBox;
+    const onJobChanged = vi.fn();
+    render(<StageCard splatId="splat-1" stage={{ kind: "check" }} cropBox={cropBox} onJobChanged={onJobChanged} />);
+    fireEvent.click(screen.getByRole("button", { name: "Looks right, build it" }));
+
+    await waitFor(() => expect(onJobChanged).toHaveBeenCalled());
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/v1/splats/splat-1/train", "POST", "test-token", { cropBox });
   });
 
   it("reports a failed action without claiming the job changed", async () => {

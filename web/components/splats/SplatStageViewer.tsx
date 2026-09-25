@@ -9,7 +9,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { SplatViewer, type ViewerMode } from "@/components/viewer/SplatViewer";
 import { apiFetch } from "@/lib/apiFetch";
 import { cn } from "@/lib/cn";
-import type { CameraPose, Job } from "@/lib/types";
+import type { CameraPose, CropBox, Job } from "@/lib/types";
 
 interface SplatStageViewerProps {
   splatId: string;
@@ -17,6 +17,9 @@ interface SplatStageViewerProps {
   complete: boolean;
   // Undefined while loading, and for a job reconstructed before the worker wrote them.
   cameras: CameraPose[] | undefined;
+  cropBox: CropBox | null;
+  // Set only while the crop box can still change what gets built, which is what offers the Crop toggle.
+  onCropBoxChange?: (box: CropBox | null) => void;
 }
 
 // The page's 3D view, with a toggle between the finished splat and the point cloud (the "shape sketch") COLMAP
@@ -24,10 +27,11 @@ interface SplatStageViewerProps {
 //
 // SWR is left on its defaults: a presigned URL is only read once, when a scene mounts, so a revalidated one that has
 // since been re-minted is never reloaded (web/components/viewer/SplatViewer.tsx).
-export function SplatStageViewer({ splatId, job, complete, cameras }: SplatStageViewerProps) {
+export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onCropBoxChange }: SplatStageViewerProps) {
   const { getToken } = useAuth();
   const [chosen, setChosen] = useState<ViewerMode | null>(null);
   const [showCameras, setShowCameras] = useState(true);
+  const [cropping, setCropping] = useState(false);
 
   async function fetchUrl(path: string) {
     const token = await getToken();
@@ -53,6 +57,7 @@ export function SplatStageViewer({ splatId, job, complete, cameras }: SplatStage
   const available = mode === "splat" ? complete : hasPointCloud;
   const url = mode === "splat" ? splatUrl : pointCloudUrl;
   const urlError = mode === "splat" ? splatUrlError : pointCloudError;
+  const canCrop = mode === "colmap_points" && onCropBoxChange !== undefined;
 
   let body: React.ReactNode;
   if (!available) {
@@ -85,6 +90,9 @@ export function SplatStageViewer({ splatId, job, complete, cameras }: SplatStage
         pointCloudUrl={pointCloudUrl ?? null}
         cameras={cameras ?? null}
         showCameras={showCameras}
+        cropping={canCrop && cropping}
+        cropBox={cropBox}
+        onCropBoxChange={onCropBoxChange}
         height="100%"
       />
     );
@@ -115,6 +123,23 @@ export function SplatStageViewer({ splatId, job, complete, cameras }: SplatStage
               className="h-4.5 w-4.5 accent-primary"
             />
             Camera positions
+          </label>
+        )}
+        {canCrop && (
+          <label className="flex h-10 items-center gap-2 border-divider border-l pr-3.5 pl-3 text-sm font-semibold whitespace-nowrap">
+            <input
+              type="checkbox"
+              checked={cropping}
+              onChange={event => {
+                setCropping(event.target.checked);
+                // Cleared rather than kept hidden, so an unticked box never reaches the build.
+                if (!event.target.checked) {
+                  onCropBoxChange?.(null);
+                }
+              }}
+              className="h-4.5 w-4.5 accent-primary"
+            />
+            Crop
           </label>
         )}
       </div>

@@ -125,6 +125,15 @@ export interface CameraPose {
   fy: number;
 }
 
+// POST /api/v1/splats/[splatId]/train's optional body. An oriented box in the point cloud's coordinate frame: size is
+// the full edge length on each of the box's own axes, and quaternion is x, y, z, w, as three.js orders it. The train
+// stage's worker drops every Gaussian whose center falls outside it.
+export interface CropBox {
+  center: [number, number, number];
+  size: [number, number, number];
+  quaternion: [number, number, number, number];
+}
+
 export interface PublicSplat {
   title: string;
   thumbnailUrl: string;

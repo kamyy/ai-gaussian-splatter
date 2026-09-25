@@ -8,32 +8,34 @@ import { mutate } from "swr";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { apiFetch } from "@/lib/apiFetch";
 import type { Stage } from "@/lib/splatStage";
-import type { Job } from "@/lib/types";
+import type { CropBox, Job } from "@/lib/types";
 import { useAppSnackbar } from "@/lib/useAppSnackbar";
 import { DeleteSplatButton, StopJobButton } from "./SplatActions";
 
 interface StageCardProps {
   splatId: string;
   stage: Stage;
+  // The crop box drawn in the 3D view, sent with the check stage's build button. Null builds the whole scene.
+  cropBox?: CropBox | null;
   // Called once an action has changed the splat's job, so the page refetches it.
   onJobChanged: () => void;
 }
 
 // What the visitor can do, or is waiting on, at the current stage. The complete stage has no card of its own; the
 // share panel takes its place.
-export function StageCard({ splatId, stage, onJobChanged }: StageCardProps) {
+export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: StageCardProps) {
   const { getToken } = useAuth();
   const { enqueueSnackbar } = useAppSnackbar();
   const [pending, setPending] = useState(false);
 
-  async function post(path: "process" | "train", failure: string) {
+  async function post(path: "process" | "train", failure: string, body?: unknown) {
     setPending(true);
     try {
       const token = await getToken();
       if (!token) {
         throw new Error("Not signed in");
       }
-      await apiFetch<Job>(`/api/v1/splats/${splatId}/${path}`, "POST", token);
+      await apiFetch<Job>(`/api/v1/splats/${splatId}/${path}`, "POST", token, body);
       onJobChanged();
       await mutate("splats");
     } catch (err) {
@@ -44,7 +46,7 @@ export function StageCard({ splatId, stage, onJobChanged }: StageCardProps) {
   }
 
   const startProcessing = () => post("process", "Failed to start");
-  const startTraining = () => post("train", "Failed to start building");
+  const startTraining = () => post("train", "Failed to start building", cropBox ? { cropBox } : {});
 
   switch (stage.kind) {
     case "no_photos":
@@ -85,6 +87,7 @@ export function StageCard({ splatId, stage, onJobChanged }: StageCardProps) {
             This is a rough sketch of the shape. If the outline looks right, build the full 3D version. If it&apos;s a
             jumble, re-shoot with more overlap between photos.
           </p>
+          <p>To leave out the background, turn on Crop in the 3D view and fit the box around your object.</p>
           <div className="flex flex-wrap gap-2">
             <Button variant="contained" onClick={startTraining} loading={pending}>
               Looks right, build it

@@ -8,8 +8,9 @@ import { type Box3, Vector3 } from "three";
 
 import { Center } from "@/components/layout/Center";
 import { Spinner } from "@/components/ui/Spinner";
-import type { CameraPose } from "@/lib/types";
+import type { CameraPose, CropBox } from "@/lib/types";
 import { CameraFrustums } from "./CameraFrustums";
+import { CropBoxGizmo, cropBoxFromBounds } from "./CropBoxGizmo";
 import { framingFromCameras, trimmedBox } from "./cameraFraming";
 import { PointCloudScene } from "./PointCloudScene";
 
@@ -23,6 +24,11 @@ interface SplatViewerProps {
   cameras?: Omit<CameraPose, "photoId">[] | null;
   // Draws the cameras as frustums, in the point cloud view only.
   showCameras?: boolean;
+  // Shows a crop box over the point cloud, which the visitor moves, rotates, and resizes. A null box while cropping is
+  // replaced by one fitted to the point cloud once it loads, through onCropBoxChange.
+  cropping?: boolean;
+  cropBox?: CropBox | null;
+  onCropBoxChange?: (box: CropBox) => void;
   height?: string;
 }
 
@@ -114,12 +120,14 @@ function ViewerSceneManager({
   pointCloudUrl,
   cameras,
   onError,
+  onPointCloudLoad,
 }: {
   mode: ViewerMode;
   splatUrl: string | null;
   pointCloudUrl: string | null;
   cameras: Omit<CameraPose, "photoId">[] | null;
   onError: (message: string) => void;
+  onPointCloudLoad: (box: Box3) => void;
 }) {
   const camera = useThree(state => state.camera);
   // CameraControls' makeDefault registers it here. drei's PerspectiveCamera takes over as the default camera only after
@@ -159,6 +167,15 @@ function ViewerSceneManager({
     setFraming({ position: new Vector3(center.x, center.y, center.z + radius * 2.5), target: center });
   }, []);
 
+  // Stable for the same reason as onFirstLoad: PointCloudScene's load effect depends on it.
+  const onPointCloudFirstLoad = useCallback(
+    (box: Box3) => {
+      onPointCloudLoad(box);
+      onFirstLoad(box);
+    },
+    [onPointCloudLoad, onFirstLoad],
+  );
+
   // Switching mode renders a different component here, so React unmounts one scene and mounts the other. That mount is
   // what starts a load: both scenes read their URL from a ref (see SplatScene above) rather than reloading on a prop
   // change.
@@ -172,7 +189,7 @@ function ViewerSceneManager({
         url={pointCloudUrl}
         colorMode="raw_rgb"
         onError={onError}
-        onFirstLoad={onFirstLoad}
+        onFirstLoad={onPointCloudFirstLoad}
       />
     );
   }
@@ -185,6 +202,9 @@ export function SplatViewer({
   pointCloudUrl,
   cameras = null,
   showCameras = false,
+  cropping = false,
+  cropBox = null,
+  onCropBoxChange,
   height = "70vh",
 }: SplatViewerProps) {
   // The failing mode is stored with the message so only that mode shows it. A bare string would leave one asset's
@@ -197,6 +217,13 @@ export function SplatViewer({
   const handleError = useCallback((message: string) => setError({ mode, message }), [mode]);
 
   const activeError = error?.mode === mode ? error.message : null;
+
+  const [pointCloudBounds, setPointCloudBounds] = useState<Box3 | null>(null);
+  useEffect(() => {
+    if (cropping && cropBox === null && pointCloudBounds !== null) {
+      onCropBoxChange?.(cropBoxFromBounds(pointCloudBounds));
+    }
+  }, [cropping, cropBox, pointCloudBounds, onCropBoxChange]);
 
   // The caller decides which modes it offers, so an unavailable one is not normally reachable. Saying so still beats
   // the alternative when it is, which is an empty canvas that looks like a load that never finishes.
@@ -216,8 +243,12 @@ export function SplatViewer({
           pointCloudUrl={pointCloudUrl}
           cameras={cameras}
           onError={handleError}
+          onPointCloudLoad={setPointCloudBounds}
         />
         {mode === "colmap_points" && showCameras && cameras && <CameraFrustums cameras={cameras} />}
+        {mode === "colmap_points" && cropping && cropBox && onCropBoxChange && (
+          <CropBoxGizmo box={cropBox} onChange={onCropBoxChange} />
+        )}
         <CameraControls makeDefault dollyDragInverted />
       </Canvas>
       {activeError && (
