@@ -33,7 +33,7 @@ export default async function RootPage() {
               Photograph something from every side. AI Gaussian Splatter turns it into a 3D Gaussian Splat anyone can
               turn over in their browser.
             </p>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-4">
               <Link href="/sign-up" className={buttonClassName("contained", "large")}>
                 Make your first splat
               </Link>

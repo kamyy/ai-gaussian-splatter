@@ -34,17 +34,14 @@ export function SiteHeader() {
         </nav>
       </Show>
       <div className="flex-1" />
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-4">
         <Show when="signed-out">
-          <Link href="/sign-in" className="hidden px-3 text-sm font-semibold sm:block">
-            Sign in
-          </Link>
           <Link href="/sign-up" className={buttonClassName("ink")}>
             Sign up free
           </Link>
         </Show>
         <Show when="signed-in">
-          <Link href="/splats/new" className={buttonClassName("ink", "medium", "px-4 sm:px-5")}>
+          <Link href="/splats/new" className={buttonClassName("ink")}>
             <span className="sm:hidden">New</span>
             <span className="hidden sm:inline">New splat</span>
           </Link>
