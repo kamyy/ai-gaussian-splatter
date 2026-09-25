@@ -135,9 +135,6 @@ importers:
       msw:
         specifier: ^2.15.0
         version: 2.15.0(@types/node@24.13.3)(typescript@7.0.2)
-      three-stdlib:
-        specifier: ^2.36.1
-        version: 2.36.1(three@0.185.1)
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
