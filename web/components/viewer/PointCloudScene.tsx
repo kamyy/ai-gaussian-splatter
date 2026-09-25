@@ -25,9 +25,8 @@ export function PointCloudScene({ url, onError, onFirstLoad }: PointCloudScenePr
 
   useEffect(() => {
     let disposed = false;
-    // Captured so cleanup can dispose the GPU buffers this effect created — unlike SplatScene's DropInViewer, a
-    // BufferGeometry has no owner other than this component to release it, and toggling the SegmentedControl
-    // unmounts/remounts this component on every switch.
+    // Captured so cleanup can dispose the GPU buffers this effect created. Nothing but this component owns a
+    // BufferGeometry, and every switch of the viewer's mode unmounts and remounts it.
     let loadedGeometry: BufferGeometry | null = null;
     setGeometry(null);
 

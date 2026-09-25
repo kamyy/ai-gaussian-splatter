@@ -14,7 +14,8 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 const BASE =
   "inline-flex min-w-10 items-center justify-center gap-2 whitespace-nowrap rounded-full font-body font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50";
 
-// Pill-shaped throughout. "contained" is the accent call to action. "ink" is the neutral high-contrast button, which inverts with the theme because it reads foreground/background rather than a fixed color.
+// Pill-shaped throughout. "contained" is the accent call to action. "ink" is the neutral high-contrast button, which
+// inverts with the theme because it reads foreground/background rather than a fixed color.
 const VARIANT: Record<ButtonVariant, string> = {
   contained: "bg-primary text-primary-foreground hover:opacity-90",
   ink: "bg-foreground text-background hover:opacity-90",

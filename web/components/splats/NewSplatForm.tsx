@@ -66,7 +66,7 @@ export function NewSplatForm() {
     accept: { "image/*": [] },
     multiple: true,
     disabled: submitting,
-    // The zone is a drop target only. Clicking it would also fire for the remove buttons on the previews beside it,
+    // The zone is a drop target only. Clicking it would also fire for the remove buttons on the previews inside it,
     // so the file picker opens from its own "browse files" button instead.
     noClick: true,
     noKeyboard: true,

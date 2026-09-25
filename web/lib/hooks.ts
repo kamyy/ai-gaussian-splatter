@@ -1,8 +1,8 @@
 "use client";
 
-// SWR hooks — owns all server-derived data (splats list, job status via refreshInterval). SWR rather than React Query
-// because it is lighter. Job-status polling is the one piece of async complexity here worth a fetching library over a
-// hand-rolled setInterval/useEffect.
+// SWR hooks for the splat, photo, camera, and job data the pages read. SWR rather than React Query because it is
+// lighter. Job-status polling is the one piece of async complexity here worth a fetching library over a hand-rolled
+// setInterval/useEffect.
 
 import { useAuth } from "@clerk/nextjs";
 import useSWR from "swr";
@@ -21,8 +21,8 @@ const JOB_POLL_INTERVAL_MS: Record<JobStatus, number> = {
   queued: 30_000,
   launching: 30_000,
   reconstruction_running: 30_000,
-  // Nothing moves here until the user hits "Start training", and that click mutates the cache directly. Polling
-  // continues anyway: it is what leaves the timer armed for the training run the click starts.
+  // Nothing moves here until the visitor clicks the check stage's build button, and that click mutates the cache
+  // directly. Polling continues anyway: it is what leaves the timer armed for the training run the click starts.
   awaiting_training: 30_000,
   training_running: 30_000,
   uploading_result: 3_000,
