@@ -2,12 +2,15 @@
 
 /* Gallery color tokens. :root holds the light palette, the default for a visitor who never gets [data-theme] set (JS
 disabled, pre-hydration). next-themes sets [data-theme] on <html> before paint (web/app/layout.tsx).
---color-muted is the recessed surface the 3D viewers and thumbnails sit on, one step off the page ground. */
+--color-muted is the recessed surface the 3D viewers and thumbnails sit on, one step off the page ground.
+--color-outline is a control's border, about 3:1 against the page so the control reads as one. --color-divider is too
+faint for that. */
 :root {
   --color-background: #f4f2ed;
   --color-paper: #fdfcf9;
   --color-muted: #e9e5dc;
   --color-divider: #dedad2;
+  --color-outline: #8d8a85;
   --color-foreground: #161616;
   --color-muted-foreground: #6b6862;
   --color-primary: #a84b24;
@@ -22,6 +25,7 @@ disabled, pre-hydration). next-themes sets [data-theme] on <html> before paint (
   --color-paper: #24211d;
   --color-muted: #2a2622;
   --color-divider: #36322c;
+  --color-outline: #6c6861;
   --color-foreground: #f1ede6;
   --color-muted-foreground: #a39d93;
   --color-primary: #e08a5c;
@@ -39,6 +43,7 @@ runtime. */
   --color-paper: var(--color-paper);
   --color-muted: var(--color-muted);
   --color-divider: var(--color-divider);
+  --color-outline: var(--color-outline);
   --color-foreground: var(--color-foreground);
   --color-muted-foreground: var(--color-muted-foreground);
   --color-primary: var(--color-primary);
