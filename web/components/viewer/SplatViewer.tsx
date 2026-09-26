@@ -14,10 +14,10 @@ import { CropBoxGizmo, cropBoxFromBounds } from "./CropBoxGizmo";
 import { framingFromCameras, trimmedBox } from "./cameraFraming";
 import { DEFAULT_POINT_SIZE, PointCloudScene } from "./PointCloudScene";
 
-export type ViewerMode = "splat" | "colmap_points";
+export type ViewMode = "splat" | "colmap_points";
 
 interface SplatViewerProps {
-  mode: ViewerMode;
+  mode: ViewMode;
   splatUrl: string | null;
   pointCloudUrl: string | null;
   // Where the photos were taken from, in the same coordinate frame as both assets. They frame the view in either mode.
@@ -108,8 +108,8 @@ function SplatScene({
 
 /**
  * Lives inside <Canvas> (needs useThree()) so it can place the camera directly, unlike SplatViewer itself. Owns the
- * camera framing, which happens once per viewer: switching the mode toggle never re-frames. That's what makes "same
- * camera pose across the toggle" hold with no manual save/restore: both assets share one coordinate frame, since
+ * camera framing, which happens once per viewer: switching the view mode never re-frames. That's what makes "same
+ * camera pose across a mode switch" hold with no manual save/restore: both assets share one coordinate frame, since
  * worker/pipeline/train.py seeds Gaussian means directly from COLMAP's points_xyz with no rescale.
  *
  * The photos' own camera poses frame it when they're known (web/components/viewer/cameraFraming.ts). Otherwise the
@@ -125,7 +125,7 @@ function ViewerSceneManager({
   onError,
   onPointCloudLoad,
 }: {
-  mode: ViewerMode;
+  mode: ViewMode;
   splatUrl: string | null;
   pointCloudUrl: string | null;
   cameras: Omit<CameraPose, "photoId">[] | null;
@@ -213,8 +213,8 @@ export function SplatViewer({
   height = "70vh",
 }: SplatViewerProps) {
   // The failing mode is stored with the message so only that mode shows it. A bare string would leave one asset's
-  // failure pinned over every other toggle position for the rest of the page's life.
-  const [error, setError] = useState<{ mode: ViewerMode; message: string } | null>(null);
+  // failure pinned over every other mode for the rest of the page's life.
+  const [error, setError] = useState<{ mode: ViewMode; message: string } | null>(null);
 
   // Re-created whenever the mode changes, which is deliberate: it is what tags a message with the mode that produced
   // it. The scenes take this as an effect dependency, and a mode change already remounts them, so the new identity
