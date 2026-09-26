@@ -110,9 +110,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - **This Clerk SDK has no `<SignedIn>` / `<SignedOut>`.** Use `<Show when="signed-in">` (`web/components/layout/SiteHeader.tsx`).
   - Pass `fallback` for the signed-out UI.
   - While Clerk is still loading the session, `<Show>` renders nothing — not the fallback.
-- **Use the Clerk MCP `clerk_sdk_snippet` tool before writing or answering Clerk SDK questions, not a raw docs fetch.** Training data lags the API, and the MCP is already scoped to this project's installed SDK.
-  - Call it with one feature slug (`use-user`, `use-auth`). Never pass a bundle (`b2b-saas`, `custom-flows`, `organizations`, `auth-basics`, `server-side`).
-  - Skip `list_clerk_sdk_snippets` when the slug is known. A bundle is a whole guide. Fetching one is how these servers exhaust the context window.
+- **Look up Clerk SDK docs through Context7 before writing or answering Clerk SDK questions.** Training data lags the API.
 - **Set `NEXT_PUBLIC_CLERK_SIGN_IN_URL` and `NEXT_PUBLIC_CLERK_SIGN_UP_URL` at build time**, or Clerk sends users to its hosted Account Portal instead of the app's own sign-in pages.
   - The paths never change, so `web/Dockerfile` bakes them in as `ENV`.
   - Both pages need an optional catch-all (`web/app/(public)/sign-in/[[...sign-in]]/page.tsx`) because Clerk puts verification and SSO steps on sub-paths; a plain `page.tsx` 404s mid-sign-in.
