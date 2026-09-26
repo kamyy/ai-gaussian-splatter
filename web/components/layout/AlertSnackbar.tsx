@@ -13,8 +13,9 @@ const VARIANT_COLOR = {
   info: "border-info text-info",
 } as const;
 
-// Registered on every variant in the SnackbarProvider `Components` prop (web/components/layout/ThemeRegistry.tsx), so
-// `enqueueSnackbar(message, { variant })` renders this component instead of notistack's default snackbar.
+// Registered on every variant in the SnackbarProvider `Components` prop
+// (web/components/layout/AppSnackbarProvider.tsx), so `enqueueSnackbar(message, { variant })` renders this component
+// instead of notistack's default snackbar.
 export const AlertSnackbar = forwardRef<HTMLDivElement, CustomContentProps>(function AlertSnackbar(
   { message, variant, id },
   ref,

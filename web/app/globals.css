@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* Gallery color tokens. :root holds the light palette, the default for a visitor who never gets [data-theme] set (JS
-disabled, pre-hydration). next-themes sets [data-theme] on <html> before paint (web/components/layout/ThemeRegistry.tsx).
+disabled, pre-hydration). next-themes sets [data-theme] on <html> before paint (web/app/layout.tsx).
 --color-muted is the recessed surface the 3D viewers and thumbnails sit on, one step off the page ground. */
 :root {
   --color-background: #f4f2ed;

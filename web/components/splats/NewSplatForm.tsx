@@ -42,7 +42,7 @@ function PhotoMeter({ count }: { count: number }) {
 
 // Name plus photos in one step. This is the only place photos can be added to a splat, so it uploads them itself and
 // then starts processing, before navigating to the new splat's page. A failure at any step is reported through the
-// shared snackbar stack (web/components/layout/ThemeRegistry.tsx's SnackbarProvider).
+// shared snackbar stack (web/components/layout/AppSnackbarProvider.tsx).
 export function NewSplatForm() {
   const { getToken } = useAuth();
   const router = useRouter();
