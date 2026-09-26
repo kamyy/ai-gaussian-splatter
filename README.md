@@ -30,9 +30,13 @@ Built with the help of [Claude Code](https://claude.com/product/claude-code) and
 
 ## Structure
 
+A monorepo of three independent packages:
+
 - `web/` — the frontend, and the REST API as Route Handlers (auth, rate limiting, worker-job orchestration)
 - `worker/` — the reconstruction pipeline, run on a GPU spot instance per worker-job stage
 - `infra/` — the Terraform configuration for the whole AWS stack
+
+The repo root and `web/` install their JavaScript dependencies with pnpm. pnpm keeps one copy of each package version in a shared store on disk and links it into every project that uses it, which saves storage. Its `node_modules` layout also exposes only the packages a project declares in its own `package.json`. That prevents ghost dependencies: imports that work only because some other package happened to install them. `worker/` manages its Python dependencies with uv instead.
 
 ## Quick start
 
