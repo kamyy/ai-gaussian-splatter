@@ -1,10 +1,7 @@
 {
   "mcpServers": {
-    "clerk": {
-      "type": "stdio",
-      "command": "${workspaceFolder}/node_modules/.bin/clerk",
-      "args": ["mcp", "run"],
-      "env": {}
+    "aws-knowledge": {
+      "url": "https://knowledge-mcp.global.api.aws"
     }
   }
 }

@@ -11,9 +11,6 @@ importers:
       '@biomejs/biome':
         specifier: 2.5.10
         version: 2.5.10
-      clerk:
-        specifier: ^3.3.0
-        version: 3.3.0
       husky:
         specifier: ^9.1.7
         version: 9.1.7
@@ -77,55 +74,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@clerk/cli-darwin-arm64@3.3.0':
-    resolution: {integrity: sha512-Ad3rGTf+MWDEyR88QdI8ya2/tlq7xWstCIXYnWLA6JHIj5Jg/XHXNyO6FH++fxfoSqn4iK96wIe0lXks0pK19w==}
-    cpu: [arm64]
-    os: [darwin]
-
-  '@clerk/cli-darwin-x64@3.3.0':
-    resolution: {integrity: sha512-8Df0jaynZqglp47HgGyL7jqPT7gV+NnErQ9fZfGhUYSj0nDPs53nVitMovNd405chqi5Eh/nHAA1VnpdJTyZ/A==}
-    cpu: [x64]
-    os: [darwin]
-
-  '@clerk/cli-linux-arm64-musl@3.3.0':
-    resolution: {integrity: sha512-repSsRtqXfMl3Kh8A69+54zRGdbj/++D8jE2YHslUmJvHjkXhIxwix46rrLPWPxBOvrYIKxMXsbWvW8ZS8qXnQ==}
-    cpu: [arm64]
-    os: [linux]
-    libc: [musl]
-
-  '@clerk/cli-linux-arm64@3.3.0':
-    resolution: {integrity: sha512-zkmwxb3pC1vnXoqxV+OePWcenz5WkthS5OSixREXl/e8hV3PjWriEL+DOQC0rmIPqRpstMkPMaSWVKr4WrJ43g==}
-    cpu: [arm64]
-    os: [linux]
-    libc: [glibc]
-
-  '@clerk/cli-linux-x64-musl@3.3.0':
-    resolution: {integrity: sha512-iZ5+4nXtbzxOgMCN+1JpRnY1/KlsRiPX2MxqTBpPHToXB+gLRSQtYOMmHwwwemu1TN03yWfbQ8KcAATx/jgNPA==}
-    cpu: [x64]
-    os: [linux]
-    libc: [musl]
-
-  '@clerk/cli-linux-x64@3.3.0':
-    resolution: {integrity: sha512-pR1vLk/SKH2qdYeaE71mUGg4zUPIAiRiPvz9stx9IvxKP1lwkvLkCpg94G+Vkm+vVKbBSdG+Kvl8Km2Z3j0iyQ==}
-    cpu: [x64]
-    os: [linux]
-    libc: [glibc]
-
-  '@clerk/cli-win32-arm64@3.3.0':
-    resolution: {integrity: sha512-5TcCxnCyEvP6CL2YLz/N2Ll63obGuNDNCCeURmhA107H+H/WmFw6/WjLF76Z93vh3Z3/9ufQwtkTcIAkD0RKXQ==}
-    cpu: [arm64]
-    os: [win32]
-
-  '@clerk/cli-win32-x64@3.3.0':
-    resolution: {integrity: sha512-5MosmWyNIM7Z+GB0Uf3xDMEQaG8p+sK84a1TJbtptqSf0Q56EA6tU6f7ikm76dDoAtc3GXpFcVvn1l5Ctvb2dA==}
-    cpu: [x64]
-    os: [win32]
-
-  clerk@3.3.0:
-    resolution: {integrity: sha512-v0CfbjGhuv/4HT+2mvRpDvDg+kfJYlo45+2xunfx93S96p2c1KGXrI/mNP6ISws5b6O3FEZFfrCTX6XZLoweQA==}
-    engines: {node: '>=20.0.0'}
-    hasBin: true
-
   husky@9.1.7:
     resolution: {integrity: sha512-5gs5ytaNjBrh5Ow3zrvdUUY+0VxIuWVL4i9irt6friV+BqdCfmV11CQTWMiBYWHbXhco+J1kHfTOUkePhCDvMA==}
     engines: {node: '>=18'}
@@ -167,40 +115,5 @@ snapshots:
 
   '@biomejs/cli-win32-x64@2.5.10':
     optional: true
-
-  '@clerk/cli-darwin-arm64@3.3.0':
-    optional: true
-
-  '@clerk/cli-darwin-x64@3.3.0':
-    optional: true
-
-  '@clerk/cli-linux-arm64-musl@3.3.0':
-    optional: true
-
-  '@clerk/cli-linux-arm64@3.3.0':
-    optional: true
-
-  '@clerk/cli-linux-x64-musl@3.3.0':
-    optional: true
-
-  '@clerk/cli-linux-x64@3.3.0':
-    optional: true
-
-  '@clerk/cli-win32-arm64@3.3.0':
-    optional: true
-
-  '@clerk/cli-win32-x64@3.3.0':
-    optional: true
-
-  clerk@3.3.0:
-    optionalDependencies:
-      '@clerk/cli-darwin-arm64': 3.3.0
-      '@clerk/cli-darwin-x64': 3.3.0
-      '@clerk/cli-linux-arm64': 3.3.0
-      '@clerk/cli-linux-arm64-musl': 3.3.0
-      '@clerk/cli-linux-x64': 3.3.0
-      '@clerk/cli-linux-x64-musl': 3.3.0
-      '@clerk/cli-win32-arm64': 3.3.0
-      '@clerk/cli-win32-x64': 3.3.0
 
   husky@9.1.7: {}
