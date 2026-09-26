@@ -84,7 +84,7 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
 
 Monorepo, three independent packages:
 
-- `web/` — Next.js 16 (App Router) + Tailwind CSS + SWR + Zustand + react-three-fiber, **and** the REST API as Route Handlers under `app/api/v1/` backed by Drizzle.
+- `web/` — Next.js 16 (App Router) + Tailwind CSS + SWR + Zustand + React Three Fiber, **and** the REST API as Route Handlers under `app/api/v1/` backed by Drizzle.
 - `worker/` — COLMAP + gsplat pipeline, runs on an EC2 GPU spot instance per worker-job stage.
 - `infra/` — Terraform. Network, registry, data, worker IAM, web, and budgets in separate `.tf` files, one state.
 
