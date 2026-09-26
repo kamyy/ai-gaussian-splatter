@@ -4,6 +4,16 @@
 
 Upload multi-angle photos of a physical object, get back a real-time, interactive 3D Gaussian Splat you can view in the browser and share.
 
+<p>
+  <img src="images/hero.webp" width="30%" alt="The AI Gaussian Splatter landing page">
+  &emsp;
+  <img src="images/point-cloud.webp" width="30%" alt="The point cloud of a bike, with the camera positions of the 61 photos drawn above it">
+  &emsp;
+  <img src="images/splat.webp" width="30%" alt="The finished 3D Gaussian Splat of the same bike">
+</p>
+
+The landing page, then a splat of a bike built from 61 photos. The middle view is the point cloud reconstructed from the photos, with an orange frame marking where each photo was taken. The last is the finished 3D Gaussian Splat.
+
 Quality depends on angular coverage and overlap, not raw count. Aim for **~50 well-spaced** views (every side, a couple of heights, neighboring shots overlapping) rather than many near-duplicates. Capture tips: [`RUNBOOK.md`](RUNBOOK.md#15-capture).
 
 See [`ARCHITECTURE.md`](ARCHITECTURE.md) for how it's built and why, and [`RUNBOOK.md`](RUNBOOK.md) for local development and operational tasks.
