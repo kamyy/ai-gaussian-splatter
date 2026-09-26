@@ -2,34 +2,7 @@
 
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
-
-// Inline rather than an icon library dependency.
-const ICON_PROPS = {
-  width: "16",
-  height: "16",
-  viewBox: "0 0 24 24",
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: "2",
-  strokeLinecap: "round",
-} as const;
-
-function SunIcon() {
-  return (
-    <svg {...ICON_PROPS} aria-hidden="true">
-      <circle cx="12" cy="12" r="4.5" />
-      <path d="M12 2.5v2.5M12 19v2.5M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M2.5 12H5M19 12h2.5M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" />
-    </svg>
-  );
-}
-
-function MoonIcon() {
-  return (
-    <svg {...ICON_PROPS} strokeLinejoin="round" aria-hidden="true">
-      <path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z" />
-    </svg>
-  );
-}
+import { LuMoon, LuSun } from "react-icons/lu";
 
 // Shows the icon for the mode a click switches to, not the current mode: a moon in light mode ("turn dark on") and a
 // sun in dark mode ("turn dark off"). web/components/layout/SiteHeader.tsx renders it, as part of the one header every
@@ -44,6 +17,7 @@ export function ThemeToggle() {
   useEffect(() => setMounted(true), []);
   const mode = mounted ? (resolvedTheme ?? "light") : "light";
   const nextMode = mode === "dark" ? "light" : "dark";
+  const Icon = mode === "dark" ? LuSun : LuMoon;
 
   return (
     <button
@@ -52,7 +26,7 @@ export function ThemeToggle() {
       onClick={() => setTheme(nextMode)}
       className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-divider hover:bg-muted"
     >
-      {mode === "dark" ? <SunIcon /> : <MoonIcon />}
+      <Icon aria-hidden="true" className="h-4 w-4" />
     </button>
   );
 }

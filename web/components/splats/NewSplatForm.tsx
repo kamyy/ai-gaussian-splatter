@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
+import { LuX } from "react-icons/lu";
 import { mutate } from "swr";
 
 import { Button } from "@/components/ui/Button";
@@ -42,7 +43,7 @@ function PhotoMeter({ count }: { count: number }) {
 
 // Name plus photos in one step. This is the only place photos can be added to a splat, so it uploads them itself and
 // then starts processing, before navigating to the new splat's page. A failure at any step is reported through the
-// shared snackbar stack (web/components/layout/ThemeRegistry.tsx's SnackbarProvider).
+// shared snackbar stack (web/components/layout/AppSnackbarProvider.tsx).
 export function NewSplatForm() {
   const { getToken } = useAuth();
   const router = useRouter();
@@ -169,9 +170,7 @@ export function NewSplatForm() {
               disabled={submitting}
               className="absolute top-1 right-1 flex h-7 w-7 items-center justify-center rounded-full bg-paper text-foreground disabled:hidden"
             >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
-                <path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              </svg>
+              <LuX aria-hidden="true" className="h-3.5 w-3.5" />
             </button>
           </li>
         ))}

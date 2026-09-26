@@ -59,7 +59,7 @@ export function SharePanel({ splatId, children }: { splatId: string; children?: 
       </div>
       <p className="text-xs text-muted-foreground">Anyone with the link can view it. No sign-in needed.</p>
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <Button variant="outlined" onClick={download} loading={downloading}>
+        <Button variant="ink" onClick={download} loading={downloading}>
           Download .ply
         </Button>
         {children}

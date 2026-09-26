@@ -1,13 +1,16 @@
 @import "tailwindcss";
 
 /* Gallery color tokens. :root holds the light palette, the default for a visitor who never gets [data-theme] set (JS
-disabled, pre-hydration). next-themes sets [data-theme] on <html> before paint (web/components/layout/ThemeRegistry.tsx).
---color-muted is the recessed surface the 3D viewers and thumbnails sit on, one step off the page ground. */
+disabled, pre-hydration). next-themes sets [data-theme] on <html> before paint (web/app/layout.tsx).
+--color-muted is the recessed surface the 3D viewers and thumbnails sit on, one step off the page ground.
+--color-outline is a control's border, about 3:1 against the page so the control reads as one. --color-divider is too
+faint for that. */
 :root {
   --color-background: #f4f2ed;
   --color-paper: #fdfcf9;
   --color-muted: #e9e5dc;
   --color-divider: #dedad2;
+  --color-outline: #8d8a85;
   --color-foreground: #161616;
   --color-muted-foreground: #6b6862;
   --color-primary: #a84b24;
@@ -15,6 +18,8 @@ disabled, pre-hydration). next-themes sets [data-theme] on <html> before paint (
   --color-success: #2f7a4a;
   --color-error: #b3261e;
   --color-info: #23389e;
+  --raised-sheen: rgb(255 255 255 / 0.7);
+  --raised-shade: rgb(40 28 16 / 0.2);
 }
 
 [data-theme="dark"] {
@@ -22,6 +27,7 @@ disabled, pre-hydration). next-themes sets [data-theme] on <html> before paint (
   --color-paper: #24211d;
   --color-muted: #2a2622;
   --color-divider: #36322c;
+  --color-outline: #6c6861;
   --color-foreground: #f1ede6;
   --color-muted-foreground: #a39d93;
   --color-primary: #e08a5c;
@@ -29,6 +35,8 @@ disabled, pre-hydration). next-themes sets [data-theme] on <html> before paint (
   --color-success: #9fd4ae;
   --color-error: #f08a7e;
   --color-info: #aab8f0;
+  --raised-sheen: rgb(255 255 255 / 0.08);
+  --raised-shade: rgb(0 0 0 / 0.5);
 }
 
 /* `inline` makes each utility read the variable at paint time, against whichever [data-theme] is active, instead of
@@ -39,6 +47,7 @@ runtime. */
   --color-paper: var(--color-paper);
   --color-muted: var(--color-muted);
   --color-divider: var(--color-divider);
+  --color-outline: var(--color-outline);
   --color-foreground: var(--color-foreground);
   --color-muted-foreground: var(--color-muted-foreground);
   --color-primary: var(--color-primary);
@@ -61,6 +70,34 @@ runtime. */
     to {
       transform: translateX(300%);
     }
+  }
+}
+
+/* The raised finish of the controls floating over the 3D viewer (web/components/splats/SplatStageViewer.tsx), which
+lifts them off whatever the scene shows. The gradient is a translucent sheen laid over the element's own
+background color, so one utility works on any fill. Each element still sets that fill with a bg-* class. */
+@utility raised {
+  background-image: linear-gradient(to bottom, rgb(255 255 255 / 0.12), rgb(0 0 0 / 0.06));
+  box-shadow:
+    inset 0 1px 0 var(--raised-sheen),
+    0 1px 2px var(--raised-shade),
+    0 3px 8px var(--raised-shade);
+}
+
+/* raised plus a deeper shadow on hover and an inset one on press, for a clickable element. The element needs a
+transition class that covers box-shadow, such as `transition`. */
+@utility raised-button {
+  @apply raised;
+
+  &:hover:not(:disabled) {
+    box-shadow:
+      inset 0 1px 0 var(--raised-sheen),
+      0 2px 3px var(--raised-shade),
+      0 6px 14px var(--raised-shade);
+  }
+
+  &:active:not(:disabled) {
+    box-shadow: inset 0 1px 3px var(--raised-shade);
   }
 }
 
