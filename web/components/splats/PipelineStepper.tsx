@@ -1,13 +1,7 @@
+import { LuCheck } from "react-icons/lu";
+
 import { cn } from "@/lib/cn";
 import { currentStep, STEPS, type Stage } from "@/lib/splatStage";
-
-function CheckIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 12 12" fill="none" className={className} aria-hidden="true">
-      <path d="M2.5 6.2l2.2 2.2 4.8-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 // Vertical while there is a step in progress, collapsing to one compact row of checks once every step is done.
 export function PipelineStepper({ stage }: { stage: Stage }) {
@@ -23,7 +17,7 @@ export function PipelineStepper({ stage }: { stage: Stage }) {
                 title={step.label}
                 className="flex h-4.5 w-4.5 items-center justify-center rounded-full bg-primary text-primary-foreground"
               >
-                <CheckIcon className="h-2.5 w-2.5" />
+                <LuCheck aria-hidden="true" strokeWidth={3} className="h-2.5 w-2.5" />
                 <span className="sr-only">{step.label}: done</span>
               </span>
               {index < STEPS.length - 1 ? <span className="h-0.5 w-4.5 bg-primary" /> : null}
@@ -59,7 +53,7 @@ export function PipelineStepper({ stage }: { stage: Stage }) {
                   !done && !isCurrent && "border-divider",
                 )}
               >
-                {done ? <CheckIcon className="h-3 w-3" /> : null}
+                {done ? <LuCheck aria-hidden="true" strokeWidth={3} className="h-3 w-3" /> : null}
                 {isCurrent ? <span className={cn("h-2 w-2 rounded-full", failed ? "bg-error" : "bg-primary")} /> : null}
               </span>
               {connector}
