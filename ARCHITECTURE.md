@@ -218,7 +218,7 @@ Ops fallback: an AWS Budget (`infra/budgets.tf`) for spend the request path neve
   - `scripts/prod/set-deploy-enabled.sh`
   - `scripts/prod/terraform-destroy.sh`
 - Creating the state bucket and tearing down are done locally. CI can't `terraform init` against a bucket that doesn't exist yet. A teardown is too rare and too destructive to put behind a push.
-- No manual approval gate: there's no live traffic yet to protect, and this is the first real deploy (M9).
+- No manual approval gate: there's no live traffic yet to protect.
 - GPU worker deployment stays manual: nothing builds or pushes the worker image on a schedule or a push, and its tag is a commit SHA someone sets by hand ([Building and pushing the worker image](RUNBOOK.md#27-building-and-pushing-the-worker-image)).
 
 ### 11.1 Image tags
@@ -295,16 +295,16 @@ Three tiers (`.github/workflows/ci.yml`):
 
 ## 13. Build order
 
-Milestones (`M0`…`M10`) name phases, not a schedule, and they are not built in order. Definitions here; status in [State / what's next](AGENTS.md#10-state--whats-next).
+Milestones (`M0`…`M10`) name phases, not a schedule, and they are not built in order. A struck-through milestone is complete. Open gaps are in [State / what's next](AGENTS.md#10-state--whats-next).
 
-- **M0** — shoot one real object per [Capture](RUNBOOK.md#15-capture); hand-run COLMAP → gsplat → export; view in a standalone page.
-- **M1** — Same run via scripted `worker/pipeline/` modules.
-- **M2** — Schema + CRUD endpoints.
-- **M3** — S3 presign/complete against a real bucket.
-- **M4** — Local end-to-end: upload → process → result (no cloud orchestration).
+- ~~**M0** — shoot one real object per [Capture](RUNBOOK.md#15-capture); hand-run COLMAP → gsplat → export; view in a standalone page.~~
+- ~~**M1** — Same run via scripted `worker/pipeline/` modules.~~
+- ~~**M2** — Schema + CRUD endpoints.~~
+- ~~**M3** — S3 presign/complete against a real bucket.~~
+- ~~**M4** — Local end-to-end: upload → process → result (no cloud orchestration).~~
 - **M5** — EC2 spot launch, worker image, status callback, self-termination (success + induced failure).
 - **M6** — Auth + three rate-limit layers.
-- **M7** — Authenticated UI: upload, worker-job polling, splat viewer.
+- ~~**M7** — Authenticated UI: upload, worker-job polling, splat viewer.~~
 - **M8** — Share links, OG thumbnails.
-- **M9** — IaC + first real deploy.
+- ~~**M9** — IaC + first real deploy.~~
 - **M10** — time a real worker job on a `g5.xlarge`, split by pull, COLMAP and training; revisit a Packer-baked AMI only if fixed overhead still dominates.

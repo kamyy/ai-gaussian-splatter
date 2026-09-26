@@ -1,8 +1,18 @@
 # AI Gaussian Splatter
 
-> 🚧 **Under construction.** The pipeline has run end to end on a local GPU, but nothing has run on AWS yet and several gaps remain. See [State / what's next](AGENTS.md#10-state--whats-next), [`ARCHITECTURE.md`](ARCHITECTURE.md), and [`RUNBOOK.md`](RUNBOOK.md).
+> 🚧 **Under construction.** The pipeline has run end to end on a local GPU. The AWS stack has been deployed before, and is currently torn down while development continues. Several gaps remain. See [State / what's next](AGENTS.md#10-state--whats-next), [`ARCHITECTURE.md`](ARCHITECTURE.md), and [`RUNBOOK.md`](RUNBOOK.md).
 
 Upload multi-angle photos of a physical object, get back a real-time, interactive 3D Gaussian Splat you can view in the browser and share.
+
+<p>
+  <img src="images/hero.webp" width="30%" alt="The AI Gaussian Splatter landing page">
+  &emsp;
+  <img src="images/point-cloud.webp" width="30%" alt="The point cloud of a bike, with the camera positions of the 61 photos drawn above it">
+  &emsp;
+  <img src="images/splat.webp" width="30%" alt="The finished 3D Gaussian Splat of the same bike">
+</p>
+
+The landing page, then a splat of a bike built from 61 photos. The middle view is the point cloud reconstructed from the photos, with an orange frame marking where each photo was taken. The last is the finished 3D Gaussian Splat.
 
 Quality depends on angular coverage and overlap, not raw count. Aim for **~50 well-spaced** views (every side, a couple of heights, neighboring shots overlapping) rather than many near-duplicates. Capture tips: [`RUNBOOK.md`](RUNBOOK.md#15-capture).
 
@@ -12,7 +22,7 @@ Built with the help of [Claude Code](https://claude.com/product/claude-code) and
 
 ## Tech stack
 
-**Frontend** — Next.js (App Router) · Tailwind CSS · Radix UI · SWR · Zustand · react-three-fiber (Spark for splat rendering)
+**Frontend** — Next.js (App Router) · Tailwind CSS · Radix UI · SWR · Zustand · React Three Fiber (Spark for splat rendering)
 
 **Backend** — Next.js Route Handlers (REST API) · Drizzle ORM · Postgres (RDS) · Clerk (auth) · Python COLMAP + gsplat pipeline on its own EC2 GPU spot instance
 
@@ -20,9 +30,13 @@ Built with the help of [Claude Code](https://claude.com/product/claude-code) and
 
 ## Structure
 
+A monorepo of three independent packages:
+
 - `web/` — the frontend, and the REST API as Route Handlers (auth, rate limiting, worker-job orchestration)
 - `worker/` — the reconstruction pipeline, run on a GPU spot instance per worker-job stage
 - `infra/` — the Terraform configuration for the whole AWS stack
+
+The repo root and `web/` install their JavaScript dependencies with pnpm. pnpm keeps one copy of each package version in a shared store on disk and links it into every project that uses it, which saves storage. Its `node_modules` layout also exposes only the packages a project declares in its own `package.json`. That prevents ghost dependencies: imports that work only because some other package happened to install them. `worker/` manages its Python dependencies with uv instead.
 
 ## Quick start
 
