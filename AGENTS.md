@@ -237,6 +237,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 
 - **`main` is push-protected.** All changes land via PR, including edits to docs, config, and `.gitignore`.
 - **Branch names are type-prefixed** (`chore/`, `refactor/`, `docs/`, `fix/`, …). Commit messages are a separate convention.
+- **Split a change into one commit per logical step**, so a reviewer can read each one on its own. A refactor, the feature built on it, and a doc update are three commits, not one.
 - **Merge with `gh pr merge --merge`**, not squash/rebase — preserves scoped commits on `main`.
 - **Update a stale PR with `git rebase main`** then `push --force-with-lease`, not merge `origin/main` into the branch.
 
