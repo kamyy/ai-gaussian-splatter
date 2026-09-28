@@ -10,8 +10,8 @@ import { Center } from "@/components/layout/Center";
 import { Spinner } from "@/components/ui/Spinner";
 import type { CameraPose, CropBox } from "@/lib/types";
 import { CameraFrustums } from "./CameraFrustums";
-import { CropBoxGizmo, cropBoxFromBounds } from "./CropBoxGizmo";
-import { framingFromCameras, trimmedBox } from "./cameraFraming";
+import { CropBoxGizmo } from "./CropBoxGizmo";
+import { type Framing, fittedCropBox, framingFromCameras, trimmedBox } from "./cameraFraming";
 import { DEFAULT_POINT_SIZE, PointCloudScene } from "./PointCloudScene";
 
 export type ViewMode = "splat" | "colmap_points";
@@ -26,7 +26,7 @@ interface SplatViewerProps {
   showCameras?: boolean;
   // How big each point of the point cloud is drawn, in world units.
   pointSize?: number;
-  // Shows a crop box over the point cloud, which the visitor moves, rotates, and resizes. A null box while cropping is
+  // Shows a crop box over the point cloud, which the visitor moves and resizes. A null box while cropping is
   // replaced by one fitted to the point cloud once it loads, through onCropBoxChange.
   cropping?: boolean;
   cropBox?: CropBox | null;
@@ -41,10 +41,12 @@ interface SplatViewerProps {
 function SplatScene({
   splatUrl,
   onError,
+  onLoad,
   onFirstLoad,
 }: {
   splatUrl: string;
   onError: (message: string) => void;
+  onLoad: () => void;
   onFirstLoad: (box: Box3) => void;
 }) {
   const gl = useThree(state => state.gl);
@@ -73,6 +75,7 @@ function SplatScene({
           return;
         }
         setMesh(splatMesh);
+        onLoad();
 
         // isEmpty() guards a degenerate box (e.g. a training collapse to a single point). Three.js represents an
         // empty Box3 as min=+Infinity/max=-Infinity, which is truthy, not null. getCenter()/getSize() on one yield
@@ -96,7 +99,7 @@ function SplatScene({
       disposed = true;
       splatMesh.dispose();
     };
-  }, [onError, onFirstLoad]);
+  }, [onError, onLoad, onFirstLoad]);
 
   return (
     <>
@@ -123,6 +126,7 @@ function ViewerSceneManager({
   cameras,
   pointSize,
   onError,
+  onLoad,
   onPointCloudLoad,
 }: {
   mode: ViewMode;
@@ -131,14 +135,15 @@ function ViewerSceneManager({
   cameras: Omit<CameraPose, "photoId">[] | null;
   pointSize: number;
   onError: (message: string) => void;
-  onPointCloudLoad: (box: Box3) => void;
+  onLoad: () => void;
+  onPointCloudLoad: (positions: ArrayLike<number>) => void;
 }) {
   const camera = useThree(state => state.camera);
   // CameraControls' makeDefault registers it here. drei's PerspectiveCamera takes over as the default camera only after
   // the first render, so the controls are rebuilt around it once, and the framing below is re-applied to whichever
   // controls are current.
   const controls = useThree(state => state.controls) as CameraControls | null;
-  const [framing, setFraming] = useState<{ position: Vector3; target: Vector3; up?: Vector3 } | null>(null);
+  const [framing, setFraming] = useState<(Omit<Framing, "up"> & { up?: Vector3 }) | null>(null);
   const framedByRef = useRef<"nothing" | "box" | "cameras">("nothing");
 
   useEffect(() => {
@@ -173,8 +178,8 @@ function ViewerSceneManager({
 
   // Stable for the same reason as onFirstLoad: PointCloudScene's load effect depends on it.
   const onPointCloudFirstLoad = useCallback(
-    (box: Box3) => {
-      onPointCloudLoad(box);
+    (box: Box3, positions: ArrayLike<number>) => {
+      onPointCloudLoad(positions);
       onFirstLoad(box);
     },
     [onPointCloudLoad, onFirstLoad],
@@ -184,7 +189,7 @@ function ViewerSceneManager({
   // what starts a load: both scenes read their URL from a ref (see SplatScene above) rather than reloading on a prop
   // change.
   if (mode === "splat" && splatUrl) {
-    return <SplatScene key="splat" splatUrl={splatUrl} onError={onError} onFirstLoad={onFirstLoad} />;
+    return <SplatScene key="splat" splatUrl={splatUrl} onError={onError} onLoad={onLoad} onFirstLoad={onFirstLoad} />;
   }
   if (mode === "colmap_points" && pointCloudUrl) {
     return (
@@ -193,6 +198,7 @@ function ViewerSceneManager({
         url={pointCloudUrl}
         pointSize={pointSize}
         onError={onError}
+        onLoad={onLoad}
         onFirstLoad={onPointCloudFirstLoad}
       />
     );
@@ -223,12 +229,21 @@ export function SplatViewer({
 
   const activeError = error?.mode === mode ? error.message : null;
 
-  const [pointCloudBounds, setPointCloudBounds] = useState<Box3 | null>(null);
+  // The mode whose asset has finished loading. Like handleError, handleLoad is re-created per mode, and a mode switch
+  // mounts a fresh scene that loads again, so the spinner comes back until that load finishes.
+  const [loadedMode, setLoadedMode] = useState<ViewMode | null>(null);
+  const handleLoad = useCallback(() => setLoadedMode(mode), [mode]);
+
+  const [pointCloudPositions, setPointCloudPositions] = useState<ArrayLike<number> | null>(null);
   useEffect(() => {
-    if (cropping && cropBox === null && pointCloudBounds !== null) {
-      onCropBoxChange?.(cropBoxFromBounds(pointCloudBounds));
+    if (!cropping || cropBox !== null || pointCloudPositions === null) {
+      return;
     }
-  }, [cropping, cropBox, pointCloudBounds, onCropBoxChange]);
+    const fitted = fittedCropBox(pointCloudPositions, cameras ? framingFromCameras(cameras) : null);
+    if (fitted) {
+      onCropBoxChange?.(fitted);
+    }
+  }, [cropping, cropBox, pointCloudPositions, cameras, onCropBoxChange]);
 
   // The caller decides which modes it offers, so an unavailable one is not normally reachable. Saying so still beats
   // the alternative when it is, which is an empty canvas that looks like a load that never finishes.
@@ -258,6 +273,12 @@ export function SplatViewer({
         <p className="text-muted-foreground">Not available for this splat.</p>
       </Center>
     );
+  } else if (loadedMode !== mode) {
+    overlay = (
+      <Center className="pointer-events-none absolute inset-0">
+        <Spinner size="large" className="text-primary" />
+      </Center>
+    );
   }
 
   return (
@@ -275,7 +296,8 @@ export function SplatViewer({
           cameras={cameras}
           pointSize={pointSize}
           onError={handleError}
-          onPointCloudLoad={setPointCloudBounds}
+          onLoad={handleLoad}
+          onPointCloudLoad={setPointCloudPositions}
         />
         {frustums}
         {gizmo}
@@ -289,7 +311,7 @@ export function SplatViewer({
 export function SplatViewerLoading() {
   return (
     <Center className="h-[70vh] w-full">
-      <Spinner className="h-8 w-8 text-muted-foreground" />
+      <Spinner size="large" className="text-primary" />
     </Center>
   );
 }

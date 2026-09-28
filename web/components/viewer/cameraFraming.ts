@@ -1,6 +1,6 @@
-import { Box3, Matrix3, Vector3 } from "three";
+import { Box3, Matrix3, Matrix4, Quaternion, Vector3 } from "three";
 
-import type { CameraPose } from "@/lib/types";
+import type { CameraPose, CropBox } from "@/lib/types";
 
 // The fraction of points trimmed from each end of every axis before framing on a bounding box. Splats and COLMAP
 // points both scatter a few strays far from the object, and an untrimmed box grows to take in every one of them.
@@ -29,6 +29,12 @@ export function trimmedBox(positions: ArrayLike<number>): Box3 {
   return box;
 }
 
+export interface Framing {
+  target: Vector3;
+  position: Vector3;
+  up: Vector3;
+}
+
 /**
  * Where to put the viewer's camera so the object is framed the way it was photographed: aimed at the point the
  * photos' optical axes pass closest to, from the first photo's position, with the photos' average up direction.
@@ -41,9 +47,7 @@ export function trimmedBox(positions: ArrayLike<number>): Box3 {
  * object is a speck. null when the axes don't pin down a point, such as a single photo or photos all taken in one
  * direction.
  */
-export function framingFromCameras(
-  cameras: Omit<CameraPose, "photoId">[],
-): { target: Vector3; position: Vector3; up: Vector3 } | null {
+export function framingFromCameras(cameras: Omit<CameraPose, "photoId">[]): Framing | null {
   if (cameras.length < 2) {
     return null;
   }
@@ -87,4 +91,46 @@ export function framingFromCameras(
     up.set(0, 1, 0);
   }
   return { target, position, up: up.normalize() };
+}
+
+/**
+ * The crop box a capture starts with, fitted to interleaved x, y, z positions the way trimmedBox fits them. With a
+ * framing, the box stands upright in the view it sets up: its y axis is the photos' up and its z axis points toward the
+ * first photo. Without one, its axes are COLMAP's, which are arbitrary per capture and so look tilted to the visitor.
+ * null when there are no positions.
+ */
+export function fittedCropBox(positions: ArrayLike<number>, framing: Framing | null): CropBox | null {
+  const rotation = new Quaternion();
+  if (framing) {
+    const y = framing.up.clone().normalize();
+    // The direction toward the first photo, with its vertical part removed so it lies in the ground plane.
+    const z = framing.position.clone().sub(framing.target);
+    z.addScaledVector(y, -z.dot(y));
+    if (z.lengthSq() > 1e-12) {
+      z.normalize();
+      rotation.setFromRotationMatrix(new Matrix4().makeBasis(new Vector3().crossVectors(y, z), y, z));
+    } else {
+      rotation.setFromUnitVectors(new Vector3(0, 1, 0), y);
+    }
+  }
+
+  // Fit an axis-aligned box in the box's own frame, then carry its center back out to the world.
+  const inverse = rotation.clone().invert();
+  const local = new Float32Array(Math.floor(positions.length / 3) * 3);
+  const point = new Vector3();
+  for (let i = 0; i < local.length; i += 3) {
+    point
+      .set(positions[i], positions[i + 1], positions[i + 2])
+      .applyQuaternion(inverse)
+      .toArray(local, i);
+  }
+  const box = trimmedBox(local);
+  if (box.isEmpty()) {
+    return null;
+  }
+  return {
+    center: box.getCenter(new Vector3()).applyQuaternion(rotation).toArray(),
+    size: box.getSize(new Vector3()).toArray(),
+    quaternion: rotation.toArray(),
+  };
 }

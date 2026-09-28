@@ -8,16 +8,18 @@ import { trimmedBox } from "./cameraFraming";
 
 // In world units. COLMAP's reconstruction has no fixed scale, so what looks right varies from one splat to the next,
 // which is why web/components/splats/SplatStageViewer.tsx offers a slider over it.
-export const DEFAULT_POINT_SIZE = 0.01;
+export const DEFAULT_POINT_SIZE = 0.0125;
 
 interface PointCloudSceneProps {
   url: string;
   pointSize: number;
   onError: (message: string) => void;
-  onFirstLoad: (box: Box3) => void;
+  onLoad: () => void;
+  // positions is the point cloud's interleaved x, y, z, which the viewer fits its first crop box to.
+  onFirstLoad: (box: Box3, positions: ArrayLike<number>) => void;
 }
 
-export function PointCloudScene({ url, pointSize, onError, onFirstLoad }: PointCloudSceneProps) {
+export function PointCloudScene({ url, pointSize, onError, onLoad, onFirstLoad }: PointCloudSceneProps) {
   const [geometry, setGeometry] = useState<BufferGeometry | null>(null);
 
   // Read by the load effect below instead of being a dependency of it, for the reason SplatScene
@@ -45,9 +47,11 @@ export function PointCloudScene({ url, pointSize, onError, onFirstLoad }: PointC
         }
         loadedGeometry = loaded;
         setGeometry(loaded);
-        const box = trimmedBox(loaded.getAttribute("position").array);
+        onLoad();
+        const positions = loaded.getAttribute("position").array;
+        const box = trimmedBox(positions);
         if (!box.isEmpty()) {
-          onFirstLoad(box);
+          onFirstLoad(box, positions);
         }
       },
       undefined,
@@ -62,7 +66,7 @@ export function PointCloudScene({ url, pointSize, onError, onFirstLoad }: PointC
       disposed = true;
       loadedGeometry?.dispose();
     };
-  }, [onError, onFirstLoad]);
+  }, [onError, onLoad, onFirstLoad]);
 
   if (!geometry) {
     return null;
