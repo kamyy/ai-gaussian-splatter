@@ -62,7 +62,7 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
           <BackToLibraryButton />
           <h1 className="min-w-0 font-display text-5xl leading-none tracking-tight">{splat.name}</h1>
         </div>
-        <PipelineStepper stage={stage} />
+        <PipelineStepper stage={stage} job={job} photoCount={photos?.length ?? 0} />
         <StageCard splatId={id} stage={stage} cropBox={cropBox} onJobChanged={() => void refetchJob()} />
         {sharePanel}
         {photos && photos.length > 0 ? <PhotoGrid photos={photos} placedPhotoIds={placedPhotoIds} /> : null}

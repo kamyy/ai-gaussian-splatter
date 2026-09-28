@@ -1,0 +1,103 @@
+import { type Job, JobStatus } from "./types";
+
+// How long each GPU stage of a worker job took, for web/components/splats/PipelineStepper.tsx.
+
+export interface StepTiming {
+  // From the instance's launch to the stage's end, or to now while it runs.
+  totalMs: number;
+  running: boolean;
+  // The instance's boot and image pull, up to the worker's first callback. Null until that callback arrives.
+  startupMs: number | null;
+  // The stage's own work, so far while it runs. Null until the worker's first callback.
+  workMs: number | null;
+}
+
+export interface StageTimings {
+  cameras: StepTiming | null;
+  // The visitor's own time between the point cloud appearing and pressing build.
+  checkMs: number | null;
+  build: StepTiming | null;
+}
+
+function time(iso: string | null): number | null {
+  return iso === null ? null : new Date(iso).getTime();
+}
+
+function stepTiming(
+  launchedAt: number | null,
+  startedAt: number | null,
+  finishedAt: number | null,
+  running: boolean,
+  now: number,
+): StepTiming | null {
+  const end = finishedAt ?? (running ? now : null);
+  if (launchedAt === null || end === null) {
+    return null;
+  }
+  // The client's clock can run behind the server's that stamped launchedAt, so a fresh stage could read negative.
+  return {
+    totalMs: Math.max(0, end - launchedAt),
+    running,
+    startupMs: startedAt === null ? null : Math.max(0, startedAt - launchedAt),
+    workMs: startedAt === null ? null : Math.max(0, end - startedAt),
+  };
+}
+
+/**
+ * A stage that ended without finishing (failed or cancelled) gets no timing, since neither timestamp marks when it
+ * stopped. The build stage's end is updatedAt, because nothing writes to a job once it is complete.
+ */
+export function stageTimings(job: Job, now: number): StageTimings {
+  const placingCameras =
+    job.status === JobStatus.queued ||
+    job.status === JobStatus.reconstruction_running ||
+    (job.status === JobStatus.launching && job.pointCloudS3Key === null);
+  const building =
+    job.status === JobStatus.training_running ||
+    job.status === JobStatus.uploading_result ||
+    (job.status === JobStatus.launching && job.pointCloudS3Key !== null);
+
+  const colmapFinishedAt = time(job.colmapFinishedAt);
+  const trainingLaunchedAt = time(job.trainingLaunchedAt);
+  return {
+    cameras: stepTiming(time(job.createdAt), time(job.colmapStartedAt), colmapFinishedAt, placingCameras, now),
+    checkMs:
+      colmapFinishedAt === null || trainingLaunchedAt === null
+        ? null
+        : Math.max(0, trainingLaunchedAt - colmapFinishedAt),
+    build: stepTiming(
+      trainingLaunchedAt,
+      time(job.trainingStartedAt),
+      job.status === JobStatus.complete ? time(job.updatedAt) : null,
+      building,
+      now,
+    ),
+  };
+}
+
+function pad(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+// "22s", "7m 52s", "1h 03m": a finished duration.
+export function formatDuration(ms: number): string {
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes}m ${pad(seconds % 60)}s`;
+  }
+  return `${Math.floor(minutes / 60)}h ${pad(minutes % 60)}m`;
+}
+
+// "4:31", "1:02:09": a running clock.
+export function formatClock(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes}:${pad(seconds % 60)}`;
+  }
+  return `${Math.floor(minutes / 60)}:${pad(minutes % 60)}:${pad(seconds % 60)}`;
+}

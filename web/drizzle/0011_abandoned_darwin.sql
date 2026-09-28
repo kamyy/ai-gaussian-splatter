@@ -1,0 +1,1 @@
+ALTER TABLE "jobs" ADD COLUMN "training_launched_at" timestamp (6) with time zone;

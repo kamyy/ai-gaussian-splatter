@@ -123,6 +123,12 @@ export interface Job {
   resultS3Key: string | null;
   thumbnailS3Key: string | null;
   pointCloudS3Key: string | null;
+  // Each stage's timestamps, which web/lib/stageTimings.ts turns into durations. A *StartedAt comes from the worker's
+  // first callback, so it follows the instance's launch by its boot and image pull. trainingLaunchedAt is null for a
+  // job trained before it was recorded.
+  colmapStartedAt: string | null;
+  colmapFinishedAt: string | null;
+  trainingLaunchedAt: string | null;
   trainingStartedAt: string | null;
   // Percent of training done, 0-100. Null until the train stage's worker first reports it.
   trainingProgress: number | null;
