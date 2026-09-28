@@ -14,7 +14,7 @@ import { apiFetch } from "@/lib/apiFetch";
 import { cn } from "@/lib/cn";
 import { measurePhotos, type PickedPhoto } from "@/lib/measurePhoto";
 import { useAppStore } from "@/lib/store";
-import type { Job, Splat } from "@/lib/types";
+import { type Job, MAX_PHOTOS_PER_SPLAT, type Splat } from "@/lib/types";
 import { uploadPhotos } from "@/lib/uploadPhotos";
 import { useAppSnackbar } from "@/lib/useAppSnackbar";
 import { useJustifiedPages } from "@/lib/useJustifiedPages";
@@ -84,6 +84,7 @@ export function NewSplatForm() {
   // Drops still being measured. Submitting waits for them, or their photos would be left out of the upload.
   const [measuringCount, setMeasuringCount] = useState(0);
   const submitting = phase !== "idle";
+  const tooManyPhotos = photos.length > MAX_PHOTOS_PER_SPLAT;
   const measuring = measuringCount > 0;
 
   // Each photo is measured as it's added, because the server stores its size for web/components/splats/PhotoGrid.tsx.
@@ -145,7 +146,7 @@ export function NewSplatForm() {
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     const trimmedName = name.trim();
-    if (trimmedName.length === 0 || photos.length === 0 || measuring) {
+    if (trimmedName.length === 0 || photos.length === 0 || tooManyPhotos || measuring) {
       return;
     }
 
@@ -209,6 +210,13 @@ export function NewSplatForm() {
     progressLabel = `Uploading ${uploadedCount} of ${photos.length}…`;
   } else if (phase === "starting") {
     progressLabel = "Starting…";
+  }
+
+  let dropHint = "More angles usually means a better result.";
+  if (isDragReject) {
+    dropHint = "Only image files are accepted.";
+  } else if (tooManyPhotos) {
+    dropHint = `The limit is ${MAX_PHOTOS_PER_SPLAT}. Remove ${photos.length - MAX_PHOTOS_PER_SPLAT} to continue.`;
   }
 
   let previewGrid: React.ReactNode = null;
@@ -290,9 +298,7 @@ export function NewSplatForm() {
                 ? "Drop your photos here"
                 : `${photos.length} photo${photos.length === 1 ? "" : "s"} added`}
             </span>
-            <span className="text-sm text-muted-foreground">
-              {isDragReject ? "Only image files are accepted." : "More angles usually means a better result."}
-            </span>
+            <span className={cn("text-sm", tooManyPhotos ? "text-error" : "text-muted-foreground")}>{dropHint}</span>
           </div>
           <div className="flex items-center gap-3">
             <PhotoMeter count={photos.length} />
@@ -311,7 +317,7 @@ export function NewSplatForm() {
           variant="contained"
           size="large"
           loading={submitting || measuring}
-          disabled={name.trim().length === 0 || photos.length === 0}
+          disabled={name.trim().length === 0 || photos.length === 0 || tooManyPhotos}
         >
           Upload and start
         </Button>

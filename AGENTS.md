@@ -257,7 +257,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - The CUDA runtime lives in both worker images. COLMAP lives in `worker/Dockerfile`'s `reconstruct` target and gsplat in its `train` target. Don't install any of them on the host. `worker/Dockerfile` compiles gsplat's kernels in a build stage, so neither shipped image carries `nvcc`.
   - Setup and the run scripts are in [`RUNBOOK.md`](RUNBOOK.md#14-worker-local-pipeline-run).
 - **The worker container is two hops from IMDS, so `RunInstances` sets `HttpPutResponseHopLimit: 2`** (`web/lib/server/ec2Launcher.ts`).
-  - At EC2's default of 1 the token PUT in `worker/pipeline/instance.py` gets no reply, `get_self_instance_id()` returns `None`, and the instance never terminates itself — logging one INFO line indistinguishable from a local run while a `g5.xlarge` keeps billing.
+  - At EC2's default of 1 the token PUT in `worker/pipeline/instance.py` gets no reply, `get_self_instance_id()` returns `None`, and the instance never terminates itself — logging one INFO line indistinguishable from a local run while a GPU instance keeps billing.
   - `HttpTokens: "required"` is paired with it and depends on it: on its own it removes the IMDSv1 fallback and breaks credentials too, not just self-termination.
 - **An agent whose shell runs on a host with that setup can run the pipeline itself.** Check `nvidia-smi` and `podman images` before handing a real run back to the user.
   - A `podman run` outside `scripts/lib/worker.sh` also needs `--security-opt label=disable` on an SELinux host. Without it, SELinux blocks the GPU device nodes and `nvidia-smi` in the container fails with `Insufficient Permissions`.
@@ -432,10 +432,9 @@ Scaffolding (three packages + CI) is in place. Host-run `next dev` can 500 with 
 Known gaps, priority order:
 
 1. **No E2E coverage.** `web/e2e/` has no specs; share/view pages SSR from the DB with no seeded test DB to run against. Seed one and add a spec.
-2. **No maximum photo count or upload size.**
-   - `MIN_PHOTOS_PER_SPLAT` has no counterpart and the presign body schema (`web/app/api/v1/splats/[splatId]/photos/presign/route.ts`) is `.min(1)` only.
-   - COLMAP's exhaustive matching is O(n²) pairs and the instance runs until `worker/run_job.py` returns, so an oversized upload is unbounded GPU spend.
-   - The global daily cap, charged by `process` and `train`, bounds how many worker instances launch, not what each one costs ([Abuse protection](ARCHITECTURE.md#10-abuse-protection)).
+2. **No maximum upload size.**
+   - Nothing limits how large one photo can be. `MAX_PHOTOS_PER_SPLAT` (`web/lib/types.ts`) bounds how many photos a splat holds, not their size.
+   - An oversized photo costs S3 storage and worker download time on every stage that reads it.
 3. **The worker's max-lifetime safety net has no alerting, and a real gap it can't close.**
    - `web/lib/server/ec2Launcher.ts` schedules `shutdown -h +WORKER_MAX_LIFETIME_MINUTES` as the first thing user-data does, paired with `InstanceInitiatedShutdownBehavior = "terminate"` on the launch, so a failed `docker login`/pull or a hang that never reaches `worker/pipeline/instance.py`'s own self-terminate still can't bill past that ceiling — *if user-data runs at all*.
    - If cloud-init itself never starts (bad AMI, a boot/networking failure), the `shutdown` is never scheduled and nothing inside the instance can catch it; only an external, instance-runtime CloudWatch alarm checking instance age independent of anything running on it would. That alarm still doesn't exist.

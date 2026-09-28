@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { and, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getClientIp, requireUser } from "@/lib/server/auth";
@@ -10,7 +10,7 @@ import { getEnv } from "@/lib/server/env";
 import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementIp, checkAndIncrementUser } from "@/lib/server/rateLimit";
 import { presignPhotoThumbnailUpload, presignPhotoUpload } from "@/lib/server/s3";
-import type { PhotoPresignItem } from "@/lib/types";
+import { MAX_PHOTOS_PER_SPLAT, type PhotoPresignItem } from "@/lib/types";
 
 // Rate limiting happens here: it gates *before* any upload happens (per-IP + per-user), separate from the global daily
 // cap, which only gates the expensive job-launch step (web/app/api/v1/splats/[splatId]/process/route.ts).
@@ -45,6 +45,16 @@ export const POST = withErrorHandling(
     const parsed = presignSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
       throw new HttpError(422, "Invalid request body");
+    }
+
+    // Checked before the rate limits below, so a batch this rejects doesn't spend the caller's quota. Only uploaded
+    // photos count, because a failed batch's pending rows are never uploaded and so never reach the worker.
+    const [uploaded] = await getDb()
+      .select({ n: count() })
+      .from(photos)
+      .where(and(eq(photos.splatId, splatId), eq(photos.uploadStatus, "uploaded")));
+    if (uploaded.n + parsed.data.length > MAX_PHOTOS_PER_SPLAT) {
+      throw new HttpError(400, `A splat can have at most ${MAX_PHOTOS_PER_SPLAT} photos`);
     }
 
     // Both checks run before any S3 URL is issued. The per-IP limit is the real defense against one person using many

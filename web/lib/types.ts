@@ -13,6 +13,11 @@ export type SplatStatus = (typeof SPLAT_STATUSES)[number];
 
 export const PHOTO_UPLOAD_STATUSES = ["pending", "uploaded", "failed"] as const;
 
+// The most photos one splat can hold. COLMAP's exhaustive matcher (worker/pipeline/sfm.py) compares every pair of
+// photos, so reconstruct time grows with the square of this number. 100 is twice the capture guide's target of 50. It
+// lives here rather than in web/lib/server/env.ts because web/components/splats/NewSplatForm.tsx enforces it too.
+export const MAX_PHOTOS_PER_SPLAT = 100;
+
 // Named so a comparison uses a member (JobStatus.queued) rather than repeating the label as a string.
 export const JobStatus = {
   queued: "queued",

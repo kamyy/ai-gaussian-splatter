@@ -6,6 +6,7 @@ vi.mock("@clerk/nextjs/server", () => ({ auth: vi.fn(async () => ({ userId: "cle
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { photos, rateLimitCounters, splats, users } from "@/lib/server/db/schema";
+import { MAX_PHOTOS_PER_SPLAT } from "@/lib/types";
 import { POST } from "./route";
 
 function ctx(splatId: string) {
@@ -72,6 +73,46 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
       { originalFilename: "a.jpg", width: 3024, height: 4032, takenAt: new Date("2026-01-01T10:00:00.000Z") },
       { originalFilename: "b.jpg", width: 4032, height: 3024, takenAt: new Date("2026-01-01T10:00:05.000Z") },
     ]);
+  });
+
+  function photoItem(filename: string) {
+    return { filename, contentType: "image/jpeg", width: 3024, height: 4032, takenAt: "2026-01-01T10:00:00.000Z" };
+  }
+
+  async function seedPhotos(splatId: string, n: number, uploadStatus: "pending" | "uploaded") {
+    await getDb()
+      .insert(photos)
+      .values(
+        Array.from({ length: n }, (_, i) => ({
+          splatId,
+          s3Key: `splats/${splatId}/photos/${uploadStatus}-${i}.jpg`,
+          originalFilename: `${uploadStatus}-${i}.jpg`,
+          contentType: "image/jpeg",
+          width: 3024,
+          height: 4032,
+          uploadStatus,
+        })),
+      );
+  }
+
+  it("rejects a batch that would take the splat past MAX_PHOTOS_PER_SPLAT, without spending the rate limit", async () => {
+    const splat = await seedSplat();
+    await seedPhotos(splat.id, MAX_PHOTOS_PER_SPLAT - 1, "uploaded");
+
+    const res = await POST(presignRequest([photoItem("a.jpg"), photoItem("b.jpg")]), ctx(splat.id));
+    expect(res.status).toBe(400);
+    expect(await getDb().select().from(rateLimitCounters)).toEqual([]);
+
+    const last = await POST(presignRequest([photoItem("a.jpg")]), ctx(splat.id));
+    expect(last.status).toBe(200);
+  });
+
+  it("doesn't count a failed batch's photos that were never uploaded", async () => {
+    const splat = await seedSplat();
+    await seedPhotos(splat.id, MAX_PHOTOS_PER_SPLAT, "pending");
+
+    const res = await POST(presignRequest([photoItem("a.jpg")]), ctx(splat.id));
+    expect(res.status).toBe(200);
   });
 
   it("rejects a photo sent without its capture time", async () => {

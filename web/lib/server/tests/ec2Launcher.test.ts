@@ -86,6 +86,15 @@ describe("launchJob", () => {
     expect(input.InstanceInitiatedShutdownBehavior).toBe("terminate");
   });
 
+  it("launches each stage on its own instance type", async () => {
+    ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
+    await launchJob(params);
+    await launchJob({ ...params, stage: "train" });
+
+    const calls = ec2Mock.commandCalls(RunInstancesCommand);
+    expect(calls.map(call => call.args[0].input.InstanceType)).toEqual(["g4dn.xlarge", "g5.xlarge"]);
+  });
+
   it("lets the worker container reach IMDS, two hops away", async () => {
     ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
     await launchJob(params);

@@ -22,7 +22,10 @@ const envSchema = z
     AWS_REGION: z.string().min(1),
 
     WORKER_AMI_ID: z.string().min(1),
-    WORKER_INSTANCE_TYPE: z.string().min(1).default("g5.xlarge"),
+    // Reconstruct is mostly COLMAP's CPU-bound mapper, so it runs on the cheaper T4 instance. Train needs the A10G,
+    // which is also what worker/Dockerfile's train target compiles gsplat's kernels for.
+    WORKER_RECONSTRUCT_INSTANCE_TYPE: z.string().min(1).default("g4dn.xlarge"),
+    WORKER_TRAIN_INSTANCE_TYPE: z.string().min(1).default("g5.xlarge"),
     WORKER_SUBNET_ID: z.string().min(1),
     WORKER_SECURITY_GROUP_ID: z.string().min(1),
     WORKER_INSTANCE_PROFILE_ARN: z.string().min(1),
