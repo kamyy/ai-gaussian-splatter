@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -54,13 +54,13 @@ export const GET = withErrorHandling(async () => {
 
   // Neither query depends on the other's result, so they run in parallel rather than as two sequential round trips.
   const [photoRows, jobRows] = await Promise.all([
-    // Ordered oldest-first per splat, and the loop below keeps only the first row it sees per id. So the thumbnail is
-    // the first photo uploaded, not the most recent.
+    // Ordered per splat the way web/app/api/v1/splats/[splatId]/photos/route.ts orders them, oldest taken first, and
+    // the loop below keeps only the first row it sees per id. So the card shows the first photo taken.
     getDb()
       .select(photoColumns)
       .from(photos)
       .where(and(inArray(photos.splatId, ids), eq(photos.uploadStatus, "uploaded")))
-      .orderBy(photos.splatId, photos.createdAt),
+      .orderBy(photos.splatId, asc(photos.takenAt), asc(photos.createdAt), asc(photos.id)),
     // Ordered newest-first per splat so the loop's "keep the first seen" reduction picks the latest job, matching
     // web/app/api/v1/splats/[splatId]/jobs/latest/route.ts's single-splat query.
     getDb().select(jobColumns).from(jobs).where(inArray(jobs.splatId, ids)).orderBy(jobs.splatId, desc(jobs.createdAt)),
@@ -92,7 +92,11 @@ export const GET = withErrorHandling(async () => {
         ...splat,
         photoCount: photoCountBySplat.get(splat.id) ?? 0,
         latestJobStatus: latestJob?.status ?? null,
-        thumbnailPhotoUrl: firstPhoto ? await presignPhotoDownload(firstPhoto.s3Key) : null,
+        thumbnailPhotoUrl: firstPhoto
+          ? await presignPhotoDownload(firstPhoto.thumbnailS3Key ?? firstPhoto.s3Key)
+          : null,
+        thumbnailWidth: firstPhoto?.width ?? null,
+        thumbnailHeight: firstPhoto?.height ?? null,
       };
     }),
   );

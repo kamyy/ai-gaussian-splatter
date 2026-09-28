@@ -9,12 +9,22 @@ import { type NewPhoto, photos, splats } from "@/lib/server/db/schema";
 import { getEnv } from "@/lib/server/env";
 import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementIp, checkAndIncrementUser } from "@/lib/server/rateLimit";
-import { presignPhotoUpload } from "@/lib/server/s3";
+import { presignPhotoThumbnailUpload, presignPhotoUpload } from "@/lib/server/s3";
 import type { PhotoPresignItem } from "@/lib/types";
 
 // Rate limiting happens here: it gates *before* any upload happens (per-IP + per-user), separate from the global daily
 // cap, which only gates the expensive job-launch step (web/app/api/v1/splats/[splatId]/process/route.ts).
-const presignSchema = z.array(z.object({ filename: z.string().min(1), contentType: z.string().min(1) })).min(1);
+const presignSchema = z
+  .array(
+    z.object({
+      filename: z.string().min(1),
+      contentType: z.string().min(1),
+      width: z.number().int().positive(),
+      height: z.number().int().positive(),
+      takenAt: z.iso.datetime(),
+    }),
+  )
+  .min(1);
 
 export const POST = withErrorHandling(
   async (request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/photos/presign">) => {
@@ -48,6 +58,7 @@ export const POST = withErrorHandling(
       const photoId = randomUUID();
       const extension = path.extname(item.filename) || ".jpg";
       const { key, url } = await presignPhotoUpload(splatId, photoId, extension, item.contentType);
+      const thumbnail = await presignPhotoThumbnailUpload(splatId, photoId);
 
       rows.push({
         id: photoId,
@@ -55,9 +66,13 @@ export const POST = withErrorHandling(
         s3Key: key,
         originalFilename: item.filename,
         contentType: item.contentType,
+        width: item.width,
+        height: item.height,
+        thumbnailS3Key: thumbnail.key,
+        takenAt: new Date(item.takenAt),
         uploadStatus: "pending",
       });
-      items.push({ photoId, presignedPutUrl: url, s3Key: key });
+      items.push({ photoId, presignedPutUrl: url, s3Key: key, thumbnailPutUrl: thumbnail.url });
     }
 
     // One insert, not one per photo: a mid-loop failure would otherwise leave a partial batch of pending rows behind,

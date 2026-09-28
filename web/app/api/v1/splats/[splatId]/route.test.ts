@@ -48,6 +48,8 @@ describe("DELETE /api/v1/splats/[splatId]", () => {
         s3Key: `splats/${splat.id}/photos/a.jpg`,
         originalFilename: "a.jpg",
         contentType: "image/jpeg",
+        width: 4032,
+        height: 3024,
         uploadStatus: "uploaded",
       });
     await getDb()

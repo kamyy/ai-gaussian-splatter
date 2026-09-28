@@ -36,5 +36,8 @@ export const photoColumns = {
   splatId: photos.splatId,
   s3Key: photos.s3Key,
   originalFilename: photos.originalFilename,
+  width: photos.width,
+  height: photos.height,
+  thumbnailS3Key: photos.thumbnailS3Key,
   createdAt: photos.createdAt,
 };

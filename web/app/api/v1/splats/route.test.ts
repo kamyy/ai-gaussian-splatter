@@ -38,10 +38,12 @@ describe("GET /api/v1/splats", () => {
       photoCount: 0,
       latestJobStatus: null,
       thumbnailPhotoUrl: null,
+      thumbnailWidth: null,
+      thumbnailHeight: null,
     });
   });
 
-  it("counts uploaded photos and takes the thumbnail from the first one, ignoring pending ones", async () => {
+  it("counts uploaded photos and takes the thumbnail from the first one taken, ignoring pending ones", async () => {
     const user = await getOrCreateUser("clerk-user-1");
     const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "With photos" }).returning();
     await getDb()
@@ -50,24 +52,34 @@ describe("GET /api/v1/splats", () => {
         {
           splatId: splat.id,
           s3Key: `splats/${splat.id}/photos/first.jpg`,
+          thumbnailS3Key: `splats/${splat.id}/photo-thumbnails/first.jpg`,
           originalFilename: "first.jpg",
           contentType: "image/jpeg",
+          width: 3024,
+          height: 4032,
+          // Taken first, though uploaded second.
+          takenAt: new Date("2025-06-01T12:00:00Z"),
           uploadStatus: "uploaded",
-          createdAt: new Date("2026-01-01T00:00:00Z"),
+          createdAt: new Date("2026-01-01T00:01:00Z"),
         },
         {
           splatId: splat.id,
           s3Key: `splats/${splat.id}/photos/second.jpg`,
           originalFilename: "second.jpg",
           contentType: "image/jpeg",
+          width: 4032,
+          height: 3024,
+          takenAt: new Date("2025-06-01T12:00:05Z"),
           uploadStatus: "uploaded",
-          createdAt: new Date("2026-01-01T00:01:00Z"),
+          createdAt: new Date("2026-01-01T00:00:00Z"),
         },
         {
           splatId: splat.id,
           s3Key: `splats/${splat.id}/photos/pending.jpg`,
           originalFilename: "pending.jpg",
           contentType: "image/jpeg",
+          width: 4032,
+          height: 3024,
           uploadStatus: "pending",
           createdAt: new Date("2025-12-31T23:59:00Z"),
         },
@@ -77,7 +89,8 @@ describe("GET /api/v1/splats", () => {
     const [item] = await res.json();
 
     expect(item.photoCount).toBe(2);
-    expect(item.thumbnailPhotoUrl).toContain("first.jpg");
+    expect(item.thumbnailPhotoUrl).toContain("photo-thumbnails/first.jpg");
+    expect([item.thumbnailWidth, item.thumbnailHeight]).toEqual([3024, 4032]);
   });
 
   it("reports the latest job's status only", async () => {

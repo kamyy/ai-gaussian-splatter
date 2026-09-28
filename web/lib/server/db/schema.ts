@@ -73,6 +73,16 @@ export const photos = pgTable(
     originalFilename: text("original_filename").notNull(),
     contentType: text("content_type").notNull(),
     sizeBytes: integer("size_bytes"),
+    // Pixel dimensions as the browser displays the photo, read at upload. Nullable only so the column can be added to
+    // a table that already has rows. Every upload sets both.
+    width: integer("width"),
+    height: integer("height"),
+    // A small JPEG copy for the photo grid and library cards, uploaded next to the original. Null for a photo uploaded
+    // before thumbnails existed, which shows its original instead.
+    thumbnailS3Key: text("thumbnail_s3_key"),
+    // When the photo was taken: its EXIF capture time, else the file's last-modified time, both read in the browser.
+    // Photos are shown oldest first. Null for a photo uploaded before this was recorded, which sorts last.
+    takenAt: timestamp("taken_at", { withTimezone: true, precision: 3 }),
     uploadStatus: photoUploadStatus("upload_status").notNull().default("pending"),
     createdAt: timestamp("created_at", { withTimezone: true, precision: 6 }).notNull().defaultNow(),
   },

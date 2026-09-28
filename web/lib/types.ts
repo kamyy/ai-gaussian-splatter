@@ -75,24 +75,33 @@ export interface Splat {
 }
 
 // GET /api/v1/splats: what a library card needs for each splat, without one API call per card. thumbnailPhotoUrl is a
-// presigned GET for the first uploaded photo. That differs from Splat.thumbnailS3Key, the splat preview the worker
-// renders once a job completes. photoCount counts uploaded photos only.
+// presigned GET for the first uploaded photo's thumbnail, or for the photo itself when it has none. That differs from Splat.thumbnailS3Key, the splat preview the worker
+// renders once a job completes. photoCount counts uploaded photos only. thumbnailWidth and thumbnailHeight are that
+// photo's size, null when there is no photo or no size was recorded.
 export interface SplatListItem extends Splat {
   photoCount: number;
   latestJobStatus: JobStatus | null;
   thumbnailPhotoUrl: string | null;
+  thumbnailWidth: number | null;
+  thumbnailHeight: number | null;
 }
 
 export interface PhotoPresignItem {
   photoId: string;
   presignedPutUrl: string;
   s3Key: string;
+  thumbnailPutUrl: string;
 }
 
+// width and height are null only for a photo uploaded before sizes were recorded. thumbnailUrl is the photo's small
+// copy, or the original for a photo uploaded before thumbnails existed.
 export interface PhotoListItem {
   id: string;
   originalFilename: string;
   url: string;
+  thumbnailUrl: string;
+  width: number | null;
+  height: number | null;
 }
 
 export interface Job {

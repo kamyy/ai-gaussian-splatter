@@ -56,8 +56,22 @@ const job: Job = {
 };
 
 const photos: PhotoListItem[] = [
-  { id: "p1", originalFilename: "a.jpg", url: "https://example.com/a.jpg" },
-  { id: "p2", originalFilename: "b.jpg", url: "https://example.com/b.jpg" },
+  {
+    id: "p1",
+    originalFilename: "a.jpg",
+    url: "https://example.com/a.jpg",
+    thumbnailUrl: "https://example.com/a-small.jpg",
+    width: 4032,
+    height: 3024,
+  },
+  {
+    id: "p2",
+    originalFilename: "b.jpg",
+    url: "https://example.com/b.jpg",
+    thumbnailUrl: "https://example.com/b-small.jpg",
+    width: 4032,
+    height: 3024,
+  },
 ];
 
 const refetchSplat = vi.fn();
