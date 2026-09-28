@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { use, useEffect, useState } from "react";
 
+import { BackToLibraryButton } from "@/components/layout/BackToLibraryButton";
 import { PhotoGrid } from "@/components/splats/PhotoGrid";
 import { PipelineStepper } from "@/components/splats/PipelineStepper";
 import { SharePanel } from "@/components/splats/SharePanel";
@@ -45,38 +45,27 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
   const stage = splatStage(job, photos?.length ?? 0);
   const placedPhotoIds = cameras ? new Set(cameras.map(camera => camera.photoId)) : null;
 
-  // The share panel shows the delete button beside its download button. The check stage's card already offers it as
-  // "Discard".
+  // Every other stage's card shows its own Discard button beside its actions.
   let sharePanel: React.ReactNode = null;
-  let deleteButton: React.ReactNode = null;
   if (stage.kind === "complete" && splat.isShareable) {
     sharePanel = (
       <SharePanel splatId={id}>
-        <DeleteSplatButton splatId={id} label="Delete splat" variant="outlined" />
+        <DeleteSplatButton splatId={id} label="Discard" variant="outlined" />
       </SharePanel>
-    );
-  } else if (stage.kind !== "check") {
-    deleteButton = (
-      <div className="mt-auto pt-2">
-        <DeleteSplatButton splatId={id} label="Delete splat" variant="text" />
-      </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-6 lg:h-full lg:flex-row lg:gap-0">
       <div className="flex flex-col gap-6 px-4 pt-7 sm:px-12 lg:w-120 lg:shrink-0 lg:overflow-y-auto lg:pr-10 lg:pb-7">
-        <div className="flex flex-col gap-2">
-          <Link href="/splats" className="text-sm font-medium text-muted-foreground hover:text-foreground">
-            ← All splats
-          </Link>
-          <h1 className="font-display text-5xl leading-none tracking-tight">{splat.name}</h1>
+        <div className="flex items-center gap-3.5">
+          <BackToLibraryButton />
+          <h1 className="min-w-0 font-display text-5xl leading-none tracking-tight">{splat.name}</h1>
         </div>
         <PipelineStepper stage={stage} />
         <StageCard splatId={id} stage={stage} cropBox={cropBox} onJobChanged={() => void refetchJob()} />
         {sharePanel}
         {photos && photos.length > 0 ? <PhotoGrid photos={photos} placedPhotoIds={placedPhotoIds} /> : null}
-        {deleteButton}
       </div>
       <section aria-label="3D view" className="h-120 px-4 pb-6 sm:px-12 lg:h-auto lg:flex-1 lg:py-6 lg:pr-8 lg:pl-0">
         <SplatStageViewer

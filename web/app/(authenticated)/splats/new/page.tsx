@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-
+import { BackToLibraryButton } from "@/components/layout/BackToLibraryButton";
 import { NewSplatForm } from "@/components/splats/NewSplatForm";
 
 export const metadata: Metadata = {
@@ -75,11 +74,9 @@ export default function NewSplatPage() {
   return (
     <div className="flex flex-col gap-8 px-4 py-9 sm:px-12 lg:flex-row lg:gap-12">
       <div className="flex min-w-0 flex-1 flex-col gap-6">
-        <div className="flex flex-col gap-2">
-          <Link href="/splats" className="text-sm font-medium text-muted-foreground hover:text-foreground">
-            ← All splats
-          </Link>
-          <h1 className="font-display text-5xl tracking-tight sm:text-6xl">New splat</h1>
+        <div className="flex items-center gap-3.5">
+          <BackToLibraryButton />
+          <h1 className="min-w-0 font-display text-5xl tracking-tight sm:text-6xl">New splat</h1>
         </div>
         <NewSplatForm />
       </div>

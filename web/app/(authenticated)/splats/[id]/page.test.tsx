@@ -108,8 +108,8 @@ describe("SplatPage", () => {
     expect(screen.getByRole("list", { name: "Progress" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "a.jpg" })).toBeInTheDocument();
     expect(screen.queryByTestId("share-panel")).not.toBeInTheDocument();
-    // The check stage's own card offers "Discard" instead.
-    expect(screen.queryByRole("button", { name: "Delete splat" })).not.toBeInTheDocument();
+    // Before the splat is complete, the stage card offers "Discard" itself.
+    expect(screen.queryByRole("button", { name: "Discard" })).not.toBeInTheDocument();
   });
 
   it("flags a photo the cameras don't include as not placed", async () => {
@@ -125,7 +125,7 @@ describe("SplatPage", () => {
     await renderPage();
     expect(screen.getByTestId("share-panel")).toBeInTheDocument();
     expect(screen.getByTestId("viewer")).toHaveTextContent("true");
-    expect(screen.getByRole("button", { name: "Delete splat" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Discard" })).toBeInTheDocument();
   });
 
   it("refetches the splat once its job has ended", async () => {

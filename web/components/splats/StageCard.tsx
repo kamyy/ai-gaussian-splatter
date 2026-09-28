@@ -7,12 +7,12 @@ import { mutate } from "swr";
 
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { apiFetch } from "@/lib/apiFetch";
-import { cn } from "@/lib/cn";
 import { requireToken } from "@/lib/requireToken";
 import type { Stage } from "@/lib/splatStage";
 import type { CropBox, Job } from "@/lib/types";
 import { useAppSnackbar } from "@/lib/useAppSnackbar";
 import { DeleteSplatButton, StopJobButton } from "./SplatActions";
+import { StageShell } from "./StageShell";
 
 interface StageCardProps {
   splatId: string;
@@ -21,31 +21,6 @@ interface StageCardProps {
   cropBox?: CropBox | null;
   // Called once an action has changed the splat's job, so the page refetches it.
   onJobChanged: () => void;
-}
-
-function StageShell({
-  title,
-  tone = "default",
-  children,
-}: {
-  title: string;
-  tone?: "default" | "error";
-  children: React.ReactNode;
-}) {
-  return (
-    <section
-      aria-labelledby="stage-heading"
-      className="flex flex-col gap-3.5 rounded-3xl border border-divider bg-paper p-6 text-sm text-muted-foreground"
-    >
-      <h2
-        id="stage-heading"
-        className={cn("font-display text-3xl", tone === "error" ? "text-error" : "text-foreground")}
-      >
-        {title}
-      </h2>
-      {children}
-    </section>
-  );
 }
 
 // For a stage that doesn't report how far along it is: this only shows that something is running.
@@ -94,8 +69,8 @@ function ProgressBar({ label, percent, startedAt }: { label: string; percent: nu
   );
 }
 
-// What the visitor can do, or is waiting on, at the current stage. The complete stage has no card of its own; the
-// share panel takes its place.
+// What the visitor can do, or is waiting on, at the current stage. The complete stage has no card of its own. The
+// share panel (web/components/splats/SharePanel.tsx) takes its place in the same StageShell.
 export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: StageCardProps) {
   const { getToken } = useAuth();
   const { enqueueSnackbar } = useAppSnackbar();
@@ -116,24 +91,31 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
 
   const startProcessing = () => post("process", "Failed to start");
   const startTraining = () => post("train", "Failed to start building", cropBox ? { cropBox } : {});
+  const discardButton = <DeleteSplatButton splatId={splatId} label="Discard" variant="outlined" />;
 
   switch (stage.kind) {
     case "no_photos":
       return (
         <StageShell title="This splat has no photos">
           <p>Photos can only be added when a splat is created, so start a new one to try again.</p>
-          <Link href="/splats/new" className={buttonClassName("contained", "medium", "self-start")}>
-            New splat
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/splats/new" className={buttonClassName("contained", "medium")}>
+              New splat
+            </Link>
+            {discardButton}
+          </div>
         </StageShell>
       );
     case "ready":
       return (
         <StageShell title="Ready to start">
           <p>The next step places the cameras: working out where each photo was taken from.</p>
-          <Button variant="contained" onClick={startProcessing} loading={pending} className="self-start">
-            Start
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="contained" onClick={startProcessing} loading={pending}>
+              Start
+            </Button>
+            {discardButton}
+          </div>
         </StageShell>
       );
     case "placing_cameras":
@@ -144,8 +126,9 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
             tab while it runs.
           </p>
           <WorkingBar label="Placing the cameras" />
-          <div className="self-start">
+          <div className="flex flex-wrap gap-2">
             <StopJobButton splatId={splatId} onJobChanged={onJobChanged} />
+            {discardButton}
           </div>
         </StageShell>
       );
@@ -161,7 +144,7 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
             <Button variant="contained" onClick={startTraining} loading={pending}>
               Looks right, build it
             </Button>
-            <DeleteSplatButton splatId={splatId} label="Discard" variant="outlined" />
+            {discardButton}
           </div>
           <p className="text-xs">Building takes a while. You can close this tab and come back.</p>
         </StageShell>
@@ -180,8 +163,9 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
             will be ready when you come back.
           </p>
           {bar}
-          <div className="self-start">
+          <div className="flex flex-wrap gap-2">
             <StopJobButton splatId={splatId} onJobChanged={onJobChanged} />
+            {discardButton}
           </div>
         </StageShell>
       );
@@ -201,9 +185,12 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
         <StageShell title="Something went wrong" tone="error">
           <p>{stage.message ?? "Processing stopped before it finished."}</p>
           {reshootHint}
-          <Button variant="contained" onClick={startProcessing} loading={pending} className="self-start">
-            Try again
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="contained" onClick={startProcessing} loading={pending}>
+              Try again
+            </Button>
+            {discardButton}
+          </div>
         </StageShell>
       );
     }
@@ -211,9 +198,12 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
       return (
         <StageShell title="Cancelled">
           <p>Processing was stopped before it finished.</p>
-          <Button variant="contained" onClick={startProcessing} loading={pending} className="self-start">
-            Start again
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="contained" onClick={startProcessing} loading={pending}>
+              Start again
+            </Button>
+            {discardButton}
+          </div>
         </StageShell>
       );
   }

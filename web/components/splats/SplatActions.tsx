@@ -13,7 +13,7 @@ import { useAppSnackbar } from "@/lib/useAppSnackbar";
 
 interface ConfirmButtonProps {
   label: string;
-  variant: "outlined" | "text";
+  variant: "contained" | "outlined";
   title: string;
   description: string;
   confirmLabel: string;
@@ -40,29 +40,11 @@ function ConfirmButton({ label, variant, title, description, confirmLabel, keepL
     }
   }
 
-  let trigger: React.ReactNode;
-  if (variant === "text") {
-    // A quiet link-like button, flush with the column's left edge rather than padded like a pill.
-    trigger = (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="self-start text-sm font-semibold text-muted-foreground hover:text-error"
-      >
-        {label}
-      </button>
-    );
-  } else {
-    trigger = (
-      <Button variant="outlined" onClick={() => setOpen(true)}>
-        {label}
-      </Button>
-    );
-  }
-
   return (
     <>
-      {trigger}
+      <Button variant={variant} onClick={() => setOpen(true)}>
+        {label}
+      </Button>
       <Dialog open={open} onOpenChange={next => !pending && setOpen(next)}>
         <DialogContent>
           <DialogTitle>{title}</DialogTitle>
@@ -88,7 +70,7 @@ export function DeleteSplatButton({
 }: {
   splatId: string;
   label: string;
-  variant: "outlined" | "text";
+  variant: "contained" | "outlined";
 }) {
   const { getToken } = useAuth();
   const router = useRouter();
@@ -116,7 +98,7 @@ export function StopJobButton({ splatId, onJobChanged }: { splatId: string; onJo
   return (
     <ConfirmButton
       label="Stop"
-      variant="outlined"
+      variant="contained"
       title="Stop processing?"
       description="The cloud GPU stops straight away. Starting again later begins from placing the cameras."
       confirmLabel="Stop"
