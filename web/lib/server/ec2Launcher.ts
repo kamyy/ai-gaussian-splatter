@@ -3,7 +3,12 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync, openSync } from "node:fs";
 import path from "node:path";
 
-import { EC2Client, RunInstancesCommand, TerminateInstancesCommand } from "@aws-sdk/client-ec2";
+import {
+  DescribeInstancesCommand,
+  EC2Client,
+  RunInstancesCommand,
+  TerminateInstancesCommand,
+} from "@aws-sdk/client-ec2";
 
 import type { CropBox } from "@/lib/types";
 import { getEnv } from "./env";
@@ -103,10 +108,13 @@ export function generateCallbackToken(): string {
 
 /**
  * How long after boot renderUserData's `shutdown -h` terminates a worker, whatever its job is doing. It caps
- * worst-case billing and is not a tuned SLA. No job's wall clock has been measured yet, so 2 hours is a rough guess
- * generous over the expected job. Revisit it once real numbers exist.
+ * worst-case billing and is not a tuned SLA. No stage's wall clock has been measured yet, so 30 minutes is a guess, and
+ * a stage that runs longer is killed. Revisit it once real numbers exist.
+ *
+ * infra/locals.tf's worker_max_lifetime_minutes must match it. That is what the sweeper Lambda (infra/worker_sweeper.tf)
+ * measures instance age against, and it lives in a separate Terraform config, so the two are kept in sync by hand.
  */
-export const WORKER_MAX_LIFETIME_MINUTES = 120;
+export const WORKER_MAX_LIFETIME_MINUTES = 30;
 
 /** Launches the spot worker instance and returns its instance ID. */
 export async function launchJob(params: {
@@ -184,6 +192,27 @@ export async function launchJob(params: {
     throw new Error("RunInstances returned no instance ID");
   }
   return instanceId;
+}
+
+/**
+ * A worker instance's EC2 state name (pending, running, shutting-down, terminated, …) and launch time, or null when EC2
+ * no longer knows the instance. EC2 forgets a terminated instance about an hour after it ends.
+ */
+export async function describeWorker(instanceId: string): Promise<{ state: string; launchTime: Date } | null> {
+  const ec2 = new EC2Client({ region: getEnv().AWS_REGION });
+  try {
+    const response = await ec2.send(new DescribeInstancesCommand({ InstanceIds: [instanceId] }));
+    const instance = response.Reservations?.[0]?.Instances?.[0];
+    if (instance?.State?.Name === undefined || instance.LaunchTime === undefined) {
+      return null;
+    }
+    return { state: instance.State.Name, launchTime: instance.LaunchTime };
+  } catch (err) {
+    if (err instanceof Error && err.name === "InvalidInstanceID.NotFound") {
+      return null;
+    }
+    throw err;
+  }
 }
 
 /**

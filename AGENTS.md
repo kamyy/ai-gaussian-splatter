@@ -86,7 +86,7 @@ Monorepo, three independent packages:
 
 - `web/` — Next.js 16 (App Router) + Tailwind CSS + SWR + Zustand + React Three Fiber, **and** the REST API as Route Handlers under `app/api/v1/` backed by Drizzle.
 - `worker/` — COLMAP + gsplat pipeline, runs on an EC2 GPU spot instance per worker-job stage.
-- `infra/` — Terraform. Network, registry, data, worker IAM, web, and budgets in separate `.tf` files, one state.
+- `infra/` — Terraform. Network, registry, data, worker IAM, worker sweeper, web, and budgets in separate `.tf` files, one state.
 
 Server-only code lives in `web/lib/server/` — never import it from a `"use client"` file. The one shared client-safe module is `web/lib/types.ts` (status-value tuples for Drizzle `pgEnum`s); import runs types → schema, never the reverse.
 
@@ -257,6 +257,8 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 - **Local pipeline runs are a Podman container: they need an NVIDIA GPU, the NVIDIA driver, and `nvidia-container-toolkit`.**
   - The CUDA runtime lives in both worker images. COLMAP lives in `worker/Dockerfile`'s `reconstruct` target and gsplat in its `train` target. Don't install any of them on the host. `worker/Dockerfile` compiles gsplat's kernels in a build stage, so neither shipped image carries `nvcc`.
   - Setup and the run scripts are in [`RUNBOOK.md`](RUNBOOK.md#14-worker-local-pipeline-run).
+- **The worker lifetime ceiling is written twice: `WORKER_MAX_LIFETIME_MINUTES` in `web/lib/server/ec2Launcher.ts` and `worker_max_lifetime_minutes` in `infra/locals.tf`.** Change both together.
+  - The sweeper Lambda (`infra/worker_sweeper.tf`) terminates any worker instance older than the `infra/` value plus 15 minutes. Raising only the web value lets it kill healthy stages that the new ceiling allows.
 - **The worker container is two hops from IMDS, so `RunInstances` sets `HttpPutResponseHopLimit: 2`** (`web/lib/server/ec2Launcher.ts`).
   - At EC2's default of 1 the token PUT in `worker/pipeline/instance.py` gets no reply, `get_self_instance_id()` returns `None`, and the instance never terminates itself — logging one INFO line indistinguishable from a local run while a GPU instance keeps billing.
   - `HttpTokens: "required"` is paired with it and depends on it: on its own it removes the IMDSv1 fallback and breaks credentials too, not just self-termination.
@@ -272,7 +274,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 
 ### 8.1 Structure & state
 
-- **All of `infra/` shares one state**, with its six logical areas (network, registry, data, worker IAM, web, budgets) split across separate `.tf` files for readability ([Infra](ARCHITECTURE.md#8-infra)). Nothing references another file by name, only by resource address in that one state, so moving a resource between files or renaming an area is a file-organization change only.
+- **All of `infra/` shares one state**, with its seven logical areas (network, registry, data, worker IAM, worker sweeper, web, budgets) split across separate `.tf` files for readability ([Infra](ARCHITECTURE.md#8-infra)). Nothing references another file by name, only by resource address in that one state, so moving a resource between files or renaming an area is a file-organization change only.
 - **Never add the state bucket as a resource in `infra/`.** Skip creating it ([Creating account prerequisites](RUNBOOK.md#22-creating-account-prerequisites)) and `terraform init` fails.
 - **`infra/tests/*.tftest.hcl` run fully offline via `mock_provider "aws" {}`.**
   - Every file needs two `mock_provider "aws"` blocks — one default, one `alias = "billing"` — since a bare `mock_provider "aws" {}` only covers the unaliased provider configuration and `providers.tf` declares a second one for `us-east-1`.
@@ -436,16 +438,11 @@ Scaffolding (three packages + CI) is in place. Host-run `next dev` can 500 with 
 Known gaps, priority order:
 
 1. **No E2E coverage.** `web/e2e/` has no specs; share/view pages SSR from the DB with no seeded test DB to run against. Seed one and add a spec.
-2. **The worker's max-lifetime safety net has no alerting, and a real gap it can't close.**
-   - `web/lib/server/ec2Launcher.ts` schedules `shutdown -h +WORKER_MAX_LIFETIME_MINUTES` as the first thing user-data does, paired with `InstanceInitiatedShutdownBehavior = "terminate"` on the launch, so a failed `docker login`/pull or a hang that never reaches `worker/pipeline/instance.py`'s own self-terminate still can't bill past that ceiling — *if user-data runs at all*.
-   - If cloud-init itself never starts (bad AMI, a boot/networking failure), the `shutdown` is never scheduled and nothing inside the instance can catch it; only an external, instance-runtime CloudWatch alarm checking instance age independent of anything running on it would. That alarm still doesn't exist.
-   - Two things are unaddressed either way. Nothing notifies anyone when the ceiling *does* fire, so a legitimately slow worker job dies exactly as silently as a real hang.
-   - Nothing updates `jobs.status` when the instance disappears out from under it either, so the row stays stuck rather than moving to `failed`.
-   - The budgets email (`infra/budgets.tf`) is the only signal for any of this, and only in aggregate, weeks later.
-   - `WORKER_MAX_LIFETIME_MINUTES`'s 2 hours is also a guess, not a ceiling measured against a real worker job's wall clock.
-3. **A well-formed but wrong `alertEmail` still deploys green.**
-   - `infra/variables.tf`'s validation now catches a non-email string outright (a blank value, a stray flag, a copy-paste mistake), but a typo'd-and-still-email-shaped address (`alert+email@gmial.com`) is syntactically fine and passes it.
-   - Deliverability can't be checked at apply time either way. The AWS Budget emails that address directly, with no subscription-confirmation state to check via the CLI, so the first sign of that class of typo is a budget alert that never arrives.
-   - Watching for a real alert once spend crosses a threshold, or temporarily lowering `monthly_budget_limit_usd` to force one, is the only way to check.
+2. **The worker's lifetime ceiling is a guess.** `WORKER_MAX_LIFETIME_MINUTES`'s 30 minutes hasn't been measured against a real worker job's wall clock.
+   - A legitimately slow stage that runs past it is terminated and failed exactly like a hang.
+   - When the instance's own shutdown fires, no one is emailed. The sweeper only emails about instances whose own shutdown never fired ([Compute](ARCHITECTURE.md#3-compute)).
+3. **A well-formed but wrong `alert_email` still deploys green.**
+   - `infra/variables.tf`'s validation catches a non-email string, but a typo'd address that is still email-shaped (`alert+email@gmial.com`) passes it.
+   - The sweeper's SNS email subscription is the one place a typo shows. It stays `PendingConfirmation` until someone clicks the link AWS sends, so a subscription that never confirms points to a wrong address ([Going live](RUNBOOK.md#26-going-live)). The AWS Budget emails the address directly and has no such state.
 
 **M0 has run locally:** a real capture has been through COLMAP→gsplat and opened in the viewer on a local GPU, via the `scripts/dev/worker-*.sh` runs in [Worker (local pipeline run)](RUNBOOK.md#14-worker-local-pipeline-run). No worker job has run on AWS yet, and no run's wall clock has been recorded.

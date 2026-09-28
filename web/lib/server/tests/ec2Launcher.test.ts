@@ -1,4 +1,9 @@
-import { EC2Client, RunInstancesCommand, TerminateInstancesCommand } from "@aws-sdk/client-ec2";
+import {
+  DescribeInstancesCommand,
+  EC2Client,
+  RunInstancesCommand,
+  TerminateInstancesCommand,
+} from "@aws-sdk/client-ec2";
 import { mockClient } from "aws-sdk-client-mock";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -10,6 +15,7 @@ vi.mock("node:fs", () => ({ mkdirSync: vi.fn(), openSync: vi.fn(() => 0) }));
 
 import type { CropBox } from "@/lib/types";
 import {
+  describeWorker,
   generateCallbackToken,
   launchJob,
   launchJobLocal,
@@ -235,5 +241,30 @@ describe("terminateWorker", () => {
       .rejects(Object.assign(new Error("denied"), { name: "UnauthorizedOperation" }));
 
     await expect(terminateWorker("i-0abc123")).rejects.toThrow("denied");
+  });
+});
+
+describe("describeWorker", () => {
+  it("returns the instance's state and launch time", async () => {
+    const launchTime = new Date("2026-01-01T10:00:00Z");
+    ec2Mock
+      .on(DescribeInstancesCommand, { InstanceIds: ["i-0abc123"] })
+      .resolves({ Reservations: [{ Instances: [{ State: { Name: "running" }, LaunchTime: launchTime }] }] });
+
+    expect(await describeWorker("i-0abc123")).toEqual({ state: "running", launchTime });
+  });
+
+  it("returns null for an instance EC2 no longer knows about", async () => {
+    ec2Mock
+      .on(DescribeInstancesCommand)
+      .rejects(Object.assign(new Error("gone"), { name: "InvalidInstanceID.NotFound" }));
+
+    expect(await describeWorker("i-0abc123")).toBeNull();
+  });
+
+  it("surfaces any other failure", async () => {
+    ec2Mock.on(DescribeInstancesCommand).rejects(Object.assign(new Error("denied"), { name: "UnauthorizedOperation" }));
+
+    await expect(describeWorker("i-0abc123")).rejects.toThrow("denied");
   });
 });

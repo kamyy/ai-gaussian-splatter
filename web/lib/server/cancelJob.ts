@@ -8,7 +8,7 @@ import { jobColumns } from "./selects";
 
 // Statuses where a worker instance may be running for the job. awaiting_training is absent: the reconstruct instance
 // has already terminated itself and the train instance hasn't launched.
-const WORKER_RUNNING_STATUSES: string[] = [
+export const WORKER_RUNNING_STATUSES: string[] = [
   JobStatus.queued,
   JobStatus.launching,
   JobStatus.reconstruction_running,

@@ -213,6 +213,14 @@ resource "aws_iam_role_policy" "task" {
         Resource  = "*"
         Condition = { StringEquals = { "ec2:ResourceTag/${local.worker_tag_key}" = local.worker_tag_value } }
       },
+      # web/lib/server/reconcileJob.ts looks up a quiet job's instance to tell a slow stage from a dead worker.
+      # ec2:DescribeInstances has no resource-level permissions to scope.
+      {
+        Sid      = "DescribeWorkers"
+        Effect   = "Allow"
+        Action   = "ec2:DescribeInstances"
+        Resource = "*"
+      },
       # PassRole is authorized against the role being passed, not the instance profile ARN that wraps it.
       # RunInstances with IamInstanceProfile evaluates iam:PassRole against the underlying role's ARN.
       {

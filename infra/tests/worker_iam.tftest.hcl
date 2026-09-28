@@ -140,3 +140,31 @@ override_data {
     account_id = "000000000000"
   }
 }
+
+override_resource {
+  target = aws_iam_role.worker_sweeper
+  values = {
+    arn = "arn:aws:iam::000000000000:role/ai-gaussian-splatter-worker-sweeper"
+  }
+}
+
+override_resource {
+  target = aws_sns_topic.alerts
+  values = {
+    arn = "arn:aws:sns:us-west-2:000000000000:ai-gaussian-splatter-alerts"
+  }
+}
+
+override_resource {
+  target = aws_lambda_function.worker_sweeper
+  values = {
+    arn = "arn:aws:lambda:us-west-2:000000000000:function:ai-gaussian-splatter-worker-sweeper"
+  }
+}
+
+override_resource {
+  target = aws_cloudwatch_event_rule.worker_sweeper
+  values = {
+    arn = "arn:aws:events:us-west-2:000000000000:rule/ai-gaussian-splatter-worker-sweeper"
+  }
+}
