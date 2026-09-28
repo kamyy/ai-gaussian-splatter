@@ -1,6 +1,6 @@
 # AI Gaussian Splatter
 
-> 🚧 **Under construction.** The pipeline has run end to end on a local GPU. The AWS stack has been deployed before, and is currently torn down while development continues. Several gaps remain. See [State / what's next](AGENTS.md#10-state--whats-next), [`ARCHITECTURE.md`](ARCHITECTURE.md), and [`RUNBOOK.md`](RUNBOOK.md).
+> 🚧 **Under construction.** The pipeline has run end to end on a local GPU. The AWS stack has been deployed before for testing, but is currently torn down while development continues. Several gaps remain. See [State / what's next](AGENTS.md#10-state--whats-next), [`ARCHITECTURE.md`](ARCHITECTURE.md), and [`RUNBOOK.md`](RUNBOOK.md).
 
 Upload multi-angle photos of a physical object, get back a real-time, interactive 3D Gaussian Splat you can view in the browser and share.
 
@@ -18,7 +18,7 @@ Quality depends on angular coverage and overlap, not raw count. Aim for **~50 we
 
 See [`ARCHITECTURE.md`](ARCHITECTURE.md) for how it's built and why, and [`RUNBOOK.md`](RUNBOOK.md) for local development and operational tasks.
 
-Built with the help of [Claude Code](https://claude.com/product/claude-code) and Cursor's Composer.
+Built with the help of [Claude Code](https://claude.com/product/claude-code) and Cursor.
 
 ## Tech stack
 
@@ -36,7 +36,7 @@ A monorepo of three independent packages:
 - `worker/` — the reconstruction pipeline, run on a GPU spot instance per worker-job stage
 - `infra/` — the Terraform configuration for the whole AWS stack
 
-The repo root and `web/` install their JavaScript dependencies with pnpm. pnpm keeps one copy of each package version in a shared store on disk and links it into every project that uses it, which saves storage. Its `node_modules` layout also exposes only the packages a project declares in its own `package.json`. That prevents ghost dependencies: imports that work only because some other package happened to install them. `worker/` manages its Python dependencies with uv instead.
+The repo root and `web/` install their JavaScript dependencies with pnpm. pnpm keeps one copy of each package version in a shared store on disk and links it into every project that uses it, which saves storage. Its `node_modules` layout also exposes only the packages a project declares in its own `package.json`. That prevents ghost dependencies: imports that work only because some other package happened to install them. `worker/` manages its Python dependencies with uv instead of pip.
 
 ## Quick start
 

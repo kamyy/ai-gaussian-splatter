@@ -126,10 +126,8 @@ To judge a change to `worker/pipeline/train.py`, add `--eval`. It holds back eve
 Set `WORKER_LOCAL_LAUNCH=true` in `web/.env` to make the web app's Start button run the worker on your own GPU instead of launching a real EC2 spot instance. Output lands in `worker/jobdir/<jobId>/worker.log`, for the same [registration debugging](#15-capture) the manual flow uses. Needs the one-time GPU passthrough setup ([Worker (local pipeline run)](#14-worker-local-pipeline-run)) and an image already built. This path never builds one for you.
 
 ```bash
-cd worker
-podman build --target reconstruct -t splat-worker-reconstruct:dev .  # once, and again after any worker code change
-podman build --target train -t splat-worker-train:dev .              # only the stage you will launch is needed
-cd ../web
+scripts/dev/worker-build-images.sh  # once, and again after any worker code change
+cd web
 pnpm dev
 ```
 
