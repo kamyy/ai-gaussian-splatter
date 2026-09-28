@@ -436,17 +436,14 @@ Scaffolding (three packages + CI) is in place. Host-run `next dev` can 500 with 
 Known gaps, priority order:
 
 1. **No E2E coverage.** `web/e2e/` has no specs; share/view pages SSR from the DB with no seeded test DB to run against. Seed one and add a spec.
-2. **No maximum upload size.**
-   - Nothing limits how large one photo can be. `MAX_PHOTOS_PER_SPLAT` (`web/lib/types.ts`) bounds how many photos a splat holds, not their size.
-   - An oversized photo costs S3 storage and worker download time on every stage that reads it.
-3. **The worker's max-lifetime safety net has no alerting, and a real gap it can't close.**
+2. **The worker's max-lifetime safety net has no alerting, and a real gap it can't close.**
    - `web/lib/server/ec2Launcher.ts` schedules `shutdown -h +WORKER_MAX_LIFETIME_MINUTES` as the first thing user-data does, paired with `InstanceInitiatedShutdownBehavior = "terminate"` on the launch, so a failed `docker login`/pull or a hang that never reaches `worker/pipeline/instance.py`'s own self-terminate still can't bill past that ceiling — *if user-data runs at all*.
    - If cloud-init itself never starts (bad AMI, a boot/networking failure), the `shutdown` is never scheduled and nothing inside the instance can catch it; only an external, instance-runtime CloudWatch alarm checking instance age independent of anything running on it would. That alarm still doesn't exist.
    - Two things are unaddressed either way. Nothing notifies anyone when the ceiling *does* fire, so a legitimately slow worker job dies exactly as silently as a real hang.
    - Nothing updates `jobs.status` when the instance disappears out from under it either, so the row stays stuck rather than moving to `failed`.
    - The budgets email (`infra/budgets.tf`) is the only signal for any of this, and only in aggregate, weeks later.
    - `WORKER_MAX_LIFETIME_MINUTES`'s 2 hours is also a guess, not a ceiling measured against a real worker job's wall clock.
-4. **A well-formed but wrong `alertEmail` still deploys green.**
+3. **A well-formed but wrong `alertEmail` still deploys green.**
    - `infra/variables.tf`'s validation now catches a non-email string outright (a blank value, a stray flag, a copy-paste mistake), but a typo'd-and-still-email-shaped address (`alert+email@gmial.com`) is syntactically fine and passes it.
    - Deliverability can't be checked at apply time either way. The AWS Budget emails that address directly, with no subscription-confirmation state to check via the CLI, so the first sign of that class of typo is a budget alert that never arrives.
    - Watching for a real alert once spend crosses a threshold, or temporarily lowering `monthly_budget_limit_usd` to force one, is the only way to check.
