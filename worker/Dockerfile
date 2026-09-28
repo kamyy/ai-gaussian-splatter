@@ -23,7 +23,7 @@
 # the mesa/LLVM stack libgl1 and libglew2.2 drag in about 296 MB, and OpenImageIO's OpenVDB/GDAL/DCMTK tree another
 # 100 MB or so, against roughly twenty minutes on any build that misses the cache. Upstream also tracks the dependency
 # list across releases, which moves, and builds for all major CUDA architectures, so one binary runs on the
-# g5.xlarge's A10G and on Ada-generation dev GPUs.
+# reconstruct stage's T4 (g4dn.xlarge) and on Ada-generation dev GPUs.
 #
 # Pinned by digest because upstream's CI names tags `$(date +%Y%m%d).$GITHUB_RUN_NUMBER`, a build number rather than a
 # version. If the pin moves, check what it holds with `colmap --version` against COLMAP_VERSION on main: a `.dev0`
@@ -105,7 +105,7 @@ RUN uv sync --no-dev --locked && \
 # the last of them as well, which the driver JITs for any newer architecture: without it a GPU outside 8.6/8.9 fails
 # at the first rasterization() with "no kernel image is available", since the prebuilt csrc.so means gsplat never
 # compiles at run time to cover itself. That reaches an A100, an H100, a Blackwell dev card, or any other
-# WORKER_INSTANCE_TYPE. The version comes from what uv resolved, so worker/uv.lock stays the single pin.
+# WORKER_TRAIN_INSTANCE_TYPE. The version comes from what uv resolved, so worker/uv.lock stays the single pin.
 FROM build AS build-train
 
 RUN TORCH_CUDA_ARCH_LIST="8.6;8.9+PTX" uv pip install --no-build-isolation --no-deps --force-reinstall \

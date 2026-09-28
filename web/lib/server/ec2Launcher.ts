@@ -139,7 +139,9 @@ export async function launchJob(params: {
   const response = await ec2.send(
     new RunInstancesCommand({
       ImageId: env.WORKER_AMI_ID,
-      InstanceType: env.WORKER_INSTANCE_TYPE as never,
+      InstanceType: (params.stage === "reconstruct"
+        ? env.WORKER_RECONSTRUCT_INSTANCE_TYPE
+        : env.WORKER_TRAIN_INSTANCE_TYPE) as never,
       MinCount: 1,
       MaxCount: 1,
       SubnetId: env.WORKER_SUBNET_ID,

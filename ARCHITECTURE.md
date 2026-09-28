@@ -60,7 +60,8 @@ The "AI" here is per-object gradient descent through a differentiable rasterizer
 
 ## 3. Compute
 
-- Each stage of a worker job — reconstruct, then train — gets its own EC2 GPU **spot** instance (`web/lib/server/ec2Launcher.ts`; type from `WORKER_INSTANCE_TYPE`, default `g5.xlarge`). It runs the worker container, then self-terminates on success or failure.
+- Each stage of a worker job — reconstruct, then train — gets its own EC2 GPU **spot** instance (`web/lib/server/ec2Launcher.ts`). Reconstruct runs on a `g4dn.xlarge` (`WORKER_RECONSTRUCT_INSTANCE_TYPE`) and train on a `g5.xlarge` (`WORKER_TRAIN_INSTANCE_TYPE`). Each instance runs the worker container, then self-terminates on success or failure.
+- Reconstruct is mostly COLMAP's CPU-bound `mapper`, so it gets little from the A10G GPU. A `g4dn.xlarge` has the same 4 vCPUs at about half the hourly price, and its T4 GPU still runs COLMAP's feature extraction and matching. Neither stage's instance type has been timed against the other (M10).
 - Fallback if a worker dies without reporting: `web/lib/server/ec2Launcher.ts` schedules `shutdown -h +WORKER_MAX_LIFETIME_MINUTES` as the first thing user-data does.
   - It runs before the failure-prone steps (ECR login, `docker run`) that could otherwise leave `worker/pipeline/instance.py`'s own self-terminate unreached.
   - `InstanceInitiatedShutdownBehavior = "terminate"` on the launch makes that shutdown terminate the instance rather than stop it.
@@ -78,7 +79,7 @@ A worker job's wall clock splits into three parts:
 - **COLMAP**: a few minutes, CPU-bound by `mapper`'s incremental bundle adjustment.
 - **Training**: the majority of wall clock.
 
-A baked AMI would attack the smaller half — fixed overhead, not training. Training cost is set by the resolution the photos are rasterized at (`MAX_TRAINING_EDGE` in `worker/pipeline/train.py`), not by boot latency. Shrinking the image and precompiling the kernels took most of what an AMI was worth here, so M10 measures the fixed overhead before anyone builds an AMI. Only the image size is measured. The split between the three parts is still read off the code, and no run on a `g5.xlarge` has been timed.
+A baked AMI would attack the smaller half — fixed overhead, not training. Training cost is set by the resolution the photos are rasterized at (`MAX_TRAINING_EDGE` in `worker/pipeline/train.py`), not by boot latency. Shrinking the image and precompiling the kernels took most of what an AMI was worth here, so M10 measures the fixed overhead before anyone builds an AMI. Only the image size is measured. The split between the three parts is still read off the code, and no stage has been timed on AWS.
 
 - Not Lambda or Fargate: neither offers GPU.
 - Not hand-rolled ECS orchestration: bin-packing shared instances doesn't fit a one-stage-one-instance model.
@@ -209,7 +210,7 @@ flowchart TB
       subgraph pub["Public subnets · 0.0.0.0/0 → IGW"]
         alb["ALB · sg alb<br/>443 in, 80 redirects"]
         web["Fargate Spot service · sg web<br/>1–3 tasks, public IP"]
-        worker["EC2 GPU spot · sg worker<br/>g5.xlarge, one per stage"]
+        worker["EC2 GPU spot · sg worker<br/>one per stage"]
       end
       subgraph priv["Private subnets · no route out"]
         rds[("RDS Postgres · sg db<br/>one availability zone")]
@@ -366,4 +367,4 @@ Milestones (`M0`…`M10`) name phases, not a schedule, and they are not built in
 - ~~**M7** — Authenticated UI: upload, worker-job polling, splat viewer.~~
 - **M8** — Share links, OG thumbnails.
 - ~~**M9** — IaC + first real deploy.~~
-- **M10** — time a real worker job on a `g5.xlarge`, split by pull, COLMAP and training; revisit a Packer-baked AMI only if fixed overhead still dominates.
+- **M10** — time a real worker job on AWS, split by pull, COLMAP and training; revisit a Packer-baked AMI only if fixed overhead still dominates.
