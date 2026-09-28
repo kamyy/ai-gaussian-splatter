@@ -84,7 +84,7 @@ describe("NewSplatForm", () => {
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/splats/new-splat-1"));
     expect(apiFetchMock).toHaveBeenCalledWith("/api/v1/splats", "POST", "test-token", { name: "Coffee mug" });
-    expect(uploadPhotosMock).toHaveBeenCalledWith("new-splat-1", expect.any(Array), "test-token");
+    expect(uploadPhotosMock).toHaveBeenCalledWith("new-splat-1", expect.any(Array), "test-token", expect.any(Function));
     expect(uploadPhotosMock.mock.calls[0][1]).toEqual([
       expect.objectContaining({ width: 4032, height: 3024 }),
       expect.objectContaining({ width: 4032, height: 3024 }),
@@ -250,6 +250,28 @@ describe("NewSplatForm", () => {
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/splats/new-splat-1"));
     const creates = apiFetchMock.mock.calls.filter(([path]) => path === "/api/v1/splats");
     expect(creates).toHaveLength(1);
+  });
+
+  it("retries only the photos that didn't upload", async () => {
+    uploadPhotosMock.mockImplementationOnce(async (_splatId, photos, _token, onUploaded) => {
+      onUploaded(photos[0]);
+      throw new Error("1 of 2 photo uploads failed");
+    });
+    render(<NewSplatForm />);
+    fillName("Coffee mug");
+    await addPhotos("a.jpg", "b.jpg");
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(enqueueSnackbarMock).toHaveBeenCalled());
+
+    // Removing an uploaded photo here wouldn't take it off the server, so only the failed one can be removed.
+    expect(screen.queryByRole("button", { name: "Remove a.jpg" })).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "a.jpg uploaded" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove b.jpg" })).toBeInTheDocument();
+
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/splats/new-splat-1"));
+    const retried = uploadPhotosMock.mock.calls[1][1] as { file: File }[];
+    expect(retried.map(photo => photo.file.name)).toEqual(["b.jpg"]);
   });
 
   it("still navigates to the splat when starting processing fails", async () => {
