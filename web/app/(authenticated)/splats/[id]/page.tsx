@@ -67,7 +67,12 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
         {sharePanel}
         {photos && photos.length > 0 ? <PhotoGrid photos={photos} placedPhotoIds={placedPhotoIds} /> : null}
       </div>
-      <section aria-label="3D view" className="h-120 px-4 pb-6 sm:px-12 lg:h-auto lg:flex-1 lg:py-6 lg:pr-8 lg:pl-0">
+      {/* min-w-0 lets the viewer shrink with the window. A flex item otherwise can't narrow below its content, and the
+      canvas holds the pixel width it was last drawn at, so the view would stay wide and run off the right edge. */}
+      <section
+        aria-label="3D view"
+        className="h-120 min-w-0 px-4 pb-6 sm:px-12 lg:h-auto lg:flex-1 lg:py-6 lg:pr-8 lg:pl-0"
+      >
         <SplatStageViewer
           splatId={id}
           job={job}
