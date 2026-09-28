@@ -10,10 +10,12 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: scripts/dev/worker-train.sh <splat-id> [--fast]"
+  echo "Usage: scripts/dev/worker-train.sh <splat-id> [--fast] [--eval]"
   echo
   echo "Stage 2 of a local pipeline run: trains a splat that scripts/dev/worker-reconstruct.sh reconstructed."
   echo "--fast cuts training to 20 iterations. It doesn't cut GPU memory."
+  echo "--eval holds back every 8th photo from training and logs PSNR/SSIM against them, with side-by-side renders"
+  echo "       in worker/jobdir/eval/. Compare these between runs, not the training loss."
 }
 
 if [[ ${1-} == -h || ${1-} == --help ]]; then
@@ -21,7 +23,7 @@ if [[ ${1-} == -h || ${1-} == --help ]]; then
   exit 0
 fi
 
-if [[ $# -lt 1 || $# -gt 2 ]]; then
+if [[ $# -lt 1 || $# -gt 3 ]]; then
   usage >&2
   exit 1
 fi
@@ -30,16 +32,18 @@ ROOT=$(git rev-parse --show-toplevel)
 source "$ROOT/scripts/lib/worker.sh"
 
 SPLAT_ID=$1
-flag=${2:-}
+shift
 extra_args=()
-case $flag in
-  "") ;;
-  --fast) extra_args=(-e FAST_TEST_MODE=true) ;;
-  *)
-    usage >&2
-    exit 1
-    ;;
-esac
+for flag in "$@"; do
+  case $flag in
+    --fast) extra_args+=(-e FAST_TEST_MODE=true) ;;
+    --eval) extra_args+=(-e EVAL_HOLDOUT=true) ;;
+    *)
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
 
 # The pipeline's AWS calls happen inside the container. Checking the web/.env key pair on the host first fails in
 # seconds rather than after the image build.

@@ -261,6 +261,9 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - `HttpTokens: "required"` is paired with it and depends on it: on its own it removes the IMDSv1 fallback and breaks credentials too, not just self-termination.
 - **An agent whose shell runs on a host with that setup can run the pipeline itself.** Check `nvidia-smi` and `podman images` before handing a real run back to the user.
   - A `podman run` outside `scripts/lib/worker.sh` also needs `--security-opt label=disable` on an SELinux host. Without it, SELinux blocks the GPU device nodes and `nvidia-smi` in the container fails with `Insufficient Permissions`.
+- **gsplat 1.5.3's `DefaultStrategy` never resets opacities, so `worker/pipeline/train.py` does it itself** (`_is_opacity_reset_step`). The opacity reset is the step that clears floaters, the stray Gaussians left hanging in mid-air.
+  - gsplat's reset condition uses a bitwise `&` where it means `and`, which makes it always false ([gsplat#797](https://github.com/nerfstudio-project/gsplat/issues/797)). [gsplat#776](https://github.com/nerfstudio-project/gsplat/pull/776) fixes it on gsplat's `main`, but no release carries the fix yet.
+  - On upgrading to a release that does, delete `_is_opacity_reset_step` and pass `reset_every=iterations * 3000 // 30_000` to `DefaultStrategy` in `_build_strategy`. Without `reset_every`, gsplat falls back to its unscaled 3000-step default, which resets only once in a 10k run.
 
 ---
 
