@@ -1,4 +1,10 @@
-import { DeleteObjectsCommand, GetObjectCommand, ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectsCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  ListObjectsV2Command,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { mockClient } from "aws-sdk-client-mock";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -9,6 +15,7 @@ import {
   presignPhotoUpload,
   presignSplatDownload,
   readSplatCameras,
+  uploadedObjectSize,
 } from "../s3";
 
 // The presign tests need no AWS stubbing: getSignedUrl signs locally and issues no request, so they run offline
@@ -39,6 +46,20 @@ describe("presignPhotoUpload", () => {
     const { url } = await presignPhotoUpload("splat-1", "photo-1", ".jpg", "image/jpeg", 1234);
 
     expect(new URL(url).searchParams.get("X-Amz-SignedHeaders")?.split(";")).toContain("content-length");
+  });
+});
+
+describe("uploadedObjectSize", () => {
+  it("returns the object's size", async () => {
+    s3Mock.on(HeadObjectCommand, { Key: "splats/splat-1/photos/a.jpg" }).resolves({ ContentLength: 1234 });
+
+    expect(await uploadedObjectSize("splats/splat-1/photos/a.jpg")).toBe(1234);
+  });
+
+  it("returns null when nothing was uploaded", async () => {
+    s3Mock.on(HeadObjectCommand).rejects(Object.assign(new Error("missing"), { name: "NotFound" }));
+
+    expect(await uploadedObjectSize("splats/splat-1/photos/a.jpg")).toBeNull();
   });
 });
 

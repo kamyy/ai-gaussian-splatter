@@ -1,6 +1,8 @@
 import {
+  DeleteObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -78,6 +80,25 @@ export async function presignPhotoThumbnailUpload(
   });
   const url = await getSignedUrl(s3Client(), command, { expiresIn: PRESIGN_EXPIRY_SECONDS });
   return { key, url };
+}
+
+/** The size in bytes of an object in UPLOADS_BUCKET, or null when there is no object at that key. */
+export async function uploadedObjectSize(uploadsBucketKey: string): Promise<number | null> {
+  try {
+    const response = await s3Client().send(
+      new HeadObjectCommand({ Bucket: getEnv().UPLOADS_BUCKET, Key: uploadsBucketKey }),
+    );
+    return response.ContentLength ?? null;
+  } catch (err) {
+    if (err instanceof Error && err.name === "NotFound") {
+      return null;
+    }
+    throw err;
+  }
+}
+
+export async function deleteUploadedObject(uploadsBucketKey: string): Promise<void> {
+  await s3Client().send(new DeleteObjectCommand({ Bucket: getEnv().UPLOADS_BUCKET, Key: uploadsBucketKey }));
 }
 
 export async function presignSplatDownload(splatsBucketKey: string): Promise<string> {
