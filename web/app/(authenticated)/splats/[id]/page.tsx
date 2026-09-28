@@ -45,14 +45,12 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
   const stage = splatStage(job, photos?.length ?? 0);
   const placedPhotoIds = cameras ? new Set(cameras.map(camera => camera.photoId)) : null;
 
-  // Every other stage's card shows its own Discard button beside its actions.
+  // Every other stage's card shows its own Discard button beside its actions. A finished splat's goes in the share
+  // panel when it's shareable, and stands alone when it isn't.
   let sharePanel: React.ReactNode = null;
-  if (stage.kind === "complete" && splat.isShareable) {
-    sharePanel = (
-      <SharePanel splatId={id}>
-        <DeleteSplatButton splatId={id} label="Discard" variant="outlined" />
-      </SharePanel>
-    );
+  if (stage.kind === "complete") {
+    const discard = <DeleteSplatButton splatId={id} label="Discard" variant="outlined" />;
+    sharePanel = splat.isShareable ? <SharePanel splatId={id}>{discard}</SharePanel> : discard;
   }
 
   return (

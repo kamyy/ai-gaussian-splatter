@@ -144,6 +144,13 @@ describe("SplatPage", () => {
     expect(screen.getByRole("button", { name: "Discard" })).toBeInTheDocument();
   });
 
+  it("still offers Discard for a finished splat that isn't shareable", async () => {
+    setup({ splat: { ...splat, status: "complete", isShareable: false }, job: { ...job, status: "complete" } });
+    await renderPage();
+    expect(screen.queryByTestId("share-panel")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Discard" })).toBeInTheDocument();
+  });
+
   it("refetches the splat once its job has ended", async () => {
     setup({ splat, job: { ...job, status: "failed" } });
     await renderPage();
