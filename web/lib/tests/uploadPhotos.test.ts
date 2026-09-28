@@ -57,6 +57,7 @@ describe("uploadPhotos", () => {
         },
       ],
       "token",
+      vi.fn(),
     );
 
     expect(apiFetchMock).toHaveBeenCalledWith("/api/v1/splats/splat-1/photos/presign", "POST", "token", [
@@ -79,12 +80,33 @@ describe("uploadPhotos", () => {
         },
       ],
       "token",
+      vi.fn(),
     );
 
     const puts = vi.mocked(fetch).mock.calls.map(([url, init]) => [url, init?.body]);
     expect(puts).toContainEqual(["https://s3.example.com/1-small", small]);
     expect(puts.map(([url]) => url)).toContain("https://s3.example.com/1");
     expect(apiFetchMock).toHaveBeenCalledWith("/api/v1/splats/splat-1/photos/photo-1/complete", "POST", "token");
+  });
+
+  it("reports each photo once the server has it, and not a photo whose upload failed", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        url.startsWith("https://s3.example.com/2") ? new Response(null, { status: 500 }) : new Response(null),
+      ),
+    );
+    const a = { file: new File(["a"], "a.jpg"), width: 1, height: 1, thumbnail: new Blob(["a"]), takenAt: 0 };
+    const b = { file: new File(["b"], "b.jpg"), width: 1, height: 1, thumbnail: new Blob(["b"]), takenAt: 0 };
+    const onUploaded = vi.fn();
+
+    await expect(uploadPhotos("splat-1", [a, b], "token", onUploaded)).rejects.toThrow("1 of 2 photo uploads failed");
+    expect(onUploaded.mock.calls).toEqual([[a]]);
+  });
+
+  it("sends nothing when there are no photos left to upload", async () => {
+    await uploadPhotos("splat-1", [], "token", vi.fn());
+    expect(apiFetchMock).not.toHaveBeenCalled();
   });
 
   it("fails a photo whose thumbnail upload fails", async () => {
@@ -108,6 +130,7 @@ describe("uploadPhotos", () => {
           },
         ],
         "token",
+        vi.fn(),
       ),
     ).rejects.toThrow("1 of 1 photo upload failed");
     expect(apiFetchMock).not.toHaveBeenCalledWith("/api/v1/splats/splat-1/photos/photo-1/complete", "POST", "token");

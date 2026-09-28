@@ -7,7 +7,17 @@ import type { PickedPhoto } from "./measurePhoto";
 import { useAppStore } from "./store";
 import type { PhotoPresignItem } from "./types";
 
-export async function uploadPhotos(splatId: string, photos: PickedPhoto[], token: string): Promise<void> {
+// onUploaded fires once per photo the server has marked uploaded, so the caller can leave it out of a retry.
+export async function uploadPhotos(
+  splatId: string,
+  photos: PickedPhoto[],
+  token: string,
+  onUploaded: (photo: PickedPhoto) => void,
+): Promise<void> {
+  // A retry whose failed photos were all removed has nothing left to send, and the presign route rejects an empty batch.
+  if (photos.length === 0) {
+    return;
+  }
   const { setUploadStatus, setUploadProgress } = useAppStore.getState();
 
   const presigned = await apiFetch<PhotoPresignItem[]>(
@@ -24,7 +34,8 @@ export async function uploadPhotos(splatId: string, photos: PickedPhoto[], token
   );
 
   const results = await Promise.all(
-    photos.map(async ({ file, thumbnail }, index) => {
+    photos.map(async (photo, index) => {
+      const { file, thumbnail } = photo;
       const item = presigned[index];
       setUploadStatus(file.name, "uploading");
       try {
@@ -40,6 +51,7 @@ export async function uploadPhotos(splatId: string, photos: PickedPhoto[], token
         setUploadProgress(file.name, 100);
         await apiFetch<void>(`/api/v1/splats/${splatId}/photos/${item.photoId}/complete`, "POST", token);
         setUploadStatus(file.name, "uploaded");
+        onUploaded(photo);
         return true;
       } catch (err) {
         setUploadStatus(file.name, "failed", err instanceof Error ? err.message : "Upload failed");

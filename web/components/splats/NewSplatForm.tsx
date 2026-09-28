@@ -4,7 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { LuImage, LuX } from "react-icons/lu";
+import { LuCheck, LuImage, LuX } from "react-icons/lu";
 import { mutate } from "swr";
 
 import { Button } from "@/components/ui/Button";
@@ -58,7 +58,6 @@ export function NewSplatForm() {
   const router = useRouter();
   const { enqueueSnackbar } = useAppSnackbar();
   const resetUploads = useAppStore(state => state.resetUploads);
-  const uploads = useAppStore(state => state.uploads);
   const [name, setName] = useState("");
   const [photos, setPhotos] = useState<PickedPhoto[]>([]);
   const aspects = useMemo(() => photos.map(photo => photo.width / photo.height), [photos]);
@@ -81,6 +80,9 @@ export function NewSplatForm() {
   // Set once the POST below succeeds, so a retry after a photo-upload failure reuses this splat instead of creating a
   // second one.
   const [createdSplat, setCreatedSplat] = useState<Splat | null>(null);
+  // Keyed by fileKey. A retry uploads only the photos not in here, because every photo the server already has would
+  // otherwise be stored again and go to COLMAP twice.
+  const [uploadedKeys, setUploadedKeys] = useState<ReadonlySet<string>>(new Set());
   // Drops still being measured. Submitting waits for them, or their photos would be left out of the upload.
   const [measuringCount, setMeasuringCount] = useState(0);
   const submitting = phase !== "idle";
@@ -174,8 +176,11 @@ export function NewSplatForm() {
 
     setPhase("uploading");
     resetUploads();
+    const remaining = photos.filter(photo => !uploadedKeys.has(fileKey(photo.file)));
     try {
-      await uploadPhotos(splat.id, photos, token);
+      await uploadPhotos(splat.id, remaining, token, photo => {
+        setUploadedKeys(current => new Set(current).add(fileKey(photo.file)));
+      });
     } catch (err) {
       enqueueSnackbar(
         err instanceof Error
@@ -200,7 +205,7 @@ export function NewSplatForm() {
     router.push(`/splats/${splat.id}`);
   }
 
-  const uploadedCount = Object.values(uploads).filter(item => item.status === "uploaded").length;
+  const uploadedCount = photos.filter(photo => uploadedKeys.has(fileKey(photo.file))).length;
   let progressLabel: string | null = null;
   if (measuring && phase === "idle") {
     progressLabel = "Reading photos…";
@@ -227,9 +232,36 @@ export function NewSplatForm() {
         <ul className="flex flex-wrap gap-2">
           {tiles.map(tile => {
             const { photo, url } = previews[tile.index - start];
+            const key = fileKey(photo.file);
+            // An uploaded photo is already on the server, and removing it here wouldn't take it off, so it can't be
+            // removed. Discarding the splat is the way to drop it.
+            let corner: React.ReactNode;
+            if (uploadedKeys.has(key)) {
+              corner = (
+                <span
+                  role="img"
+                  aria-label={`${photo.file.name} uploaded`}
+                  className="absolute top-1 right-1 flex h-7 w-7 items-center justify-center rounded-full bg-paper text-success"
+                >
+                  <LuCheck aria-hidden="true" className="h-3.5 w-3.5" />
+                </span>
+              );
+            } else {
+              corner = (
+                <button
+                  type="button"
+                  aria-label={`Remove ${photo.file.name}`}
+                  onClick={() => removeFile(key)}
+                  disabled={submitting}
+                  className="absolute top-1 right-1 flex h-7 w-7 items-center justify-center rounded-full bg-paper text-foreground disabled:hidden"
+                >
+                  <LuX aria-hidden="true" className="h-3.5 w-3.5" />
+                </button>
+              );
+            }
             return (
               <li
-                key={fileKey(photo.file)}
+                key={key}
                 style={{ width: tile.width, height: tile.height }}
                 className="relative shrink-0 overflow-hidden rounded-xl bg-muted"
               >
@@ -241,15 +273,7 @@ export function NewSplatForm() {
                 />
                 {/* biome-ignore lint/performance/noImgElement: a local object URL, not something next/image can optimize. */}
                 <img src={url} alt={photo.file.name} className="relative h-full w-full object-cover" />
-                <button
-                  type="button"
-                  aria-label={`Remove ${photo.file.name}`}
-                  onClick={() => removeFile(fileKey(photo.file))}
-                  disabled={submitting}
-                  className="absolute top-1 right-1 flex h-7 w-7 items-center justify-center rounded-full bg-paper text-foreground disabled:hidden"
-                >
-                  <LuX aria-hidden="true" className="h-3.5 w-3.5" />
-                </button>
+                {corner}
               </li>
             );
           })}
