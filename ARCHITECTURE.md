@@ -266,6 +266,8 @@ Three request-path layers (`web/lib/server/rateLimit.ts`). A per-user quota alon
 2. Per-user, alongside it.
 3. A global daily cap on worker jobs, charged only when a worker instance launches, on the `process` and `train` routes. It bounds worst-case GPU spend whoever the caller is.
 
+The daily cap bounds how many worker instances launch, not how long each one runs. `MAX_PHOTOS_PER_SPLAT` (`web/lib/types.ts`) bounds the second, since COLMAP's exhaustive matching compares every pair of photos. The presign route rejects a batch past it, and the `process` route rejects a splat past it before charging the daily cap.
+
 Ops fallback: an AWS Budget (`infra/budgets.tf`) for spend the request path never sees.
 
 ---

@@ -18,7 +18,7 @@ import { getEnv } from "@/lib/server/env";
 import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
 import { jobColumns } from "@/lib/server/selects";
-import { JOB_ENDED_STATUSES } from "@/lib/types";
+import { JOB_ENDED_STATUSES, MAX_PHOTOS_PER_SPLAT } from "@/lib/types";
 
 // Postgres error code 23505 (unique violation). drizzle-orm wraps the raw node-postgres DatabaseError, which carries
 // `.code` itself, in its own error that adds the failed query for debugging. The driver error ends up on `.cause`
@@ -60,6 +60,11 @@ export const POST = withErrorHandling(
       .where(and(eq(photos.splatId, splatId), eq(photos.uploadStatus, "uploaded")));
     if (uploaded.n < env.MIN_PHOTOS_PER_SPLAT) {
       throw new HttpError(400, `Need at least ${env.MIN_PHOTOS_PER_SPLAT} uploaded photos, have ${uploaded.n}`);
+    }
+    // The presign route enforces this too, but two concurrent presign batches can each pass it. This is the check that
+    // stands between an oversized photo set and a GPU instance.
+    if (uploaded.n > MAX_PHOTOS_PER_SPLAT) {
+      throw new HttpError(400, `A splat can have at most ${MAX_PHOTOS_PER_SPLAT} photos, has ${uploaded.n}`);
     }
 
     // `uq_jobs_splat_id_active` (web/lib/server/db/schema.ts) makes an active job block every later POST here. Nothing

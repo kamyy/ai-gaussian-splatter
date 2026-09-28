@@ -16,6 +16,7 @@ import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { globalJobCounters, jobs, photos, splats, users } from "@/lib/server/db/schema";
 import { getEnv } from "@/lib/server/env";
+import { MAX_PHOTOS_PER_SPLAT } from "@/lib/types";
 import { POST } from "./route";
 
 function ctx(splatId: string) {
@@ -44,14 +45,13 @@ describe("POST /api/v1/splats/[splatId]/process", () => {
     await closeDb();
   });
 
-  async function seed() {
+  async function seed(photoCount = getEnv().MIN_PHOTOS_PER_SPLAT) {
     const user = await getOrCreateUser("clerk-user-1");
     const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "obj" }).returning();
-    const minPhotos = getEnv().MIN_PHOTOS_PER_SPLAT;
     await getDb()
       .insert(photos)
       .values(
-        Array.from({ length: minPhotos }, (_, i) => ({
+        Array.from({ length: photoCount }, (_, i) => ({
           splatId: splat.id,
           s3Key: `splats/${splat.id}/photos/${i}.jpg`,
           originalFilename: `${i}.jpg`,
@@ -70,6 +70,15 @@ describe("POST /api/v1/splats/[splatId]/process", () => {
     const res = await POST({} as never, ctx(splat.id));
     expect(res.status).toBe(201);
     expect(launchJobMock).toHaveBeenCalledWith(expect.objectContaining({ splatId: splat.id, stage: "reconstruct" }));
+  });
+
+  it("refuses a splat with more than MAX_PHOTOS_PER_SPLAT uploaded photos, before charging the daily cap", async () => {
+    const { splat } = await seed(MAX_PHOTOS_PER_SPLAT + 1);
+
+    const res = await POST({} as never, ctx(splat.id));
+    expect(res.status).toBe(400);
+    expect(launchJobMock).not.toHaveBeenCalled();
+    expect(await getDb().select().from(globalJobCounters)).toEqual([]);
   });
 
   it("terminates the worker it just launched when the job was cancelled during the launch", async () => {

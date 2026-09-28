@@ -91,7 +91,7 @@ Then shoot a set of photos ([Capture](#15-capture)) and run it through the pipel
 
 ### 1.5 Capture
 
-Walk around the object shooting individual stills: every side, a couple of heights, each shot overlapping its neighbors. Aim for ~50. The API's floor of 20 (`MIN_PHOTOS_PER_SPLAT`, HTTP 400 below it) is a hard minimum, not a quality target. Extra frames only help where they close a coverage gap, and near-duplicates just add COLMAP matching cost.
+Walk around the object shooting individual stills: every side, a couple of heights, each shot overlapping its neighbors. Aim for ~50. The API's floor of 20 (`MIN_PHOTOS_PER_SPLAT`, HTTP 400 below it) is a hard minimum, not a quality target, and its ceiling is 100 (`MAX_PHOTOS_PER_SPLAT`). Extra frames only help where they close a coverage gap, and near-duplicates just add COLMAP matching cost.
 
 Object choice matters more than photo count. COLMAP triangulates surface features that hold still, so these kinds of objects can defeat it:
 

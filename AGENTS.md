@@ -432,10 +432,9 @@ Scaffolding (three packages + CI) is in place. Host-run `next dev` can 500 with 
 Known gaps, priority order:
 
 1. **No E2E coverage.** `web/e2e/` has no specs; share/view pages SSR from the DB with no seeded test DB to run against. Seed one and add a spec.
-2. **No maximum photo count or upload size.**
-   - `MIN_PHOTOS_PER_SPLAT` has no counterpart and the presign body schema (`web/app/api/v1/splats/[splatId]/photos/presign/route.ts`) is `.min(1)` only.
-   - COLMAP's exhaustive matching is O(n²) pairs and the instance runs until `worker/run_job.py` returns, so an oversized upload is unbounded GPU spend.
-   - The global daily cap, charged by `process` and `train`, bounds how many worker instances launch, not what each one costs ([Abuse protection](ARCHITECTURE.md#10-abuse-protection)).
+2. **No maximum upload size.**
+   - Nothing limits how large one photo can be. `MAX_PHOTOS_PER_SPLAT` (`web/lib/types.ts`) bounds how many photos a splat holds, not their size.
+   - An oversized photo costs S3 storage and worker download time on every stage that reads it.
 3. **The worker's max-lifetime safety net has no alerting, and a real gap it can't close.**
    - `web/lib/server/ec2Launcher.ts` schedules `shutdown -h +WORKER_MAX_LIFETIME_MINUTES` as the first thing user-data does, paired with `InstanceInitiatedShutdownBehavior = "terminate"` on the launch, so a failed `docker login`/pull or a hang that never reaches `worker/pipeline/instance.py`'s own self-terminate still can't bill past that ceiling — *if user-data runs at all*.
    - If cloud-init itself never starts (bad AMI, a boot/networking failure), the `shutdown` is never scheduled and nothing inside the instance can catch it; only an external, instance-runtime CloudWatch alarm checking instance age independent of anything running on it would. That alarm still doesn't exist.
