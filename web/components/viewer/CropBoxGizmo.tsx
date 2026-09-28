@@ -11,10 +11,10 @@ import type { CropBox } from "@/lib/types";
 const COLOR = "#5b7bd6";
 // The gizmo's on-screen size in pixels. COLMAP's scale is arbitrary per capture, so a size in world units would be
 // invisible in one reconstruction and swamp another.
-const GIZMO_PIXELS = 90;
-// The arrows' line width in pixels, one under PivotControls' default. With a fixed-size gizmo it also sets how wide each
+const GIZMO_PIXELS = 70;
+// The arrows' line width in pixels, half PivotControls' default. With a fixed-size gizmo it also sets how wide each
 // arrowhead is.
-const GIZMO_LINE_PIXELS = 3;
+const GIZMO_LINE_PIXELS = 2;
 
 function toMatrix({ center, size, quaternion }: CropBox): Matrix4 {
   return new Matrix4().compose(new Vector3(...center), new Quaternion(...quaternion), new Vector3(...size));
