@@ -6,7 +6,8 @@ vi.mock("@clerk/nextjs/server", () => ({ auth: vi.fn(async () => ({ userId: "cle
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { photos, rateLimitCounters, splats, users } from "@/lib/server/db/schema";
-import { MAX_PHOTOS_PER_SPLAT } from "@/lib/types";
+import { MAX_THUMBNAIL_BYTES } from "@/lib/server/s3";
+import { MAX_PHOTO_BYTES, MAX_PHOTOS_PER_SPLAT } from "@/lib/types";
 import { POST } from "./route";
 
 function ctx(splatId: string) {
@@ -36,7 +37,7 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
     return splat;
   }
 
-  it("stores each photo's dimensions and capture time", async () => {
+  it("stores each photo's size, dimensions and capture time", async () => {
     const splat = await seedSplat();
 
     const res = await POST(
@@ -44,6 +45,8 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
         {
           filename: "a.jpg",
           contentType: "image/jpeg",
+          size: 4_000_000,
+          thumbnailSize: 100_000,
           width: 3024,
           height: 4032,
           takenAt: "2026-01-01T10:00:00.000Z",
@@ -51,6 +54,8 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
         {
           filename: "b.jpg",
           contentType: "image/jpeg",
+          size: 3_000_000,
+          thumbnailSize: 100_000,
           width: 4032,
           height: 3024,
           takenAt: "2026-01-01T10:00:05.000Z",
@@ -63,6 +68,7 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
     const rows = await getDb()
       .select({
         originalFilename: photos.originalFilename,
+        sizeBytes: photos.sizeBytes,
         width: photos.width,
         height: photos.height,
         takenAt: photos.takenAt,
@@ -70,14 +76,62 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
       .from(photos)
       .orderBy(photos.originalFilename);
     expect(rows).toEqual([
-      { originalFilename: "a.jpg", width: 3024, height: 4032, takenAt: new Date("2026-01-01T10:00:00.000Z") },
-      { originalFilename: "b.jpg", width: 4032, height: 3024, takenAt: new Date("2026-01-01T10:00:05.000Z") },
+      {
+        originalFilename: "a.jpg",
+        sizeBytes: 4_000_000,
+        width: 3024,
+        height: 4032,
+        takenAt: new Date("2026-01-01T10:00:00.000Z"),
+      },
+      {
+        originalFilename: "b.jpg",
+        sizeBytes: 3_000_000,
+        width: 4032,
+        height: 3024,
+        takenAt: new Date("2026-01-01T10:00:05.000Z"),
+      },
     ]);
   });
 
-  function photoItem(filename: string) {
-    return { filename, contentType: "image/jpeg", width: 3024, height: 4032, takenAt: "2026-01-01T10:00:00.000Z" };
+  function photoItem(filename: string, size = 4_000_000, thumbnailSize = 100_000) {
+    return {
+      filename,
+      contentType: "image/jpeg",
+      size,
+      thumbnailSize,
+      width: 3024,
+      height: 4032,
+      takenAt: "2026-01-01T10:00:00.000Z",
+    };
   }
+
+  it("rejects a photo over MAX_PHOTO_BYTES, without spending the rate limit", async () => {
+    const splat = await seedSplat();
+
+    const res = await POST(presignRequest([photoItem("a.jpg", MAX_PHOTO_BYTES + 1)]), ctx(splat.id));
+    expect(res.status).toBe(422);
+    expect(await getDb().select().from(rateLimitCounters)).toEqual([]);
+
+    const atCap = await POST(presignRequest([photoItem("a.jpg", MAX_PHOTO_BYTES)]), ctx(splat.id));
+    expect(atCap.status).toBe(200);
+  });
+
+  it("rejects a thumbnail over MAX_THUMBNAIL_BYTES", async () => {
+    const splat = await seedSplat();
+
+    const res = await POST(presignRequest([photoItem("a.jpg", 4_000_000, MAX_THUMBNAIL_BYTES + 1)]), ctx(splat.id));
+    expect(res.status).toBe(422);
+  });
+
+  it("signs each photo's and thumbnail's declared size into its upload URL", async () => {
+    const splat = await seedSplat();
+
+    const res = await POST(presignRequest([photoItem("a.jpg", 1234)]), ctx(splat.id));
+    const [item] = await res.json();
+
+    expect(new URL(item.presignedPutUrl).searchParams.get("X-Amz-SignedHeaders")).toContain("content-length");
+    expect(new URL(item.thumbnailPutUrl).searchParams.get("X-Amz-SignedHeaders")).toContain("content-length");
+  });
 
   async function seedPhotos(splatId: string, n: number, uploadStatus: "pending" | "uploaded") {
     await getDb()
@@ -88,6 +142,7 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
           s3Key: `splats/${splatId}/photos/${uploadStatus}-${i}.jpg`,
           originalFilename: `${uploadStatus}-${i}.jpg`,
           contentType: "image/jpeg",
+          sizeBytes: 4_000_000,
           width: 3024,
           height: 4032,
           uploadStatus,
@@ -119,7 +174,16 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
     const splat = await seedSplat();
 
     const res = await POST(
-      presignRequest([{ filename: "a.jpg", contentType: "image/jpeg", width: 3024, height: 4032 }]),
+      presignRequest([
+        {
+          filename: "a.jpg",
+          contentType: "image/jpeg",
+          size: 4_000_000,
+          thumbnailSize: 100_000,
+          width: 3024,
+          height: 4032,
+        },
+      ]),
       ctx(splat.id),
     );
     expect(res.status).toBe(422);
@@ -133,6 +197,8 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
         {
           filename: "a.jpg",
           contentType: "image/jpeg",
+          size: 4_000_000,
+          thumbnailSize: 100_000,
           width: 3024,
           height: 4032,
           takenAt: "2026-01-01T10:00:00.000Z",
@@ -152,7 +218,15 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
 
     const res = await POST(
       presignRequest([
-        { filename: "a.jpg", contentType: "image/jpeg", width: 0, height: 4032, takenAt: "2026-01-01T10:00:00.000Z" },
+        {
+          filename: "a.jpg",
+          contentType: "image/jpeg",
+          size: 4_000_000,
+          thumbnailSize: 100_000,
+          width: 0,
+          height: 4032,
+          takenAt: "2026-01-01T10:00:00.000Z",
+        },
       ]),
       ctx(splat.id),
     );
@@ -164,7 +238,14 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
 
     const res = await POST(
       presignRequest([
-        { filename: "a.jpg", contentType: "image/jpeg", width: 3024, takenAt: "2026-01-01T10:00:00.000Z" },
+        {
+          filename: "a.jpg",
+          contentType: "image/jpeg",
+          size: 4_000_000,
+          thumbnailSize: 100_000,
+          width: 3024,
+          takenAt: "2026-01-01T10:00:00.000Z",
+        },
       ]),
       ctx(splat.id),
     );

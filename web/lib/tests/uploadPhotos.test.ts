@@ -37,7 +37,7 @@ describe("uploadPhotos", () => {
     vi.unstubAllGlobals();
   });
 
-  it("sends each photo's dimensions and capture time with the presign request", async () => {
+  it("sends each photo's size, dimensions and capture time with the presign request", async () => {
     await uploadPhotos(
       "splat-1",
       [
@@ -49,10 +49,10 @@ describe("uploadPhotos", () => {
           takenAt: Date.UTC(2026, 0, 1),
         },
         {
-          file: new File(["b"], "b.png", { type: "image/png" }),
+          file: new File(["bbb"], "b.png", { type: "image/png" }),
           width: 1920,
           height: 1080,
-          thumbnail: new Blob(["b"]),
+          thumbnail: new Blob(["bb"]),
           takenAt: Date.UTC(2026, 0, 2),
         },
       ],
@@ -61,8 +61,24 @@ describe("uploadPhotos", () => {
     );
 
     expect(apiFetchMock).toHaveBeenCalledWith("/api/v1/splats/splat-1/photos/presign", "POST", "token", [
-      { filename: "a.jpg", contentType: "image/jpeg", width: 3024, height: 4032, takenAt: "2026-01-01T00:00:00.000Z" },
-      { filename: "b.png", contentType: "image/png", width: 1920, height: 1080, takenAt: "2026-01-02T00:00:00.000Z" },
+      {
+        filename: "a.jpg",
+        contentType: "image/jpeg",
+        size: 1,
+        thumbnailSize: 1,
+        width: 3024,
+        height: 4032,
+        takenAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        filename: "b.png",
+        contentType: "image/png",
+        size: 3,
+        thumbnailSize: 2,
+        width: 1920,
+        height: 1080,
+        takenAt: "2026-01-02T00:00:00.000Z",
+      },
     ]);
   });
 

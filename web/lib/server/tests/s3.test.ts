@@ -27,12 +27,18 @@ describe("photoS3Key", () => {
 
 describe("presignPhotoUpload", () => {
   it("returns the key and a signed URL containing bucket and key", async () => {
-    const { key, url } = await presignPhotoUpload("splat-1", "photo-1", ".jpg", "image/jpeg");
+    const { key, url } = await presignPhotoUpload("splat-1", "photo-1", ".jpg", "image/jpeg", 1234);
 
     expect(key).toBe("splats/splat-1/photos/photo-1.jpg");
     expect(url).toContain(process.env.UPLOADS_BUCKET);
     expect(url).toContain("splats/splat-1/photos/photo-1.jpg");
     expect(url).toContain("X-Amz-Signature=");
+  });
+
+  it("signs the content length, so S3 rejects a body of any other size", async () => {
+    const { url } = await presignPhotoUpload("splat-1", "photo-1", ".jpg", "image/jpeg", 1234);
+
+    expect(new URL(url).searchParams.get("X-Amz-SignedHeaders")?.split(";")).toContain("content-length");
   });
 });
 

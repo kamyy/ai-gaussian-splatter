@@ -24,9 +24,11 @@ export async function uploadPhotos(
     `/api/v1/splats/${splatId}/photos/presign`,
     "POST",
     token,
-    photos.map(({ file, width, height, takenAt }) => ({
+    photos.map(({ file, thumbnail, width, height, takenAt }) => ({
       filename: file.name,
       contentType: file.type || "image/jpeg",
+      size: file.size,
+      thumbnailSize: thumbnail.size,
       width,
       height,
       takenAt: new Date(takenAt).toISOString(),

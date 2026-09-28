@@ -14,7 +14,7 @@ import { apiFetch } from "@/lib/apiFetch";
 import { cn } from "@/lib/cn";
 import { measurePhotos, type PickedPhoto } from "@/lib/measurePhoto";
 import { useAppStore } from "@/lib/store";
-import { type Job, MAX_PHOTOS_PER_SPLAT, type Splat } from "@/lib/types";
+import { type Job, MAX_PHOTO_BYTES, MAX_PHOTOS_PER_SPLAT, type Splat } from "@/lib/types";
 import { uploadPhotos } from "@/lib/uploadPhotos";
 import { useAppSnackbar } from "@/lib/useAppSnackbar";
 import { useJustifiedPages } from "@/lib/useJustifiedPages";
@@ -27,6 +27,7 @@ const PREVIEW_ROWS_PER_PAGE = 4;
 const PREVIEW_ROW_HEIGHT_REM = 7.5;
 // Matches the preview list's gap-2.
 const PREVIEW_GAP_REM = 0.5;
+const MAX_PHOTO_MB = MAX_PHOTO_BYTES / (1024 * 1024);
 
 type Phase = "idle" | "creating" | "uploading" | "starting";
 
@@ -91,7 +92,15 @@ export function NewSplatForm() {
 
   // Each photo is measured as it's added, because the server stores its size for web/components/splats/PhotoGrid.tsx.
   // A photo this browser can't decode has no size to store, so it's turned away here rather than failing mid-upload.
-  async function addFiles(accepted: File[]) {
+  async function addFiles(dropped: File[]) {
+    // The server refuses a photo over MAX_PHOTO_BYTES, so an oversized one is turned away before it's decoded.
+    const tooLarge = dropped.filter(file => file.size > MAX_PHOTO_BYTES).map(file => file.name);
+    if (tooLarge.length > 0) {
+      enqueueSnackbar(`${tooLarge.join(", ")} ${tooLarge.length === 1 ? "is" : "are"} over ${MAX_PHOTO_MB} MB.`, {
+        variant: "error",
+      });
+    }
+    const accepted = dropped.filter(file => file.size <= MAX_PHOTO_BYTES);
     setMeasuringCount(count => count + 1);
     try {
       const measured = await measurePhotos(accepted);

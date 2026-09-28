@@ -9,8 +9,8 @@ import { type NewPhoto, photos, splats } from "@/lib/server/db/schema";
 import { getEnv } from "@/lib/server/env";
 import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementIp, checkAndIncrementUser } from "@/lib/server/rateLimit";
-import { presignPhotoThumbnailUpload, presignPhotoUpload } from "@/lib/server/s3";
-import { MAX_PHOTOS_PER_SPLAT, type PhotoPresignItem } from "@/lib/types";
+import { MAX_THUMBNAIL_BYTES, presignPhotoThumbnailUpload, presignPhotoUpload } from "@/lib/server/s3";
+import { MAX_PHOTO_BYTES, MAX_PHOTOS_PER_SPLAT, type PhotoPresignItem } from "@/lib/types";
 
 // Rate limiting happens here: it gates *before* any upload happens (per-IP + per-user), separate from the global daily
 // cap, which only gates the expensive job-launch step (web/app/api/v1/splats/[splatId]/process/route.ts).
@@ -19,6 +19,8 @@ const presignSchema = z
     z.object({
       filename: z.string().min(1),
       contentType: z.string().min(1),
+      size: z.number().int().positive().max(MAX_PHOTO_BYTES),
+      thumbnailSize: z.number().int().positive().max(MAX_THUMBNAIL_BYTES),
       width: z.number().int().positive(),
       height: z.number().int().positive(),
       takenAt: z.iso.datetime(),
@@ -67,8 +69,8 @@ export const POST = withErrorHandling(
     for (const item of parsed.data) {
       const photoId = randomUUID();
       const extension = path.extname(item.filename) || ".jpg";
-      const { key, url } = await presignPhotoUpload(splatId, photoId, extension, item.contentType);
-      const thumbnail = await presignPhotoThumbnailUpload(splatId, photoId);
+      const { key, url } = await presignPhotoUpload(splatId, photoId, extension, item.contentType, item.size);
+      const thumbnail = await presignPhotoThumbnailUpload(splatId, photoId, item.thumbnailSize);
 
       rows.push({
         id: photoId,
@@ -76,6 +78,7 @@ export const POST = withErrorHandling(
         s3Key: key,
         originalFilename: item.filename,
         contentType: item.contentType,
+        sizeBytes: item.size,
         width: item.width,
         height: item.height,
         thumbnailS3Key: thumbnail.key,
