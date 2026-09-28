@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Job, PhotoListItem, Splat } from "@/lib/types";
 import SplatPage from "./page";
 
+// jsdom has no ResizeObserver, so the photo grid is given a fixed width to lay its rows out in.
+vi.mock("@/lib/useElementWidth", () => ({ useElementWidth: () => [() => {}, 392] }));
 // The viewer pulls in three.js, R3F and Spark, none of which have a WebGL context under jsdom.
 vi.mock("@/components/splats/SplatStageViewer", () => ({
   SplatStageViewer: ({ complete }: { complete: boolean }) => <div data-testid="viewer">{String(complete)}</div>,
@@ -56,8 +58,22 @@ const job: Job = {
 };
 
 const photos: PhotoListItem[] = [
-  { id: "p1", originalFilename: "a.jpg", url: "https://example.com/a.jpg" },
-  { id: "p2", originalFilename: "b.jpg", url: "https://example.com/b.jpg" },
+  {
+    id: "p1",
+    originalFilename: "a.jpg",
+    url: "https://example.com/a.jpg",
+    thumbnailUrl: "https://example.com/a-small.jpg",
+    width: 4032,
+    height: 3024,
+  },
+  {
+    id: "p2",
+    originalFilename: "b.jpg",
+    url: "https://example.com/b.jpg",
+    thumbnailUrl: "https://example.com/b-small.jpg",
+    width: 4032,
+    height: 3024,
+  },
 ];
 
 const refetchSplat = vi.fn();
@@ -108,8 +124,8 @@ describe("SplatPage", () => {
     expect(screen.getByRole("list", { name: "Progress" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "a.jpg" })).toBeInTheDocument();
     expect(screen.queryByTestId("share-panel")).not.toBeInTheDocument();
-    // The check stage's own card offers "Discard" instead.
-    expect(screen.queryByRole("button", { name: "Delete splat" })).not.toBeInTheDocument();
+    // Before the splat is complete, the stage card offers "Discard" itself.
+    expect(screen.queryByRole("button", { name: "Discard" })).not.toBeInTheDocument();
   });
 
   it("flags a photo the cameras don't include as not placed", async () => {
@@ -125,7 +141,14 @@ describe("SplatPage", () => {
     await renderPage();
     expect(screen.getByTestId("share-panel")).toBeInTheDocument();
     expect(screen.getByTestId("viewer")).toHaveTextContent("true");
-    expect(screen.getByRole("button", { name: "Delete splat" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Discard" })).toBeInTheDocument();
+  });
+
+  it("still offers Discard for a finished splat that isn't shareable", async () => {
+    setup({ splat: { ...splat, status: "complete", isShareable: false }, job: { ...job, status: "complete" } });
+    await renderPage();
+    expect(screen.queryByTestId("share-panel")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Discard" })).toBeInTheDocument();
   });
 
   it("refetches the splat once its job has ended", async () => {

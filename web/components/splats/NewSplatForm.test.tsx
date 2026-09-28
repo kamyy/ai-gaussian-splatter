@@ -3,8 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NewSplatForm } from "./NewSplatForm";
 
+const { getTokenMock } = vi.hoisted(() => ({ getTokenMock: vi.fn() }));
 vi.mock("@clerk/nextjs", () => ({
-  useAuth: () => ({ getToken: async () => "test-token" }),
+  useAuth: () => ({ getToken: getTokenMock }),
 }));
 
 const pushMock = vi.fn();
@@ -17,6 +18,13 @@ vi.mock("@/lib/apiFetch", () => ({ apiFetch: apiFetchMock }));
 
 const { uploadPhotosMock } = vi.hoisted(() => ({ uploadPhotosMock: vi.fn() }));
 vi.mock("@/lib/uploadPhotos", () => ({ uploadPhotos: uploadPhotosMock }));
+
+const { measurePhotosMock } = vi.hoisted(() => ({ measurePhotosMock: vi.fn() }));
+vi.mock("@/lib/measurePhoto", () => ({ measurePhotos: measurePhotosMock }));
+
+// jsdom does no layout, so the preview area reports a fixed width. At 800 wide with the default 16px root font, a row
+// holds five 4:3 previews at 115.2px tall, so a page of four rows holds 20.
+vi.mock("@/lib/useElementWidth", () => ({ useElementWidth: () => [() => {}, 800] }));
 
 const { mutateMock } = vi.hoisted(() => ({ mutateMock: vi.fn() }));
 vi.mock("swr", () => ({ mutate: mutateMock }));
@@ -32,12 +40,14 @@ function submitButton() {
   return screen.getByRole("button", { name: "Upload and start" });
 }
 
-// react-dropzone resolves a file selection asynchronously (it's Promise-based internally), so this waits for the file
-// to land in component state before the caller goes on to submit.
+// react-dropzone resolves a file selection asynchronously (it's Promise-based internally), and the form then measures
+// the photos. This waits for both to finish before the caller goes on.
 async function addPhotos(...names: string[]) {
+  const drops = measurePhotosMock.mock.calls.length;
   const files = names.map(name => new File(["fake"], name, { type: "image/jpeg" }));
   fireEvent.change(screen.getByLabelText("Photos"), { target: { files } });
-  await waitFor(() => expect(screen.getByRole("img", { name: names[names.length - 1] })).toBeInTheDocument());
+  await waitFor(() => expect(measurePhotosMock).toHaveBeenCalledTimes(drops + 1));
+  await waitFor(() => expect(screen.queryByText("Reading photos…")).not.toBeInTheDocument());
 }
 
 function fillName(value: string) {
@@ -49,6 +59,10 @@ describe("NewSplatForm", () => {
     vi.clearAllMocks();
     apiFetchMock.mockImplementation(async (path: string) => (path === "/api/v1/splats" ? { id: "new-splat-1" } : {}));
     uploadPhotosMock.mockResolvedValue(undefined);
+    getTokenMock.mockResolvedValue("test-token");
+    measurePhotosMock.mockImplementation(async (files: File[]) =>
+      files.map(file => ({ file, width: 4032, height: 3024, thumbnail: new Blob([file.name]), takenAt: 0 })),
+    );
   });
 
   it("needs both a name and at least one photo", async () => {
@@ -71,7 +85,10 @@ describe("NewSplatForm", () => {
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/splats/new-splat-1"));
     expect(apiFetchMock).toHaveBeenCalledWith("/api/v1/splats", "POST", "test-token", { name: "Coffee mug" });
     expect(uploadPhotosMock).toHaveBeenCalledWith("new-splat-1", expect.any(Array), "test-token");
-    expect(uploadPhotosMock.mock.calls[0][1]).toHaveLength(2);
+    expect(uploadPhotosMock.mock.calls[0][1]).toEqual([
+      expect.objectContaining({ width: 4032, height: 3024 }),
+      expect.objectContaining({ width: 4032, height: 3024 }),
+    ]);
     expect(apiFetchMock).toHaveBeenCalledWith("/api/v1/splats/new-splat-1/process", "POST", "test-token");
     expect(mutateMock).toHaveBeenCalledWith("splats");
   });
@@ -84,6 +101,122 @@ describe("NewSplatForm", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Remove a.jpg" }));
     expect(screen.getByText("1 photo added")).toBeInTheDocument();
+  });
+
+  it("turns away a photo the browser can't read, naming it", async () => {
+    measurePhotosMock.mockImplementation(async (files: File[]) =>
+      files.map(file => (file.name.endsWith(".heic") ? null : { file, width: 4032, height: 3024 })),
+    );
+    render(<NewSplatForm />);
+    fireEvent.change(screen.getByLabelText("Photos"), {
+      target: {
+        files: [new File(["a"], "a.jpg", { type: "image/jpeg" }), new File(["b"], "b.heic", { type: "image/heic" })],
+      },
+    });
+
+    await waitFor(() => expect(screen.getByText("1 photo added")).toBeInTheDocument());
+    expect(screen.queryByRole("img", { name: "b.heic" })).not.toBeInTheDocument();
+    expect(enqueueSnackbarMock).toHaveBeenCalledWith("Couldn't read b.heic. Try exporting as JPEG.", {
+      variant: "error",
+    });
+  });
+
+  it("shows the button busy as soon as it's clicked, before the session token arrives", async () => {
+    let resolveToken: (token: string) => void = () => {};
+    getTokenMock.mockReturnValueOnce(new Promise<string>(resolve => (resolveToken = resolve)));
+    render(<NewSplatForm />);
+    fillName("Coffee mug");
+    await addPhotos("a.jpg");
+    fireEvent.click(submitButton());
+
+    await waitFor(() => expect(submitButton()).toHaveAttribute("aria-busy", "true"));
+    expect(apiFetchMock).not.toHaveBeenCalled();
+
+    resolveToken("test-token");
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/splats/new-splat-1"));
+  });
+
+  it("holds the submit button until every dropped photo has been measured", async () => {
+    let finishMeasuring: () => void = () => {};
+    measurePhotosMock.mockImplementationOnce(
+      (files: File[]) =>
+        new Promise(resolve => {
+          finishMeasuring = () =>
+            resolve(
+              files.map(file => ({ file, width: 4032, height: 3024, thumbnail: new Blob([file.name]), takenAt: 0 })),
+            );
+        }),
+    );
+    render(<NewSplatForm />);
+    fillName("Coffee mug");
+    fireEvent.change(screen.getByLabelText("Photos"), {
+      target: { files: [new File(["a"], "a.jpg", { type: "image/jpeg" })] },
+    });
+
+    await waitFor(() => expect(screen.getByText("Reading photos…")).toBeInTheDocument());
+    expect(submitButton()).toBeDisabled();
+
+    finishMeasuring();
+    await waitFor(() => expect(submitButton()).not.toBeDisabled());
+    expect(screen.getByText("1 photo added")).toBeInTheDocument();
+  });
+
+  it("sizes each preview to fill its row", async () => {
+    render(<NewSplatForm />);
+    await addPhotos("a.jpg", "b.jpg", "c.jpg", "d.jpg", "e.jpg");
+    const tile = screen.getByRole("img", { name: "a.jpg" }).closest("li");
+    expect(tile).toHaveStyle({ width: "153.6px", height: "115.2px" });
+    // The preview shows the photo's thumbnail, not the full file.
+    const createObjectURL = vi.mocked(URL.createObjectURL);
+    expect(createObjectURL.mock.calls.some(([source]) => source instanceof Blob && !(source instanceof File))).toBe(
+      true,
+    );
+    expect(createObjectURL.mock.calls.every(([source]) => !(source instanceof File))).toBe(true);
+    // A placeholder icon sits under each preview until it decodes.
+    expect(tile?.querySelector("svg + img")).not.toBeNull();
+  });
+
+  it("pages the previews by whole rows, starting on page 1 after each drop", async () => {
+    render(<NewSplatForm />);
+    await addPhotos(...Array.from({ length: 21 }, (_, i) => `${i + 1}.jpg`));
+    expect(screen.getByText("1–20 of 21")).toBeInTheDocument();
+    expect(screen.getAllByRole("img")).toHaveLength(20);
+
+    fireEvent.click(screen.getByRole("button", { name: "Page 2" }));
+    expect(screen.getAllByRole("img").map(img => img.getAttribute("alt"))).toEqual(["21.jpg"]);
+    // The part-filled last page keeps a full page's height, four 115.2px rows and three 8px gaps, so the pager stays
+    // put.
+    expect(screen.getAllByRole("list").at(-1)?.parentElement).toHaveStyle({ minHeight: "484.8px" });
+
+    await addPhotos("22.jpg");
+    expect(screen.getByRole("button", { name: "Page 1" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("moves back a page when the last photo on the final page is removed", async () => {
+    render(<NewSplatForm />);
+    await addPhotos(...Array.from({ length: 21 }, (_, i) => `${i + 1}.jpg`));
+    fireEvent.click(screen.getByRole("button", { name: "Page 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove 21.jpg" }));
+
+    expect(screen.getAllByRole("img")).toHaveLength(20);
+    expect(screen.queryByRole("navigation", { name: "Photo pages" })).not.toBeInTheDocument();
+  });
+
+  it("orders the previews oldest taken first, whatever order they were added in", async () => {
+    const takenAt: Record<string, number> = { "b.jpg": 2, "c.jpg": 3, "a.jpg": 1 };
+    measurePhotosMock.mockImplementation(async (files: File[]) =>
+      files.map(file => ({
+        file,
+        width: 4032,
+        height: 3024,
+        thumbnail: new Blob([file.name]),
+        takenAt: takenAt[file.name],
+      })),
+    );
+    render(<NewSplatForm />);
+    await addPhotos("c.jpg", "b.jpg");
+    await addPhotos("a.jpg");
+    expect(screen.getAllByRole("img").map(img => img.getAttribute("alt"))).toEqual(["a.jpg", "b.jpg", "c.jpg"]);
   });
 
   it("surfaces a creation failure and stays on the form", async () => {

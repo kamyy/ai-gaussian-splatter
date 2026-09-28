@@ -30,8 +30,13 @@ export function splatStage(job: Job | undefined, photoCount: number): Stage {
   }
   switch (job.status) {
     case JobStatus.queued:
-    case JobStatus.launching:
     case JobStatus.reconstruction_running:
+      return { kind: "placing_cameras" };
+    // Both stages launch through "launching". The train stage's launch starts from a job that already has a point cloud.
+    case JobStatus.launching:
+      if (job.pointCloudS3Key) {
+        return { kind: "building", progress: null, startedAt: null };
+      }
       return { kind: "placing_cameras" };
     case JobStatus.awaiting_training:
       return { kind: "check" };
@@ -42,7 +47,7 @@ export function splatStage(job: Job | undefined, photoCount: number): Stage {
     case JobStatus.complete:
       return { kind: "complete" };
     // The job keeps no record of which stage it ended in. Reconstruction is what writes the point cloud, so a job
-    // that has one got past placing the cameras.
+    // that has one got past placing the cameras. "launching" above goes by the same test.
     case JobStatus.failed:
       return { kind: "failed", step: job.pointCloudS3Key ? "build" : "cameras", message: job.errorMessage };
     case JobStatus.cancelled:

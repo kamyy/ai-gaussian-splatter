@@ -1,7 +1,8 @@
+import { Quaternion, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 
 import type { CameraPose } from "@/lib/types";
-import { framingFromCameras, trimmedBox } from "./cameraFraming";
+import { fittedCropBox, framingFromCameras, trimmedBox } from "./cameraFraming";
 
 // A camera at `center` looking at `target`. Only the rotation's third row, the viewing direction, matters here.
 function lookingAt(center: [number, number, number], target: [number, number, number]): CameraPose {
@@ -49,5 +50,36 @@ describe("trimmedBox", () => {
 
   it("is empty without positions", () => {
     expect(trimmedBox([]).isEmpty()).toBe(true);
+  });
+});
+
+describe("fittedCropBox", () => {
+  // The corners of a 2 x 4 x 6 box centered on (1, 2, 3), tilted 30° about x, so its axes are none of the world's.
+  const tilt = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), Math.PI / 6);
+  const center = new Vector3(1, 2, 3);
+  const corners = [-1, 1].flatMap(x =>
+    [-2, 2].flatMap(y => [-3, 3].flatMap(z => new Vector3(x, y, z).applyQuaternion(tilt).add(center).toArray())),
+  );
+  const round = (values: number[]) => values.map(v => Number(v.toFixed(6)) + 0);
+
+  it("stands the box on the photos' up and faces it toward the first photo", () => {
+    const up = new Vector3(0, 1, 0).applyQuaternion(tilt);
+    const towardPhoto = new Vector3(0, 0, 1).applyQuaternion(tilt);
+    // The photo sits a little above the box, which the fit ignores.
+    const position = center.clone().addScaledVector(towardPhoto, 10).addScaledVector(up, 3);
+
+    const box = fittedCropBox(corners, { target: center, position, up });
+
+    expect(round(box?.center ?? [])).toEqual([1, 2, 3]);
+    expect(round(box?.size ?? [])).toEqual([2, 4, 6]);
+    expect(round(box?.quaternion ?? [])).toEqual(round(tilt.toArray()));
+  });
+
+  it("keeps COLMAP's axes without a framing", () => {
+    expect(fittedCropBox(corners, null)?.quaternion).toEqual([0, 0, 0, 1]);
+  });
+
+  it("is null without positions", () => {
+    expect(fittedCropBox([], null)).toBeNull();
   });
 });

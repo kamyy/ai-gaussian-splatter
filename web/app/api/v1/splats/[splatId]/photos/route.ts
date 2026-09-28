@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 
 import { requireUser } from "@/lib/server/auth";
@@ -30,13 +30,18 @@ export const GET = withErrorHandling(
       .select(photoColumns)
       .from(photos)
       .where(and(eq(photos.splatId, splatId), eq(photos.uploadStatus, "uploaded")))
-      .orderBy(photos.createdAt);
+      // Oldest taken first. Postgres sorts a null taken_at last, and upload time then id break ties so the order never
+      // shifts between requests.
+      .orderBy(asc(photos.takenAt), asc(photos.createdAt), asc(photos.id));
 
     const items: PhotoListItem[] = await Promise.all(
       rows.map(async row => ({
         id: row.id,
         originalFilename: row.originalFilename,
         url: await presignPhotoDownload(row.s3Key),
+        thumbnailUrl: await presignPhotoDownload(row.thumbnailS3Key ?? row.s3Key),
+        width: row.width,
+        height: row.height,
       })),
     );
     return NextResponse.json(items);

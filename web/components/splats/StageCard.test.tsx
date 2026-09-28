@@ -77,7 +77,7 @@ describe("StageCard", () => {
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
   });
 
-  it("offers only Stop while a stage is running", () => {
+  it("offers only Stop and Discard while a stage is running", () => {
     render(
       <StageCard
         splatId="splat-1"
@@ -86,7 +86,7 @@ describe("StageCard", () => {
       />,
     );
     expect(screen.getByRole("progressbar", { name: "Building the splat" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button").map(button => button.textContent)).toEqual(["Stop"]);
+    expect(screen.getAllByRole("button").map(button => button.textContent)).toEqual(["Stop", "Discard"]);
   });
 
   it("shows training progress and a time estimate once the worker reports it", () => {

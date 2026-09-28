@@ -3,8 +3,14 @@
 import { useAuth } from "@clerk/nextjs";
 import { useState } from "react";
 import type { IconType } from "react-icons";
-import { PiCameraDuotone, PiCameraSlashDuotone } from "react-icons/pi";
-import { TbChartScatter3D, TbCube3dSphere, TbCube3dSphereOff } from "react-icons/tb";
+import {
+  PiCameraDuotone,
+  PiCameraSlashDuotone,
+  PiCircleDuotone,
+  PiDotOutlineDuotone,
+  PiSelectionDuotone,
+  PiSelectionSlashDuotone,
+} from "react-icons/pi";
 import useSWR from "swr";
 
 import { Center } from "@/components/layout/Center";
@@ -111,7 +117,7 @@ function PointSizeSlider({ value, onChange }: { value: number; onChange: (value:
   return (
     <Tooltip label="Point size: how large each point in the shape sketch is drawn.">
       <label className="raised flex h-9 items-center gap-2 rounded-full border border-divider bg-paper px-3.5 text-foreground whitespace-nowrap">
-        <TbChartScatter3D aria-hidden="true" className="h-5 w-5" />
+        <PiDotOutlineDuotone aria-hidden="true" className="h-5 w-5" />
         <input
           type="range"
           aria-label="Point size"
@@ -122,6 +128,7 @@ function PointSizeSlider({ value, onChange }: { value: number; onChange: (value:
           onChange={event => onChange(event.target.valueAsNumber)}
           className="w-16 accent-primary"
         />
+        <PiCircleDuotone aria-hidden="true" className="h-4 w-4" />
       </label>
     </Tooltip>
   );
@@ -215,7 +222,7 @@ export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onC
   } else if (!url) {
     body = (
       <Center className="h-full rounded-3xl bg-muted">
-        <Spinner className="h-8 w-8 text-muted-foreground" />
+        <Spinner size="large" className="text-primary" />
       </Center>
     );
   } else {
@@ -242,8 +249,8 @@ export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onC
         label="Crop"
         tooltip="Crop: fit a box around the object. Anything outside it is left out of the 3D splat."
         pressed={cropping}
-        onIcon={TbCube3dSphere}
-        offIcon={TbCube3dSphereOff}
+        onIcon={PiSelectionDuotone}
+        offIcon={PiSelectionSlashDuotone}
         onChange={pressed => {
           setCropping(pressed);
           // Cleared rather than kept hidden, so a box the visitor turned off never reaches the build.

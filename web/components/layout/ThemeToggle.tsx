@@ -24,7 +24,7 @@ export function ThemeToggle() {
       type="button"
       aria-label={`Switch to ${nextMode} mode`}
       onClick={() => setTheme(nextMode)}
-      className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-divider hover:bg-muted"
+      className="inline-flex h-10 w-10 items-center justify-center pointer-coarse:h-11 pointer-coarse:w-11 rounded-full border border-outline transition-colors hover:border-muted-foreground hover:bg-muted"
     >
       <Icon aria-hidden="true" className="h-4 w-4" />
     </button>

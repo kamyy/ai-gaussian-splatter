@@ -145,6 +145,29 @@ The migration task (`web/scripts/db-migrate.cjs`) keeps the old static-env-var b
 
 ## 8. Infra
 
+How a photo set moves through AWS, from upload to viewing the finished splat. The ALB is the Application Load Balancer in front of the web app. A presigned URL is a short-lived link the API signs so the browser can read or write one S3 object directly, without the bytes passing through the web app.
+
+```mermaid
+flowchart LR
+  browser(["Browser"])
+  alb["ALB"]
+  web["Next.js<br/>Fargate Spot"]
+  rds[("RDS Postgres")]
+  up[("S3 uploads")]
+  sp[("S3 splats")]
+  worker["GPU spot instance<br/>reconstruct, then train"]
+  ecr["ECR worker repo"]
+  browser -->|"1 · pages + API"| alb --> web
+  web --> rds
+  browser -->|"2 · presigned PUT photos"| up
+  web -->|"3 · RunInstances"| worker
+  ecr -->|"4 · pull image"| worker
+  up -->|"5 · read photos"| worker
+  worker -->|"6 · write .ply + thumbnail"| sp
+  worker -->|"7 · status callback over HTTPS"| alb
+  sp -->|"8 · presigned GET .ply"| browser
+```
+
 - Infra: **Terraform**. One configuration (`infra/`) holding one state. The S3 bucket that state lives in is created by hand ([Creating account prerequisites](RUNBOOK.md#22-creating-account-prerequisites)). `terraform init` needs the bucket before any apply. Managing it inside `infra/` would store state in a bucket `infra/` also owns. A second Terraform module with its own local state was rejected.
 - Six logical areas, one per `.tf` file, rather than one CloudFormation-style stack each. A single state resolves the dependencies between them directly, so there's no cross-stack export/import to keep in sync:
   - **network** — VPC, subnets, security groups.
@@ -170,6 +193,39 @@ The web app runs on **Fargate** behind an **Application Load Balancer** (`infra/
 - The service auto-scales on CPU between 1 and 3 tasks.
 
 ### 9.2 Networking
+
+Where each resource sits in the network, and which security group (sg) guards it.
+
+```mermaid
+flowchart TB
+  user(["Browser"])
+  subgraph aws["AWS account · var.aws_region"]
+    r53["Route 53 record + ACM cert"]
+    subgraph vpc["VPC 10.0.0.0/16 · 2 availability zones"]
+      igw["Internet gateway"]
+      subgraph pub["Public subnets · 0.0.0.0/0 → IGW"]
+        alb["ALB · sg alb<br/>443 in, 80 redirects"]
+        web["Fargate Spot service · sg web<br/>1–3 tasks, public IP"]
+        worker["EC2 GPU spot · sg worker<br/>g5.xlarge, one per stage"]
+      end
+      subgraph priv["Private subnets · no route out"]
+        rds[("RDS Postgres · sg db<br/>one availability zone")]
+      end
+      s3ep["S3 gateway endpoint"]
+    end
+    s3[("S3<br/>uploads, splats, ALB logs")]
+    ecr["ECR<br/>web repo, worker repo"]
+    sm["Secrets Manager<br/>Clerk key, RDS login"]
+  end
+  user -->|DNS| r53
+  user -->|HTTPS| igw --> alb -->|":8000 only"| web
+  web -->|":5432 only"| rds
+  web -.->|RunInstances| worker
+  web --> s3ep
+  worker -->|"photos, splats, image layers"| s3ep --> s3
+  worker -->|"ECR login + manifest via IGW"| ecr
+  web -->|via IGW| sm
+```
 
 - Tasks share public subnets with the ALB and have a public IP, so they can reach the EC2 API through the internet gateway (IGW). S3 calls go through a gateway VPC endpoint instead (free, no IGW hop).
 - No NAT: it costs ~$33/mo + $0.045/GB, and a multi-GB worker ECR pull would cost more per worker job than the spot instance itself.

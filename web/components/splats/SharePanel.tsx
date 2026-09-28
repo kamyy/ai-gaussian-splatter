@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/Button";
 import { apiFetch } from "@/lib/apiFetch";
 import { requireToken } from "@/lib/requireToken";
 import { useAppSnackbar } from "@/lib/useAppSnackbar";
+import { StageShell } from "./StageShell";
 
 // Shown once a splat is complete. The link is the public view (web/app/(public)/preview/splats/[id]/page.tsx), which
-// needs no sign-in. Children sit in a row beside the download button.
+// needs no sign-in. Children sit in a row beside the download button, and the page passes its Discard button, which
+// the prose above that row describes.
 export function SharePanel({ splatId, children }: { splatId: string; children?: React.ReactNode }) {
   const { getToken } = useAuth();
   const { enqueueSnackbar } = useAppSnackbar();
@@ -41,29 +43,32 @@ export function SharePanel({ splatId, children }: { splatId: string; children?: 
   }
 
   return (
-    <section aria-labelledby="share-heading" className="flex flex-col gap-2.5">
-      <h2 id="share-heading" className="text-sm font-semibold">
-        <label htmlFor="share-link">Public link</label>
-      </h2>
-      <div className="flex gap-2">
-        <input
-          id="share-link"
-          readOnly
-          value={shareUrl}
-          onFocus={event => event.currentTarget.select()}
-          className="h-11 min-w-0 flex-1 rounded-full border border-divider bg-paper px-4 text-sm"
-        />
-        <Button variant="contained" onClick={copy} aria-live="polite">
-          {copied ? "Copied" : "Copy"}
-        </Button>
+    <StageShell title="Your splat is ready">
+      <div className="flex flex-col gap-2">
+        <div className="flex gap-2">
+          <input
+            aria-label="Public link"
+            readOnly
+            value={shareUrl}
+            onFocus={event => event.currentTarget.select()}
+            className="h-11 min-w-0 flex-1 rounded-full border border-divider bg-paper px-4 text-sm text-foreground"
+          />
+          <Button variant="contained" onClick={copy} aria-live="polite">
+            {copied ? "Copied" : "Copy"}
+          </Button>
+        </div>
+        <p>Anyone with the link can view it. No sign-in needed.</p>
       </div>
-      <p className="text-xs text-muted-foreground">Anyone with the link can view it. No sign-in needed.</p>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
+      <p>
+        Download the splat as a .ply file to open it in other 3D tools. Discarding it deletes the splat and its photos,
+        and the public link stops working.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
         <Button variant="ink" onClick={download} loading={downloading}>
           Download .ply
         </Button>
         {children}
       </div>
-    </section>
+    </StageShell>
   );
 }

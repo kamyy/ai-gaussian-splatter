@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { LuImage } from "react-icons/lu";
 
-import { SplatCard } from "@/components/splats/SplatCard";
+import { SplatCard, splatCardAspect } from "@/components/splats/SplatCard";
 import { buttonClassName } from "@/components/ui/Button";
+import { Pager } from "@/components/ui/Pager";
 import { cn } from "@/lib/cn";
 import { useSplats } from "@/lib/hooks";
 import { type LibraryFilter, splatBadge } from "@/lib/splatBadge";
+import { useJustifiedPages } from "@/lib/useJustifiedPages";
 
 const FILTERS: { value: LibraryFilter | "all"; label: string }[] = [
   { value: "all", label: "All" },
@@ -16,14 +19,26 @@ const FILTERS: { value: LibraryFilter | "all"; label: string }[] = [
   { value: "complete", label: "Complete" },
 ];
 
-// Shared by the loaded list and its skeleton, so the placeholders sit exactly where the cards will.
-const GRID = "grid gap-x-6 gap-y-7 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+// A page is this many whole rows of cards, so every page but the last ends on a full row.
+const ROWS_PER_PAGE = 3;
+// About the height of a card image. Each full row stretches a little past it to fill the width.
+const ROW_HEIGHT_REM = 14.75;
+// Match the card list's gap-x-6 and gap-y-7.
+const COLUMN_GAP_REM = 1.5;
+const ROW_GAP_REM = 1.75;
+// The name line below each card image (web/components/splats/SplatCard.tsx): its gap-3 plus text-2xl's 2rem line.
+const CAPTION_REM = 2.75;
 
 function SplatGridSkeleton() {
   return (
-    <div className={GRID} aria-hidden="true">
+    <div className="grid gap-x-6 gap-y-7 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" aria-hidden="true">
       {[0, 1, 2, 3].map(i => (
-        <div key={i} className="h-59 animate-pulse rounded-3xl bg-muted" />
+        <div
+          key={i}
+          className="flex h-59 animate-pulse items-center justify-center rounded-3xl bg-muted text-muted-foreground"
+        >
+          <LuImage strokeWidth={1} className="h-8 w-8" />
+        </div>
       ))}
     </div>
   );
@@ -45,6 +60,18 @@ function EmptyLibrary() {
 export default function LibraryPage() {
   const { data: splats, isLoading, error } = useSplats();
   const [filter, setFilter] = useState<LibraryFilter | "all">("all");
+  const filtered = useMemo(
+    () => (filter === "all" ? (splats ?? []) : (splats ?? []).filter(splat => splatBadge(splat).filter === filter)),
+    [splats, filter],
+  );
+  const aspects = useMemo(() => filtered.map(splatCardAspect), [filtered]);
+  const { setArea, areaHeight, current, pageCount, setPage, tiles } = useJustifiedPages(aspects, {
+    rowHeightRem: ROW_HEIGHT_REM,
+    columnGapRem: COLUMN_GAP_REM,
+    rowGapRem: ROW_GAP_REM,
+    rowsPerPage: ROWS_PER_PAGE,
+    captionRem: CAPTION_REM,
+  });
 
   let body: React.ReactNode;
   if (isLoading) {
@@ -53,20 +80,32 @@ export default function LibraryPage() {
     body = <p className="text-error">Failed to load splats.</p>;
   } else if (splats.length === 0) {
     body = <EmptyLibrary />;
+  } else if (filtered.length === 0) {
+    body = <p className="text-muted-foreground">Nothing here right now.</p>;
   } else {
-    const shown = filter === "all" ? splats : splats.filter(splat => splatBadge(splat).filter === filter);
-    body =
-      shown.length === 0 ? (
-        <p className="text-muted-foreground">Nothing here right now.</p>
-      ) : (
-        <ul className={GRID}>
-          {shown.map(splat => (
-            <li key={splat.id}>
-              <SplatCard splat={splat} />
-            </li>
-          ))}
-        </ul>
-      );
+    let pager: React.ReactNode = null;
+    if (pageCount > 1) {
+      pager = <Pager label="Library pages" current={current} count={pageCount} onChange={setPage} />;
+    }
+    body = (
+      <div className="flex flex-col gap-8">
+        {/* Measured for its width, which decides how many cards each row holds. It keeps the tallest page's height, so
+        the pager below stays put from page to page. */}
+        <div ref={setArea} style={{ minHeight: areaHeight }}>
+          <ul className="flex flex-wrap gap-x-6 gap-y-7">
+            {tiles.map(tile => {
+              const splat = filtered[tile.index];
+              return (
+                <li key={splat.id} style={{ width: tile.width }} className="shrink-0">
+                  <SplatCard splat={splat} />
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+        {pager}
+      </div>
+    );
   }
 
   let filters: React.ReactNode = null;
@@ -81,7 +120,10 @@ export default function LibraryPage() {
             key={option.value}
             type="button"
             aria-pressed={filter === option.value}
-            onClick={() => setFilter(option.value)}
+            onClick={() => {
+              setFilter(option.value);
+              setPage(1);
+            }}
             className={cn(
               "h-9 rounded-full px-3 text-sm font-semibold whitespace-nowrap sm:px-4",
               filter === option.value ? "bg-foreground text-background" : "hover:bg-muted",
@@ -99,7 +141,7 @@ export default function LibraryPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <h1 className="font-display text-5xl tracking-tight sm:text-6xl">
           Your splats{" "}
-          {splats && splats.length > 0 ? <span className="text-muted-foreground">{splats.length}</span> : null}
+          {splats && splats.length > 0 ? <span className="ml-2 text-muted-foreground">{splats.length}</span> : null}
         </h1>
         {filters}
       </div>

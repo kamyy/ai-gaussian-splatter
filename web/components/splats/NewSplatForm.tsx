@@ -4,20 +4,29 @@ import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { LuX } from "react-icons/lu";
+import { LuImage, LuX } from "react-icons/lu";
 import { mutate } from "swr";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Pager } from "@/components/ui/Pager";
 import { apiFetch } from "@/lib/apiFetch";
 import { cn } from "@/lib/cn";
+import { measurePhotos, type PickedPhoto } from "@/lib/measurePhoto";
 import { useAppStore } from "@/lib/store";
 import type { Job, Splat } from "@/lib/types";
 import { uploadPhotos } from "@/lib/uploadPhotos";
 import { useAppSnackbar } from "@/lib/useAppSnackbar";
+import { useJustifiedPages } from "@/lib/useJustifiedPages";
 
 // Guidance, not a limit: the meter fills at this count. The server's own minimum is MIN_PHOTOS_PER_SPLAT.
 const TARGET_PHOTOS = 50;
+// A page of previews is this many whole rows, so every page but the last ends on a full row. Only that page is
+// rendered, so a large drop never decodes every full-size photo at once.
+const PREVIEW_ROWS_PER_PAGE = 4;
+const PREVIEW_ROW_HEIGHT_REM = 7.5;
+// Matches the preview list's gap-2.
+const PREVIEW_GAP_REM = 0.5;
 
 type Phase = "idle" | "creating" | "uploading" | "starting";
 
@@ -51,19 +60,59 @@ export function NewSplatForm() {
   const resetUploads = useAppStore(state => state.resetUploads);
   const uploads = useAppStore(state => state.uploads);
   const [name, setName] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
+  const [photos, setPhotos] = useState<PickedPhoto[]>([]);
+  const aspects = useMemo(() => photos.map(photo => photo.width / photo.height), [photos]);
+  const {
+    setArea: setPreviewArea,
+    areaHeight: previewAreaHeight,
+    current: currentPage,
+    pageCount,
+    setPage,
+    start,
+    end,
+    tiles,
+  } = useJustifiedPages(aspects, {
+    rowHeightRem: PREVIEW_ROW_HEIGHT_REM,
+    columnGapRem: PREVIEW_GAP_REM,
+    rowGapRem: PREVIEW_GAP_REM,
+    rowsPerPage: PREVIEW_ROWS_PER_PAGE,
+  });
   const [phase, setPhase] = useState<Phase>("idle");
   // Set once the POST below succeeds, so a retry after a photo-upload failure reuses this splat instead of creating a
   // second one.
   const [createdSplat, setCreatedSplat] = useState<Splat | null>(null);
+  // Drops still being measured. Submitting waits for them, or their photos would be left out of the upload.
+  const [measuringCount, setMeasuringCount] = useState(0);
   const submitting = phase !== "idle";
+  const measuring = measuringCount > 0;
+
+  // Each photo is measured as it's added, because the server stores its size for web/components/splats/PhotoGrid.tsx.
+  // A photo this browser can't decode has no size to store, so it's turned away here rather than failing mid-upload.
+  async function addFiles(accepted: File[]) {
+    setMeasuringCount(count => count + 1);
+    try {
+      const measured = await measurePhotos(accepted);
+      const unreadable = accepted.filter((_, index) => measured[index] === null).map(file => file.name);
+      if (unreadable.length > 0) {
+        enqueueSnackbar(`Couldn't read ${unreadable.join(", ")}. Try exporting as JPEG.`, { variant: "error" });
+      }
+      const readable = measured.filter(photo => photo !== null);
+      setPhotos(current => {
+        const seen = new Set(current.map(photo => fileKey(photo.file)));
+        // Oldest taken first, matching the order the splat's page shows them in. The sort is stable, so photos taken at
+        // the same moment keep the order they were added in.
+        return [...current, ...readable.filter(photo => !seen.has(fileKey(photo.file)))].sort(
+          (a, b) => a.takenAt - b.takenAt,
+        );
+      });
+      setPage(1);
+    } finally {
+      setMeasuringCount(count => count - 1);
+    }
+  }
 
   const { getRootProps, getInputProps, open, isDragAccept, isDragReject } = useDropzone({
-    onDrop: accepted =>
-      setFiles(current => {
-        const seen = new Set(current.map(fileKey));
-        return [...current, ...accepted.filter(file => !seen.has(fileKey(file)))];
-      }),
+    onDrop: accepted => void addFiles(accepted),
     accept: { "image/*": [] },
     multiple: true,
     disabled: submitting,
@@ -73,7 +122,10 @@ export function NewSplatForm() {
     noKeyboard: true,
   });
 
-  const previews = useMemo(() => files.map(file => ({ file, url: URL.createObjectURL(file) })), [files]);
+  const previews = useMemo(
+    () => photos.slice(start, end).map(photo => ({ photo, url: URL.createObjectURL(photo.thumbnail) })),
+    [photos, start, end],
+  );
   useEffect(
     () => () => {
       for (const preview of previews) {
@@ -87,25 +139,27 @@ export function NewSplatForm() {
   useEffect(() => resetUploads, [resetUploads]);
 
   function removeFile(key: string) {
-    setFiles(current => current.filter(file => fileKey(file) !== key));
+    setPhotos(current => current.filter(photo => fileKey(photo.file) !== key));
   }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     const trimmedName = name.trim();
-    if (trimmedName.length === 0 || files.length === 0) {
+    if (trimmedName.length === 0 || photos.length === 0 || measuring) {
       return;
     }
 
+    // Set before the token fetch, which can take a moment, so the button shows its spinner as soon as it's clicked.
+    setPhase(createdSplat ? "uploading" : "creating");
     const token = await getToken();
     if (!token) {
       enqueueSnackbar("Not signed in", { variant: "error" });
+      setPhase("idle");
       return;
     }
 
     let splat = createdSplat;
     if (!splat) {
-      setPhase("creating");
       try {
         splat = await apiFetch<Splat>("/api/v1/splats", "POST", token, { name: trimmedName });
       } catch (err) {
@@ -120,7 +174,7 @@ export function NewSplatForm() {
     setPhase("uploading");
     resetUploads();
     try {
-      await uploadPhotos(splat.id, files, token);
+      await uploadPhotos(splat.id, photos, token);
     } catch (err) {
       enqueueSnackbar(
         err instanceof Error
@@ -147,34 +201,64 @@ export function NewSplatForm() {
 
   const uploadedCount = Object.values(uploads).filter(item => item.status === "uploaded").length;
   let progressLabel: string | null = null;
-  if (phase === "creating") {
+  if (measuring && phase === "idle") {
+    progressLabel = "Reading photos…";
+  } else if (phase === "creating") {
     progressLabel = "Creating…";
   } else if (phase === "uploading") {
-    progressLabel = `Uploading ${uploadedCount} of ${files.length}…`;
+    progressLabel = `Uploading ${uploadedCount} of ${photos.length}…`;
   } else if (phase === "starting") {
     progressLabel = "Starting…";
   }
 
   let previewGrid: React.ReactNode = null;
-  if (previews.length > 0) {
+  if (photos.length > 0) {
     previewGrid = (
-      <ul className="grid grid-cols-4 gap-2 sm:grid-cols-6 lg:grid-cols-8">
-        {previews.map(({ file, url }) => (
-          <li key={fileKey(file)} className="relative aspect-square overflow-hidden rounded-xl bg-muted">
-            {/* biome-ignore lint/performance/noImgElement: a local object URL, not something next/image can optimize. */}
-            <img src={url} alt={file.name} className="h-full w-full object-cover" />
-            <button
-              type="button"
-              aria-label={`Remove ${file.name}`}
-              onClick={() => removeFile(fileKey(file))}
-              disabled={submitting}
-              className="absolute top-1 right-1 flex h-7 w-7 items-center justify-center rounded-full bg-paper text-foreground disabled:hidden"
-            >
-              <LuX aria-hidden="true" className="h-3.5 w-3.5" />
-            </button>
-          </li>
-        ))}
-      </ul>
+      // Measured for its width, which decides how many previews each row holds.
+      <div ref={setPreviewArea} style={{ minHeight: previewAreaHeight }}>
+        <ul className="flex flex-wrap gap-2">
+          {tiles.map(tile => {
+            const { photo, url } = previews[tile.index - start];
+            return (
+              <li
+                key={fileKey(photo.file)}
+                style={{ width: tile.width, height: tile.height }}
+                className="relative shrink-0 overflow-hidden rounded-xl bg-muted"
+              >
+                {/* Shows until the photo decodes and covers it. The photo is relative so it paints above this icon. */}
+                <LuImage
+                  aria-hidden="true"
+                  strokeWidth={1}
+                  className="absolute inset-0 m-auto h-6 w-6 text-muted-foreground"
+                />
+                {/* biome-ignore lint/performance/noImgElement: a local object URL, not something next/image can optimize. */}
+                <img src={url} alt={photo.file.name} className="relative h-full w-full object-cover" />
+                <button
+                  type="button"
+                  aria-label={`Remove ${photo.file.name}`}
+                  onClick={() => removeFile(fileKey(photo.file))}
+                  disabled={submitting}
+                  className="absolute top-1 right-1 flex h-7 w-7 items-center justify-center rounded-full bg-paper text-foreground disabled:hidden"
+                >
+                  <LuX aria-hidden="true" className="h-3.5 w-3.5" />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  }
+
+  let previewPager: React.ReactNode = null;
+  if (pageCount > 1) {
+    previewPager = (
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-sm text-muted-foreground">
+          {start + 1}–{end} of {photos.length}
+        </span>
+        <Pager label="Photo pages" current={currentPage} count={pageCount} onChange={setPage} />
+      </div>
     );
   }
 
@@ -194,7 +278,7 @@ export function NewSplatForm() {
         {...getRootProps()}
         className={cn(
           "flex flex-col gap-4 rounded-3xl border-2 border-dashed p-5",
-          files.length === 0 && "min-h-60 justify-center",
+          photos.length === 0 && "min-h-60 justify-center",
           isDragReject ? "border-error" : isDragAccept ? "border-primary" : "border-divider",
         )}
       >
@@ -202,22 +286,23 @@ export function NewSplatForm() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-col gap-0.5">
             <span className="font-semibold">
-              {files.length === 0
+              {photos.length === 0
                 ? "Drop your photos here"
-                : `${files.length} photo${files.length === 1 ? "" : "s"} added`}
+                : `${photos.length} photo${photos.length === 1 ? "" : "s"} added`}
             </span>
             <span className="text-sm text-muted-foreground">
               {isDragReject ? "Only image files are accepted." : "More angles usually means a better result."}
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <PhotoMeter count={files.length} />
+            <PhotoMeter count={photos.length} />
             <Button variant="outlined" onClick={open} disabled={submitting}>
               Browse files
             </Button>
           </div>
         </div>
         {previewGrid}
+        {previewPager}
       </div>
 
       <div className="flex flex-wrap items-center gap-4">
@@ -225,8 +310,8 @@ export function NewSplatForm() {
           type="submit"
           variant="contained"
           size="large"
-          loading={submitting}
-          disabled={name.trim().length === 0 || files.length === 0}
+          loading={submitting || measuring}
+          disabled={name.trim().length === 0 || photos.length === 0}
         >
           Upload and start
         </Button>

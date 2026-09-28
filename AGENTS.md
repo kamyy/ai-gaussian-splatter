@@ -259,7 +259,8 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 - **The worker container is two hops from IMDS, so `RunInstances` sets `HttpPutResponseHopLimit: 2`** (`web/lib/server/ec2Launcher.ts`).
   - At EC2's default of 1 the token PUT in `worker/pipeline/instance.py` gets no reply, `get_self_instance_id()` returns `None`, and the instance never terminates itself — logging one INFO line indistinguishable from a local run while a `g5.xlarge` keeps billing.
   - `HttpTokens: "required"` is paired with it and depends on it: on its own it removes the IMDSv1 fallback and breaks credentials too, not just self-termination.
-- **Typical agent sandboxes have none of that**, so an agent can't run the pipeline itself and has to hand a real run back to the user.
+- **An agent whose shell runs on a host with that setup can run the pipeline itself.** Check `nvidia-smi` and `podman images` before handing a real run back to the user.
+  - A `podman run` outside `scripts/lib/worker.sh` also needs `--security-opt label=disable` on an SELinux host. Without it, SELinux blocks the GPU device nodes and `nvidia-smi` in the container fails with `Insufficient Permissions`.
 
 ---
 

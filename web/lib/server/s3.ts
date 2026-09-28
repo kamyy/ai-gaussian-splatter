@@ -22,6 +22,14 @@ export function photoS3Key(splatId: string, photoId: string, extension: string):
   return `splats/${splatId}/photos/${photoId}${extension}`;
 }
 
+/**
+ * A photo's thumbnail sits beside, not under, photos/. The worker downloads everything under splats/<splatId>/photos/
+ * (worker/pipeline/fetch.py) and hands it to COLMAP, which would treat a thumbnail as another photo.
+ */
+export function photoThumbnailS3Key(splatId: string, photoId: string): string {
+  return `splats/${splatId}/photo-thumbnails/${photoId}.jpg`;
+}
+
 /** Returns the S3 key alongside the presigned PUT URL. */
 export async function presignPhotoUpload(
   splatId: string,
@@ -36,6 +44,18 @@ export async function presignPhotoUpload(
     Key: key,
     ContentType: contentType,
   });
+  const url = await getSignedUrl(s3Client(), command, { expiresIn: PRESIGN_EXPIRY_SECONDS });
+  return { key, url };
+}
+
+/** A thumbnail is always a JPEG, drawn in the browser by web/lib/measurePhoto.ts. */
+export async function presignPhotoThumbnailUpload(
+  splatId: string,
+  photoId: string,
+): Promise<{ key: string; url: string }> {
+  const env = getEnv();
+  const key = photoThumbnailS3Key(splatId, photoId);
+  const command = new PutObjectCommand({ Bucket: env.UPLOADS_BUCKET, Key: key, ContentType: "image/jpeg" });
   const url = await getSignedUrl(s3Client(), command, { expiresIn: PRESIGN_EXPIRY_SECONDS });
   return { key, url };
 }

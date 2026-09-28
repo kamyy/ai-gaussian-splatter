@@ -39,6 +39,14 @@ describe("splatStage", () => {
     expect(splatStage(job({ status }), 30).kind).toBe(kind);
   });
 
+  it("shows a launch as building once the job has a point cloud", () => {
+    expect(splatStage(job({ status: JobStatus.launching, pointCloudS3Key: "pc.ply" }), 30)).toEqual({
+      kind: "building",
+      progress: null,
+      startedAt: null,
+    });
+  });
+
   it("carries training progress on the building stage, and treats uploading the result as done", () => {
     expect(splatStage(job({ status: JobStatus.training_running, trainingProgress: 40 }), 30)).toMatchObject({
       kind: "building",

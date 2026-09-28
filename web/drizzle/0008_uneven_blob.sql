@@ -1,0 +1,1 @@
+ALTER TABLE "photos" ADD COLUMN "thumbnail_s3_key" text;

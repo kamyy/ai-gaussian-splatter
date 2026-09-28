@@ -56,6 +56,8 @@ describe("POST /api/v1/splats/[splatId]/process", () => {
           s3Key: `splats/${splat.id}/photos/${i}.jpg`,
           originalFilename: `${i}.jpg`,
           contentType: "image/jpeg",
+          width: 4032,
+          height: 3024,
           uploadStatus: "uploaded" as const,
         })),
       );
