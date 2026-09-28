@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     # to the iteration count, so the short run covers the same code paths as a full one.
     fast_test_mode: bool = False
 
+    # A local experiment switch, never set on AWS. worker/pipeline/train.py holds back every 8th photo from training
+    # and scores the finished splat against them, since the training loss keeps falling even while the splat overfits
+    # the photos it trains on. It also seeds the random view order, but GPU nondeterminism still moves the score of two
+    # identical runs by up to about 1 dB, so compare a change over several runs.
+    eval_holdout: bool = False
+
     # Set only on a train-stage launch, as JSON in CROP_BOX. worker/pipeline/export.py drops every Gaussian whose center
     # falls outside it. Training ignores it, for the reason ARCHITECTURE.md's Pipeline section gives.
     crop_box: CropBox | None = None

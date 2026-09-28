@@ -10,6 +10,8 @@ than by oversight:
 """
 
 import logging
+import shutil
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -42,6 +44,17 @@ MIN_INIT_SCALE = 1e-4
 SH_DEGREE = 3
 # The constant that turns an RGB value in [0, 1] into the degree-0 (DC) SH coefficient and back: rgb = SH_C0 * dc + 0.5.
 SH_C0 = 0.28209479177387814
+
+# With Settings.eval_holdout set, every 8th registered photo is held back from training and scored afterwards, as the
+# reference 3DGS evaluation does.
+EVAL_HOLDOUT_EVERY = 8
+
+# SSIM (structural similarity) compares local brightness, contrast, and structure over a sliding Gaussian window rather
+# than pixel by pixel. These are the reference implementation's window and stabilizing constants.
+SSIM_WINDOW = 11
+SSIM_SIGMA = 1.5
+SSIM_C1 = 0.01**2
+SSIM_C2 = 0.03**2
 
 
 @dataclass
@@ -102,6 +115,10 @@ def _train_loop(sparse: SparseModel, photos_dir: Path, settings: Settings):
     instead of re-indenting this whole body.
     """
     cameras, viewmats, images_tensor = _load_views(sparse, photos_dir)
+    train_indices, eval_indices = _split_views(len(images_tensor), settings.eval_holdout)
+    if settings.eval_holdout:
+        np.random.seed(0)
+        torch.manual_seed(0)
     # gsplat's strategy replaces entries of this dict as it clones, splits, and prunes, carrying each optimizer's
     # state across. So nothing may hold on to an individual parameter between steps.
     params = {name: torch.nn.Parameter(tensor.detach()) for name, tensor in vars(_init_gaussians(sparse)).items()}
@@ -110,13 +127,16 @@ def _train_loop(sparse: SparseModel, photos_dir: Path, settings: Settings):
     iterations = 20 if settings.fast_test_mode else settings.training_iterations
     log_every = max(1, iterations // 20)
 
+    from gsplat.strategy.ops import reset_opa  # imported lazily for the same reason as in _render
+
     strategy = _build_strategy(iterations)
     strategy.check_sanity(params, optimizers)
     strategy_state = strategy.initialize_state(scene_scale=_scene_scale(viewmats))
     max_points = _max_gaussians_for_device()
 
+    started = time.monotonic()
     for step in range(iterations):
-        idx = np.random.randint(0, len(images_tensor))
+        idx = train_indices[np.random.randint(0, len(train_indices))]
         K, width, height = cameras[idx]
         viewmat = viewmats[idx]
         gt_image = images_tensor[idx]
@@ -134,6 +154,8 @@ def _train_loop(sparse: SparseModel, photos_dir: Path, settings: Settings):
             # No gradient exceeds infinity, so this stops growth while pruning carries on.
             strategy.grow_grad2d = float("inf")
         strategy.step_post_backward(params, optimizers, strategy_state, step, meta, packed=True)
+        if _is_opacity_reset_step(step, iterations, strategy.refine_stop_iter):
+            reset_opa(params, optimizers, strategy_state, value=strategy.prune_opa * 2.0)
         if len(params["means"]) == 0:
             raise RuntimeError("Every Gaussian's opacity decayed below the prune threshold; the model has collapsed")
 
@@ -143,7 +165,77 @@ def _train_loop(sparse: SparseModel, photos_dir: Path, settings: Settings):
             # raises, so an unreachable web app costs its timeout here and nothing more.
             report_status(settings, "training_running", training_progress=step * 100 // iterations)
 
-    return GaussianModel(**params), cameras, viewmats, images_tensor
+    logger.info("Trained %d iterations in %.0fs", iterations, time.monotonic() - started)
+    model = GaussianModel(**params)
+    if eval_indices:
+        _evaluate(model, cameras, viewmats, images_tensor, eval_indices, Path(settings.local_workdir) / "eval")
+    return model, cameras, viewmats, images_tensor
+
+
+def _split_views(count: int, eval_holdout: bool) -> tuple[list[int], list[int]]:
+    """(train_indices, eval_indices) over the loaded views. Without eval_holdout every view trains."""
+    if not eval_holdout:
+        return list(range(count)), []
+    eval_indices = list(range(0, count, EVAL_HOLDOUT_EVERY))
+    train_indices = [i for i in range(count) if i % EVAL_HOLDOUT_EVERY != 0]
+    if not train_indices:
+        raise RuntimeError(f"Holding out every {EVAL_HOLDOUT_EVERY}th photo leaves none of {count} to train on")
+    return train_indices, eval_indices
+
+
+def _evaluate(model: GaussianModel, cameras, viewmats, images_tensor, eval_indices: list[int], out_dir: Path) -> None:
+    """Logs mean PSNR and SSIM over the held-out views. It also writes a ground-truth-beside-render PNG per view to
+    out_dir, which is worker/jobdir/eval/ on the host, for looking at what the numbers miss.
+
+    PSNR (peak signal-to-noise ratio) is in decibels and higher is better. It rewards matching exact pixel values.
+    SSIM runs from 0 to 1 and rewards matching local structure, such as edges and texture.
+    """
+    # Emptied first, so a splat with fewer views doesn't leave an earlier splat's extra renders beside its own.
+    shutil.rmtree(out_dir, ignore_errors=True)
+    out_dir.mkdir(parents=True)
+    psnrs, ssims = [], []
+    for idx in eval_indices:
+        K, width, height = cameras[idx]
+        rendered = render_view(model, viewmats[idx], K, width, height).clamp(0, 1)
+        gt_image = images_tensor[idx]
+        psnrs.append(_psnr(rendered, gt_image))
+        ssims.append(_ssim(rendered, gt_image).item())
+        side_by_side = (torch.cat([gt_image, rendered], dim=1) * 255).byte().cpu().numpy()
+        PILImage.fromarray(side_by_side).save(out_dir / f"view-{idx:03d}.png")
+    logger.info(
+        "Held-out eval over %d views: PSNR=%.2f dB SSIM=%.4f (side-by-sides in %s)",
+        len(eval_indices),
+        float(np.mean(psnrs)),
+        float(np.mean(ssims)),
+        out_dir,
+    )
+
+
+def _psnr(a: torch.Tensor, b: torch.Tensor) -> float:
+    return -10 * torch.log10(torch.nn.functional.mse_loss(a, b)).item()
+
+
+def _ssim(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+    """Mean SSIM between two (H, W, 3) images in [0, 1], as a scalar tensor."""
+    coords = torch.arange(SSIM_WINDOW, dtype=a.dtype, device=a.device) - SSIM_WINDOW // 2
+    gauss = torch.exp(-(coords**2) / (2 * SSIM_SIGMA**2))
+    gauss = gauss / gauss.sum()
+
+    x = a.permute(2, 0, 1)
+    y = b.permute(2, 0, 1)
+    # All five maps SSIM blurs are stacked as one batch of single-channel images. The 2D Gaussian window is applied as
+    # a horizontal pass then a vertical one, which runs about 6x faster than an 11x11 conv2d per map.
+    maps = torch.cat([x, y, x * x, y * y, x * y])[:, None]
+    maps = torch.nn.functional.conv2d(maps, gauss.view(1, 1, 1, -1), padding=(0, SSIM_WINDOW // 2))
+    maps = torch.nn.functional.conv2d(maps, gauss.view(1, 1, -1, 1), padding=(SSIM_WINDOW // 2, 0))
+    mu_x, mu_y, blur_xx, blur_yy, blur_xy = maps[:, 0].split(3)
+    var_x = blur_xx - mu_x**2
+    var_y = blur_yy - mu_y**2
+    cov_xy = blur_xy - mu_x * mu_y
+    ssim_map = ((2 * mu_x * mu_y + SSIM_C1) * (2 * cov_xy + SSIM_C2)) / (
+        (mu_x**2 + mu_y**2 + SSIM_C1) * (var_x + var_y + SSIM_C2)
+    )
+    return ssim_map.mean()
 
 
 def render_view(model: GaussianModel, viewmat: torch.Tensor, K: torch.Tensor, width: int, height: int) -> torch.Tensor:
@@ -259,7 +351,12 @@ def _build_strategy(iterations: int):
     by the same fraction of the run here, so a 10k run keeps the reference proportions and a 20-iteration fast-test
     run still refines.
 
-    Its reset_every never fires in gsplat 1.5.3, whose condition for it is always false, so opacities are never reset.
+    Its own opacity reset never fires in gsplat 1.5.3, whose condition for it is always false. _train_loop resets
+    opacities itself instead, on the schedule _is_opacity_reset_step gives.
+
+    Growth is decided by absolute gradients (AbsGS) at gsplat's recommended threshold for them. Averaged gradients
+    cancel out across a Gaussian covering fine texture, so it never splits. On test captures this held or improved
+    quality while ending with about half as many Gaussians, which also makes training about a quarter faster.
 
     Pruning by size is off. The Gaussians it removes are the large ones covering whatever the photos barely reach, such
     as a ceiling or the far corners of a room. Nothing trained replaces them, so pruning them leaves holes that the
@@ -272,7 +369,18 @@ def _build_strategy(iterations: int):
         refine_stop_iter=iterations // 2,
         refine_every=max(1, iterations * 100 // 30_000),
         prune_scale3d=float("inf"),
+        absgrad=True,
+        grow_grad2d=0.0008,
     )
+
+
+def _is_opacity_reset_step(step: int, iterations: int, refine_stop_iter: int) -> bool:
+    """Every 3000 steps of a 30k-iteration run, scaled to the run's length like _build_strategy, and only while the
+    strategy still refines. The reset caps every Gaussian's opacity just above the prune threshold. The ones the photos
+    need climb back, and the rest, mostly floaters hanging in front of the cameras, get pruned at the next refine.
+    """
+    interval = max(1, iterations * 3000 // 30_000)
+    return 0 < step < refine_stop_iter and step % interval == 0
 
 
 def _sh_degree_at(step: int, iterations: int) -> int:
@@ -310,6 +418,7 @@ def _render(model: GaussianModel, viewmat: torch.Tensor, K: torch.Tensor, width:
         Ks=K[None],
         width=width,
         height=height,
+        absgrad=True,
     )
     return renders[0], alphas[0], meta
 

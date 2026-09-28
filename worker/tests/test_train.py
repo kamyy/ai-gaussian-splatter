@@ -12,11 +12,14 @@ from pipeline.train import (
     SH_DEGREE,
     _build_strategy,
     _init_gaussians,
+    _is_opacity_reset_step,
     _load_views,
     _max_gaussians_for_device,
     _nearest_neighbour_scales,
     _scene_scale,
     _sh_degree_at,
+    _split_views,
+    _ssim,
     train,
 )
 
@@ -120,6 +123,18 @@ def test_build_strategy_keeps_the_reference_proportions_at_10k():
     assert (strategy.refine_start_iter, strategy.refine_every, strategy.refine_stop_iter) == (166, 33, 5000)
 
 
+def test_opacity_resets_every_tenth_of_a_10k_run_until_refinement_stops():
+    refine_stop_iter = _build_strategy(10_000).refine_stop_iter
+    resets = [step for step in range(10_000) if _is_opacity_reset_step(step, 10_000, refine_stop_iter)]
+    assert resets == [1000, 2000, 3000, 4000]
+
+
+def test_opacity_resets_within_a_fast_test_run():
+    """A 20-iteration smoke test must still reach a reset, or it stops covering reset_opa."""
+    refine_stop_iter = _build_strategy(20).refine_stop_iter
+    assert any(_is_opacity_reset_step(step, 20, refine_stop_iter) for step in range(20))
+
+
 def test_sh_degree_rises_by_one_every_thirtieth_of_a_10k_run():
     degrees = [_sh_degree_at(step, 10_000) for step in (0, 332, 333, 666, 999, 9_999)]
     assert degrees == [0, 0, 1, 2, 3, SH_DEGREE]
@@ -188,3 +203,27 @@ def test_init_gaussians_renders_colmap_colors_unchanged():
     assert rendered == pytest.approx(sparse.points_rgb.astype(np.float32), abs=0.5)
     assert model.shN.shape == (2, (SH_DEGREE + 1) ** 2 - 1, 3)
     assert not model.shN.any()
+
+
+def test_split_views_trains_on_every_view_without_eval_holdout():
+    assert _split_views(10, eval_holdout=False) == (list(range(10)), [])
+
+
+def test_split_views_holds_back_every_eighth_view():
+    train_indices, eval_indices = _split_views(17, eval_holdout=True)
+    assert eval_indices == [0, 8, 16]
+    assert sorted(train_indices + eval_indices) == list(range(17))
+
+
+def test_split_views_refuses_to_hold_back_the_only_view():
+    with pytest.raises(RuntimeError, match="none of 1"):
+        _split_views(1, eval_holdout=True)
+
+
+def test_ssim_is_one_for_identical_images_and_lower_for_noise():
+    torch.manual_seed(0)
+    image = torch.rand(32, 32, 3)
+    noisy = (image + 0.2 * torch.randn_like(image)).clamp(0, 1)
+
+    assert _ssim(image, image).item() == pytest.approx(1.0)
+    assert _ssim(image, noisy).item() < 0.9

@@ -119,6 +119,8 @@ scripts/dev/worker-reconstruct.sh              # photos from worker/photos, or p
 scripts/dev/worker-train.sh <splat-id>         # add --fast for a 20-iteration smoke test
 ```
 
+To judge a change to `worker/pipeline/train.py`, add `--eval`. It holds back every 8th photo from training, then logs PSNR and SSIM against those photos and writes side-by-side renders to `worker/jobdir/eval/`. The training loss can't judge a change, because it keeps falling even while the splat overfits. Identical runs can differ by up to about 1 dB, so repeat each side of a comparison a few times.
+
 ### 1.7 Triggering the worker from pnpm dev
 
 Set `WORKER_LOCAL_LAUNCH=true` in `web/.env` to make the web app's Start button run the worker on your own GPU instead of launching a real EC2 spot instance. Output lands in `worker/jobdir/<jobId>/worker.log`, for the same [registration debugging](#15-capture) the manual flow uses. Needs the one-time GPU passthrough setup ([Worker (local pipeline run)](#14-worker-local-pipeline-run)) and an image already built. This path never builds one for you.
