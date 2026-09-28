@@ -81,7 +81,7 @@ export const POST = withErrorHandling(
     // launching an instance.
     const [flipped] = await getDb()
       .update(jobs)
-      .set({ status: "launching" })
+      .set({ status: "launching", trainingLaunchedAt: new Date() })
       .where(and(eq(jobs.id, latestJob.id), eq(jobs.status, "awaiting_training")))
       .returning();
     if (flipped === undefined) {
@@ -94,7 +94,10 @@ export const POST = withErrorHandling(
     try {
       await checkAndIncrementGlobalDaily(env.GLOBAL_MAX_JOBS_PER_DAY);
     } catch (err) {
-      await getDb().update(jobs).set({ status: "awaiting_training" }).where(eq(jobs.id, flipped.id));
+      await getDb()
+        .update(jobs)
+        .set({ status: "awaiting_training", trainingLaunchedAt: null })
+        .where(eq(jobs.id, flipped.id));
       throw err;
     }
 
@@ -118,7 +121,10 @@ export const POST = withErrorHandling(
       // Reverted rather than left at "launching": the reconstruct phase's own output (sparse model, point cloud) is
       // untouched, so the user can just click the check stage's build button again. Left at "launching" the job blocks
       // on POST /process's JOB_STALE_AFTER_MS sweep instead, which is hours away and cancels the job outright.
-      await getDb().update(jobs).set({ status: "awaiting_training" }).where(eq(jobs.id, flipped.id));
+      await getDb()
+        .update(jobs)
+        .set({ status: "awaiting_training", trainingLaunchedAt: null })
+        .where(eq(jobs.id, flipped.id));
       throw err;
     }
 

@@ -75,6 +75,42 @@ describe("POST /api/v1/splats/[splatId]/train", () => {
     expect(updated.ec2InstanceId).toBe("i-0abc123");
   });
 
+  it("records when the train stage's instance was launched", async () => {
+    const { splat, job } = await seed();
+    const before = Date.now();
+
+    await POST(trainRequest(), ctx(splat.id));
+
+    const [updated] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
+    expect(updated.trainingLaunchedAt?.getTime()).toBeGreaterThanOrEqual(before);
+    expect(updated.trainingLaunchedAt?.getTime()).toBeLessThanOrEqual(Date.now());
+  });
+
+  it("clears the launch time when the instance fails to launch", async () => {
+    const { splat, job } = await seed();
+    launchJobMock.mockRejectedValueOnce(new Error("InsufficientInstanceCapacity"));
+
+    await expect(POST(trainRequest(), ctx(splat.id))).rejects.toThrow("InsufficientInstanceCapacity");
+
+    const [updated] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
+    expect(updated.status).toBe("awaiting_training");
+    expect(updated.trainingLaunchedAt).toBeNull();
+  });
+
+  it("clears the launch time when the daily cap rejects the build", async () => {
+    const { splat, job } = await seed();
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    await getDb().insert(globalJobCounters).values({ day: today, jobsStarted: 1_000_000 });
+
+    expect((await POST(trainRequest(), ctx(splat.id))).status).toBe(503);
+
+    const [updated] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
+    expect(updated.status).toBe("awaiting_training");
+    expect(updated.trainingLaunchedAt).toBeNull();
+    expect(launchJobMock).not.toHaveBeenCalled();
+  });
+
   it("passes a crop box through to the train stage's worker", async () => {
     const { splat } = await seed();
     const cropBox = { center: [1, 2, 3], size: [4, 5, 6], quaternion: [0, 0, 0, 1] };
