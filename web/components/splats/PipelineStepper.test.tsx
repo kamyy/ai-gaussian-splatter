@@ -44,8 +44,8 @@ describe("PipelineStepper", () => {
 
     expect(screen.getByText("38 photos")).toBeTruthy();
     expect(screen.getByText("7m 52s")).toBeTruthy();
-    expect(screen.getByText("GPU start-up 3m 40s · working 4m 12s")).toBeTruthy();
-    expect(screen.getByText("you took 12m 00s")).toBeTruthy();
+    expect(screen.getByText("GPU start-up 3m 40s · reconstructing 4m 12s")).toBeTruthy();
+    expect(screen.getByText("You took 12m 00s")).toBeTruthy();
     expect(screen.getByText("4:31 so far")).toBeTruthy();
     expect(screen.getByText("GPU start-up 3m 05s · training 1m 26s")).toBeTruthy();
 
@@ -55,7 +55,7 @@ describe("PipelineStepper", () => {
     expect(screen.getByText("4:33 so far")).toBeTruthy();
   });
 
-  it("sums the GPU time under the collapsed stepper once the splat is done", () => {
+  it("keeps the stepper vertical once the splat is done, with every step's time", () => {
     render(
       <PipelineStepper
         stage={{ kind: "complete" }}
@@ -64,6 +64,12 @@ describe("PipelineStepper", () => {
       />,
     );
 
-    expect(screen.getByText("Cameras 7m 52s · Build 10m 15s · 18m 07s of GPU time")).toBeTruthy();
+    const steps = screen.getAllByRole("listitem").map(item => item.textContent);
+    expect(steps[0]).toContain("Upload photos: done38 photos");
+    expect(steps[1]).toContain("Place the cameras: done7m 52sGPU start-up 3m 40s · reconstructing 4m 12s");
+    expect(steps[2]).toContain("Check the shape: doneYou took 12m 00s");
+    expect(steps[3]).toContain("Build the 3D splat: done10m 15sGPU start-up 3m 05s · training 7m 10s");
+    expect(steps[4]).toContain("Share: done");
+    expect(screen.getByText("18m 07s of GPU time")).toBeTruthy();
   });
 });
