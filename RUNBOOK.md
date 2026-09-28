@@ -236,7 +236,7 @@ It asks for these, defaulting to each one's current value:
   - The S3 CORS origins.
   - The origin the worker PATCHes status back to.
   - The origin `.github/workflows/deploy.yml` smoke-checks after a rollout.
-- `ALERT_EMAIL` is where the AWS Budget (`infra/budgets.tf`) sends spend alerts. A typo'd but well-formed address deploys green with the alerts never arriving, and nothing can catch that at apply time ([State / what's next](AGENTS.md#10-state--whats-next)).
+- `ALERT_EMAIL` is where the AWS Budget (`infra/budgets.tf`) sends spend alerts, and where the worker sweeper (`infra/worker_sweeper.tf`) sends overdue-instance alerts. A typo'd but well-formed address deploys green. The sweeper's subscription confirmation is the only way to catch it ([Going live](#26-going-live)).
 - `CLERK_PUBLISHABLE_KEY` is the `pk_live_...` key, not the secret one. `web/Dockerfile` compiles it into the browser bundle, so a later change to it reaches users on the next deploy that changes `web/` ([Image tags](ARCHITECTURE.md#111-image-tags)).
 - `WORKER_AMI_ID` is the AMI every worker instance boots. User data does no provisioning of its own, so the image must already carry Docker, the NVIDIA driver and container toolkit, and the AWS CLI. AWS's Deep Learning Base GPU AMIs do, and the script lists the newest five before asking.
 
@@ -255,6 +255,13 @@ scripts/prod/set-deploy-enabled.sh true
 The script refuses while a CI run on `main` is unfinished ([CI/CD](ARCHITECTURE.md#11-cicd)).
 
 A deploy starts on a push to `main` that changes more than just `.md` files or `LICENSE`.
+
+A first deploy also sends a subscription confirmation email to `ALERT_EMAIL`. Click its link, or the sweeper's alerts about overdue worker instances are never delivered ([Compute](ARCHITECTURE.md#3-compute)). A subscription that still reads `PendingConfirmation` here after the email should have arrived usually means a typo'd address:
+
+```bash
+aws sns list-subscriptions --region "$(source scripts/lib/terraform.sh && tf_get_aws_region)" \
+  --query "Subscriptions[?ends_with(TopicArn, ':ai-gaussian-splatter-alerts')].SubscriptionArn"
+```
 
 On a first deploy, the service starts before the migration runs, so real routes 500 until the migration finishes. The first deploy also waits on ACM DNS validation, which can take several minutes.
 
@@ -305,10 +312,10 @@ If the `deploy` job's migration step fails for an infra reason rather than a bad
 ### 3.2 Debugging a failed worker job
 
 1. Check `jobs.status` and `jobs.error_message` for the splat (`GET /api/v1/splats/{id}/jobs/latest`).
-2. If `status` is stuck (no update in ~20 min) rather than `failed`, the instance likely died without reporting. Check the EC2 console for the tagged instance (`Role=worker`, `JobId=<job_id>`) and its system log.
-3. Confirm the instance actually went away. It self-terminates once the worker job reaches a terminal state, and `web/lib/server/ec2Launcher.ts` schedules a hard `shutdown` at `WORKER_MAX_LIFETIME_MINUTES` (2 hours) as the first thing user-data runs.
-   - **Still running well past that ceiling means cloud-init, which runs user-data, never started.** That is a boot failure (a bad AMI, or an instance metadata or networking problem), the one case the scheduled shutdown can't catch. Terminate it by hand.
-   - Nothing alerts when any of this fires ([State / what's next](AGENTS.md#10-state--whats-next)), so run this check by hand.
+2. A job whose instance has gone without reporting moves to `failed` on the splat page's next poll, once it has gone 15 minutes without a callback (`web/lib/server/reconcileJob.ts`). A job that stays in progress with no callback still has a running instance. Check the EC2 console for the tagged instance (`Role=worker`, `JobId=<job_id>`) and its system log.
+3. Confirm the instance actually went away. It self-terminates once the worker job reaches a terminal state, and `web/lib/server/ec2Launcher.ts` schedules a hard `shutdown` at `WORKER_MAX_LIFETIME_MINUTES` (30 minutes) as the first thing user-data runs.
+   - **Still running past that ceiling means cloud-init, which runs user-data, never started.** That is a boot failure (a bad AMI, or an instance metadata or networking problem), the one case the scheduled shutdown can't catch.
+   - The sweeper (`infra/worker_sweeper.tf`) terminates such an instance within 10 minutes of it passing the ceiling plus 15 minutes, and emails `ALERT_EMAIL` its ID.
 4. `docker logs` on the instance (if still running) or CloudWatch Logs (once wired up) for the actual COLMAP/gsplat stack trace.
 
 ---

@@ -66,7 +66,13 @@ The "AI" here is per-object gradient descent through a differentiable rasterizer
   - It runs before the failure-prone steps (ECR login, `docker run`) that could otherwise leave `worker/pipeline/instance.py`'s own self-terminate unreached.
   - `InstanceInitiatedShutdownBehavior = "terminate"` on the launch makes that shutdown terminate the instance rather than stop it.
   - If scheduling the shutdown fails, user-data powers the instance off immediately rather than run the stage without a ceiling. Losing one worker job costs less than a GPU instance billing with no bound.
-  - A CloudWatch runtime alarm was considered for alerting when the ceiling fires. Nothing in the request path needs to *know* a worker job hung, only to stop it billing, so the ceiling was built without one. That alerting is still an open gap ([State / what's next](AGENTS.md#10-state--whats-next)).
+- A sweeper Lambda (`infra/worker_sweeper.tf`) enforces the same ceiling from outside the instance. Every 10 minutes it terminates any worker instance older than the ceiling plus 15 minutes, and emails `alert_email` the list through an SNS (Simple Notification Service) topic.
+  - It catches an instance whose cloud-init never ran, so the user-data shutdown was never scheduled.
+  - It is a Lambda rather than a CloudWatch alarm because EC2 publishes no instance-age metric to alarm on.
+- The splat page's job poll is what moves a dead worker's job to `failed`, since that worker never calls back. Once a job has gone 15 minutes without a callback, `web/lib/server/reconcileJob.ts` looks up its instance.
+  - An instance that has gone fails the job.
+  - An instance past the ceiling is terminated, and then the job fails.
+  - A running instance inside the ceiling is a slow stage, so the job is left alone.
 - No SQS, Batch, or always-on fleet. The global daily cap on worker jobs bounds their volume instead.
 - A queue is only worth the added complexity at higher, decoupled-fleet scale.
 
@@ -173,11 +179,12 @@ flowchart LR
 ```
 
 - Infra: **Terraform**. One configuration (`infra/`) holding one state. The S3 bucket that state lives in is created by hand ([Creating account prerequisites](RUNBOOK.md#22-creating-account-prerequisites)). `terraform init` needs the bucket before any apply. Managing it inside `infra/` would store state in a bucket `infra/` also owns. A second Terraform module with its own local state was rejected.
-- Six logical areas, one per `.tf` file, rather than one CloudFormation-style stack each. A single state resolves the dependencies between them directly, so there's no cross-stack export/import to keep in sync:
+- Seven logical areas, one per `.tf` file, rather than one CloudFormation-style stack each. A single state resolves the dependencies between them directly, so there's no cross-stack export/import to keep in sync:
   - **network** — VPC, subnets, security groups.
   - **data** — RDS, S3.
   - **registry** — ECR alone, so the image can push before the service exists.
   - **worker_iam** — IAM for the GPU worker instances.
+  - **worker_sweeper** — the scheduled Lambda that terminates overdue worker instances, and its alert topic.
   - **web** — ALB + Fargate.
   - **budgets** — a second, `us-east-1`-aliased provider, since the Budgets API only operates there.
 - `infra/tests/*.tftest.hcl` (native `terraform test`, `mock_provider "aws" {}`) replaces hand-written assertions against synthesized templates with the same offline, zero-credential guarantee, run by `.github/workflows/ci.yml`'s `infra` job on every PR.
