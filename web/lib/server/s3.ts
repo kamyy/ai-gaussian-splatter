@@ -1,6 +1,8 @@
 import {
+  DeleteObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -30,12 +32,16 @@ export function photoThumbnailS3Key(splatId: string, photoId: string): string {
   return `splats/${splatId}/photo-thumbnails/${photoId}.jpg`;
 }
 
-/** Returns the S3 key alongside the presigned PUT URL. */
+/**
+ * Returns the S3 key alongside the presigned PUT URL. contentLength is signed into the URL, so S3 rejects a body of
+ * any other size. That is what makes the presign route's size check binding on the upload itself.
+ */
 export async function presignPhotoUpload(
   splatId: string,
   photoId: string,
   extension: string,
   contentType: string,
+  contentLength: number,
 ): Promise<{ key: string; url: string }> {
   const env = getEnv();
   const key = photoS3Key(splatId, photoId, extension);
@@ -43,21 +49,56 @@ export async function presignPhotoUpload(
     Bucket: env.UPLOADS_BUCKET,
     Key: key,
     ContentType: contentType,
+    ContentLength: contentLength,
   });
   const url = await getSignedUrl(s3Client(), command, { expiresIn: PRESIGN_EXPIRY_SECONDS });
   return { key, url };
 }
 
-/** A thumbnail is always a JPEG, drawn in the browser by web/lib/measurePhoto.ts. */
+/**
+ * The largest a thumbnail can be, in bytes. web/lib/measurePhoto.ts draws it at THUMBNAIL_LONG_SIDE pixels, which
+ * comes out well under this. The cap exists because the client, not the server, produces the thumbnail.
+ */
+export const MAX_THUMBNAIL_BYTES = 1024 * 1024;
+
+/**
+ * A thumbnail is always a JPEG, drawn in the browser by web/lib/measurePhoto.ts. contentLength is signed into the URL
+ * for the same reason as presignPhotoUpload's.
+ */
 export async function presignPhotoThumbnailUpload(
   splatId: string,
   photoId: string,
+  contentLength: number,
 ): Promise<{ key: string; url: string }> {
   const env = getEnv();
   const key = photoThumbnailS3Key(splatId, photoId);
-  const command = new PutObjectCommand({ Bucket: env.UPLOADS_BUCKET, Key: key, ContentType: "image/jpeg" });
+  const command = new PutObjectCommand({
+    Bucket: env.UPLOADS_BUCKET,
+    Key: key,
+    ContentType: "image/jpeg",
+    ContentLength: contentLength,
+  });
   const url = await getSignedUrl(s3Client(), command, { expiresIn: PRESIGN_EXPIRY_SECONDS });
   return { key, url };
+}
+
+/** The size in bytes of an object in UPLOADS_BUCKET, or null when there is no object at that key. */
+export async function uploadedObjectSize(uploadsBucketKey: string): Promise<number | null> {
+  try {
+    const response = await s3Client().send(
+      new HeadObjectCommand({ Bucket: getEnv().UPLOADS_BUCKET, Key: uploadsBucketKey }),
+    );
+    return response.ContentLength ?? null;
+  } catch (err) {
+    if (err instanceof Error && err.name === "NotFound") {
+      return null;
+    }
+    throw err;
+  }
+}
+
+export async function deleteUploadedObject(uploadsBucketKey: string): Promise<void> {
+  await s3Client().send(new DeleteObjectCommand({ Bucket: getEnv().UPLOADS_BUCKET, Key: uploadsBucketKey }));
 }
 
 export async function presignSplatDownload(splatsBucketKey: string): Promise<string> {

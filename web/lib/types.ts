@@ -18,6 +18,12 @@ export const PHOTO_UPLOAD_STATUSES = ["pending", "uploaded", "failed"] as const;
 // lives here rather than in web/lib/server/env.ts because web/components/splats/NewSplatForm.tsx enforces it too.
 export const MAX_PHOTOS_PER_SPLAT = 100;
 
+// The largest one photo can be, in bytes. It bounds what a photo costs in S3 storage and in worker download time. The
+// worker downsamples every photo to worker/pipeline/train.py's MAX_TRAINING_EDGE, so a bigger file adds nothing to the
+// splat. 30 MB still admits a full-resolution phone JPEG or HEIC. web/components/splats/NewSplatForm.tsx enforces it
+// too.
+export const MAX_PHOTO_BYTES = 30 * 1024 * 1024;
+
 // Named so a comparison uses a member (JobStatus.queued) rather than repeating the label as a string.
 export const JobStatus = {
   queued: "queued",
