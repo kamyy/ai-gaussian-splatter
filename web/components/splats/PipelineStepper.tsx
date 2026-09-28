@@ -41,12 +41,12 @@ function stepExtras(key: StepKey, timings: StageTimings | null, photoCount: numb
       }
       return { ...NO_EXTRAS, aside: `${photoCount} photo${photoCount === 1 ? "" : "s"}` };
     case "cameras":
-      return timingExtras(timings?.cameras ?? null, "working");
+      return timingExtras(timings?.cameras ?? null, "reconstructing");
     case "check":
       if (timings?.checkMs == null) {
         return NO_EXTRAS;
       }
-      return { ...NO_EXTRAS, aside: `you took ${formatDuration(timings.checkMs)}` };
+      return { ...NO_EXTRAS, aside: `You took ${formatDuration(timings.checkMs)}` };
     case "build":
       return timingExtras(timings?.build ?? null, "training");
     case "share":
@@ -54,19 +54,12 @@ function stepExtras(key: StepKey, timings: StageTimings | null, photoCount: numb
   }
 }
 
-// One line under the collapsed stepper, once every step is done.
-function timingSummary(timings: StageTimings | null): string | null {
-  const parts: string[] = [];
-  if (timings?.cameras) {
-    parts.push(`Cameras ${formatDuration(timings.cameras.totalMs)}`);
+// The camera and build stages' combined time, under the stepper once the splat is complete.
+function gpuTotal(timings: StageTimings | null): string | null {
+  if (!timings?.cameras || !timings.build) {
+    return null;
   }
-  if (timings?.build) {
-    parts.push(`Build ${formatDuration(timings.build.totalMs)}`);
-  }
-  if (timings?.cameras && timings.build) {
-    parts.push(`${formatDuration(timings.cameras.totalMs + timings.build.totalMs)} of GPU time`);
-  }
-  return parts.length > 0 ? parts.join(" · ") : null;
+  return `${formatDuration(timings.cameras.totalMs + timings.build.totalMs)} of GPU time`;
 }
 
 // The current time, ticking once a second while ticking is set, so a running stage's clock counts up between the job
@@ -84,8 +77,8 @@ function useNow(ticking: boolean): number {
   return now;
 }
 
-// Vertical while there is a step in progress, collapsing to one compact row of checks once every step is done. Each GPU
-// step shows how long it took, split into the instance's start-up and the work itself.
+// Each GPU step shows how long it took, split into the instance's start-up and the work itself. Once the splat is
+// complete, every step shows as done, and the list stays vertical so those times stay visible.
 export function PipelineStepper({
   stage,
   job,
@@ -99,98 +92,81 @@ export function PipelineStepper({
   const now = useNow(ticking);
   const timings = job ? stageTimings(job, now) : null;
   const current = currentStep(stage);
-
-  if (current === null) {
-    const summary = timingSummary(timings);
-    let summaryLine: React.ReactNode = null;
-    if (summary !== null) {
-      summaryLine = <p className="text-sm text-muted-foreground tabular-nums">{summary}</p>;
-    }
-    return (
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-1.5">
-          <ol aria-label="Progress" className="flex items-center gap-1.5">
-            {STEPS.map((step, index) => (
-              <li key={step.key} className="flex items-center gap-1.5">
-                <span
-                  title={step.label}
-                  className="flex h-4.5 w-4.5 items-center justify-center rounded-full bg-primary text-primary-foreground"
-                >
-                  <LuCheck aria-hidden="true" strokeWidth={3} className="h-2.5 w-2.5" />
-                  <span className="sr-only">{step.label}: done</span>
-                </span>
-                {index < STEPS.length - 1 ? <span className="h-0.5 w-4.5 bg-primary" /> : null}
-              </li>
-            ))}
-          </ol>
-          <span className="ml-2 text-sm font-semibold text-primary">Ready to share</span>
-        </div>
-        {summaryLine}
-      </div>
-    );
-  }
-
-  const currentIndex = STEPS.findIndex(step => step.key === current);
+  const complete = current === null;
+  const currentIndex = complete ? STEPS.length : STEPS.findIndex(step => step.key === current);
   const failed = stage.kind === "failed" || stage.kind === "cancelled";
 
-  return (
-    <ol aria-label="Progress" className="flex flex-col">
-      {STEPS.map((step, index) => {
-        const done = index < currentIndex;
-        const isCurrent = index === currentIndex;
-        const extras = done || isCurrent ? stepExtras(step.key, timings, photoCount) : NO_EXTRAS;
-        let connector: React.ReactNode = null;
-        if (index < STEPS.length - 1) {
-          connector = <span className={cn("min-h-2.5 w-0.5 flex-1", done ? "bg-primary" : "bg-divider")} />;
-        }
-        let aside: React.ReactNode = null;
-        if (extras.aside !== null) {
-          aside = (
-            <span className={cn("tabular-nums", extras.running ? "text-primary" : "font-medium text-muted-foreground")}>
-              {extras.aside}
-            </span>
-          );
-        }
-        let detail: React.ReactNode = null;
-        if (extras.detail !== null) {
-          detail = <span className="text-xs font-normal text-muted-foreground tabular-nums">{extras.detail}</span>;
-        }
+  let total: React.ReactNode = null;
+  const gpuTime = complete ? gpuTotal(timings) : null;
+  if (gpuTime !== null) {
+    total = <p className="pl-8.5 text-sm text-muted-foreground tabular-nums">{gpuTime}</p>;
+  }
 
-        return (
-          <li key={step.key} aria-current={isCurrent ? "step" : undefined} className="flex min-h-8 gap-3">
-            <div className="flex w-5.5 flex-col items-center">
+  return (
+    <div className="flex flex-col gap-1">
+      <ol aria-label="Progress" className="flex flex-col">
+        {STEPS.map((step, index) => {
+          const done = index < currentIndex;
+          const isCurrent = index === currentIndex;
+          const extras = done || isCurrent ? stepExtras(step.key, timings, photoCount) : NO_EXTRAS;
+          let connector: React.ReactNode = null;
+          if (index < STEPS.length - 1) {
+            connector = <span className={cn("min-h-2.5 w-0.5 flex-1", done ? "bg-primary" : "bg-divider")} />;
+          }
+          let aside: React.ReactNode = null;
+          if (extras.aside !== null) {
+            aside = (
               <span
+                className={cn("tabular-nums", extras.running ? "text-primary" : "font-medium text-muted-foreground")}
+              >
+                {extras.aside}
+              </span>
+            );
+          }
+          let detail: React.ReactNode = null;
+          if (extras.detail !== null) {
+            detail = <span className="text-xs font-normal text-muted-foreground tabular-nums">{extras.detail}</span>;
+          }
+
+          return (
+            <li key={step.key} aria-current={isCurrent ? "step" : undefined} className="flex min-h-8 gap-3">
+              <div className="flex w-5.5 flex-col items-center">
+                <span
+                  className={cn(
+                    "flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full border-2",
+                    done && "border-primary bg-primary text-primary-foreground",
+                    isCurrent && (failed ? "border-error" : "border-primary"),
+                    !done && !isCurrent && "border-divider",
+                  )}
+                >
+                  {done ? <LuCheck aria-hidden="true" strokeWidth={3} className="h-3 w-3" /> : null}
+                  {isCurrent ? (
+                    <span className={cn("h-2 w-2 rounded-full", failed ? "bg-error" : "bg-primary")} />
+                  ) : null}
+                </span>
+                {connector}
+              </div>
+              <div
                 className={cn(
-                  "flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full border-2",
-                  done && "border-primary bg-primary text-primary-foreground",
-                  isCurrent && (failed ? "border-error" : "border-primary"),
-                  !done && !isCurrent && "border-divider",
+                  "flex min-w-0 flex-1 flex-col gap-0.5 pb-2 text-sm",
+                  isCurrent ? "font-bold" : "font-medium",
+                  !done && !isCurrent && "text-muted-foreground",
                 )}
               >
-                {done ? <LuCheck aria-hidden="true" strokeWidth={3} className="h-3 w-3" /> : null}
-                {isCurrent ? <span className={cn("h-2 w-2 rounded-full", failed ? "bg-error" : "bg-primary")} /> : null}
-              </span>
-              {connector}
-            </div>
-            <div
-              className={cn(
-                "flex min-w-0 flex-1 flex-col gap-0.5 pb-2 text-sm",
-                isCurrent ? "font-bold" : "font-medium",
-                !done && !isCurrent && "text-muted-foreground",
-              )}
-            >
-              <div className="flex justify-between gap-3">
-                <span>
-                  {step.label}
-                  {done ? <span className="sr-only">: done</span> : null}
-                </span>
-                {aside}
+                <div className="flex justify-between gap-3">
+                  <span>
+                    {step.label}
+                    {done ? <span className="sr-only">: done</span> : null}
+                  </span>
+                  {aside}
+                </div>
+                {detail}
               </div>
-              {detail}
-            </div>
-          </li>
-        );
-      })}
-    </ol>
+            </li>
+          );
+        })}
+      </ol>
+      {total}
+    </div>
   );
 }
