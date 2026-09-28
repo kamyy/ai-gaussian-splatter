@@ -47,7 +47,10 @@ Why the system is shaped this way: decisions, alternatives rejected, costs accep
 3. **gsplat** (`worker/pipeline/train.py`): the actual training step. It trains one 3D Gaussian Splatting (3DGS) model per object, for a default of 10k iterations (`worker/pipeline/config.py`) against the paper's 30k. Each iteration is one gradient-descent step that adjusts the Gaussians to better match the photos.
    - Single-object, plain-background scenes converge faster, so fewer iterations suffice.
    - Apache 2.0 (INRIA's original is non-commercial).
-4. **Export** (`worker/pipeline/export.py`): viewer `.ply` plus a thumbnail from gsplat's own rasterizer, for Open Graph. Using gsplat's rasterizer avoids pulling in an extra dependency just for the thumbnail.
+   - Colors use degree-3 spherical harmonics (SH), so a Gaussian's color changes with the viewing angle and highlights on glossy surfaces move as the camera orbits. The cost is 45 more values per Gaussian. The `.spz` export below still comes out smaller than a degree-0 `.ply`.
+4. **Export** (`worker/pipeline/export.py`): the splat twice, plus a thumbnail from gsplat's own rasterizer, for Open Graph. Using gsplat's rasterizer avoids pulling in an extra dependency just for the thumbnail.
+   - `.ply` is the Download button's file. It's lossless and every splat tool reads it, which matters to someone who downloads a splat to edit or convert it.
+   - `.spz` (Niantic's compressed format, written by `worker/pipeline/spz.py`) is what the viewer loads. It's about a twelfth of the `.ply`'s size, and its quantization isn't visible on screen.
    - The optional crop box is drawn on the point cloud before training but applied only here, where it drops every Gaussian centered outside it.
    - Training still sees the whole scene. The photos show the background too, and without Gaussians there to explain those pixels, the optimizer grows floaters around the object.
 
@@ -104,7 +107,7 @@ A baked AMI would attack the smaller half — fixed overhead, not training. Trai
 - SWR for server-derived data (worker-job polling via `refreshInterval`).
 - Zustand, not Redux, for pure client UI (upload progress). Zustand needs less boilerplate.
 - Splats render with **Spark** (`@sparkjsdev/spark`), whose `SplatMesh` and `SparkRenderer` are plain Three.js objects added to the r3f scene via `<primitive>`.
-  - Spark renders the trained `.ply` the way gsplat does during training. `@mkkellogg/gaussian-splats-3d` smeared dense results into haze in front of the camera, and the haze grew with the Gaussian count.
+  - Spark renders the trained splat the way gsplat does during training. `@mkkellogg/gaussian-splats-3d` smeared dense results into haze in front of the camera, and the haze grew with the Gaussian count.
 
 ---
 
@@ -163,9 +166,9 @@ flowchart LR
   web -->|"3 · RunInstances"| worker
   ecr -->|"4 · pull image"| worker
   up -->|"5 · read photos"| worker
-  worker -->|"6 · write .ply + thumbnail"| sp
+  worker -->|"6 · write .ply + .spz + thumbnail"| sp
   worker -->|"7 · status callback over HTTPS"| alb
-  sp -->|"8 · presigned GET .ply"| browser
+  sp -->|"8 · presigned GET .spz"| browser
 ```
 
 - Infra: **Terraform**. One configuration (`infra/`) holding one state. The S3 bucket that state lives in is created by hand ([Creating account prerequisites](RUNBOOK.md#22-creating-account-prerequisites)). `terraform init` needs the bucket before any apply. Managing it inside `infra/` would store state in a bucket `infra/` also owns. A second Terraform module with its own local state was rejected.

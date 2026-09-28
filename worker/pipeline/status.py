@@ -15,6 +15,7 @@ def report_status(
     *,
     error_message: str | None = None,
     result_s3_key: str | None = None,
+    result_spz_s3_key: str | None = None,
     thumbnail_s3_key: str | None = None,
     point_cloud_s3_key: str | None = None,
     ec2_instance_id: str | None = None,
@@ -29,6 +30,8 @@ def report_status(
         payload["error_message"] = error_message
     if result_s3_key is not None:
         payload["result_s3_key"] = result_s3_key
+    if result_spz_s3_key is not None:
+        payload["result_spz_s3_key"] = result_spz_s3_key
     if thumbnail_s3_key is not None:
         payload["thumbnail_s3_key"] = thumbnail_s3_key
     if point_cloud_s3_key is not None:

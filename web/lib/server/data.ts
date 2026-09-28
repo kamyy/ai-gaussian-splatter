@@ -51,13 +51,13 @@ export async function getPublicSplat(splatId: string): Promise<PublicSplat | nul
     .where(and(eq(jobs.splatId, splatId), eq(jobs.status, "complete")))
     .orderBy(desc(jobs.createdAt))
     .limit(1);
-  if (latestJob === undefined || latestJob.resultS3Key === null) {
+  if (latestJob === undefined || latestJob.resultSpzS3Key === null) {
     return null;
   }
 
   return {
     title: splat.name,
     thumbnailUrl: await thumbnailUrl(splat.thumbnailS3Key),
-    splatUrl: await presignSplatDownload(latestJob.resultS3Key),
+    splatUrl: await presignSplatDownload(latestJob.resultSpzS3Key),
   };
 }

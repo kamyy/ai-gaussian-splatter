@@ -2,8 +2,6 @@
 
 Simplifications relative to the original paper, made deliberately for a reduced-iteration, object-centric MVP rather
 than by oversight:
-- Direct RGB colors, not full spherical-harmonics view-dependent color (sh_degree=0). That is adequate for a
-  mostly-diffuse single-object capture.
 - Densification is gsplat's DefaultStrategy with its schedule scaled down from 30k iterations to the run's length (see
   _build_strategy).
 - Camera radial distortion from COLMAP is not undistorted before training (see worker/pipeline/colmap_model.py). That
@@ -38,6 +36,13 @@ MAX_TRAINING_EDGE = 1600
 INIT_SCALE_NEIGHBOURS = 3
 MIN_INIT_SCALE = 1e-4
 
+# Spherical harmonics (SH) let a Gaussian's color change with the viewing direction, which is what makes a highlight
+# move across a glossy surface as the camera orbits. Degree 3 is the reference 3DGS implementation's, and the highest
+# the viewer renders.
+SH_DEGREE = 3
+# The constant that turns an RGB value in [0, 1] into the degree-0 (DC) SH coefficient and back: rgb = SH_C0 * dc + 0.5.
+SH_C0 = 0.28209479177387814
+
 
 @dataclass
 class GaussianModel:
@@ -45,7 +50,8 @@ class GaussianModel:
     scales: torch.Tensor  # (N, 3), log-space
     quats: torch.Tensor  # (N, 4)
     opacities: torch.Tensor  # (N,), logit-space
-    colors: torch.Tensor  # (N, 3), logit-space
+    sh0: torch.Tensor  # (N, 1, 3), the degree-0 SH coefficient per color channel
+    shN: torch.Tensor  # (N, (SH_DEGREE + 1) ** 2 - 1, 3), the higher-degree coefficients
 
 
 @dataclass
@@ -115,7 +121,8 @@ def _train_loop(sparse: SparseModel, photos_dir: Path, settings: Settings):
         viewmat = viewmats[idx]
         gt_image = images_tensor[idx]
 
-        rendered, _alpha, meta = _render(GaussianModel(**params), viewmat, K, width, height)
+        sh_degree = _sh_degree_at(step, iterations)
+        rendered, _alpha, meta = _render(GaussianModel(**params), viewmat, K, width, height, sh_degree)
         strategy.step_pre_backward(params, optimizers, strategy_state, step, meta)
         loss = torch.nn.functional.l1_loss(rendered, gt_image)
         loss.backward()
@@ -144,7 +151,7 @@ def render_view(model: GaussianModel, viewmat: torch.Tensor, K: torch.Tensor, wi
     training, just without gradient tracking.
     """
     with torch.no_grad():
-        rendered, _alpha, _meta = _render(model, viewmat, K, width, height)
+        rendered, _alpha, _meta = _render(model, viewmat, K, width, height, SH_DEGREE)
     return rendered
 
 
@@ -207,12 +214,13 @@ def _init_gaussians(sparse: SparseModel) -> GaussianModel:
 
     opacities = torch.full((n,), _logit(0.1), dtype=torch.float32, device=DEVICE, requires_grad=True)
 
-    # _render applies a sigmoid to colors, so COLMAP's RGB is stored as its logit. The eps keeps pure black and white
-    # finite.
+    # Each point starts as COLMAP's color from every direction: the DC coefficient that renders as its RGB, and no
+    # higher-degree terms.
     rgb = torch.tensor(sparse.points_rgb.astype(np.float32) / 255.0, dtype=torch.float32, device=DEVICE)
-    colors = torch.logit(rgb, eps=1e-3).requires_grad_(True)
+    sh0 = ((rgb - 0.5) / SH_C0)[:, None, :].requires_grad_(True)
+    shN = torch.zeros((n, (SH_DEGREE + 1) ** 2 - 1, 3), dtype=torch.float32, device=DEVICE, requires_grad=True)
 
-    return GaussianModel(means=means, scales=scales, quats=quats, opacities=opacities, colors=colors)
+    return GaussianModel(means=means, scales=scales, quats=quats, opacities=opacities, sh0=sh0, shN=shN)
 
 
 def _nearest_neighbour_scales(points: torch.Tensor) -> torch.Tensor:
@@ -235,7 +243,14 @@ def _nearest_neighbour_scales(points: torch.Tensor) -> torch.Tensor:
 
 def _build_optimizers(params: dict[str, torch.nn.Parameter]) -> dict[str, torch.optim.Optimizer]:
     """One Adam per parameter, which is the shape gsplat's strategy needs to resize each one's state."""
-    learning_rates = {"means": 1.6e-4, "scales": 5e-3, "quats": 1e-3, "opacities": 5e-2, "colors": 2.5e-3}
+    learning_rates = {
+        "means": 1.6e-4,
+        "scales": 5e-3,
+        "quats": 1e-3,
+        "opacities": 5e-2,
+        "sh0": 2.5e-3,
+        "shN": 2.5e-3 / 20,
+    }
     return {name: torch.optim.Adam([params[name]], lr=lr) for name, lr in learning_rates.items()}
 
 
@@ -260,6 +275,15 @@ def _build_strategy(iterations: int):
     )
 
 
+def _sh_degree_at(step: int, iterations: int) -> int:
+    """Raises the SH degree by one every 1000 steps of a 30k-iteration run, scaled to the run's length like
+    _build_strategy. Starting at degree 0 lets each Gaussian's base color settle before the direction-dependent terms
+    can absorb it.
+    """
+    interval = max(1, iterations * 1000 // 30_000)
+    return min(step // interval, SH_DEGREE)
+
+
 def _scene_scale(viewmats: list[torch.Tensor]) -> float:
     """1.1 times the farthest camera's distance from the cameras' mean position, as the reference 3DGS implementation
     measures it. The strategy's size threshold for splitting is a fraction of this.
@@ -268,7 +292,7 @@ def _scene_scale(viewmats: list[torch.Tensor]) -> float:
     return 1.1 * (centres - centres.mean(dim=0)).norm(dim=-1).max().item()
 
 
-def _render(model: GaussianModel, viewmat: torch.Tensor, K: torch.Tensor, width: int, height: int):
+def _render(model: GaussianModel, viewmat: torch.Tensor, K: torch.Tensor, width: int, height: int, sh_degree: int):
     """Returns (rendered_image, alpha, meta) for the single camera passed in. gsplat.rasterization is batched over
     cameras, so batch index 0 is sliced out of the image and alpha before returning them. Meta is returned as-is for
     the densification strategy, which reads its 2D means and their gradients.
@@ -280,7 +304,8 @@ def _render(model: GaussianModel, viewmat: torch.Tensor, K: torch.Tensor, width:
         quats=model.quats / model.quats.norm(dim=-1, keepdim=True),
         scales=torch.exp(model.scales),
         opacities=torch.sigmoid(model.opacities),
-        colors=torch.sigmoid(model.colors),
+        colors=torch.cat([model.sh0, model.shN], dim=1),
+        sh_degree=sh_degree,
         viewmats=viewmat[None],
         Ks=K[None],
         width=width,
@@ -294,7 +319,7 @@ def _max_gaussians_for_device() -> int:
     until the strategy's refine_stop_iter regardless of how much VRAM is left, so a run on a small GPU can climb for
     thousands of iterations before finally OOMing.
 
-    2KB/point is a deliberately conservative, unmeasured budget covering the point's own five tensors, Adam's two
+    2KB/point is a deliberately conservative, unmeasured budget covering the point's own six tensors, Adam's two
     moment estimates per tensor, and gsplat's per-render tile-intersection buffers, which also scale with point
     count. Read against currently-free memory, not the card's total, so ground-truth images, the optimizer, and
     PyTorch's own overhead already resident by this point in training are accounted for. Half of what's free is

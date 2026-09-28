@@ -101,6 +101,7 @@ export const jobs = pgTable(
     ec2InstanceId: text("ec2_instance_id"),
     errorMessage: text("error_message"),
     resultS3Key: text("result_s3_key"),
+    resultSpzS3Key: text("result_spz_s3_key"),
     thumbnailS3Key: text("thumbnail_s3_key"),
     pointCloudS3Key: text("point_cloud_s3_key"),
 

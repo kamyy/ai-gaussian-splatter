@@ -66,9 +66,9 @@ function SplatScene({
 
   useEffect(() => {
     let disposed = false;
-    // fileType is required, not inferred: splatUrl is a presigned S3 URL, and the query string after .ply defeats
-    // extension-based detection.
-    const splatMesh = new SplatMesh({ url: splatUrlRef.current, fileType: SplatFileType.PLY });
+    // fileType is stated rather than inferred, because splatUrl is a presigned S3 URL whose query string follows the
+    // .spz extension.
+    const splatMesh = new SplatMesh({ url: splatUrlRef.current, fileType: SplatFileType.SPZ });
     splatMesh.initialized
       .then(() => {
         if (disposed) {

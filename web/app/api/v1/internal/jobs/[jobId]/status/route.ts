@@ -29,6 +29,7 @@ const workerStatusSchema = z.object({
   status: z.enum(JOB_STATUS_DB_VALUES),
   error_message: z.string().nullish(),
   result_s3_key: z.string().nullish(),
+  result_spz_s3_key: z.string().nullish(),
   thumbnail_s3_key: z.string().nullish(),
   point_cloud_s3_key: z.string().nullish(),
   ec2_instance_id: z.string().nullish(),
@@ -70,6 +71,9 @@ export const PATCH = withErrorHandling(
     }
     if (body.result_s3_key != null) {
       jobData.resultS3Key = body.result_s3_key;
+    }
+    if (body.result_spz_s3_key != null) {
+      jobData.resultSpzS3Key = body.result_spz_s3_key;
     }
     if (body.thumbnail_s3_key != null) {
       jobData.thumbnailS3Key = body.thumbnail_s3_key;
