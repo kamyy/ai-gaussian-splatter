@@ -30,4 +30,17 @@ describe("Pager", () => {
     const pages = screen.getAllByRole("button", { name: /^Page / }).map(button => button.textContent);
     expect(pages).toEqual(["1", "8", "9", "10", "17"]);
   });
+
+  it("flags the marked page, or the ellipsis hiding it", () => {
+    const { container, rerender } = render(
+      <Pager label="Photo pages" current={3} count={9} onChange={() => {}} markedPage={2} />,
+    );
+    expect(screen.getByRole("button", { name: "Page 2, has the selected photo" })).toBeInTheDocument();
+
+    rerender(<Pager label="Photo pages" current={3} count={9} onChange={() => {}} markedPage={7} />);
+    expect(screen.queryByRole("button", { name: /has the selected photo/ })).not.toBeInTheDocument();
+    // The pages run 1 to 5, then an ellipsis for 6 to 8, then 9.
+    const gap = [...container.querySelectorAll("span")].find(span => span.textContent === "…");
+    expect(gap?.querySelector("span")).not.toBeNull();
+  });
 });
