@@ -10,6 +10,11 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.0"
     }
+    # Zips infra/lambda/worker_sweeper.py for infra/worker_sweeper.tf.
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.0"
+    }
   }
 
   # terraform init -backend-config adds these three arguments to the backend "s3" block:

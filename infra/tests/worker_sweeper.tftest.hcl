@@ -1,5 +1,3 @@
-# Runs fully offline via mock_provider, so terraform test never reaches real AWS here. The values below are arbitrary
-# but well-formed stand-ins for the real ones a deploy passes. See infra/variables.tf for what each one means.
 mock_provider "aws" {}
 
 mock_provider "aws" {
@@ -16,57 +14,58 @@ variables {
   worker_image_tag     = "0123abc"
 }
 
-run "no_nat_gateway_or_extra_public_ingress" {
+run "sweeper_terminate_scoped_by_tag" {
   command = apply
 
-  # infra/ deliberately has no aws_nat_gateway or aws_eip resource (see infra/network.tf). A plan never contains one, so
-  # there is nothing to assert about their absence here.
-
   assert {
-    condition     = aws_vpc_security_group_ingress_rule.alb_https.cidr_ipv4 == "0.0.0.0/0"
-    error_message = "the ALB security group must admit HTTPS from anywhere"
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.worker_sweeper.policy).Statement :
+      s.Sid == "TerminateWorker" && s.Action == "ec2:TerminateInstances" &&
+      try(s.Condition.StringEquals["ec2:ResourceTag/Role"], "") == "worker"
+    ])
+    error_message = "the sweeper may only terminate instances tagged Role=worker, or it could stop anything in the account"
   }
 
   assert {
-    condition     = aws_vpc_security_group_ingress_rule.alb_http.cidr_ipv4 == "0.0.0.0/0"
-    error_message = "the ALB security group must admit HTTP from anywhere (redirected to HTTPS)"
-  }
-
-  assert {
-    condition     = aws_vpc_security_group_ingress_rule.alb_https.from_port == 443 && aws_vpc_security_group_ingress_rule.alb_http.from_port == 80
-    error_message = "the ALB must listen on 443 and 80 only"
+    condition     = aws_lambda_function.worker_sweeper.environment[0].variables.WORKER_TAG_KEY == "Role" && aws_lambda_function.worker_sweeper.environment[0].variables.WORKER_TAG_VALUE == "worker"
+    error_message = "the sweeper must look for the same tag its terminate grant is scoped to"
   }
 }
 
-run "db_only_reachable_from_web" {
+run "sweeper_waits_past_the_lifetime_ceiling" {
   command = apply
 
   assert {
-    condition     = aws_vpc_security_group_ingress_rule.db_from_web.referenced_security_group_id == aws_security_group.web.id
-    error_message = "the DB security group must only admit traffic from the web security group"
-  }
-
-  assert {
-    condition     = aws_vpc_security_group_ingress_rule.db_from_web.from_port == 5432
-    error_message = "the DB security group must admit Postgres (5432) only"
+    condition     = tonumber(aws_lambda_function.worker_sweeper.environment[0].variables.MAX_AGE_MINUTES) > local.worker_max_lifetime_minutes
+    error_message = "the sweeper must only terminate instances older than the ceiling their own shutdown enforces"
   }
 }
 
-run "default_security_group_is_stripped" {
+run "sweeper_runs_on_a_schedule" {
   command = apply
 
   assert {
-    condition     = length(aws_default_security_group.default.ingress) == 0 && length(aws_default_security_group.default.egress) == 0
-    error_message = "the VPC's default security group must carry no rules"
+    condition     = aws_cloudwatch_event_target.worker_sweeper.arn == aws_lambda_function.worker_sweeper.arn
+    error_message = "the schedule must invoke the sweeper Lambda"
+  }
+
+  assert {
+    condition     = aws_lambda_permission.worker_sweeper.source_arn == aws_cloudwatch_event_rule.worker_sweeper.arn
+    error_message = "the Lambda must allow the schedule's rule to invoke it"
   }
 }
 
-run "s3_gateway_endpoint_covers_both_route_tables" {
+run "sweeper_alerts_the_alert_email" {
   command = apply
 
   assert {
-    condition     = length(aws_vpc_endpoint.s3.route_table_ids) == 2
-    error_message = "the S3 gateway endpoint must be reachable from both the public and private route tables"
+    condition     = aws_sns_topic_subscription.alerts_email.endpoint == var.alert_email && aws_sns_topic_subscription.alerts_email.protocol == "email"
+    error_message = "sweeper alerts must reach alert_email"
+  }
+
+  assert {
+    condition     = aws_lambda_function.worker_sweeper.environment[0].variables.ALERT_TOPIC_ARN == aws_sns_topic.alerts.arn
+    error_message = "the sweeper must publish to the topic alert_email subscribes to"
   }
 }
 

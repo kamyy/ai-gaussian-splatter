@@ -95,6 +95,14 @@ run "run_instances_statements_stay_split" {
     ])
     error_message = "ec2:TerminateInstances must be scoped to instances tagged Role=worker"
   }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.task.policy).Statement :
+      s.Sid == "DescribeWorkers" && s.Action == "ec2:DescribeInstances"
+    ])
+    error_message = "web/lib/server/reconcileJob.ts needs ec2:DescribeInstances to notice a dead worker"
+  }
 }
 
 run "web_container_wiring" {
@@ -580,5 +588,33 @@ override_data {
   target = data.aws_caller_identity.current
   values = {
     account_id = "000000000000"
+  }
+}
+
+override_resource {
+  target = aws_iam_role.worker_sweeper
+  values = {
+    arn = "arn:aws:iam::000000000000:role/ai-gaussian-splatter-worker-sweeper"
+  }
+}
+
+override_resource {
+  target = aws_sns_topic.alerts
+  values = {
+    arn = "arn:aws:sns:us-west-2:000000000000:ai-gaussian-splatter-alerts"
+  }
+}
+
+override_resource {
+  target = aws_lambda_function.worker_sweeper
+  values = {
+    arn = "arn:aws:lambda:us-west-2:000000000000:function:ai-gaussian-splatter-worker-sweeper"
+  }
+}
+
+override_resource {
+  target = aws_cloudwatch_event_rule.worker_sweeper
+  values = {
+    arn = "arn:aws:events:us-west-2:000000000000:rule/ai-gaussian-splatter-worker-sweeper"
   }
 }

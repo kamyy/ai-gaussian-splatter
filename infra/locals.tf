@@ -15,6 +15,11 @@ locals {
   worker_tag_key   = "Role"
   worker_tag_value = "worker"
 
+  # How long after boot a worker instance's own `shutdown -h` terminates it, which the sweeper (infra/worker_sweeper.tf)
+  # measures instance age against. It must match WORKER_MAX_LIFETIME_MINUTES in web/lib/server/ec2Launcher.ts, which
+  # schedules that shutdown. The two live in separate packages, so they are kept in sync by hand.
+  worker_max_lifetime_minutes = 30
+
   # All four named explicitly rather than left to a generated name, so `aws ecs update-service
   # --force-new-deployment` (a Clerk secret rotation still needs one) can be written down literally in
   # RUNBOOK.md instead of looked up per environment.
