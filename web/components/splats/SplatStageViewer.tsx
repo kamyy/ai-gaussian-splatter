@@ -193,9 +193,9 @@ export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onC
     pointCloudAvailable ? ["point-cloud", splatId] : null,
     `/api/v1/splats/${splatId}/point-cloud`,
   );
-  // The download route collapses "not ready" and "not yours" into one 404, so a failure here is usually the result
+  // The viewer-splat route collapses "not ready" and "not yours" into one 404, so a failure here is usually the result
   // still being finalized.
-  const splat = usePresignedUrl(complete ? ["splat-download", splatId] : null, `/api/v1/splats/${splatId}/download`);
+  const splat = usePresignedUrl(complete ? ["viewer-splat", splatId] : null, `/api/v1/splats/${splatId}/viewer-splat`);
 
   const mode: ViewMode = viewMode ?? (complete ? "splat" : "colmap_points");
   const canCrop = mode === "colmap_points" && onCropBoxChange !== undefined;

@@ -8,12 +8,15 @@ from pipeline.config import Settings
 from pipeline.train import (
     MAX_TRAINING_EDGE,
     MIN_INIT_SCALE,
+    SH_C0,
+    SH_DEGREE,
     _build_strategy,
     _init_gaussians,
     _load_views,
     _max_gaussians_for_device,
     _nearest_neighbour_scales,
     _scene_scale,
+    _sh_degree_at,
     train,
 )
 
@@ -117,6 +120,16 @@ def test_build_strategy_keeps_the_reference_proportions_at_10k():
     assert (strategy.refine_start_iter, strategy.refine_every, strategy.refine_stop_iter) == (166, 33, 5000)
 
 
+def test_sh_degree_rises_by_one_every_thirtieth_of_a_10k_run():
+    degrees = [_sh_degree_at(step, 10_000) for step in (0, 332, 333, 666, 999, 9_999)]
+    assert degrees == [0, 0, 1, 2, 3, SH_DEGREE]
+
+
+def test_sh_degree_reaches_the_maximum_within_a_fast_test_run():
+    """A 20-iteration smoke test must still render at the full degree, or it stops covering the SH code path."""
+    assert _sh_degree_at(19, 20) == SH_DEGREE
+
+
 def test_scene_scale_is_the_farthest_camera_from_the_cameras_centre():
     def viewmat_at(centre: list[float]) -> torch.Tensor:
         viewmat = torch.eye(4)
@@ -162,8 +175,8 @@ def test_nearest_neighbour_scales_floor_a_single_point():
 
 
 def test_init_gaussians_renders_colmap_colors_unchanged():
-    """_render applies a sigmoid to colors, so the initial colors must be stored so that the sigmoid returns
-    COLMAP's RGB.
+    """gsplat renders the DC coefficient as SH_C0 * sh0 + 0.5, so the initial sh0 must be stored so that returns
+    COLMAP's RGB, with no view-dependent color yet.
     """
     sparse = _make_sparse_model(800, 600)
     sparse.points_xyz = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
@@ -171,5 +184,7 @@ def test_init_gaussians_renders_colmap_colors_unchanged():
 
     model = _init_gaussians(sparse)
 
-    rendered = torch.sigmoid(model.colors).detach().cpu().numpy() * 255
+    rendered = (SH_C0 * model.sh0[:, 0, :] + 0.5).detach().cpu().numpy() * 255
     assert rendered == pytest.approx(sparse.points_rgb.astype(np.float32), abs=0.5)
+    assert model.shN.shape == (2, (SH_DEGREE + 1) ** 2 - 1, 3)
+    assert not model.shN.any()

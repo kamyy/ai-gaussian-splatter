@@ -45,7 +45,7 @@ describe("SplatStageViewer", () => {
     expect(screen.getByText("viewer: url-1")).toBeInTheDocument();
   });
 
-  it("re-mints the download URL well inside its 15-minute expiry", async () => {
+  it("re-mints the viewer URL well inside its 15-minute expiry", async () => {
     apiFetchMock.mockResolvedValueOnce("url-1").mockResolvedValueOnce("url-2");
     render(viewer("splat-refresh"));
     expect(await screen.findByText("viewer: url-1")).toBeInTheDocument();

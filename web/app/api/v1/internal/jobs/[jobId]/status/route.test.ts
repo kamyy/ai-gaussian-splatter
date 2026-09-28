@@ -113,7 +113,7 @@ describe("worker status callback", () => {
     const { splat, job } = await seed();
 
     const res = await PATCH(
-      req("tok", { status: "complete", result_s3_key: "r.ply", thumbnail_s3_key: "t.jpg" }),
+      req("tok", { status: "complete", result_s3_key: "r.ply", result_spz_s3_key: "r.spz", thumbnail_s3_key: "t.jpg" }),
       ctx(job.id),
     );
     expect(res.status).toBe(204);
@@ -122,6 +122,7 @@ describe("worker status callback", () => {
     const [updatedSplat] = await getDb().select().from(splats).where(eq(splats.id, splat.id));
     expect(updatedJob.status).toBe("complete");
     expect(updatedJob.resultS3Key).toBe("r.ply");
+    expect(updatedJob.resultSpzS3Key).toBe("r.spz");
     expect(updatedSplat.status).toBe("complete");
     expect(updatedSplat.thumbnailS3Key).toBe("t.jpg");
   });
