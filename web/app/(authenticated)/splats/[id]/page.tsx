@@ -90,6 +90,9 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
           complete={splat.status === "complete"}
           cameras={cameras}
           cropBox={cropBox}
+          selection={selection}
+          onSelectPhoto={selectPhoto}
+          onClearSelection={() => setSelection(null)}
           onCropBoxChange={stage.kind === "check" ? setCropBox : undefined}
         />
       </section>

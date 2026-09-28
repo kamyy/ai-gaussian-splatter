@@ -13,6 +13,7 @@ import { CameraFrustums } from "./CameraFrustums";
 import { CropBoxGizmo } from "./CropBoxGizmo";
 import { type Framing, fittedCropBox, framingFromCameras, trimmedBox } from "./cameraFraming";
 import { DEFAULT_POINT_SIZE, PointCloudScene } from "./PointCloudScene";
+import { type CameraSelection, DEFAULT_FOV, useCameraFlight } from "./useCameraFlight";
 
 export type ViewMode = "splat" | "colmap_points";
 
@@ -24,6 +25,12 @@ interface SplatViewerProps {
   cameras?: Omit<CameraPose, "photoId">[] | null;
   // Draws the cameras as frustums, in the point cloud view only.
   showCameras?: boolean;
+  // Flies the view to this camera's pose and highlights its frustum.
+  selectedCamera?: CameraSelection | null;
+  // Makes the frustums clickable, reporting the index of the one clicked.
+  onSelectCamera?: (index: number) => void;
+  // Called as the visitor drags, zooms or pans the view, which leaves the selected camera's view behind.
+  onManualMove?: () => void;
   // How big each point of the point cloud is drawn, in world units.
   pointSize?: number;
   // Shows a crop box over the point cloud, which the visitor moves and resizes. A null box while cropping is
@@ -124,6 +131,8 @@ function ViewerSceneManager({
   splatUrl,
   pointCloudUrl,
   cameras,
+  selectedCamera,
+  onManualMove,
   pointSize,
   onError,
   onLoad,
@@ -133,6 +142,8 @@ function ViewerSceneManager({
   splatUrl: string | null;
   pointCloudUrl: string | null;
   cameras: Omit<CameraPose, "photoId">[] | null;
+  selectedCamera: CameraSelection | null;
+  onManualMove?: () => void;
   pointSize: number;
   onError: (message: string) => void;
   onLoad: () => void;
@@ -145,6 +156,8 @@ function ViewerSceneManager({
   const controls = useThree(state => state.controls) as CameraControls | null;
   const [framing, setFraming] = useState<(Omit<Framing, "up"> & { up?: Vector3 }) | null>(null);
   const framedByRef = useRef<"nothing" | "box" | "cameras">("nothing");
+  // The up direction the framing set, which orbiting returns to after a flight has taken on a photo's roll.
+  const sceneUpRef = useRef<Vector3 | null>(null);
 
   useEffect(() => {
     if (!controls || !framing) {
@@ -154,6 +167,7 @@ function ViewerSceneManager({
       camera.up.copy(framing.up);
       controls.updateCameraUp();
     }
+    sceneUpRef.current = camera.up.clone();
     const { position, target } = framing;
     void controls.setLookAt(position.x, position.y, position.z, target.x, target.y, target.z, false);
   }, [camera, controls, framing]);
@@ -165,6 +179,8 @@ function ViewerSceneManager({
       setFraming(fromCameras);
     }
   }, [cameras]);
+
+  useCameraFlight(cameras, selectedCamera, sceneUpRef, onManualMove);
 
   const onFirstLoad = useCallback((box: Box3) => {
     if (framedByRef.current !== "nothing") {
@@ -212,6 +228,9 @@ export function SplatViewer({
   pointCloudUrl,
   cameras = null,
   showCameras = false,
+  selectedCamera = null,
+  onSelectCamera,
+  onManualMove,
   pointSize = DEFAULT_POINT_SIZE,
   cropping = false,
   cropBox = null,
@@ -253,7 +272,14 @@ export function SplatViewer({
   let gizmo: React.ReactNode = null;
   if (mode === "colmap_points") {
     if (showCameras && cameras) {
-      frustums = <CameraFrustums cameras={cameras} />;
+      frustums = (
+        <CameraFrustums
+          cameras={cameras}
+          selected={selectedCamera?.index ?? null}
+          // Not while cropping: the crop box's handles let a click through, which would pick the camera behind them.
+          onSelect={cropping ? undefined : onSelectCamera}
+        />
+      );
     }
     if (cropping && cropBox && onCropBoxChange) {
       gizmo = <CropBoxGizmo box={cropBox} onChange={onCropBoxChange} />;
@@ -286,14 +312,15 @@ export function SplatViewer({
       {/* flat: R3F's default ACESFilmicToneMapping would bend every color through a filmic curve. The output stays
           sRGB, which both Spark's splats and PLYLoader's linearized point colors expect. */}
       <Canvas flat>
-        {/* R3F's own default camera has a 75° field of view, which this keeps. The up direction only lasts until the
-            photos' poses replace it. */}
-        <PerspectiveCamera makeDefault fov={75} up={[0, -1, -0.6]} />
+        {/* The up direction only lasts until the photos' poses replace it. */}
+        <PerspectiveCamera makeDefault fov={DEFAULT_FOV} up={[0, -1, -0.6]} />
         <ViewerSceneManager
           mode={mode}
           splatUrl={splatUrl}
           pointCloudUrl={pointCloudUrl}
           cameras={cameras}
+          selectedCamera={selectedCamera}
+          onManualMove={onManualMove}
           pointSize={pointSize}
           onError={handleError}
           onLoad={handleLoad}
