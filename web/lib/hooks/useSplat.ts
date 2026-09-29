@@ -1,3 +1,10 @@
+/**
+ * Fetches one splat.
+ *
+ * An SWR hook over GET /api/v1/splats/[splatId]. The splat's page refetches it when its latest job ends, because the
+ * worker's final callback updates the splat too.
+ */
+
 "use client";
 
 import { useAuth } from "@clerk/nextjs";

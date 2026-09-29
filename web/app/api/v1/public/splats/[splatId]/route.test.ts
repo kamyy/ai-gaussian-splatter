@@ -8,10 +8,8 @@ function ctx(splatId: string) {
   return { params: Promise.resolve({ splatId }) } as never;
 }
 
-/**
- * Requires a real Postgres (TEST_DATABASE_URL). No Clerk mock: this route is public. What qualifies a splat is
- * web/lib/server/tests/data.test.ts's subject, so this only checks the route's two responses.
- */
+// Requires a real Postgres (TEST_DATABASE_URL). No Clerk mock: this route is public. What qualifies a splat is
+// web/lib/server/tests/data.test.ts's subject, so this only checks the route's two responses.
 describe("GET /api/v1/public/splats/[splatId]", () => {
   beforeEach(async () => {
     await getDb().delete(jobs);

@@ -7,12 +7,10 @@ import { closeDb, getDb } from "@/lib/server/db";
 import { jobs, photos, splats, users } from "@/lib/server/db/schema";
 import { GET, POST } from "./route";
 
-/**
- * Requires a real Postgres (TEST_DATABASE_URL). Covers what GET /api/v1/splats adds on top of the plain splat list:
- * photo counts, job statuses, and thumbnails. The route runs two extra queries (uploaded photos and latest jobs)
- * batched with inArray() over every splat id, then reduces the rows in JS to one per splat. These tests check that
- * reduction, not the number of queries.
- */
+// Requires a real Postgres (TEST_DATABASE_URL). Covers what GET /api/v1/splats adds on top of the plain splat list:
+// photo counts, job statuses, and thumbnails. The route runs two extra queries (uploaded photos and latest jobs)
+// batched with inArray() over every splat id, then reduces the rows in JS to one per splat. These tests check that
+// reduction, not the number of queries.
 describe("GET /api/v1/splats", () => {
   beforeEach(async () => {
     await getDb().delete(jobs);
@@ -141,6 +139,7 @@ describe("GET /api/v1/splats", () => {
         uploadStatus: "uploaded" as const,
       };
     }
+
     await getDb()
       .insert(photos)
       .values([uploaded(older.id, "a.jpg"), uploaded(older.id, "b.jpg"), uploaded(newer.id, "c.jpg")]);
@@ -174,7 +173,7 @@ describe("GET /api/v1/splats", () => {
   });
 });
 
-/** Requires a real Postgres (TEST_DATABASE_URL). */
+// Requires a real Postgres (TEST_DATABASE_URL).
 describe("POST /api/v1/splats", () => {
   beforeEach(async () => {
     await getDb().delete(jobs);

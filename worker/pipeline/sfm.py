@@ -1,8 +1,11 @@
-"""Structure-from-Motion via COLMAP: exhaustive matching, favouring accuracy over speed for a small object-centric
-photo set.
+"""Works out where each photo was taken, with COLMAP.
 
-Requires the `colmap` CLI on PATH, which `worker/Dockerfile` installs. It is not a pip package, hence subprocess
-rather than pycolmap.
+COLMAP is a structure-from-motion tool: it matches features between photos, then solves for each camera's position and
+orientation and a sparse cloud of 3D points. This runs its exhaustive matcher, which compares every pair of photos,
+favouring accuracy over speed for a small object-centric photo set.
+
+Requires the `colmap` CLI on PATH, which `worker/Dockerfile` installs. It is not a pip package, hence subprocess rather
+than pycolmap.
 """
 
 import logging

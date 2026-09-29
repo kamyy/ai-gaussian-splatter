@@ -1,3 +1,8 @@
+# The inputs to infra/: every value that differs between deployments.
+#
+# Each variable is set on the command line or, for the deploy job, from a GitHub repository variable. Most required ones
+# have a validation block, so a missing or malformed value fails before Terraform reaches AWS.
+
 # Editing this default on a live account has an order to it. Tear the stack down first, while the default still names
 # the region the stack is deployed in (AGENTS.md).
 variable "aws_region" {

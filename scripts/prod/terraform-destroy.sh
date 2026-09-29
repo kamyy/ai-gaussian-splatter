@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Destroys every AWS resource infra/ created.
+#
+# Tears down the deployed stack with the same variables the deploy job uses. It leaves the state bucket, the Clerk
+# secret and the CI role alone.
+
 # Refuses while DEPLOY_ENABLED is true, because the next push to main would find an empty state and deploy the whole
 # stack again. An unreadable variable is refused as well, rather than treated as off. An unfinished CI run on main is
 # refused too, because that run may still deploy after destroy.

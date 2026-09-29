@@ -1,3 +1,10 @@
+/**
+ * The /splats page: the signed-in user's library of splats.
+ *
+ * Lists every splat as a card, filterable by what it needs next, and pages them in whole rows sized to each cover
+ * photo's shape. An empty library shows a prompt to make the first splat instead.
+ */
+
 "use client";
 
 import Link from "next/link";
@@ -59,11 +66,13 @@ function EmptyLibrary() {
 
 export default function LibraryPage() {
   const { data: splats, isLoading, error } = useSplats();
+
   const [filter, setFilter] = useState<LibraryFilter | "all">("all");
   const filtered = useMemo(
     () => (filter === "all" ? (splats ?? []) : (splats ?? []).filter(splat => splatBadge(splat).filter === filter)),
     [splats, filter],
   );
+
   const aspects = useMemo(() => filtered.map(splatCardAspect), [filtered]);
   const { setArea, areaHeight, current, pageCount, setPage, tiles } = useJustifiedPages(aspects, {
     rowHeightRem: ROW_HEIGHT_REM,
@@ -87,6 +96,7 @@ export default function LibraryPage() {
     if (pageCount > 1) {
       pager = <Pager label="Library pages" current={current} count={pageCount} onChange={setPage} />;
     }
+
     body = (
       <div className="flex flex-col gap-8">
         {/* Measured for its width, which decides how many cards each row holds. It keeps the tallest page's height, so

@@ -1,3 +1,10 @@
+/**
+ * The status label and color a splat's card shows in the /splats library.
+ *
+ * Turns a splat's status and its latest job's status into a short label such as "Check the shape", a chip color, and
+ * the library filter tab ("Needs you", "In progress", "Complete") that lists it.
+ */
+
 import type { ChipColor } from "@/components/ui/Chip";
 import { JobStatus } from "./statuses";
 import type { SplatListItem } from "./types";
@@ -11,8 +18,11 @@ interface SplatBadge {
   filter: LibraryFilter | null;
 }
 
-// A library card's status pill. "primary" marks "Ready to start" and "Check the shape", where the splat moves forward
-// only once the visitor acts. "Failed" and "Cancelled" also wait on the visitor but are dead ends, so they don't get it.
+/**
+ * A library card's status pill. "primary" marks "Ready to start" and "Check the shape", where the splat moves forward
+ * only once the visitor acts. "Failed" and "Cancelled" also wait on the visitor but are dead ends, so they don't get
+ * it.
+ */
 export function splatBadge({
   photoCount,
   latestJobStatus,
@@ -21,8 +31,10 @@ export function splatBadge({
     if (photoCount === 0) {
       return { label: "No photos", color: "default", filter: null };
     }
+
     return { label: "Ready to start", color: "primary", filter: "needs_you" };
   }
+
   return JOB_BADGES[latestJobStatus];
 }
 

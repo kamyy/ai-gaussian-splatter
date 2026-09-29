@@ -1,6 +1,13 @@
+/**
+ * The server's configuration, read and checked from environment variables.
+ *
+ * getEnv() validates every variable once with zod and returns them typed, so a missing or malformed setting fails
+ * clearly at the first request rather than deep inside a handler. Clerk needs no settings here beyond CLERK_SECRET_KEY,
+ * which its SDK reads itself.
+ */
+
 import { z } from "zod";
 
-/** Server-side configuration. Clerk needs no JWKS settings. Its SDK verifies sessions from CLERK_SECRET_KEY. */
 const envSchema = z
   .object({
     DATABASE_HOST: z.string().min(1),
@@ -59,7 +66,9 @@ export function getEnv(): Env {
       const detail = parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join(", ");
       throw new Error(`Invalid server environment: ${detail}`);
     }
+
     cached = parsed.data;
   }
+
   return cached;
 }

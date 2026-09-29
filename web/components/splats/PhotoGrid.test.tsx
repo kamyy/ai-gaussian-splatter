@@ -62,6 +62,7 @@ describe("PhotoGrid", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Page 4" }));
     expect(shownFilenames()).toEqual(["IMG_28.jpg", "IMG_29.jpg", "IMG_30.jpg"]);
+
     // The part-filled last page keeps a full page's height, three 95px rows and two 6px gaps, so the pager stays put.
     expect(screen.getByRole("list").parentElement).toHaveStyle({ minHeight: "297px" });
     expect(screen.getByRole("button", { name: "Page 4" })).toHaveAttribute("aria-current", "page");
@@ -122,12 +123,14 @@ describe("PhotoGrid", () => {
         onHover={() => {}}
       />,
     );
+
     // They don't fill a row, so they keep the 96px target height.
     const [landscapeTile, portraitTile, unknownTile] = screen.getAllByRole("img").map(img => img.closest("li"));
     expect(landscapeTile).toHaveStyle({ width: "128px", height: "96px" });
     expect(portraitTile).toHaveStyle({ width: "72px", height: "96px" });
     expect(unknownTile).toHaveStyle({ width: "96px", height: "96px" });
     expect(screen.getAllByRole("img")[0]).toHaveAttribute("src", "https://example.com/thumbnails/1.jpg");
+
     // A placeholder icon sits under each photo until it loads.
     expect(portraitTile?.querySelector("svg + img")).not.toBeNull();
   });
@@ -277,6 +280,7 @@ describe("PhotoGrid", () => {
       />,
     );
     const selected = screen.getByRole("button", { name: "IMG_2.jpg" });
+
     // Only the selected tile is in the tab order.
     expect(selected).toHaveAttribute("tabindex", "0");
     expect(screen.getByRole("button", { name: "IMG_1.jpg" })).toHaveAttribute("tabindex", "-1");
@@ -349,6 +353,7 @@ describe("PhotoGrid", () => {
           return get(this);
         },
       });
+
       return () => {
         if (original) {
           Object.defineProperty(HTMLElement.prototype, name, original);
@@ -373,6 +378,7 @@ describe("PhotoGrid", () => {
       fireEvent.keyDown(middle, { key: "ArrowDown" });
       fireEvent.keyDown(middle, { key: "ArrowUp" });
       fireEvent.keyDown(screen.getByRole("button", { name: "IMG_8.jpg" }), { key: "ArrowDown" });
+
       // Down from the last row has nowhere to go.
       expect(onSelect.mock.calls).toEqual([["photo-8"], ["photo-2"]]);
     } finally {

@@ -8,12 +8,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { clearDatabasePasswordCache, databaseSsl, fetchDatabasePassword, resolveDatabaseUrl } from "../databaseUrl";
 
-/**
- * The production path can't be tested against real AWS, so these tests pin the contract instead. ECS projects the RDS
- * secret's fields into DATABASE_USER and DATABASE_PASSWORD (see the matching assertion in infra/tests/web.tftest.hcl),
- * and this code assembles the URL from them. The migration task and local dev use this path. The long-lived web service
- * uses fetchDatabasePassword instead, tested below.
- */
+// The production path can't be tested against real AWS, so these tests pin the contract instead. ECS projects the RDS
+// secret's fields into DATABASE_USER and DATABASE_PASSWORD (see the matching assertion in infra/tests/web.tftest.hcl),
+// and this code assembles the URL from them. The migration task and local dev use this path. The long-lived web service
+// uses fetchDatabasePassword instead, tested below.
 describe("resolveDatabaseUrl", () => {
   it("assembles the URL from the parts ECS supplies", () => {
     expect(
@@ -47,6 +45,7 @@ describe("resolveDatabaseUrl", () => {
       DATABASE_PASSWORD: "p:a?b#c%d",
     });
     expect(url).toBe("postgresql://u:p%3Aa%3Fb%23c%25d@h:5432/n");
+
     // Round-trips: pg decodes these back to the original password.
     expect(decodeURIComponent(new URL(url as string).password)).toBe("p:a?b#c%d");
   });

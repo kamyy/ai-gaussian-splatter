@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Builds the worker's two container images for local use.
+#
+# Builds splat-worker-reconstruct:dev and splat-worker-train:dev from worker/, without running either.
+
 # The web app's Start button under WORKER_LOCAL_LAUNCH runs whatever splat-worker-<stage>:dev image already exists and
 # never builds one, so a worker code change reaches it only after this script.
 

@@ -1,3 +1,10 @@
+/**
+ * POST /api/v1/splats/[splatId]/cancel: stop the splat's running worker job.
+ *
+ * Terminates the GPU instance working on the splat and marks its job cancelled. The splat keeps its photos, so
+ * processing can be started again.
+ */
+
 import { and, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 
@@ -7,7 +14,6 @@ import { getDb } from "@/lib/server/db";
 import { splats } from "@/lib/server/db/schema";
 import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
 
-/** Stops the splat's running worker job. The splat keeps its photos, so processing can be started again. */
 export const POST = withErrorHandling(
   async (_request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/cancel">) => {
     const user = await requireUser();
@@ -27,6 +33,7 @@ export const POST = withErrorHandling(
     if (job === undefined) {
       throw new HttpError(409, "Nothing is running for this splat");
     }
+
     return NextResponse.json(job);
   },
 );

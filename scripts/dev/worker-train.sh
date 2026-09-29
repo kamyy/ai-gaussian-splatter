@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Runs the train stage of the pipeline on this machine's GPU.
+#
+# Trains the Gaussian splat for a splat id that scripts/dev/worker-reconstruct.sh already reconstructed, in the worker
+# container, exactly as a worker instance would on AWS.
+
 # The train stage fetches the photos and sparse model from S3, so it needs nothing left in worker/jobdir and can run on
 # a different machine or days later. Success leaves result.ply and thumbnail.png under splats/<splat-id>/ in web/.env's
 # SPLATS_BUCKET.

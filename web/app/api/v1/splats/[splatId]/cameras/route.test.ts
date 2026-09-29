@@ -31,7 +31,7 @@ const POSE = {
   fy: 3200,
 };
 
-/** Requires a real Postgres (TEST_DATABASE_URL). The S3 read is mocked so this never touches real AWS. */
+// Requires a real Postgres (TEST_DATABASE_URL). The S3 read is mocked so this never touches real AWS.
 describe("GET /api/v1/splats/[splatId]/cameras", () => {
   beforeEach(async () => {
     readSplatCamerasMock.mockReset();

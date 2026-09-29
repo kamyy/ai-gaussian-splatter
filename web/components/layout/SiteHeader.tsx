@@ -1,3 +1,10 @@
+/**
+ * The header bar at the top of every page.
+ *
+ * Shows the app's name, the light and dark mode toggle, and either a sign-up link or, for a signed-in user, a link to
+ * their library, a new-splat button and Clerk's account menu.
+ */
+
 "use client";
 
 import { Show, UserButton } from "@clerk/nextjs";
@@ -8,8 +15,10 @@ import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { buttonClassName } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 
-// The one header every page renders. <Show> resolves the session on the client, so this stays correct without a
-// layout reading auth() itself. While Clerk is still loading, neither the signed-in nor the signed-out branch renders.
+/**
+ * The one header every page renders. <Show> resolves the session on the client, so this stays correct without a
+ * layout reading auth() itself. While Clerk is still loading, neither the signed-in nor the signed-out branch renders.
+ */
 export function SiteHeader() {
   const pathname = usePathname();
   const inLibrary = pathname === "/splats";

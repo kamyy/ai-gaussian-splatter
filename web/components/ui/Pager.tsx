@@ -1,13 +1,39 @@
+/**
+ * Page-number navigation for a paged list.
+ *
+ * Shows previous and next buttons around numbered pages, collapsing long runs into an ellipsis so the pager stays one
+ * width. The library, the photo grid and the new-splat form's previews all page with it.
+ */
+
 "use client";
 
 import { useEffect, useRef } from "react";
 import { LuChevronLeft, LuChevronRight } from "react-icons/lu";
 
 import { cn } from "@/lib/cn";
-import { pageItems } from "@/lib/pageItems";
 
 const PAGER_BUTTON =
   "flex h-9 min-w-9 items-center justify-center rounded-full border border-divider bg-paper px-2 text-sm font-semibold transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50";
+
+// A pager's buttons, as 1-based page numbers with "gap" where a run of pages is collapsed into an ellipsis. Past seven
+// pages the list is always seven items long, so the pager keeps one width as the visitor pages through.
+const MAX_ITEMS = 7;
+
+export function pageItems(current: number, count: number): Array<number | "gap"> {
+  if (count <= MAX_ITEMS) {
+    return Array.from({ length: count }, (_, i) => i + 1);
+  }
+
+  if (current <= 4) {
+    return [1, 2, 3, 4, 5, "gap", count];
+  }
+
+  if (current >= count - 3) {
+    return [1, "gap", count - 4, count - 3, count - 2, count - 1, count];
+  }
+
+  return [1, "gap", current - 1, current, current + 1, "gap", count];
+}
 
 interface PagerProps {
   // Names the navigation landmark, such as "Photo pages".
@@ -30,11 +56,14 @@ function MarkPip() {
   );
 }
 
-// Previous and next plus numbered pages, 1-based. web/lib/hooks/useJustifiedPages.ts supplies current and count. With
-// focus anywhere in the pager, the left and right arrow keys step a page and Home and End jump to the first and last.
+/**
+ * Previous and next plus numbered pages, 1-based. web/lib/hooks/useJustifiedPages.ts supplies current and count. With
+ * focus anywhere in the pager, the left and right arrow keys step a page and Home and End jump to the first and last.
+ */
 export function Pager({ label, current, count, onChange, markedPage = null }: PagerProps) {
   const items = pageItems(current, count);
   const navRef = useRef<HTMLElement>(null);
+
   // A key press moves focus to the new current page's button once it renders. The button that had focus can vanish
   // as the numbered pages shift, or be disabled, like Next on the last page.
   const focusCurrentRef = useRef(false);
@@ -63,6 +92,7 @@ export function Pager({ label, current, count, onChange, markedPage = null }: Pa
       default:
         return;
     }
+
     event.preventDefault();
     page = Math.min(count, Math.max(1, page));
     if (page !== current) {
@@ -103,8 +133,10 @@ export function Pager({ label, current, count, onChange, markedPage = null }: Pa
             </span>
           );
         }
+
         const active = item === current;
         const marked = item === markedPage;
+
         return (
           <button
             key={item}

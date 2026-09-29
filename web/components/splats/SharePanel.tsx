@@ -1,3 +1,9 @@
+/**
+ * The share and download controls for a finished splat.
+ *
+ * Offers the public link to the splat, a copy button for it, and a download of the full splat file.
+ */
+
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
@@ -9,14 +15,18 @@ import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
 import { requireToken } from "@/lib/requireToken";
 import { StageShell } from "./StageShell";
 
-// Shown once a splat is complete. The link is the public view (web/app/(public)/preview/splats/[id]/page.tsx), which
-// needs no sign-in. Children sit in a row beside the download button, and the page passes its Discard button, which
-// the prose above that row describes.
+/**
+ * Shown once a splat is complete. The link is the public view (web/app/(public)/preview/splats/[id]/page.tsx), which
+ * needs no sign-in. Children sit in a row beside the download button, and the page passes its Discard button, which
+ * the prose above that row describes.
+ */
 export function SharePanel({ splatId, children }: { splatId: string; children?: React.ReactNode }) {
   const { getToken } = useAuth();
   const { enqueueSnackbar } = useAppSnackbar();
+
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
+
   // The page renders this only after its client-side fetches resolve, never on the server, so window is defined.
   const shareUrl = `${window.location.origin}/preview/splats/${splatId}`;
 

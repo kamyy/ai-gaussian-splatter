@@ -24,7 +24,7 @@ import { reconcileJob } from "../reconcileJob";
 
 const MINUTE = 60 * 1000;
 
-/** Requires a real Postgres (TEST_DATABASE_URL). EC2 is mocked so this never touches real AWS. */
+// Requires a real Postgres (TEST_DATABASE_URL). EC2 is mocked so this never touches real AWS.
 describe("reconcileJob", () => {
   beforeEach(async () => {
     vi.clearAllMocks();

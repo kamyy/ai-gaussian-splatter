@@ -32,7 +32,7 @@ function completeRequest() {
   return new NextRequest("http://localhost/api/v1/splats/complete", { method: "POST" });
 }
 
-/** Requires a real Postgres (TEST_DATABASE_URL). S3 is mocked so this never touches real AWS. */
+// Requires a real Postgres (TEST_DATABASE_URL). S3 is mocked so this never touches real AWS.
 describe("POST /api/v1/splats/[splatId]/photos/[photoId]/complete", () => {
   beforeEach(async () => {
     vi.clearAllMocks();

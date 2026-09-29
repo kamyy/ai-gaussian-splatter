@@ -1,3 +1,11 @@
+/**
+ * The app's Postgres connection pool, through Drizzle.
+ *
+ * getDb() returns the shared Drizzle client (Drizzle is the typed SQL query builder the app uses), creating the
+ * connection pool on first use. In production the pool fetches the rotating database password for each new connection
+ * and retries once when the password has just changed. closeDb() shuts the pool, which tests call so Vitest can exit.
+ */
+
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { DatabaseError, Pool, type PoolClient } from "pg";
 
@@ -34,12 +42,15 @@ export class SecretPasswordPool extends Pool {
       if (!(err instanceof DatabaseError && err.code === "28P01")) {
         throw err;
       }
+
       clearDatabasePasswordCache();
+
       return super.connect();
     });
     if (!callback) {
       return connected;
     }
+
     connected.then(
       client => callback(undefined, client, client.release),
       (err: Error) => callback(err, undefined, () => {}),
@@ -62,6 +73,7 @@ export function getDb(): NodePgDatabase<typeof schema> {
       DATABASE_SECRET_ARN,
       AWS_REGION,
     } = getEnv();
+
     const options = {
       host: DATABASE_HOST,
       port: DATABASE_PORT,
@@ -72,6 +84,7 @@ export function getDb(): NodePgDatabase<typeof schema> {
     globalForDb.pool = DATABASE_SECRET_ARN
       ? new SecretPasswordPool({ ...options, password: () => fetchDatabasePassword(DATABASE_SECRET_ARN, AWS_REGION) })
       : new Pool({ ...options, password: DATABASE_PASSWORD });
+
     globalForDb.pool.on("error", err => {
       // Without this, a single dead idle connection takes down the process. `pg` re-emits errors from idle pooled
       // clients on the Pool itself, and an unhandled "error" event on an EventEmitter is an uncaught exception. So an
@@ -79,8 +92,10 @@ export function getDb(): NodePgDatabase<typeof schema> {
       // in-flight request instead of the pool quietly discarding one client.
       console.error("Idle pg client error (connection discarded):", err);
     });
+
     globalForDb.pgDb = drizzle(globalForDb.pool, { schema });
   }
+
   return globalForDb.pgDb;
 }
 
@@ -93,6 +108,7 @@ export async function closeDb(): Promise<void> {
     await globalForDb.pool.end();
     globalForDb.pool = undefined;
   }
+
   if (globalForDb.pgDb) {
     globalForDb.pgDb = undefined;
   }

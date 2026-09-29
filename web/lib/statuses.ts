@@ -1,19 +1,21 @@
-// The status values for splats, photos, and jobs, as used by the REST API in web/app/api/v1/, the UI, and Postgres.
-//
-// These live outside web/lib/server/ because client components must not import from it (that would pull the database
-// client and AWS SDK into the browser bundle). The dependency runs the safe direction instead:
-// web/lib/server/db/schema.ts imports these tuples and hands them to pgEnum, so the Postgres enum labels and the
-// TypeScript unions cannot drift apart.
-//
-// Values are snake_case because they are simultaneously the Postgres enum labels, so there is exactly one spelling from
-// the database through to the JSON responses. Field *names* stay camelCase; only these values are snake_case.
+/**
+ * The status values for splats, photos and jobs, shared by the database, the API and the UI.
+ *
+ * These live outside web/lib/server/ because client components must not import from it, since that would pull the
+ * database client and AWS SDK into the browser bundle. The dependency runs the safe direction instead:
+ * web/lib/server/db/schema.ts imports these lists and hands them to Drizzle's pgEnum, so the Postgres enum labels and
+ * the TypeScript types cannot drift apart.
+ *
+ * Values are snake_case because they are also the Postgres enum labels, so there is exactly one spelling from the
+ * database through to the JSON responses. Field names stay camelCase. Only these values are snake_case.
+ */
 
 export const SPLAT_STATUSES = ["draft", "uploading", "ready_to_process", "processing", "complete", "failed"] as const;
 export type SplatStatus = (typeof SPLAT_STATUSES)[number];
 
 export const PHOTO_UPLOAD_STATUSES = ["pending", "uploaded", "failed"] as const;
 
-// Named so a comparison uses a member (JobStatus.queued) rather than repeating the label as a string.
+/** Named so a comparison uses a member (JobStatus.queued) rather than repeating the label as a string. */
 export const JobStatus = {
   queued: "queued",
   launching: "launching",
@@ -26,9 +28,11 @@ export const JobStatus = {
   cancelled: "cancelled",
 } as const;
 
-// Derived from JobStatus's own values rather than hand-listed a second time, so the two can't drift. The cast is a
-// literal tuple, not a plain `JobStatus[]`, because pgEnum (web/lib/server/db/schema.ts) requires a
-// `[string, ...string[]]` shape that Object.values()'s inferred `JobStatus[]` doesn't satisfy on its own.
+/**
+ * Derived from JobStatus's own values rather than hand-listed a second time, so the two can't drift. The cast is a
+ * literal tuple, not a plain `JobStatus[]`, because pgEnum (web/lib/server/db/schema.ts) requires a
+ * `[string, ...string[]]` shape that Object.values()'s inferred `JobStatus[]` doesn't satisfy on its own.
+ */
 export const JOB_STATUSES = Object.values(JobStatus) as [JobStatus, ...JobStatus[]];
 export type JobStatus = (typeof JobStatus)[keyof typeof JobStatus];
 

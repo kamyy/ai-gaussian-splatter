@@ -1,12 +1,12 @@
-import { jobs, photos, splats } from "./db/schema";
-
 /**
- * Which columns responses may expose.
+ * Which database columns API responses may expose.
  *
- * Column maps are passed to `.select()` rather than deleting keys from the result, so the SQL itself enforces what's
- * left out. Excluded columns are never fetched at all. This matters most for jobs: `callbackToken` is the worker's
- * bearer credential and `ec2InstanceId` is internal, and neither may reach a client.
+ * Column maps are passed to Drizzle's `.select()` rather than deleting keys from the result, so the SQL itself enforces
+ * what's left out. Excluded columns are never fetched at all. This matters most for jobs: `callbackToken` is the
+ * worker's bearer credential and `ec2InstanceId` is internal, and neither may reach a client.
  */
+
+import { jobs, photos, splats } from "./db/schema";
 
 export const splatColumns = {
   id: splats.id,

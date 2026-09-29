@@ -1,6 +1,9 @@
-# The GPU spot worker's IAM role and instance profile. Both bucket grants cover the whole bucket, not just the calling
-# worker job's own objects. The terminate grant matches every worker instance, not only the caller. EC2 has no
-# resource-level condition for "the calling instance" that could narrow either one.
+# The permissions a GPU worker instance runs with.
+#
+# The IAM role and instance profile web/lib/server/ec2Launcher.ts attaches to each worker instance. Both bucket grants
+# cover the whole bucket, not just the calling worker job's own objects. The terminate grant matches every worker
+# instance, not only the caller. EC2 has no resource-level condition for "the calling instance" that could narrow either
+# one.
 #
 # AWSServiceRoleForEC2Spot is deliberately not managed here. It is one account-wide role shared by every other Spot
 # workload, so creating it fails in an account that already has one, and letting Terraform delete it would break those

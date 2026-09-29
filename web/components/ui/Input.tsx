@@ -1,3 +1,10 @@
+/**
+ * A labelled text input.
+ *
+ * Renders a <label> above a rounded <input> and links the two with a generated id, so clicking the label focuses the
+ * input and screen readers announce the label.
+ */
+
 "use client";
 
 import { forwardRef, useId } from "react";

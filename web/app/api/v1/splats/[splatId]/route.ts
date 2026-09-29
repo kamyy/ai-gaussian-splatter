@@ -1,3 +1,10 @@
+/**
+ * GET and DELETE /api/v1/splats/[splatId]: read one splat, or delete it.
+ *
+ * GET returns the splat for its owner. DELETE removes the splat with everything it owns, in the database and in S3
+ * (AWS's file storage), after stopping any worker still running for it.
+ */
+
 import { and, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 
@@ -24,6 +31,7 @@ export const GET = withErrorHandling(async (_request: NextRequest, ctx: RouteCon
   if (splat === undefined) {
     throw new HttpError(404, "Splat not found");
   }
+
   return NextResponse.json(splat);
 });
 
@@ -56,6 +64,7 @@ export const DELETE = withErrorHandling(
     } catch (err) {
       console.error(`Deleted splat ${splatId} but not all of its S3 objects`, err);
     }
+
     return new NextResponse(null, { status: 204 });
   },
 );

@@ -20,7 +20,10 @@ const { uploadPhotosMock } = vi.hoisted(() => ({ uploadPhotosMock: vi.fn() }));
 vi.mock("@/lib/uploadPhotos", () => ({ uploadPhotos: uploadPhotosMock }));
 
 const { measurePhotosMock } = vi.hoisted(() => ({ measurePhotosMock: vi.fn() }));
-vi.mock("@/lib/measurePhoto", () => ({ measurePhotos: measurePhotosMock }));
+vi.mock("@/lib/measurePhoto", async importOriginal => ({
+  ...(await importOriginal<typeof import("@/lib/measurePhoto")>()),
+  measurePhotos: measurePhotosMock,
+}));
 
 // jsdom does no layout, so the preview area reports a fixed width. At 800 wide with the default 16px root font, a row
 // holds five 4:3 previews at 115.2px tall, so a page of four rows holds 20.
@@ -166,12 +169,14 @@ describe("NewSplatForm", () => {
     await addPhotos("a.jpg", "b.jpg", "c.jpg", "d.jpg", "e.jpg");
     const tile = screen.getByRole("img", { name: "a.jpg" }).closest("li");
     expect(tile).toHaveStyle({ width: "153.6px", height: "115.2px" });
+
     // The preview shows the photo's thumbnail, not the full file.
     const createObjectURL = vi.mocked(URL.createObjectURL);
     expect(createObjectURL.mock.calls.some(([source]) => source instanceof Blob && !(source instanceof File))).toBe(
       true,
     );
     expect(createObjectURL.mock.calls.every(([source]) => !(source instanceof File))).toBe(true);
+
     // A placeholder icon sits under each preview until it decodes.
     expect(tile?.querySelector("svg + img")).not.toBeNull();
   });
@@ -184,6 +189,7 @@ describe("NewSplatForm", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Page 2" }));
     expect(screen.getAllByRole("img").map(img => img.getAttribute("alt"))).toEqual(["21.jpg"]);
+
     // The part-filled last page keeps a full page's height, four 115.2px rows and three 8px gaps, so the pager stays
     // put.
     expect(screen.getAllByRole("list").at(-1)?.parentElement).toHaveStyle({ minHeight: "484.8px" });
@@ -279,6 +285,7 @@ describe("NewSplatForm", () => {
       if (path === "/api/v1/splats") {
         return { id: "new-splat-1" };
       }
+
       throw new Error("Need at least 20 uploaded photos, have 1");
     });
     render(<NewSplatForm />);

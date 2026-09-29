@@ -1,11 +1,16 @@
-// Applies the migrations in web/drizzle/. `pnpm db:migrate` runs it in local dev and .github/workflows/ci.yml. The
-// migrator image's CMD (web/Dockerfile) runs it directly with node.
-//
-// This replaces `drizzle-kit migrate`, which can exit 1 without printing any error (drizzle-team/drizzle-orm#5521).
-// Delete this script and point db:migrate back at `drizzle-kit migrate` once a stable release ships the fix.
-//
-// It is CommonJS so Node doesn't reparse web/lib/server/databaseUrl.ts as a module of unknown type, which prints a
-// warning on every run.
+/**
+ * Applies the database migrations in web/drizzle/.
+ *
+ * `pnpm db:migrate` runs it in local dev and .github/workflows/ci.yml. The migrator image's CMD (web/Dockerfile) runs
+ * it directly with node, as the one-off task the deploy runs before the new release goes live.
+ *
+ * This replaces `drizzle-kit migrate`, which can exit 1 without printing any error (drizzle-team/drizzle-orm#5521).
+ * Delete this script and point db:migrate back at `drizzle-kit migrate` once a stable release ships the fix.
+ *
+ * It is CommonJS so Node doesn't reparse web/lib/server/databaseUrl.ts as a module of unknown type, which prints a
+ * warning on every run.
+ */
+
 const path = require("node:path");
 const { loadEnvConfig } = require("@next/env");
 const { drizzle } = require("drizzle-orm/node-postgres");

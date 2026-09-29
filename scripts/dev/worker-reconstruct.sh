@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Runs the reconstruct stage of the pipeline on this machine's GPU.
+#
+# Uploads a folder of photos to the dev S3 bucket under a new splat id, then runs COLMAP (which works out where each
+# photo was taken) in the worker container, exactly as a worker instance would on AWS.
+
 # Stage 2 is scripts/dev/worker-train.sh. Needs web/.env's dev AWS keys and the one-time
 # scripts/dev/setup-gpu-passthrough.sh.
 

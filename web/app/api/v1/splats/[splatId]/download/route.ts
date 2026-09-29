@@ -1,3 +1,10 @@
+/**
+ * GET /api/v1/splats/[splatId]/download: a download link for the finished splat.
+ *
+ * Returns a presigned URL (a time-limited link straight to the file in S3, AWS's file storage) for the lossless .ply
+ * file the Download button saves. The 3D viewer loads a smaller compressed copy from the viewer-splat route instead.
+ */
+
 import { and, desc, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 

@@ -1,3 +1,10 @@
+/**
+ * Lays photos out in justified rows and splits the rows into pages.
+ *
+ * Measures the area it's given, fits the photos into rows of that width with web/lib/justifiedLayout.ts, and tracks the
+ * current page. The library, the photo grid and the new-splat previews all use it with web/components/ui/Pager.tsx.
+ */
+
 import { useCallback, useMemo, useState } from "react";
 
 import { type LayoutTile, layoutPages } from "@/lib/justifiedLayout";
@@ -13,10 +20,12 @@ interface JustifiedPagesOptions {
   captionRem?: number;
 }
 
-// Pages of whole justified rows, laid out for the width of the element given setArea as its ref. Every page but the
-// last ends on a full row. The requested page is clamped to the last one, so removing items or narrowing the window
-// under a later page shows what is now the last page. aspects (width over height) should keep its identity between
-// renders, or the layout is redone on every one.
+/**
+ * Pages of whole justified rows, laid out for the width of the element given setArea as its ref. Every page but the
+ * last ends on a full row. The requested page is clamped to the last one, so removing items or narrowing the window
+ * under a later page shows what is now the last page. aspects (width over height) should keep its identity between
+ * renders, or the layout is redone on every one.
+ */
 export function useJustifiedPages(
   aspects: number[],
   { rowHeightRem, columnGapRem, rowGapRem, rowsPerPage, captionRem = 0 }: JustifiedPagesOptions,
@@ -30,9 +39,11 @@ export function useJustifiedPages(
     if (width === 0) {
       return { pages: [], areaHeight: 0 };
     }
+
     // 16px is the browser default, for an environment that reports no font size.
     const remPx = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
     const laidOut = layoutPages(aspects, width, rowHeightRem * remPx, columnGapRem * remPx, rowsPerPage);
+
     // The tallest page's height, which every page reserves so the controls below stay put from page to page, the
     // part-filled last page included.
     const height = Math.max(
@@ -43,6 +54,7 @@ export function useJustifiedPages(
           rowGapRem * remPx * (laidOutPage.rows.length - 1),
       ),
     );
+
     return { pages: laidOut, areaHeight: height };
   }, [aspects, width, rowHeightRem, columnGapRem, rowGapRem, rowsPerPage, captionRem]);
 
@@ -55,11 +67,13 @@ export function useJustifiedPages(
   const pageCount = Math.max(1, pages.length);
   const current = Math.min(page, pageCount);
   const layout = pages.at(current - 1);
+
   // Each full row's widths add up to the area's width, so a wrapping list breaks exactly where the layout broke the
   // rows. Rounding each width down keeps a row from overflowing by a fraction of a pixel.
   const tiles: LayoutTile[] = (layout?.rows ?? []).flatMap(row =>
     row.tiles.map(tile => ({ ...tile, width: Math.floor(tile.width * 100) / 100 })),
   );
+
   return {
     setArea,
     // Give it to the area as its minimum height.

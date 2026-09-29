@@ -1,3 +1,11 @@
+/**
+ * POST and GET /api/v1/splats: create a splat, and list the signed-in user's splats.
+ *
+ * POST creates an empty splat row from a name. Photos are added afterwards through the presign route beside this one.
+ * GET returns the user's library, newest first, with each splat's cover photo and latest job status, which is what the
+ * cards on the library page (web/app/(authenticated)/splats/page.tsx) show.
+ */
+
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -34,10 +42,12 @@ export const POST = withErrorHandling(async (req: Request) => {
   });
 });
 
-// Batched rather than one query per splat: two extra queries use inArray() over every id in the list, and the rows are
-// reduced in JS to one per splat. That avoids both an N+1 fan-out and a more complex DISTINCT ON or lateral-join query.
-// The job and photo rows are already scoped to this user, because their splat ids come from the splats query above,
-// which filtered on userId. So no extra ownership join is needed.
+/**
+ * Batched rather than one query per splat: two extra queries use inArray() over every id in the list, and the rows are
+ * reduced in JS to one per splat. That avoids both an N+1 fan-out and a more complex DISTINCT ON or lateral-join query.
+ * The job and photo rows are already scoped to this user, because their splat ids come from the splats query above,
+ * which filtered on userId. So no extra ownership join is needed.
+ */
 export const GET = withErrorHandling(async () => {
   const user = await requireUser();
 
@@ -50,6 +60,7 @@ export const GET = withErrorHandling(async () => {
   if (rows.length === 0) {
     return NextResponse.json([]);
   }
+
   const ids = rows.map(row => row.id);
 
   // Neither query depends on the other's result, so they run in parallel rather than as two sequential round trips.
@@ -74,6 +85,7 @@ export const GET = withErrorHandling(async () => {
     if (!firstPhotoBySplat.has(row.splatId)) {
       firstPhotoBySplat.set(row.splatId, row);
     }
+
     photoCountBySplat.set(row.splatId, (photoCountBySplat.get(row.splatId) ?? 0) + 1);
   }
 
@@ -88,6 +100,7 @@ export const GET = withErrorHandling(async () => {
     rows.map(async splat => {
       const latestJob = latestJobBySplat.get(splat.id);
       const firstPhoto = firstPhotoBySplat.get(splat.id);
+
       return {
         ...splat,
         photoCount: photoCountBySplat.get(splat.id) ?? 0,

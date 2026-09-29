@@ -1,4 +1,8 @@
-"""Worker -> web status callback: PATCH /api/v1/internal/jobs/{id}/status."""
+"""Reports a worker job's progress back to the web app.
+
+Sends PATCH /api/v1/internal/jobs/{id}/status (web/app/api/v1/internal/jobs/[jobId]/status/route.ts), authenticated with
+the job's callback token. The web app updates the job's row from it, which is what the splat's page polls.
+"""
 
 import logging
 

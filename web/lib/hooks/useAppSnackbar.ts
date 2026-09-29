@@ -1,3 +1,10 @@
+/**
+ * Shows a snackbar (a toast message in the corner of the screen).
+ *
+ * Wraps notistack's useSnackbar so one dismiss policy holds everywhere instead of each call site having to remember it:
+ * an error stays until the visitor closes it, and every other variant times out on its own.
+ */
+
 "use client";
 
 import type { SnackbarMessage, VariantType } from "notistack";
@@ -8,8 +15,6 @@ interface AppSnackbarOptions {
   variant: VariantType;
 }
 
-// Wraps notistack's useSnackbar so one dismiss policy holds everywhere instead of each call site having to remember
-// it: an error persists until the visitor closes it, and every other variant times out on its own.
 export function useAppSnackbar() {
   const { enqueueSnackbar } = useNotistackSnackbar();
 

@@ -34,6 +34,7 @@ afterEach(() => {
 function runInstancesInput() {
   const calls = ec2Mock.commandCalls(RunInstancesCommand);
   expect(calls).toHaveLength(1);
+
   return calls[0].args[0].input;
 }
 
@@ -111,6 +112,7 @@ describe("launchJob", () => {
     // log line is an INFO message that looks exactly like a normal local run.
     const metadata = runInstancesInput().MetadataOptions;
     expect(metadata?.HttpPutResponseHopLimit).toBe(2);
+
     // Only safe with the hop limit above: it drops the IMDSv1 fallback.
     expect(metadata?.HttpTokens).toBe("required");
   });
@@ -154,6 +156,7 @@ describe("launchJob", () => {
     const dockerLoginLine = userData.indexOf("docker login --username");
     expect(shutdownLine).toBeGreaterThan(-1);
     expect(shutdownLine).toBeLessThan(dockerLoginLine);
+
     // Under set -e, a failed shutdown with no fallback would exit before the job and leave no ceiling scheduled.
     expect(userData).toContain(`shutdown -h +${WORKER_MAX_LIFETIME_MINUTES} || poweroff -f`);
   });
@@ -182,6 +185,7 @@ describe("launchJobLocal", () => {
     expect(args).toEqual(expect.arrayContaining(["-e", "SPLAT_ID=splat-456"]));
     expect(args).toEqual(expect.arrayContaining(["-e", "CALLBACK_TOKEN=tok-abc"]));
     expect(args).toEqual(expect.arrayContaining(["-e", "STAGE=train"]));
+
     // Podman's alias for the host running `next dev`. See the APP_PUBLIC_URL comment in web/lib/server/ec2Launcher.ts.
     expect(args).toEqual(expect.arrayContaining(["-e", "APP_PUBLIC_URL=http://host.containers.internal:3000"]));
     expect(options).toMatchObject({ detached: true });

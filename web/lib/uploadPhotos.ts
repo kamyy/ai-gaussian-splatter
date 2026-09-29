@@ -1,23 +1,31 @@
-// The presign, PUT, complete loop for photo uploads. web/components/splats/NewSplatForm.tsx calls it right after
-// creating a splat, which is the only place photos can be added. Progress goes through Zustand's vanilla store API, so
-// this plain async function works from that caller's event handler without a hook of its own.
+/**
+ * Uploads a new splat's photos, with per-photo progress.
+ *
+ * For each batch it asks the API for presigned URLs (time-limited links that let the browser upload straight to S3,
+ * AWS's file storage), uploads each photo and its thumbnail to them, and then tells the API each photo is complete.
+ * web/components/splats/NewSplatForm.tsx calls it right after creating a splat, which is the only place photos can be
+ * added. Progress goes through Zustand's plain store API (web/lib/store.ts), so this ordinary async function can report
+ * it from an event handler without a hook of its own.
+ */
 
 import { apiFetch } from "./apiFetch";
 import type { PickedPhoto } from "./measurePhoto";
 import { useAppStore } from "./store";
 import type { PhotoPresignItem } from "./types";
 
-// onUploaded fires once per photo the server has marked uploaded, so the caller can leave it out of a retry.
+/** onUploaded fires once per photo the server has marked uploaded, so the caller can leave it out of a retry. */
 export async function uploadPhotos(
   splatId: string,
   photos: PickedPhoto[],
   token: string,
   onUploaded: (photo: PickedPhoto) => void,
 ): Promise<void> {
-  // A retry whose failed photos were all removed has nothing left to send, and the presign route rejects an empty batch.
+  // A retry whose failed photos were all removed has nothing left to send, and the presign route rejects an empty
+  // batch.
   if (photos.length === 0) {
     return;
   }
+
   const { setUploadStatus, setUploadProgress } = useAppStore.getState();
 
   const presigned = await apiFetch<PhotoPresignItem[]>(
@@ -50,6 +58,7 @@ export async function uploadPhotos(
         if (failed !== undefined) {
           throw new Error(`S3 upload failed: ${failed.statusText}`);
         }
+
         setUploadProgress(file.name, 100);
         await apiFetch<void>(`/api/v1/splats/${splatId}/photos/${item.photoId}/complete`, "POST", token);
         setUploadStatus(file.name, "uploaded");

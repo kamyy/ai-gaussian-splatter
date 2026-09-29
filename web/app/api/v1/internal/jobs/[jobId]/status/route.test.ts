@@ -19,10 +19,8 @@ function ctx(jobId: string) {
   return { params: Promise.resolve({ jobId }) } as never;
 }
 
-/**
- * Requires a real Postgres (TEST_DATABASE_URL). Covers three invariants of this route: the enum values are snake_case
- * end to end, `updatedAt` moves via `.$onUpdate()`, and the job/splat pair updates inside one transaction.
- */
+// Requires a real Postgres (TEST_DATABASE_URL). Covers three invariants of this route: the enum values are snake_case
+// end to end, `updatedAt` moves via `.$onUpdate()`, and the job/splat pair updates inside one transaction.
 describe("worker status callback", () => {
   beforeEach(async () => {
     await getDb().delete(jobs);
@@ -38,6 +36,7 @@ describe("worker status callback", () => {
     const [user] = await getDb().insert(users).values({ clerkUserId: "u1" }).returning();
     const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "obj" }).returning();
     const [job] = await getDb().insert(jobs).values({ splatId: splat.id, callbackToken: "tok" }).returning();
+
     return { splat, job };
   }
 
@@ -51,6 +50,7 @@ describe("worker status callback", () => {
     const [updated] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
     expect(updated.status).toBe("reconstruction_running");
     expect(updated.colmapStartedAt).not.toBeNull();
+
     // updatedAt only moves via .$onUpdate(); nothing in the database does it.
     expect(updated.updatedAt.getTime()).toBeGreaterThan(job.updatedAt.getTime());
   });

@@ -1,3 +1,9 @@
+/**
+ * A small colored pill for a status label.
+ *
+ * The library's cards use it to show what state a splat is in.
+ */
+
 import { cn } from "@/lib/cn";
 
 export type ChipColor = "default" | "primary" | "success" | "error" | "info";
@@ -18,7 +24,7 @@ interface ChipProps {
   className?: string;
 }
 
-// A filled status pill. "primary" is solid rather than tinted, reserved for a status that needs the visitor to act.
+/** A filled status pill. "primary" is solid rather than tinted, reserved for a status that needs the visitor to act. */
 export function Chip({ color = "default", label, className }: ChipProps) {
   return (
     <span

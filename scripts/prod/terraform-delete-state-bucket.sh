@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Deletes the Terraform state bucket, the last step of tearing down an AWS account.
+#
+# The state bucket records what Terraform has created. It refuses while that state still tracks resources, so
+# scripts/prod/terraform-destroy.sh has to finish first.
 
 set -euo pipefail
 

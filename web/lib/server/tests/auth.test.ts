@@ -6,10 +6,8 @@ import { getClientIp, getJobForCallbackToken, getOrCreateUser } from "../auth";
 import { closeDb, getDb } from "../db";
 import { jobs, splats, users } from "../db/schema";
 
-/**
- * @clerk/nextjs verifies JWTs, and testing Clerk's own code isn't this suite's job. What's worth testing is the
- * app-specific logic: the lazy shadow-row upsert and the worker's per-job token check.
- */
+// @clerk/nextjs verifies JWTs, and testing Clerk's own code isn't this suite's job. What's worth testing is the
+// app-specific logic: the lazy shadow-row upsert and the worker's per-job token check.
 vi.mock("@clerk/nextjs/server", () => ({ auth: vi.fn() }));
 
 function fakeRequest(headers: Record<string, string>): NextRequest {
@@ -90,6 +88,7 @@ describe("database-backed auth helpers", () => {
         .returning();
       const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "s" }).returning();
       const [job] = await getDb().insert(jobs).values({ splatId: splat.id, callbackToken }).returning();
+
       return job;
     }
 

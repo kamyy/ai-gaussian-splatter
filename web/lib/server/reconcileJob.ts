@@ -1,3 +1,10 @@
+/**
+ * Notices a worker job whose GPU instance has died, and fails it.
+ *
+ * A worker that crashes or is reclaimed never calls back to say so. Each time the splat's page polls its latest job,
+ * this checks whether a job that has been quiet for a while still has a live instance, and marks it failed if not.
+ */
+
 import { and, eq } from "drizzle-orm";
 
 import { JobStatus } from "@/lib/statuses";
@@ -30,6 +37,7 @@ export async function reconcileJob(
   if (!WORKER_RUNNING_STATUSES.includes(job.status) || localLaunchEnabled()) {
     return false;
   }
+
   if (Date.now() - job.updatedAt.getTime() < CHECK_AFTER_MS) {
     return false;
   }
@@ -42,6 +50,7 @@ export async function reconcileJob(
   if (row === undefined || row.ec2InstanceId === null) {
     return false;
   }
+
   const { splatId, ec2InstanceId } = row;
 
   const instance = await describeWorker(ec2InstanceId);
@@ -56,9 +65,9 @@ export async function reconcileJob(
   }
 
   // Both rows move together or not at all. The job write is conditional on the job still having the status and instance
-  // this lookup judged. A reconstruct stage that finishes during the lookup moves to awaiting_training and terminates its
-  // own instance, which the lookup would otherwise read as a dead worker. The same condition keeps a result or a cancel
-  // that landed meanwhile.
+  // this lookup judged. A reconstruct stage that finishes during the lookup moves to awaiting_training and terminates
+  // its own instance, which the lookup would otherwise read as a dead worker. The same condition keeps a result or a
+  // cancel that landed meanwhile.
   return getDb().transaction(async tx => {
     const failed = await tx
       .update(jobs)
@@ -68,7 +77,9 @@ export async function reconcileJob(
     if (failed.length === 0) {
       return false;
     }
+
     await tx.update(splats).set({ status: "failed" }).where(eq(splats.id, splatId));
+
     return true;
   });
 }

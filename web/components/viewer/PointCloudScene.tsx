@@ -1,13 +1,25 @@
+/**
+ * Loads and draws COLMAP's point cloud in the 3D view.
+ *
+ * The point cloud is the rough cloud of colored points COLMAP (the structure-from-motion tool in worker/) builds from
+ * the photos. It's the "shape sketch" the visitor checks before training. This component downloads the .ply file once
+ * when it mounts, and reports the points' bounding box so the view can frame them.
+ */
+
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Box3, BufferGeometry } from "three";
 import { PLYLoader } from "three/examples/jsm/loaders/PLYLoader.js";
 
+import { useLatestRef } from "@/lib/hooks/useLatestRef";
+
 import { trimmedBox } from "./cameraFraming";
 
-// In world units. COLMAP's reconstruction has no fixed scale, so what looks right varies from one splat to the next,
-// which is why web/components/splats/SplatStageViewer.tsx offers a slider over it.
+/**
+ * In world units. COLMAP's reconstruction has no fixed scale, so what looks right varies from one splat to the next,
+ * which is why web/components/splats/SplatStageViewer.tsx offers a slider over it.
+ */
 export const DEFAULT_POINT_SIZE = 0.0125;
 
 interface PointCloudSceneProps {
@@ -25,13 +37,11 @@ export function PointCloudScene({ url, pointSize, onError, onLoad, onFirstLoad }
   // Read by the load effect below instead of being a dependency of it, for the reason SplatScene
   // (web/components/viewer/SplatViewer.tsx) gives: a re-minted presigned URL is the same object, and reloading on it
   // would re-download the whole point cloud.
-  const urlRef = useRef(url);
-  useEffect(() => {
-    urlRef.current = url;
-  }, [url]);
+  const urlRef = useLatestRef(url);
 
   useEffect(() => {
     let disposed = false;
+
     // Captured so cleanup can dispose the GPU buffers this effect created. Nothing but this component owns a
     // BufferGeometry, and every switch of the viewer's mode unmounts and remounts it.
     let loadedGeometry: BufferGeometry | null = null;
@@ -45,9 +55,11 @@ export function PointCloudScene({ url, pointSize, onError, onLoad, onFirstLoad }
           loaded.dispose();
           return;
         }
+
         loadedGeometry = loaded;
         setGeometry(loaded);
         onLoad();
+
         const positions = loaded.getAttribute("position").array;
         const box = trimmedBox(positions);
         if (!box.isEmpty()) {
@@ -66,11 +78,12 @@ export function PointCloudScene({ url, pointSize, onError, onLoad, onFirstLoad }
       disposed = true;
       loadedGeometry?.dispose();
     };
-  }, [onError, onLoad, onFirstLoad]);
+  }, [urlRef, onError, onLoad, onFirstLoad]);
 
   if (!geometry) {
     return null;
   }
+
   return (
     <points geometry={geometry}>
       <pointsMaterial vertexColors size={pointSize} sizeAttenuation />

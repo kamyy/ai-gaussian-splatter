@@ -5,11 +5,9 @@ import { getPublicSplat } from "../data";
 import { closeDb, getDb } from "../db";
 import { jobs, splats, users } from "../db/schema";
 
-/**
- * Requires a real Postgres (TEST_DATABASE_URL). getPublicSplat is the only gate between the unauthenticated share page
- * and a splat, so every way a splat can fail to qualify is checked here. Signing an S3 URL is local, so nothing reaches
- * AWS.
- */
+// Requires a real Postgres (TEST_DATABASE_URL). getPublicSplat is the only gate between the unauthenticated share page
+// and a splat, so every way a splat can fail to qualify is checked here. Signing an S3 URL is local, so nothing reaches
+// AWS.
 describe("getPublicSplat", () => {
   beforeEach(async () => {
     await getDb().delete(jobs);

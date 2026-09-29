@@ -1,3 +1,10 @@
+/**
+ * The /splats/new page: name a new splat and add its photos.
+ *
+ * Shows web/components/splats/NewSplatForm.tsx beside a short guide to taking photos that reconstruct well, since a
+ * poor capture is the most common reason a splat comes out badly.
+ */
+
 import type { Metadata } from "next";
 import { BackToLibraryButton } from "@/components/layout/BackToLibraryButton";
 import { NewSplatForm } from "@/components/splats/NewSplatForm";

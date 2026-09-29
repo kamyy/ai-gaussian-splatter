@@ -1,3 +1,11 @@
+/**
+ * GET /api/v1/splats/[splatId]/point-cloud: a link to the splat's COLMAP point cloud.
+ *
+ * Returns a presigned URL (a time-limited S3 link) for the rough 3D point cloud COLMAP (the structure-from-motion tool
+ * in worker/) builds from the photos during the reconstruct stage. The viewer shows it as the "shape sketch" while the
+ * visitor checks the capture before training.
+ */
+
 import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 

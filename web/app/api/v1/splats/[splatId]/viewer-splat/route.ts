@@ -1,3 +1,10 @@
+/**
+ * GET /api/v1/splats/[splatId]/viewer-splat: a link to the splat the 3D viewer loads.
+ *
+ * Returns a presigned URL (a time-limited S3 link) for the compressed .spz copy of the finished splat, which loads far
+ * faster than the lossless .ply the download route serves.
+ */
+
 import { and, desc, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 

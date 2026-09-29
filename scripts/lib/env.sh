@@ -1,5 +1,7 @@
 # shellcheck shell=bash
-# web/.env isn't committed. web/.env.example is the record of what it holds. Not meant to be run directly.
+# Shared helpers for reading and writing web/.env.
+#
+# Sourced by other scripts, not run directly. web/.env isn't committed. web/.env.example is the record of what it holds.
 
 # Usage: env_create_file <env-file> <aws-account-id> <aws-region>
 #

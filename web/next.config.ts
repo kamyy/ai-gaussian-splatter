@@ -1,3 +1,10 @@
+/**
+ * Next.js build configuration.
+ *
+ * Builds the app as a standalone server for the production container, and pins the project root for Turbopack, Next's
+ * bundler.
+ */
+
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {

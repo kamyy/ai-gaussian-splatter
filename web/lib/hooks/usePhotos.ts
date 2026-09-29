@@ -1,3 +1,10 @@
+/**
+ * Fetches a splat's uploaded photos.
+ *
+ * An SWR hook over GET /api/v1/splats/[splatId]/photos. SWR caches the response and refetches it when the page regains
+ * focus.
+ */
+
 "use client";
 
 import { useAuth } from "@clerk/nextjs";

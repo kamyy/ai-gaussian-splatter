@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Deletes the local Postgres container and its data.
+#
+# The counterpart to scripts/dev/db-up.sh, for starting over with empty dev and test databases.
+
 # A missing container or volume is a no-op.
 
 set -euo pipefail

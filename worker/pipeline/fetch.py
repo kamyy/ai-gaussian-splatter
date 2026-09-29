@@ -1,4 +1,8 @@
-"""Download a job's uploaded photos from S3."""
+"""Downloads a worker job's photos from S3.
+
+The browser uploaded the photos to S3 (AWS's file storage). Each stage downloads them to the instance's local disk
+before COLMAP or training reads them.
+"""
 
 from pathlib import Path
 

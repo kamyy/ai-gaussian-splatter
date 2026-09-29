@@ -1,3 +1,11 @@
+/**
+ * The maths for where the 3D view's camera starts, and for the initial crop box.
+ *
+ * Pure functions, with no React. They frame the object from the photos' own camera positions when those are known, or
+ * from the point cloud's bounding box otherwise, trimming stray points so they don't pull the view away. They also fit
+ * the crop box the visitor starts from.
+ */
+
 import { Box3, Matrix3, Matrix4, Quaternion, Vector3 } from "three";
 
 import type { CameraPose, CropBox } from "@/lib/types";
@@ -22,10 +30,12 @@ export function trimmedBox(positions: ArrayLike<number>): Box3 {
     for (let i = 0; i < count; i++) {
       values[i] = positions[i * 3 + axis];
     }
+
     values.sort();
     box.min.setComponent(axis, values[Math.floor(count * BOX_TRIM)]);
     box.max.setComponent(axis, values[Math.ceil(count * (1 - BOX_TRIM)) - 1]);
   }
+
   return box;
 }
 
@@ -75,6 +85,7 @@ export function framingFromCameras(cameras: Omit<CameraPose, "photoId">[]): Fram
     });
     b.add(new Vector3(...center).applyMatrix3(projector));
   }
+
   if (Math.abs(a.determinant()) < 1e-9) {
     return null;
   }
@@ -87,9 +98,11 @@ export function framingFromCameras(cameras: Omit<CameraPose, "photoId">[]): Fram
   for (const { rotation } of cameras) {
     up.sub(new Vector3(...rotation[1]).normalize());
   }
+
   if (up.lengthSq() < 1e-12) {
     up.set(0, 1, 0);
   }
+
   return { target, position, up: up.normalize() };
 }
 
@@ -103,6 +116,7 @@ export function fittedCropBox(positions: ArrayLike<number>, framing: Framing | n
   const rotation = new Quaternion();
   if (framing) {
     const y = framing.up.clone().normalize();
+
     // The direction toward the first photo, with its vertical part removed so it lies in the ground plane.
     const z = framing.position.clone().sub(framing.target);
     z.addScaledVector(y, -z.dot(y));
@@ -124,10 +138,12 @@ export function fittedCropBox(positions: ArrayLike<number>, framing: Framing | n
       .applyQuaternion(inverse)
       .toArray(local, i);
   }
+
   const box = trimmedBox(local);
   if (box.isEmpty()) {
     return null;
   }
+
   return {
     center: box.getCenter(new Vector3()).applyQuaternion(rotation).toArray(),
     size: box.getSize(new Vector3()).toArray(),

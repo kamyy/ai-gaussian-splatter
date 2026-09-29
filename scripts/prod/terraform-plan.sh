@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Previews what the deploy job would change in AWS.
+#
+# Runs terraform plan against the deployed account with the same repository variables the deploy job applies with,
+# without changing anything.
 
 set -euo pipefail
 

@@ -1,3 +1,10 @@
+/**
+ * Fetches the signed-in user's library of splats.
+ *
+ * An SWR hook over GET /api/v1/splats. SWR caches the response, so returning to the library shows it straight away
+ * while it refreshes.
+ */
+
 "use client";
 
 import { useAuth } from "@clerk/nextjs";

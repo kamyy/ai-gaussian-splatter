@@ -1,3 +1,11 @@
+/**
+ * The card on a splat's page that says what happens next.
+ *
+ * Each stage of a splat (no photos, ready to process, placing the cameras, waiting for the visitor's check, building,
+ * failed, cancelled) has its own heading, explanation and buttons, such as starting processing, building the splat, or
+ * stopping a run. While the splat builds, it shows a progress bar with a time estimate.
+ */
+
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
@@ -39,11 +47,13 @@ function timeLeft(percent: number, startedAt: string | null): string | null {
   if (startedAt === null || percent < MIN_PERCENT_FOR_ESTIMATE || percent >= 100) {
     return null;
   }
+
   const elapsedMs = Date.now() - new Date(startedAt).getTime();
   const minutes = Math.round((elapsedMs * (100 - percent)) / percent / 60_000);
   if (minutes < 1) {
     return "Less than a minute left";
   }
+
   return `About ${minutes} minute${minutes === 1 ? "" : "s"} left`;
 }
 
@@ -69,8 +79,10 @@ function ProgressBar({ label, percent, startedAt }: { label: string; percent: nu
   );
 }
 
-// What the visitor can do, or is waiting on, at the current stage. The complete stage has no card of its own. The
-// share panel (web/components/splats/SharePanel.tsx) takes its place in the same StageShell.
+/**
+ * What the visitor can do, or is waiting on, at the current stage. The complete stage has no card of its own. The
+ * share panel (web/components/splats/SharePanel.tsx) takes its place in the same StageShell.
+ */
 export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: StageCardProps) {
   const { getToken } = useAuth();
   const { enqueueSnackbar } = useAppSnackbar();
@@ -156,6 +168,7 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
       } else {
         bar = <ProgressBar label="Building the splat" percent={stage.progress} startedAt={stage.startedAt} />;
       }
+
       return (
         <StageShell title="Building your 3D splat">
           <p>
@@ -181,6 +194,7 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
           </p>
         );
       }
+
       return (
         <StageShell title="Something went wrong" tone="error">
           <p>{stage.message ?? "Processing stopped before it finished."}</p>

@@ -1,5 +1,7 @@
-# The infrastructure-level spend safety net: an AWS Budget, kept separate from the web app's own rate limits and daily
-# cap.
+# The monthly AWS Budget that emails alert_email as spend rises.
+#
+# This is the infrastructure-level spend safety net, kept separate from the web app's own rate limits and daily cap on
+# worker jobs. It catches spend those can't see, such as a resource left running by hand.
 #
 # The Budgets API only works in us-east-1, wherever the rest of the app runs. That is why these resources use provider =
 # aws.billing (see infra/providers.tf).

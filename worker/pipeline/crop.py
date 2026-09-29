@@ -1,4 +1,8 @@
-"""The crop-box test worker/pipeline/export.py applies to the trained Gaussians. It needs numpy only, not torch."""
+"""Tests which trained Gaussians fall inside the visitor's crop box.
+
+The visitor can draw a box around the object in the web app's 3D view before training. worker/pipeline/export.py uses
+this test to drop every Gaussian whose center falls outside it. It needs numpy only, not torch.
+"""
 
 import numpy as np
 

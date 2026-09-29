@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+# Sets up the AWS role GitHub Actions deploys with.
+#
+# Creates the GitHub OIDC provider (which lets a GitHub Actions run prove its identity to AWS without a stored secret)
+# and the role the deploy job assumes, with the permissions a deploy needs. Part of the one-time setup in RUNBOOK.md's
+# Deploying to production.
+
 # Safe to re-run. Both of the role's policies are rewritten from this file on every run, so fixing an AccessDenied from
 # the deploy job is an edit to DEPLOY_POLICY below and a re-run.
 

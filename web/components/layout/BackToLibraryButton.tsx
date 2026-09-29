@@ -1,9 +1,14 @@
+/**
+ * The round back-arrow button that returns to the /splats library.
+ *
+ * It sits in a row beside a page's title, so the title keeps the column's top line to itself.
+ */
+
 import Link from "next/link";
 import { LuArrowLeft } from "react-icons/lu";
 
 import { Tooltip } from "@/components/ui/Tooltip";
 
-// Sits in a row beside a page's title, so the title keeps the column's top line to itself.
 export function BackToLibraryButton() {
   return (
     <Tooltip label="Back to Library">

@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Tests the helpers in scripts/lib/terraform.sh that read values out of infra/'s Terraform files.
+#
+# Those helpers parse HCL (Terraform's config language) with text tools, so a change to how a value is written in infra/
+# can silently break them. This checks them against the real files and against fixtures.
+
 # The root package.json's scripts:check calls it, from the pre-commit hook and CI's lint-format job.
 #
 # .github/workflows/deploy.yml signs its AWS credentials with tf_get_aws_region, so a spelling in infra/variables.tf

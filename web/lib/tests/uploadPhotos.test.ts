@@ -25,6 +25,7 @@ describe("uploadPhotos", () => {
           },
         ];
       }
+
       return undefined;
     });
     vi.stubGlobal(

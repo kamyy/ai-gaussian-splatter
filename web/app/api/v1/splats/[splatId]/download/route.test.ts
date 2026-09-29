@@ -12,7 +12,7 @@ function ctx(splatId: string) {
   return { params: Promise.resolve({ splatId }) } as never;
 }
 
-/** Requires a real Postgres (TEST_DATABASE_URL). Signing an S3 URL is local, so nothing reaches AWS. */
+// Requires a real Postgres (TEST_DATABASE_URL). Signing an S3 URL is local, so nothing reaches AWS.
 describe("GET /api/v1/splats/[splatId]/download", () => {
   beforeEach(async () => {
     await getDb().delete(jobs);
@@ -42,6 +42,7 @@ describe("GET /api/v1/splats/[splatId]/download", () => {
       resultS3Key,
       resultSpzS3Key: "splats/x/result.spz",
     });
+
     return splat;
   }
 

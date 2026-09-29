@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Installs the Terraform CLI version infra/ pins.
+#
+# Downloads that exact release from HashiCorp into ~/.local/bin, which scripts/lib/terraform.sh prefers over any other
+# terraform on PATH, so every script uses the version infra/ was written for.
+
 # Checks HashiCorp's signature on the release's checksum file first, then the zip against that checksum. Installs
 # nothing if either check fails.
 

@@ -1,3 +1,10 @@
+/**
+ * The app's button, in each of its variants and sizes.
+ *
+ * Button is a <button> with the app's styling and an optional loading spinner. buttonClassName() gives a Next.js <Link>
+ * the same look, for a navigation that should look like a button.
+ */
+
 import { forwardRef } from "react";
 import { Spinner } from "@/components/ui/Spinner";
 import { cn } from "@/lib/cn";
@@ -31,13 +38,15 @@ const SIZE: Record<ButtonSize, string> = {
   large: "h-10 px-5 text-base pointer-coarse:h-11",
 };
 
-// For a next/link <Link> that should look like a button: a <button> nested inside an <a> is invalid HTML.
+/** For a next/link <Link> that should look like a button: a <button> nested inside an <a> is invalid HTML. */
 export function buttonClassName(variant: ButtonVariant = "text", size: ButtonSize = "medium", className?: string) {
   return cn(BASE, VARIANT[variant], SIZE[size], className);
 }
 
-// type defaults to "button" rather than the native "submit", so a Button inside a form submits it only when the caller
-// passes type="submit".
+/**
+ * type defaults to "button" rather than the native "submit", so a Button inside a form submits it only when the caller
+ * passes type="submit".
+ */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   { className, variant = "text", size = "medium", loading, disabled, children, ...props },
   ref,

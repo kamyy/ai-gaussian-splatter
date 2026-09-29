@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Starts the local Postgres container and creates the dev and test databases.
+#
+# Local development and the database-backed web tests both need this container running. It is safe to run whenever
+# Postgres seems to be missing.
+
 # Does not migrate. Vitest's globalSetup (web/tests/migrate-test-db.ts) applies web/drizzle/ to TEST_DATABASE_URL.
 
 set -euo pipefail

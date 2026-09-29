@@ -1,10 +1,13 @@
-# The ECR repository holding the web/ container image. Deliberately created before the ECS service ever
-# references an image tag: a first apply that tried to create both at once would leave the service with
-# nothing to pull, tripping the deployment circuit breaker.
+# The ECR repositories that hold the app's container images.
+#
+# ECR is AWS's container image registry. One repository holds the web/ image and another the worker images. The web
+# repository is deliberately created before the ECS service ever references an image tag. A first apply that tried to
+# create both at once would leave the service with nothing to pull, tripping the deployment circuit breaker.
 #
 # A deploy that changes web/ pushes two immutable tags, <tree>-web and <tree>-migrate (see web/Dockerfile). A lifecycle
 # rule per suffix caps each, so local.releases_kept (infra/locals.tf) counts releases rather than images. A deploy that
 # leaves web/ alone pushes nothing, so those releases are distinct web/ builds rather than commits.
+
 resource "aws_ecr_repository" "web" {
   name = "ai-gaussian-splatter"
 

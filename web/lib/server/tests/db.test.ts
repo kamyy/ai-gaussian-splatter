@@ -5,10 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { clearDatabasePasswordCache, fetchDatabasePassword } from "../databaseUrl";
 import { SecretPasswordPool } from "../db";
 
-/**
- * Requires a real Postgres (TEST_DATABASE_URL): the retry keys off the `28P01` error Postgres itself sends for a
- * rejected password, which a mocked pool couldn't prove. Secrets Manager is mocked to play the part of a rotation.
- */
+// Requires a real Postgres (TEST_DATABASE_URL): the retry keys off the `28P01` error Postgres itself sends for a
+// rejected password, which a mocked pool couldn't prove. Secrets Manager is mocked to play the part of a rotation.
 describe("SecretPasswordPool", () => {
   const secretsMock = mockClient(SecretsManagerClient);
   const arn = "arn:aws:secretsmanager:us-west-2:000000000000:secret:rotating";
@@ -31,6 +29,7 @@ describe("SecretPasswordPool", () => {
       user: decodeURIComponent(url.username),
       password: () => fetchDatabasePassword(arn, "us-west-2"),
     });
+
     return pool;
   }
 

@@ -1,3 +1,10 @@
+/**
+ * Cancels a splat's active worker job and stops its GPU instance.
+ *
+ * Used by the cancel route, and by the delete route before a splat is removed. The update only lands while the job
+ * hasn't already ended, so a cancel racing the worker's final callback can't bring an ended job back.
+ */
+
 import { and, desc, eq, notInArray } from "drizzle-orm";
 
 import { JOB_ENDED_STATUSES, JobStatus } from "@/lib/statuses";
@@ -6,8 +13,10 @@ import { jobs } from "./db/schema";
 import { localLaunchEnabled, stopLocalWorker, terminateWorker } from "./ec2Launcher";
 import { jobColumns } from "./selects";
 
-// Statuses where a worker instance may be running for the job. awaiting_training is absent: the reconstruct instance
-// has already terminated itself and the train instance hasn't launched.
+/**
+ * Statuses where a worker instance may be running for the job. awaiting_training is absent: the reconstruct instance
+ * has already terminated itself and the train instance hasn't launched.
+ */
 export const WORKER_RUNNING_STATUSES: string[] = [
   JobStatus.queued,
   JobStatus.launching,

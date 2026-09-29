@@ -1,3 +1,10 @@
+/**
+ * The decorative vase made of dots on the signed-out landing page.
+ *
+ * It stands in for a real Gaussian Splat render (a 3D scene drawn as many soft, colored blobs) without loading any 3D
+ * library. The dots are generated from a fixed seed, so the server and the browser draw the same picture.
+ */
+
 // Every position is in the component's own 320×420 px box, which the markup below sizes with the matching rem classes.
 const WIDTH = 320;
 const HEIGHT = 420;
@@ -12,6 +19,7 @@ function seededRandom(seed: number) {
     t += 0x6d2b79f5;
     let r = Math.imul(t ^ (t >>> 15), 1 | t);
     r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+
     return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
   };
 }
@@ -33,6 +41,7 @@ function generatePoints(): Point[] {
   const centerX = WIDTH / 2;
   const centerY = HEIGHT / 2 - 10;
   const height = 340;
+
   const points: Point[] = [];
   for (let i = 0; i < 1500; i++) {
     const t = rand();
@@ -53,12 +62,13 @@ function generatePoints(): Point[] {
       depth,
     });
   }
+
   return points.sort((a, b) => a.depth - b.depth);
 }
 
 const POINTS = generatePoints();
 
-// The signed-out landing page's visual (web/app/page.tsx).
+/** The signed-out landing page's visual (web/app/page.tsx). */
 export function HeroPointCloud() {
   return (
     <div className="relative h-105 w-80" aria-hidden="true">

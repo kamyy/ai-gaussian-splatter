@@ -1,3 +1,10 @@
+/**
+ * The root layout that wraps every page on the site.
+ *
+ * Sets up the <html> and <body> elements, the two web fonts, the page metadata, and the providers every page shares:
+ * Clerk (sign-in), next-themes (light and dark mode) and the snackbar stack for toast messages.
+ */
+
 import "./globals.css";
 
 import { ClerkProvider } from "@clerk/nextjs";

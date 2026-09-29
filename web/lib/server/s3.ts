@@ -1,3 +1,12 @@
+/**
+ * Everything the app stores in S3, AWS's file storage: photo uploads, and the worker's results.
+ *
+ * Builds the object keys (paths) photos are stored under, and presigned URLs, time-limited links that let the browser
+ * upload or download a file directly without the app handling the bytes. It also reads back an object's size, and
+ * deletes a splat's objects. Uploads are only presigned by the API, so the rate limit is enforced before any bytes
+ * reach S3.
+ */
+
 import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
@@ -11,8 +20,6 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 import type { CameraPose } from "@/lib/types";
 import { getEnv } from "./env";
-
-// Presigned S3 URLs. Uploads always go through this API, so the rate limit is enforced before any bytes hit S3.
 
 const PRESIGN_EXPIRY_SECONDS = 15 * 60;
 
@@ -93,6 +100,7 @@ export async function uploadedObjectSize(uploadsBucketKey: string): Promise<numb
     if (err instanceof Error && err.name === "NotFound") {
       return null;
     }
+
     throw err;
   }
 }
@@ -104,6 +112,7 @@ export async function deleteUploadedObject(uploadsBucketKey: string): Promise<vo
 export async function presignSplatDownload(splatsBucketKey: string): Promise<string> {
   const env = getEnv();
   const command = new GetObjectCommand({ Bucket: env.SPLATS_BUCKET, Key: splatsBucketKey });
+
   return getSignedUrl(s3Client(), command, { expiresIn: PRESIGN_EXPIRY_SECONDS });
 }
 
@@ -111,6 +120,7 @@ export async function presignSplatDownload(splatsBucketKey: string): Promise<str
 export async function presignPhotoDownload(uploadsBucketKey: string): Promise<string> {
   const env = getEnv();
   const command = new GetObjectCommand({ Bucket: env.UPLOADS_BUCKET, Key: uploadsBucketKey });
+
   return getSignedUrl(s3Client(), command, { expiresIn: PRESIGN_EXPIRY_SECONDS });
 }
 
@@ -136,6 +146,7 @@ export async function deleteSplatObjects(splatId: string): Promise<void> {
       if (keys.length > 0) {
         await client.send(new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: keys, Quiet: true } }));
       }
+
       continuationToken = page.NextContinuationToken;
     } while (continuationToken);
   }
@@ -160,11 +171,15 @@ export async function readSplatCameras(splatId: string): Promise<CameraPose[] | 
     if (err instanceof Error && err.name === "NoSuchKey") {
       return null;
     }
+
     throw err;
   }
+
   if (body === undefined) {
     return null;
   }
+
   const { cameras } = JSON.parse(body) as { cameras: WorkerCamera[] };
+
   return cameras.map(({ name, ...camera }) => ({ photoId: name.replace(/\.[^.]*$/, ""), ...camera }));
 }

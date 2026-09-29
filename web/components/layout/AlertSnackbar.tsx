@@ -1,3 +1,10 @@
+/**
+ * How one snackbar (toast message) looks.
+ *
+ * notistack is the library that stacks toast messages in the corner of the screen. This component replaces its default
+ * look with the app's own: a rounded box colored for its variant, with a close button.
+ */
+
 "use client";
 
 import { type CustomContentProps, closeSnackbar } from "notistack";
@@ -13,9 +20,11 @@ const VARIANT_COLOR = {
   info: "border-info text-info",
 } as const;
 
-// Registered on every variant in the SnackbarProvider `Components` prop
-// (web/components/layout/AppSnackbarProvider.tsx), so `enqueueSnackbar(message, { variant })` renders this component
-// instead of notistack's default snackbar.
+/**
+ * Registered on every variant in the SnackbarProvider `Components` prop
+ * (web/components/layout/AppSnackbarProvider.tsx), so `enqueueSnackbar(message, { variant })` renders this component
+ * instead of notistack's default snackbar.
+ */
 export const AlertSnackbar = forwardRef<HTMLDivElement, CustomContentProps>(function AlertSnackbar(
   { message, variant, id },
   ref,

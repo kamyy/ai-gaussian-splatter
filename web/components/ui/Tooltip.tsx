@@ -1,10 +1,15 @@
+/**
+ * A short text label that appears when hovering or focusing an element.
+ *
+ * A thin wrapper that gives Radix's Tooltip the app's styling. Radix's Tooltip is unstyled and needs a Provider above
+ * it, so each one carries its own rather than the app adding one to web/app/layout.tsx. The wrapped element has to
+ * accept a ref and forward props, which a DOM element such as <label> does.
+ */
+
 "use client";
 
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
-// Radix's Tooltip is unstyled and needs a Provider above it, so each one carries its own rather than the app adding
-// one to web/app/layout.tsx. The trigger has to accept a ref and forward props, which a DOM element such as <label>
-// does.
 export function Tooltip({ label, children }: { label: string; children: React.ReactElement }) {
   return (
     <TooltipPrimitive.Provider delayDuration={300}>

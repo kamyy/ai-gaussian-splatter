@@ -1,3 +1,10 @@
+/**
+ * Fetches a time-limited download link for one of the viewer's 3D files, and keeps it fresh.
+ *
+ * The 3D files live in S3 (AWS's file storage), and the viewer loads them through presigned URLs, links that stop
+ * working after 15 minutes. This hook fetches one from the API and replaces it well before it expires.
+ */
+
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
@@ -17,7 +24,7 @@ const URL_REFRESH_MS = 5 * 60_000;
 // fetched longer than this before the page mounted is not used, and the page waits for SWR's revalidation instead.
 const URL_MAX_AGE_AT_MOUNT_MS = 10 * 60_000;
 
-// Fetches the presigned URL at path while key is set, and returns undefined until one is fresh enough to mount.
+/** Fetches the presigned URL at path while key is set, and returns undefined until one is fresh enough to mount. */
 export function usePresignedUrl(key: string[] | null, path: string) {
   const { getToken } = useAuth();
   const [mountedAt] = useState(Date.now);
@@ -27,5 +34,6 @@ export function usePresignedUrl(key: string[] | null, path: string) {
     { refreshInterval: URL_REFRESH_MS },
   );
   const url = data && data.fetchedAt > mountedAt - URL_MAX_AGE_AT_MOUNT_MS ? data.url : undefined;
+
   return { url, error };
 }

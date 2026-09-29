@@ -1,7 +1,29 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { Pager } from "./Pager";
+import { Pager, pageItems } from "./Pager";
+
+describe("pageItems", () => {
+  it("lists every page when they all fit", () => {
+    expect(pageItems(1, 1)).toEqual([1]);
+    expect(pageItems(4, 7)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  });
+
+  it("collapses the far end while the current page is near the start", () => {
+    expect(pageItems(1, 8)).toEqual([1, 2, 3, 4, 5, "gap", 8]);
+    expect(pageItems(4, 17)).toEqual([1, 2, 3, 4, 5, "gap", 17]);
+  });
+
+  it("collapses both ends around a page in the middle", () => {
+    expect(pageItems(5, 17)).toEqual([1, "gap", 4, 5, 6, "gap", 17]);
+    expect(pageItems(9, 17)).toEqual([1, "gap", 8, 9, 10, "gap", 17]);
+  });
+
+  it("collapses the near end while the current page is near the end", () => {
+    expect(pageItems(14, 17)).toEqual([1, "gap", 13, 14, 15, 16, 17]);
+    expect(pageItems(8, 8)).toEqual([1, "gap", 4, 5, 6, 7, 8]);
+  });
+});
 
 describe("Pager", () => {
   it("marks the current page and asks for the one clicked", () => {
@@ -39,6 +61,7 @@ describe("Pager", () => {
 
     rerender(<Pager label="Photo pages" current={3} count={9} onChange={() => {}} markedPage={7} />);
     expect(screen.queryByRole("button", { name: /has the selected photo/ })).not.toBeInTheDocument();
+
     // The pages run 1 to 5, then an ellipsis for 6 to 8, then 9.
     const gap = [...container.querySelectorAll("span")].find(span => span.textContent === "…");
     expect(gap?.querySelector("span")).not.toBeNull();

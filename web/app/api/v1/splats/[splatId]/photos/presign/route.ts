@@ -1,3 +1,12 @@
+/**
+ * POST /api/v1/splats/[splatId]/photos/presign: permission to upload a batch of photos.
+ *
+ * Creates a pending row for each photo and returns presigned URLs (time-limited links that let the browser upload
+ * straight to S3, AWS's file storage) for the photo and its thumbnail. It is also where upload abuse is stopped: the
+ * per-photo size limits, the per-splat photo limit, and the per-IP and per-user rate limits all apply here, before any
+ * storage is used.
+ */
+
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { and, count, eq } from "drizzle-orm";

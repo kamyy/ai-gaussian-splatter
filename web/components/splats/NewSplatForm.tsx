@@ -1,3 +1,11 @@
+/**
+ * The form on /splats/new that creates a splat from a name and a set of photos.
+ *
+ * The visitor names the splat and drops photos onto it, previewed in justified rows. Submitting creates the splat,
+ * uploads the photos straight to S3 (AWS's file storage), and starts processing, then moves to the new splat's page. If
+ * an upload fails partway, a retry reuses the splat and sends only the photos that didn't make it.
+ */
+
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
@@ -14,8 +22,9 @@ import { apiFetch } from "@/lib/apiFetch";
 import { cn } from "@/lib/cn";
 import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
 import { useJustifiedPages } from "@/lib/hooks/useJustifiedPages";
-import { MAX_PHOTO_BYTES, MAX_PHOTOS_PER_SPLAT } from "@/lib/limits";
-import { measurePhotos, type PickedPhoto } from "@/lib/measurePhoto";
+import { usePickedPhotos } from "@/lib/hooks/usePickedPhotos";
+import { MAX_PHOTOS_PER_SPLAT } from "@/lib/limits";
+import { fileKey } from "@/lib/measurePhoto";
 import { useAppStore } from "@/lib/store";
 import type { Job, Splat } from "@/lib/types";
 import { uploadPhotos } from "@/lib/uploadPhotos";
@@ -28,14 +37,8 @@ const PREVIEW_ROWS_PER_PAGE = 4;
 const PREVIEW_ROW_HEIGHT_REM = 7.5;
 // Matches the preview list's gap-2.
 const PREVIEW_GAP_REM = 0.5;
-const MAX_PHOTO_MB = MAX_PHOTO_BYTES / (1024 * 1024);
 
 type Phase = "idle" | "creating" | "uploading" | "starting";
-
-// Two files with the same name and size from separate drops are the same photo picked twice.
-function fileKey(file: File) {
-  return `${file.name}:${file.size}`;
-}
 
 function PhotoMeter({ count }: { count: number }) {
   return (
@@ -52,16 +55,20 @@ function PhotoMeter({ count }: { count: number }) {
   );
 }
 
-// Name plus photos in one step. This is the only place photos can be added to a splat, so it uploads them itself and
-// then starts processing, before navigating to the new splat's page. A failure at any step is reported through the
-// shared snackbar stack (web/components/layout/AppSnackbarProvider.tsx).
+/**
+ * Name plus photos in one step. This is the only place photos can be added to a splat, so it uploads them itself and
+ * then starts processing, before navigating to the new splat's page. A failure at any step is reported through the
+ * shared snackbar stack (web/components/layout/AppSnackbarProvider.tsx).
+ */
 export function NewSplatForm() {
   const { getToken } = useAuth();
   const router = useRouter();
   const { enqueueSnackbar } = useAppSnackbar();
   const resetUploads = useAppStore(state => state.resetUploads);
+
   const [name, setName] = useState("");
-  const [photos, setPhotos] = useState<PickedPhoto[]>([]);
+
+  const { photos, measuring, addFiles, removeFile } = usePickedPhotos();
   const aspects = useMemo(() => photos.map(photo => photo.width / photo.height), [photos]);
   const {
     setArea: setPreviewArea,
@@ -78,54 +85,21 @@ export function NewSplatForm() {
     rowGapRem: PREVIEW_GAP_REM,
     rowsPerPage: PREVIEW_ROWS_PER_PAGE,
   });
+
   const [phase, setPhase] = useState<Phase>("idle");
+
   // Set once the POST below succeeds, so a retry after a photo-upload failure reuses this splat instead of creating a
   // second one.
   const [createdSplat, setCreatedSplat] = useState<Splat | null>(null);
+
   // Keyed by fileKey. A retry uploads only the photos not in here, because every photo the server already has would
   // otherwise be stored again and go to COLMAP twice.
   const [uploadedKeys, setUploadedKeys] = useState<ReadonlySet<string>>(new Set());
-  // Drops still being measured. Submitting waits for them, or their photos would be left out of the upload.
-  const [measuringCount, setMeasuringCount] = useState(0);
   const submitting = phase !== "idle";
   const tooManyPhotos = photos.length > MAX_PHOTOS_PER_SPLAT;
-  const measuring = measuringCount > 0;
-
-  // Each photo is measured as it's added, because the server stores its size for web/components/splats/PhotoGrid.tsx.
-  // A photo this browser can't decode has no size to store, so it's turned away here rather than failing mid-upload.
-  async function addFiles(dropped: File[]) {
-    // The server refuses a photo over MAX_PHOTO_BYTES, so an oversized one is turned away before it's decoded.
-    const tooLarge = dropped.filter(file => file.size > MAX_PHOTO_BYTES).map(file => file.name);
-    if (tooLarge.length > 0) {
-      enqueueSnackbar(`${tooLarge.join(", ")} ${tooLarge.length === 1 ? "is" : "are"} over ${MAX_PHOTO_MB} MB.`, {
-        variant: "error",
-      });
-    }
-    const accepted = dropped.filter(file => file.size <= MAX_PHOTO_BYTES);
-    setMeasuringCount(count => count + 1);
-    try {
-      const measured = await measurePhotos(accepted);
-      const unreadable = accepted.filter((_, index) => measured[index] === null).map(file => file.name);
-      if (unreadable.length > 0) {
-        enqueueSnackbar(`Couldn't read ${unreadable.join(", ")}. Try exporting as JPEG.`, { variant: "error" });
-      }
-      const readable = measured.filter(photo => photo !== null);
-      setPhotos(current => {
-        const seen = new Set(current.map(photo => fileKey(photo.file)));
-        // Oldest taken first, matching the order the splat's page shows them in. The sort is stable, so photos taken at
-        // the same moment keep the order they were added in.
-        return [...current, ...readable.filter(photo => !seen.has(fileKey(photo.file)))].sort(
-          (a, b) => a.takenAt - b.takenAt,
-        );
-      });
-      setPage(1);
-    } finally {
-      setMeasuringCount(count => count - 1);
-    }
-  }
 
   const { getRootProps, getInputProps, open, isDragAccept, isDragReject } = useDropzone({
-    onDrop: accepted => void addFiles(accepted),
+    onDrop: accepted => void addFiles(accepted).then(() => setPage(1)),
     accept: { "image/*": [] },
     multiple: true,
     disabled: submitting,
@@ -150,10 +124,6 @@ export function NewSplatForm() {
 
   // Clears the previous batch's per-file progress, which lives in a store shared with every other upload.
   useEffect(() => resetUploads, [resetUploads]);
-
-  function removeFile(key: string) {
-    setPhotos(current => current.filter(photo => fileKey(photo.file) !== key));
-  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -180,6 +150,7 @@ export function NewSplatForm() {
         setPhase("idle");
         return;
       }
+
       setCreatedSplat(splat);
       await mutate("splats");
     }
@@ -243,6 +214,7 @@ export function NewSplatForm() {
           {tiles.map(tile => {
             const { photo, url } = previews[tile.index - start];
             const key = fileKey(photo.file);
+
             // An uploaded photo is already on the server, and removing it here wouldn't take it off, so it can't be
             // removed. Discarding the splat is the way to drop it.
             let corner: React.ReactNode;
@@ -269,6 +241,7 @@ export function NewSplatForm() {
                 </button>
               );
             }
+
             return (
               <li
                 key={key}

@@ -1,3 +1,10 @@
+/**
+ * The / landing page for signed-out visitors.
+ *
+ * Explains what the app does and links to sign-up and sign-in. A signed-in visitor is sent straight to their library at
+ * /splats instead.
+ */
+
 import { auth } from "@clerk/nextjs/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";

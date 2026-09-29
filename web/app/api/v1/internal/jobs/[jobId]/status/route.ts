@@ -1,3 +1,17 @@
+/**
+ * PATCH /api/v1/internal/jobs/[jobId]/status: the worker's progress callback.
+ *
+ * The GPU worker (worker/) calls this as it moves a worker job through its stages, and once more when it finishes or
+ * fails. Each call updates the job's row, and the matching splat's row when the job ends. The caller is a machine, not
+ * a signed-in person, so auth is the per-job bearer token the app handed the worker at launch rather than a Clerk
+ * session.
+ *
+ * This is the one endpoint whose field names are snake_case, because worker/pipeline/status.py sends a literal
+ * snake_case body. Status values need no translation. They are the Postgres enum labels as-is, so JOB_STATUSES
+ * validates the incoming value and it goes straight into the column. Changing either the field names or the status list
+ * means changing worker/ at the same time.
+ */
+
 import { and, eq, notInArray } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -8,16 +22,6 @@ import { jobs, splats } from "@/lib/server/db/schema";
 import { HttpError, withErrorHandling } from "@/lib/server/httpError";
 import { JOB_ENDED_STATUSES, JOB_STATUSES, JobStatus, type SplatStatus } from "@/lib/statuses";
 
-/**
- * The worker's status callback to the app.
- *
- * This is the one endpoint whose field *names* are snake_case, because worker/pipeline/status.py PATCHes a literal
- * snake_case body. Status values need no translation. They are the Postgres enum labels as-is, so `JOB_STATUSES`
- * validates the incoming value and it goes straight into the column. Changing either the field names or the status
- * list means changing worker/ at the same time.
- *
- * Auth is the per-job bearer token, not a Clerk session.
- */
 const workerStatusSchema = z.object({
   status: z.enum(JOB_STATUSES),
   error_message: z.string().nullish(),
@@ -49,6 +53,7 @@ export const PATCH = withErrorHandling(
     if (!parsed.success) {
       throw new HttpError(422, "Invalid request body");
     }
+
     const body = parsed.data;
     const { status } = body;
 
@@ -56,18 +61,23 @@ export const PATCH = withErrorHandling(
     if (body.error_message != null) {
       jobData.errorMessage = body.error_message;
     }
+
     if (body.result_s3_key != null) {
       jobData.resultS3Key = body.result_s3_key;
     }
+
     if (body.result_spz_s3_key != null) {
       jobData.resultSpzS3Key = body.result_spz_s3_key;
     }
+
     if (body.thumbnail_s3_key != null) {
       jobData.thumbnailS3Key = body.thumbnail_s3_key;
     }
+
     if (body.point_cloud_s3_key != null) {
       jobData.pointCloudS3Key = body.point_cloud_s3_key;
     }
+
     if (body.training_progress != null) {
       jobData.trainingProgress = body.training_progress;
     }
@@ -104,6 +114,7 @@ export const PATCH = withErrorHandling(
     } else if (status === JobStatus.failed) {
       splatStatus = "failed";
     }
+
     if (splatStatus !== null) {
       splatData.status = splatStatus;
     }

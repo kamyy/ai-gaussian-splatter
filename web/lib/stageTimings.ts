@@ -1,3 +1,10 @@
+/**
+ * How long each GPU stage of a worker job took, and how to show those durations.
+ *
+ * Splits each stage into the instance's start-up and the work itself, from the timestamps the worker reports.
+ * web/components/splats/PipelineStepper.tsx shows them beside its steps.
+ */
+
 import { JobStatus } from "./statuses";
 import type { Job } from "./types";
 
@@ -35,6 +42,7 @@ function stepTiming(
   if (launchedAt === null || end === null) {
     return null;
   }
+
   // The client's clock can run behind the server's that stamped launchedAt, so a fresh stage could read negative.
   return {
     totalMs: Math.max(0, end - launchedAt),
@@ -60,6 +68,7 @@ export function stageTimings(job: Job, now: number): StageTimings {
 
   const colmapFinishedAt = time(job.colmapFinishedAt);
   const trainingLaunchedAt = time(job.trainingLaunchedAt);
+
   return {
     cameras: stepTiming(time(job.createdAt), time(job.colmapStartedAt), colmapFinishedAt, placingCameras, now),
     checkMs:
@@ -80,25 +89,28 @@ function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-// "22s", "7m 52s", "1h 03m": a finished duration.
+/** "22s", "7m 52s", "1h 03m": a finished duration. */
 export function formatDuration(ms: number): string {
   const seconds = Math.round(ms / 1000);
   if (seconds < 60) {
     return `${seconds}s`;
   }
+
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) {
     return `${minutes}m ${pad(seconds % 60)}s`;
   }
+
   return `${Math.floor(minutes / 60)}h ${pad(minutes % 60)}m`;
 }
 
-// "4:31", "1:02:09": a running clock.
+/** "4:31", "1:02:09": a running clock. */
 export function formatClock(ms: number): string {
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) {
     return `${minutes}:${pad(seconds % 60)}`;
   }
+
   return `${Math.floor(minutes / 60)}:${pad(minutes % 60)}:${pad(seconds % 60)}`;
 }

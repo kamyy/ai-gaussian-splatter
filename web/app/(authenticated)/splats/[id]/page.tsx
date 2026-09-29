@@ -1,3 +1,11 @@
+/**
+ * The /splats/[id] page: one splat's workspace, from processing through to sharing.
+ *
+ * Loads the splat, its latest worker job, its photos and its camera positions, then shows the stage the splat is at: a
+ * card with that stage's actions, the pipeline's progress, the 3D viewer and the photo grid. The viewer and the grid
+ * share one selected photo, so picking a photo in either shows it in both.
+ */
+
 "use client";
 
 import { use, useEffect, useState } from "react";
@@ -24,11 +32,14 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
   const { data: job, isLoading: jobLoading, mutate: refetchJob } = useLatestJob(id);
   const { data: photos, isLoading: photosLoading } = usePhotos(id);
   const { data: cameras } = useCameras(id, Boolean(job?.pointCloudS3Key));
+
   // Drawn in the 3D view and sent with the check stage's build button, which sit on opposite sides of the page.
   const [cropBox, setCropBox] = useState<CropBox | null>(null);
+
   // Picked from either the photo grid or the 3D view's cameras, and shown in both.
   const [selection, setSelection] = useState<PhotoSelection | null>(null);
   const selectPhoto = (photoId: string) => setSelection({ photoId });
+
   // Hovering a photo marks its camera in the 3D view, and hovering a camera marks its photo in the grid.
   const [hoveredPhotoId, setHoveredPhotoId] = useState<string | null>(null);
 
@@ -46,6 +57,7 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
   if (splatLoading || jobLoading || photosLoading) {
     return <div className="h-full animate-pulse bg-muted" />;
   }
+
   // Deliberately not `!splat` combined with an error check: a failed revalidation leaves the last good splat in `data`,
   // and SWR retries on its own.
   if (!splat) {

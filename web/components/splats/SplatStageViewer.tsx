@@ -1,3 +1,11 @@
+/**
+ * The 3D viewer panel on a splat's page, with its controls.
+ *
+ * Wraps web/components/viewer/SplatViewer.tsx with the buttons around it: switching between the finished splat and
+ * COLMAP's point cloud, showing the photos' cameras, drawing a crop box, and sizing the points. It also fetches the
+ * time-limited download links each 3D file loads from.
+ */
+
 "use client";
 
 import { useMemo, useState } from "react";
@@ -167,6 +175,7 @@ function OrbitHint({ canPickCameras }: { canPickCameras: boolean }) {
   if (canPickCameras) {
     pickLine = <HintLine text="Click a camera to see its photo" />;
   }
+
   return (
     <p className="pointer-events-none absolute top-5 right-6 hidden flex-col items-end gap-1 text-xs whitespace-nowrap sm:flex">
       <HintLine text="Drag to orbit · scroll to zoom" />
@@ -181,8 +190,10 @@ function cameraIndexOf(cameras: CameraPose[] | undefined, photoId: string | null
   return index === -1 ? null : index;
 }
 
-// The page's 3D view, with a selector between the finished splat and the point cloud (the "shape sketch") COLMAP
-// produced. Both URLs go to one SplatViewer, so switching keeps the camera where the visitor left it.
+/**
+ * The page's 3D view, with a selector between the finished splat and the point cloud (the "shape sketch") COLMAP
+ * produced. Both URLs go to one SplatViewer, so switching keeps the camera where the visitor left it.
+ */
 export function SplatStageViewer({
   splatId,
   job,
@@ -285,6 +296,7 @@ export function SplatStageViewer({
         offIcon={PiSelectionSlashDuotone}
         onChange={pressed => {
           setCropping(pressed);
+
           // Cleared rather than kept hidden, so a box the visitor turned off never reaches the build.
           if (!pressed) {
             onCropBoxChange?.(null);
