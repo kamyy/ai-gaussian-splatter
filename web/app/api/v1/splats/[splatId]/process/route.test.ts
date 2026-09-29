@@ -124,8 +124,8 @@ describe("POST /api/v1/splats/[splatId]/process", () => {
   });
 
   it("cancels a job whose worker stopped reporting, so the splat isn't blocked forever", async () => {
-    // Nothing outside the worker moves a job on from "launching", and uq_jobs_splat_id_active makes an active job
-    // block every later POST here. A dead worker would otherwise strand the splat permanently.
+    // A dead worker's job that web/lib/server/reconcileJob.ts never failed stays active, and uq_jobs_splat_id_active
+    // makes an active job block every later POST here. Without the sweep the splat would be stranded permanently.
     const { splat } = await seed();
     const first = await POST({} as never, ctx(splat.id));
     expect(first.status).toBe(201);

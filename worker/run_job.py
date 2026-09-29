@@ -53,7 +53,7 @@ def _run_reconstruct(settings: Settings) -> int:
 
     finally:
         # Attempted on every path out of the try, success or failure. Missing it leaves the instance billing until
-        # user-data's scheduled shutdown fires hours later (web/lib/server/ec2Launcher.ts).
+        # user-data's scheduled shutdown fires at WORKER_MAX_LIFETIME_MINUTES (web/lib/server/ec2Launcher.ts).
         terminate_self()
 
 
