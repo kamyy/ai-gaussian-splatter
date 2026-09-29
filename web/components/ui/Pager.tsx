@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useRef } from "react";
 import { LuChevronLeft, LuChevronRight } from "react-icons/lu";
 
 import { cn } from "@/lib/cn";
@@ -27,11 +30,54 @@ function MarkPip() {
   );
 }
 
-// Previous and next plus numbered pages, 1-based. web/lib/useJustifiedPages.ts supplies current and count.
+// Previous and next plus numbered pages, 1-based. web/lib/useJustifiedPages.ts supplies current and count. With focus
+// anywhere in the pager, the left and right arrow keys step a page and Home and End jump to the first and last.
 export function Pager({ label, current, count, onChange, markedPage = null }: PagerProps) {
   const items = pageItems(current, count);
+  const navRef = useRef<HTMLElement>(null);
+  // A key press moves focus to the new current page's button once it renders. The button that had focus can vanish
+  // as the numbered pages shift, or be disabled, like Next on the last page.
+  const focusCurrentRef = useRef(false);
+  useEffect(() => {
+    if (focusCurrentRef.current) {
+      focusCurrentRef.current = false;
+      navRef.current?.querySelector<HTMLButtonElement>('[aria-current="page"]')?.focus();
+    }
+  });
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLElement>) {
+    let page: number;
+    switch (event.key) {
+      case "ArrowLeft":
+        page = current - 1;
+        break;
+      case "ArrowRight":
+        page = current + 1;
+        break;
+      case "Home":
+        page = 1;
+        break;
+      case "End":
+        page = count;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    page = Math.min(count, Math.max(1, page));
+    if (page !== current) {
+      focusCurrentRef.current = true;
+      onChange(page);
+    }
+  }
+
   return (
-    <nav aria-label={label} className="flex flex-wrap items-center justify-center gap-1">
+    <nav
+      ref={navRef}
+      aria-label={label}
+      onKeyDown={handleKeyDown}
+      className="flex flex-wrap items-center justify-center gap-1"
+    >
       <button
         type="button"
         aria-label="Previous page"
