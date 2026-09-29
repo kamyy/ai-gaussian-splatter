@@ -2,7 +2,8 @@
  * Fetches a splat's latest worker job, and keeps polling it while the job runs.
  *
  * An SWR hook over GET /api/v1/splats/[splatId]/jobs/latest. The splat's page polls it to show the pipeline's progress.
- * Polling speeds up near the end of a run and stops once the job has ended.
+ * Polling speeds up near the end of a run and stops once the job has ended. It carries on in a background tab, because
+ * web/lib/hooks/useStageNotification.ts can only notify the visitor of a finished stage that a poll has seen.
  */
 
 "use client";
@@ -54,6 +55,7 @@ export function useLatestJob(splatId: string) {
     async () => apiFetch<Job>(`/api/v1/splats/${splatId}/jobs/latest`, "GET", await requireToken(getToken)),
     {
       refreshInterval,
+      refreshWhenHidden: true,
     },
   );
 }

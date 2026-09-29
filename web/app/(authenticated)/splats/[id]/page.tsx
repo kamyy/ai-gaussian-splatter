@@ -22,6 +22,7 @@ import { useCameras } from "@/lib/hooks/useCameras";
 import { useLatestJob } from "@/lib/hooks/useLatestJob";
 import { usePhotos } from "@/lib/hooks/usePhotos";
 import { useSplat } from "@/lib/hooks/useSplat";
+import { useStageNotification } from "@/lib/hooks/useStageNotification";
 import { splatStage } from "@/lib/splatStage";
 import { JOB_ENDED_STATUSES } from "@/lib/statuses";
 import type { CropBox } from "@/lib/types";
@@ -54,7 +55,11 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
   // jobLoading is part of this gate, not just splatLoading: before the job's first fetch settles, `job` is undefined
   // exactly as it is for a splat with no job at all, and the "ready" stage would offer a second POST /process for a
   // splat whose job is already running.
-  if (splatLoading || jobLoading || photosLoading) {
+  const loading = splatLoading || jobLoading || photosLoading;
+  const stage = splatStage(job, photos?.length ?? 0);
+  useStageNotification(splat?.name, loading ? undefined : stage);
+
+  if (loading) {
     return <div className="h-full animate-pulse bg-muted" />;
   }
 
@@ -64,7 +69,6 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
     return <p className="p-12 text-error">Splat not found.</p>;
   }
 
-  const stage = splatStage(job, photos?.length ?? 0);
   const placedPhotoIds = cameras ? new Set(cameras.map(camera => camera.photoId)) : null;
 
   // Every other stage's card shows its own Discard button beside its actions. A finished splat's goes in the share
