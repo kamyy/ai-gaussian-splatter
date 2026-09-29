@@ -1,6 +1,9 @@
-# Every local value in infra/ is declared here, including the ones only one .tf file reads, so there is a single
-# place to look for where a derived value comes from. The sections below group by subject rather than by consuming
-# file, because several of these are read from two or three .tf files at once.
+# Every derived value infra/ uses, in one place.
+#
+# Terraform locals are named values computed from variables and from each other. Every local in infra/ is declared here,
+# including the ones only one .tf file reads, so there is a single place to look for where a derived value comes from.
+# The sections below group by subject rather than by consuming file, because several of these are read from two or three
+# .tf files at once.
 
 locals {
   # ---------------------------------------------------------------------------

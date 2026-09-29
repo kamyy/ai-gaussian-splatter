@@ -1,5 +1,8 @@
-# RDS Postgres and the two S3 buckets the app reads and writes (uploads, splats). The ALB's access-log bucket lives in
-# infra/web.tf, beside the load balancer that writes it.
+# Where the app keeps its data: the RDS Postgres database and the two S3 buckets.
+#
+# RDS is AWS's managed Postgres, and S3 is its file storage. The uploads bucket holds the visitors' photos, and the
+# splats bucket holds everything the worker produces. The ALB's access-log bucket lives in infra/web.tf, beside the load
+# balancer that writes it.
 #
 # The uploads and splats buckets' CORS rules name local.app_origin rather than "*": the browser talks to S3
 # directly on both legs (presigned PUT on upload, presigned GET in the viewer), so "*" would let another

@@ -1,6 +1,8 @@
-# The sweeper: a Lambda that runs every 10 minutes, terminates any worker instance older than the lifetime ceiling, and
-# emails alert_email the list. It backstops the `shutdown -h` each instance schedules for itself in user-data
-# (web/lib/server/ec2Launcher.ts), which never gets scheduled when cloud-init itself fails to run.
+# The sweeper: a scheduled Lambda that terminates overdue worker instances.
+#
+# It runs every 10 minutes, terminates any worker instance older than the lifetime ceiling, and emails alert_email the
+# list. It backstops the `shutdown -h` each instance schedules for itself in user-data (web/lib/server/ec2Launcher.ts),
+# which never gets scheduled when cloud-init itself fails to run.
 #
 # The email subscription below needs a one-time confirmation click before anything is delivered (RUNBOOK.md).
 

@@ -1,5 +1,8 @@
-# The Next.js app (pages + the REST API as Route Handlers) on Fargate, behind an internet-facing Application
-# Load Balancer.
+# The web app's hosting: ECS Fargate tasks behind an Application Load Balancer.
+#
+# Fargate runs the Next.js container (pages plus the REST API as Route Handlers) without servers to manage, and the
+# internet-facing load balancer spreads requests across its tasks. This file also holds the TLS certificate, the DNS
+# record, and the IAM roles the tasks run with.
 #
 # The tasks share the public subnets with the ALB and carry a public IP. Their calls to the EC2 API egress
 # through the internet gateway; S3 calls stay on AWS's network through the gateway endpoint (infra/network.tf) instead.

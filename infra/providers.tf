@@ -1,3 +1,9 @@
+# Terraform's own settings: the required versions, the AWS providers, and the state backend.
+#
+# Pins the Terraform CLI and AWS provider versions, configures the AWS provider for the app's region plus a second one
+# fixed to us-east-1 for the Budgets API, and stores Terraform's state in an S3 bucket. Every AWS resource the providers
+# create is tagged with the project name.
+
 # The state bucket is created by hand once (RUNBOOK.md, Creating account prerequisites).
 terraform {
   # Exact, not a floor. A range would let a newer local CLI plan. scripts/lib/terraform.sh's tf_get_required_version

@@ -1,3 +1,8 @@
+# Values Terraform prints after an apply.
+#
+# The names and addresses of resources a person or script needs next, such as the load balancer's DNS name and the
+# bucket names. `terraform output` reads them back at any time.
+
 output "load_balancer_dns_name" {
   value = aws_lb.web.dns_name
 }
