@@ -12,7 +12,8 @@ function ctx(splatId: string) {
   return { params: Promise.resolve({ splatId }) } as never;
 }
 
-describe("GET /api/v1/splats/[splatId]/viewer-splat", () => {
+/** Requires a real Postgres (TEST_DATABASE_URL). Signing an S3 URL is local, so nothing reaches AWS. */
+describe("GET /api/v1/splats/[splatId]/download", () => {
   beforeEach(async () => {
     await getDb().delete(jobs);
     await getDb().delete(splats);
@@ -26,7 +27,7 @@ describe("GET /api/v1/splats/[splatId]/viewer-splat", () => {
   async function seed(
     splatStatus: SplatStatus,
     jobStatus: JobStatus,
-    resultSpzS3Key: string | null,
+    resultS3Key: string | null,
     clerkUserId = "clerk-user-1",
   ) {
     const user = await getOrCreateUser(clerkUserId);
@@ -38,18 +39,18 @@ describe("GET /api/v1/splats/[splatId]/viewer-splat", () => {
       splatId: splat.id,
       callbackToken: "tok",
       status: jobStatus,
-      resultS3Key: "splats/x/result.ply",
-      resultSpzS3Key,
+      resultS3Key,
+      resultSpzS3Key: "splats/x/result.spz",
     });
     return splat;
   }
 
-  it("returns the .spz, not the .ply the download route serves", async () => {
-    const splat = await seed("complete", "complete", "splats/x/result.spz");
+  it("returns the lossless .ply, not the .spz the viewer loads", async () => {
+    const splat = await seed("complete", "complete", "splats/x/result.ply");
 
     const res = await GET({} as never, ctx(splat.id));
     expect(res.status).toBe(200);
-    expect(await res.json()).toContain("result.spz");
+    expect(await res.json()).toContain("result.ply");
   });
 
   it("404s before the splat is complete", async () => {
@@ -60,7 +61,7 @@ describe("GET /api/v1/splats/[splatId]/viewer-splat", () => {
   });
 
   it("404s for a finished splat the caller doesn't own", async () => {
-    const splat = await seed("complete", "complete", "splats/x/result.spz", "clerk-user-2");
+    const splat = await seed("complete", "complete", "splats/x/result.ply", "clerk-user-2");
 
     const res = await GET({} as never, ctx(splat.id));
     expect(res.status).toBe(404);

@@ -45,8 +45,8 @@ describe("POST /api/v1/splats/[splatId]/process", () => {
     await closeDb();
   });
 
-  async function seed(photoCount = getEnv().MIN_PHOTOS_PER_SPLAT) {
-    const user = await getOrCreateUser("clerk-user-1");
+  async function seed(photoCount = getEnv().MIN_PHOTOS_PER_SPLAT, clerkUserId = "clerk-user-1") {
+    const user = await getOrCreateUser(clerkUserId);
     const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "obj" }).returning();
     await getDb()
       .insert(photos)
@@ -70,6 +70,38 @@ describe("POST /api/v1/splats/[splatId]/process", () => {
     const res = await POST({} as never, ctx(splat.id));
     expect(res.status).toBe(201);
     expect(launchJobMock).toHaveBeenCalledWith(expect.objectContaining({ splatId: splat.id, stage: "reconstruct" }));
+  });
+
+  it("404s for a splat the caller doesn't own", async () => {
+    const { splat } = await seed(undefined, "clerk-user-2");
+
+    const res = await POST({} as never, ctx(splat.id));
+    expect(res.status).toBe(404);
+    expect(launchJobMock).not.toHaveBeenCalled();
+    expect(await getDb().select().from(jobs)).toEqual([]);
+  });
+
+  it("refuses a splat with fewer than MIN_PHOTOS_PER_SPLAT uploaded photos, before charging the daily cap", async () => {
+    const { splat } = await seed(getEnv().MIN_PHOTOS_PER_SPLAT - 1);
+
+    const res = await POST({} as never, ctx(splat.id));
+    expect(res.status).toBe(400);
+    expect(launchJobMock).not.toHaveBeenCalled();
+    expect(await getDb().select().from(globalJobCounters)).toEqual([]);
+  });
+
+  it("deletes the job it claimed when the daily cap rejects, so the splat stays ready to start", async () => {
+    const { splat } = await seed();
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    await getDb().insert(globalJobCounters).values({ day: today, jobsStarted: 1_000_000 });
+
+    const res = await POST({} as never, ctx(splat.id));
+    expect(res.status).toBe(503);
+    expect(launchJobMock).not.toHaveBeenCalled();
+    expect(await getDb().select().from(jobs)).toEqual([]);
+    const [unchanged] = await getDb().select().from(splats).where(eq(splats.id, splat.id));
+    expect(unchanged.status).toBe("draft");
   });
 
   it("refuses a splat with more than MAX_PHOTOS_PER_SPLAT uploaded photos, before charging the daily cap", async () => {

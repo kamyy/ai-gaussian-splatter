@@ -18,11 +18,43 @@ vi.mock("@/lib/server/s3", async importOriginal => {
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { jobs, photos, splats, users } from "@/lib/server/db/schema";
-import { DELETE } from "./route";
+import { DELETE, GET } from "./route";
 
 function ctx(splatId: string) {
   return { params: Promise.resolve({ splatId }) } as never;
 }
+
+/** Requires a real Postgres (TEST_DATABASE_URL). */
+describe("GET /api/v1/splats/[splatId]", () => {
+  beforeEach(async () => {
+    await getDb().delete(jobs);
+    await getDb().delete(photos);
+    await getDb().delete(splats);
+    await getDb().delete(users);
+  });
+
+  it("returns the caller's splat", async () => {
+    const user = await getOrCreateUser("clerk-user-1");
+    const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "Mine" }).returning();
+
+    const res = await GET({} as never, ctx(splat.id));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ id: splat.id, name: "Mine" });
+  });
+
+  it("404s for someone else's splat", async () => {
+    const otherUser = await getOrCreateUser("clerk-user-2");
+    const [splat] = await getDb().insert(splats).values({ userId: otherUser.id, name: "Not mine" }).returning();
+
+    const res = await GET({} as never, ctx(splat.id));
+    expect(res.status).toBe(404);
+  });
+
+  it("404s for a malformed id", async () => {
+    const res = await GET({} as never, ctx("not-a-uuid"));
+    expect(res.status).toBe(404);
+  });
+});
 
 /** Requires a real Postgres (TEST_DATABASE_URL). EC2 and S3 are mocked so this never touches real AWS. */
 describe("DELETE /api/v1/splats/[splatId]", () => {

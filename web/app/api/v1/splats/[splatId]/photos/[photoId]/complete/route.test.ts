@@ -46,8 +46,8 @@ describe("POST /api/v1/splats/[splatId]/photos/[photoId]/complete", () => {
     await closeDb();
   });
 
-  async function seedPhoto() {
-    const user = await getOrCreateUser("clerk-user-1");
+  async function seedPhoto(clerkUserId = "clerk-user-1") {
+    const user = await getOrCreateUser(clerkUserId);
     const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "obj" }).returning();
     const [photo] = await getDb()
       .insert(photos)
@@ -79,6 +79,30 @@ describe("POST /api/v1/splats/[splatId]/photos/[photoId]/complete", () => {
 
     expect(res.status).toBe(204);
     expect(await uploadStatus()).toBe("uploaded");
+  });
+
+  it("404s for a photo on someone else's splat, leaving it pending", async () => {
+    const photo = await seedPhoto("clerk-user-2");
+    objectSizes.set(photo.s3Key, 4_000_000);
+    objectSizes.set(photo.thumbnailS3Key, 100_000);
+
+    const res = await POST(completeRequest(), ctx(photo.splatId, photo.id));
+
+    expect(res.status).toBe(404);
+    expect(await uploadStatus()).toBe("pending");
+  });
+
+  it("404s for a photo addressed through a different splat of the caller's", async () => {
+    const photo = await seedPhoto();
+    objectSizes.set(photo.s3Key, 4_000_000);
+    objectSizes.set(photo.thumbnailS3Key, 100_000);
+    const user = await getOrCreateUser("clerk-user-1");
+    const [otherSplat] = await getDb().insert(splats).values({ userId: user.id, name: "other" }).returning();
+
+    const res = await POST(completeRequest(), ctx(otherSplat.id, photo.id));
+
+    expect(res.status).toBe(404);
+    expect(await uploadStatus()).toBe("pending");
   });
 
   it("deletes a photo over MAX_PHOTO_BYTES and leaves it pending", async () => {
