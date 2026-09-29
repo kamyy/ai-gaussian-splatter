@@ -25,7 +25,7 @@ const FILL_FADE_DEPTHS: [number, number] = [1, 3];
 const TRIANGLES_PER_FRUSTUM = 6;
 // How far, in pixels, the pointer may move between press and release for the release to still count as a click
 // rather than the end of an orbit drag.
-const CLICK_SLOP_PX = 4;
+export const CLICK_SLOP_PX = 4;
 
 type Vec3 = [number, number, number];
 

@@ -6,6 +6,7 @@ import { type RefObject, useEffect, useMemo, useRef } from "react";
 import { PerspectiveCamera, Quaternion, Vector3 } from "three";
 
 import type { CameraPose } from "@/lib/types";
+import { CLICK_SLOP_PX } from "./CameraFrustums";
 import {
   easeInOutCubic,
   fittedFov,
@@ -74,15 +75,50 @@ export function useCameraFlight(
     };
   }, [camera, perspective, controls, cameras, captureTarget, selectedCamera]);
 
+  // Where the current press started, and whether the pointer has since moved further than a click allows. A press that
+  // stays within CLICK_SLOP_PX is a click, even though CameraControls turns the view a little for it.
+  const canvas = useThree(state => state.gl.domElement);
+  const pressRef = useRef<{ x: number; y: number; dragged: boolean } | null>(null);
+  useEffect(() => {
+    const handleDown = (event: PointerEvent) => {
+      pressRef.current = { x: event.clientX, y: event.clientY, dragged: false };
+    };
+    const handleMove = (event: PointerEvent) => {
+      const press = pressRef.current;
+      if (press && Math.hypot(event.clientX - press.x, event.clientY - press.y) > CLICK_SLOP_PX) {
+        press.dragged = true;
+      }
+    };
+    const handleUp = () => {
+      pressRef.current = null;
+    };
+    // The window's capture phase runs before CameraControls' own listeners on the document, so a move is measured
+    // before the "control" event it causes is handled below.
+    canvas.addEventListener("pointerdown", handleDown);
+    window.addEventListener("pointermove", handleMove, { capture: true });
+    window.addEventListener("pointerup", handleUp, { capture: true });
+    return () => {
+      canvas.removeEventListener("pointerdown", handleDown);
+      window.removeEventListener("pointermove", handleMove, { capture: true });
+      window.removeEventListener("pointerup", handleUp, { capture: true });
+    };
+  }, [canvas]);
+
   // Moving the view by hand ends a flight where it is, starts levelling out whatever roll and zoom it took on, and
   // leaves the selected photo's view behind. This listens for "control", which every drag and wheel step fires, rather
-  // than "controlstart", which the wheel never fires and a plain press fires before the view has moved at all. A click
-  // that picks a frustum is exactly such a press.
+  // than "controlstart", which the wheel never fires and a plain press fires before the view has moved at all.
+  //
+  // A press counts only once it has moved further than a click allows. Otherwise a click on a frustum that wobbles a
+  // pixel would clear the selection mid-click, and the pick mesh rebuilt for the cleared selection is not the object
+  // R3F saw pressed, so the click would never arrive.
   useEffect(() => {
     if (!controls) {
       return;
     }
     const handleControl = () => {
+      if (pressRef.current && !pressRef.current.dragged) {
+        return;
+      }
       flightRef.current = null;
       const up = sceneUp.current;
       const fov = perspective?.fov ?? DEFAULT_FOV;
