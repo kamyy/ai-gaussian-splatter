@@ -262,6 +262,45 @@ describe("PhotoGrid", () => {
     expect(tile.closest("li")).toHaveClass("-translate-y-0.5");
   });
 
+  it("moves the selection with the arrow keys and Home/End, skipping unplaced photos and turning pages", () => {
+    const photos = makePhotos(12);
+    const placed = new Set(photos.filter(photo => photo.id !== "photo-3").map(photo => photo.id));
+    const onSelect = vi.fn();
+    const { rerender } = render(
+      <PhotoGrid
+        photos={photos}
+        placedPhotoIds={placed}
+        selection={{ photoId: "photo-2" }}
+        onSelect={onSelect}
+        hoveredPhotoId={null}
+        onHover={() => {}}
+      />,
+    );
+    const selected = screen.getByRole("button", { name: "IMG_2.jpg" });
+    // Only the selected tile is in the tab order.
+    expect(selected).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("button", { name: "IMG_1.jpg" })).toHaveAttribute("tabindex", "-1");
+
+    fireEvent.keyDown(selected, { key: "ArrowRight" });
+    fireEvent.keyDown(selected, { key: "ArrowLeft" });
+    fireEvent.keyDown(selected, { key: "End" });
+    expect(onSelect.mock.calls).toEqual([["photo-4"], ["photo-1"], ["photo-12"]]);
+
+    // Picking a photo on the next page turns to it and focuses its tile.
+    rerender(
+      <PhotoGrid
+        photos={photos}
+        placedPhotoIds={placed}
+        selection={{ photoId: "photo-12" }}
+        onSelect={onSelect}
+        hoveredPhotoId={null}
+        onHover={() => {}}
+      />,
+    );
+    expect(screen.getByText("10–12 of 12")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "IMG_12.jpg" })).toHaveFocus();
+  });
+
   it("clears its own hover when a page turn removes the hovered tile", () => {
     const photos = makePhotos(30);
     const placed = new Set(photos.map(photo => photo.id));
@@ -290,5 +329,56 @@ describe("PhotoGrid", () => {
       />,
     );
     expect(onHover.mock.calls).toEqual([["photo-1"], [null]]);
+  });
+
+  it("moves the selection between rows with the up and down arrows", () => {
+    // jsdom does no layout, so each tile reports a layout box from its place in the list: three per row, 95px tall with
+    // 6px gaps, as the grid lays them out at this width.
+    const place = (item: HTMLElement) => [...(item.parentElement?.children ?? [])].indexOf(item);
+    const offsets = {
+      offsetTop: (item: HTMLElement) => Math.floor(place(item) / 3) * 101,
+      offsetLeft: (item: HTMLElement) => (place(item) % 3) * 132,
+      offsetWidth: () => 126,
+      offsetHeight: () => 95,
+    };
+    const restore = Object.entries(offsets).map(([name, get]) => {
+      const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, name);
+      Object.defineProperty(HTMLElement.prototype, name, {
+        configurable: true,
+        get(this: HTMLElement) {
+          return get(this);
+        },
+      });
+      return () => {
+        if (original) {
+          Object.defineProperty(HTMLElement.prototype, name, original);
+        }
+      };
+    });
+
+    try {
+      const photos = makePhotos(9);
+      const onSelect = vi.fn();
+      render(
+        <PhotoGrid
+          photos={photos}
+          placedPhotoIds={new Set(photos.map(photo => photo.id))}
+          selection={{ photoId: "photo-5" }}
+          onSelect={onSelect}
+          hoveredPhotoId={null}
+          onHover={() => {}}
+        />,
+      );
+      const middle = screen.getByRole("button", { name: "IMG_5.jpg" });
+      fireEvent.keyDown(middle, { key: "ArrowDown" });
+      fireEvent.keyDown(middle, { key: "ArrowUp" });
+      fireEvent.keyDown(screen.getByRole("button", { name: "IMG_8.jpg" }), { key: "ArrowDown" });
+      // Down from the last row has nowhere to go.
+      expect(onSelect.mock.calls).toEqual([["photo-8"], ["photo-2"]]);
+    } finally {
+      for (const undo of restore) {
+        undo();
+      }
+    }
   });
 });

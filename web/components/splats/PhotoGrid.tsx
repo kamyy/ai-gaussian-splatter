@@ -31,6 +31,38 @@ interface PhotoGridProps {
   onHover: (photoId: string | null) => void;
 }
 
+// A tile's box in the list's layout. offsetTop and offsetLeft ignore transforms, so a hovered tile's lift doesn't
+// move it out of its row the way getBoundingClientRect would.
+function layoutBox(tile: HTMLElement) {
+  const item = tile.closest("li") ?? tile;
+  return {
+    top: item.offsetTop,
+    bottom: item.offsetTop + item.offsetHeight,
+    center: item.offsetLeft + item.offsetWidth / 2,
+  };
+}
+
+/**
+ * The photo id of the tile in the row above (-1) or below (1) whose center is nearest the one in from. Measured from
+ * the laid-out tiles, because justified rows don't line up in columns. null from the page's top or bottom row.
+ */
+function tileInNextRow(list: HTMLElement, from: HTMLElement, direction: 1 | -1): string | null {
+  const origin = layoutBox(from);
+  const candidates = [...list.querySelectorAll<HTMLElement>("[data-photo-id]")]
+    .map(tile => ({ id: tile.dataset.photoId ?? null, box: layoutBox(tile) }))
+    .filter(({ box }) => (direction === 1 ? box.top >= origin.bottom : box.bottom <= origin.top));
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  // The adjacent row is the candidates' topmost row going down, and their bottommost going up.
+  const tops = candidates.map(({ box }) => box.top);
+  const rowTop = direction === 1 ? Math.min(...tops) : Math.max(...tops);
+  const row = candidates.filter(({ box }) => box.top === rowTop);
+  const distance = (box: ReturnType<typeof layoutBox>) => Math.abs(box.center - origin.center);
+  return row.reduce((best, tile) => (distance(tile.box) < distance(best.box) ? tile : best)).id;
+}
+
 // Drawn over the photo, which would cover a border on the tile itself.
 function SelectedMark() {
   return (
@@ -53,6 +85,7 @@ function PhotoTile({
   unplaced,
   selected,
   hovered,
+  tabbable,
   onSelect,
   onPointerEnter,
   onPointerLeave,
@@ -65,6 +98,8 @@ function PhotoTile({
   unplaced: boolean;
   selected: boolean;
   hovered: boolean;
+  // Whether this tile is the grid's one stop in the tab order.
+  tabbable: boolean;
   onSelect: () => void;
   onPointerEnter: () => void;
   onPointerLeave: () => void;
@@ -87,6 +122,8 @@ function PhotoTile({
       <button
         type="button"
         aria-pressed={selected}
+        data-photo-id={photo.id}
+        tabIndex={tabbable ? 0 : -1}
         onClick={onSelect}
         onPointerEnter={onPointerEnter}
         onPointerLeave={onPointerLeave}
@@ -160,6 +197,60 @@ export function PhotoGrid({ photos, placedPhotoIds, selection, onSelect, hovered
     }
   });
 
+  // Keyboard support. The arrow keys and Home/End select a neighbouring placed photo, turning the page when they cross
+  // one. Only one tile is in the tab order, so Tab moves past the grid in one step rather than through every photo.
+  const listRef = useRef<HTMLUListElement>(null);
+  const placedIds = photos.filter(isPlaced).map(photo => photo.id);
+  const shownPlaced = shownPhotos.filter(isPlaced);
+  const tabbableId = shownPlaced.some(photo => photo.id === selectedPhotoId) ? selectedPhotoId : shownPlaced[0]?.id;
+
+  // A photo picked from the keyboard is focused once its tile renders, which is after the page turn when there is one.
+  const pendingFocusRef = useRef<string | null>(null);
+  useEffect(() => {
+    const id = pendingFocusRef.current;
+    const tile = id ? listRef.current?.querySelector<HTMLButtonElement>(`[data-photo-id="${id}"]`) : null;
+    if (tile) {
+      pendingFocusRef.current = null;
+      tile.focus();
+    }
+  });
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLUListElement>) {
+    const from = event.target as HTMLElement;
+    const position = placedIds.indexOf(from.dataset.photoId ?? "");
+    if (position === -1 || !listRef.current) {
+      return;
+    }
+    let target: string | null | undefined;
+    switch (event.key) {
+      case "ArrowRight":
+        target = placedIds[position + 1];
+        break;
+      case "ArrowLeft":
+        target = placedIds[position - 1];
+        break;
+      case "ArrowDown":
+        target = tileInNextRow(listRef.current, from, 1);
+        break;
+      case "ArrowUp":
+        target = tileInNextRow(listRef.current, from, -1);
+        break;
+      case "Home":
+        target = placedIds[0];
+        break;
+      case "End":
+        target = placedIds[placedIds.length - 1];
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    if (target && target !== from.dataset.photoId) {
+      pendingFocusRef.current = target;
+      onSelect(target);
+    }
+  }
+
   let unplacedNote: React.ReactNode = null;
   if (unplacedCount > 0) {
     unplacedNote = <span className="font-medium text-error"> · {unplacedCount} couldn&apos;t be placed</span>;
@@ -195,7 +286,7 @@ export function PhotoGrid({ photos, placedPhotoIds, selection, onSelect, hovered
       </div>
       {/* Measured for its width, which decides how many photos each row holds. */}
       <div ref={setArea} style={{ minHeight: areaHeight }}>
-        <ul className="flex flex-wrap gap-1.5">
+        <ul ref={listRef} onKeyDown={handleKeyDown} className="flex flex-wrap gap-1.5">
           {tiles.map(({ index, width, height }) => {
             const photo = photos[index];
             return (
@@ -208,6 +299,7 @@ export function PhotoGrid({ photos, placedPhotoIds, selection, onSelect, hovered
                 unplaced={isUnplaced(photo)}
                 selected={photo.id === selectedPhotoId}
                 hovered={photo.id === hoveredPhotoId}
+                tabbable={photo.id === tabbableId}
                 onSelect={() => onSelect(photo.id)}
                 onPointerEnter={() => {
                   gridHoverRef.current = photo.id;
