@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CropBox } from "@/lib/types";
 import { StageCard } from "./StageCard";
@@ -103,5 +103,49 @@ describe("StageCard", () => {
     const startedAt = new Date(Date.now() - 60_000).toISOString();
     render(<StageCard splatId="splat-1" stage={{ kind: "building", progress: 2, startedAt }} onJobChanged={vi.fn()} />);
     expect(screen.queryByText(/left$/)).not.toBeInTheDocument();
+  });
+
+  describe("notify button", () => {
+    const building = { kind: "building", progress: null, startedAt: null } as const;
+
+    function stubNotification(permission: NotificationPermission, answer: NotificationPermission = permission) {
+      vi.stubGlobal("Notification", { permission, requestPermission: vi.fn(async () => answer) });
+    }
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("asks for permission while a stage runs, and goes away once answered", async () => {
+      stubNotification("default", "granted");
+      render(<StageCard splatId="splat-1" stage={building} onJobChanged={vi.fn()} />);
+      fireEvent.click(await screen.findByRole("button", { name: "Notify me when it's done" }));
+
+      await waitFor(() =>
+        expect(screen.queryByRole("button", { name: "Notify me when it's done" })).not.toBeInTheDocument(),
+      );
+    });
+
+    it("goes away if the browser rejects the permission request", async () => {
+      vi.stubGlobal("Notification", {
+        permission: "default",
+        requestPermission: vi.fn(async () => {
+          throw new DOMException("Not allowed in this context", "NotAllowedError");
+        }),
+      });
+      render(<StageCard splatId="splat-1" stage={building} onJobChanged={vi.fn()} />);
+      fireEvent.click(await screen.findByRole("button", { name: "Notify me when it's done" }));
+
+      await waitFor(() =>
+        expect(screen.queryByRole("button", { name: "Notify me when it's done" })).not.toBeInTheDocument(),
+      );
+    });
+
+    it("isn't offered once the visitor has already answered", () => {
+      stubNotification("denied");
+      render(<StageCard splatId="splat-1" stage={building} onJobChanged={vi.fn()} />);
+
+      expect(screen.queryByRole("button", { name: "Notify me when it's done" })).not.toBeInTheDocument();
+    });
   });
 });
