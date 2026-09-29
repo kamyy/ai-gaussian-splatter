@@ -1,3 +1,10 @@
+/**
+ * One splat's card in the /splats library.
+ *
+ * Shows the splat's cover photo, its name and a status chip, and links to the splat's page. splatCardAspect() gives the
+ * library the card's shape, so it can lay the cards out in justified rows.
+ */
+
 import Link from "next/link";
 import { LuImage } from "react-icons/lu";
 

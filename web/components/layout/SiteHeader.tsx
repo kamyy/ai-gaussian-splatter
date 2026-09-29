@@ -1,3 +1,10 @@
+/**
+ * The header bar at the top of every page.
+ *
+ * Shows the app's name, the light and dark mode toggle, and either a sign-up link or, for a signed-in user, a link to
+ * their library, a new-splat button and Clerk's account menu.
+ */
+
 "use client";
 
 import { Show, UserButton } from "@clerk/nextjs";

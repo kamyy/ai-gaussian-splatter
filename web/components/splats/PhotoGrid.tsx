@@ -1,3 +1,12 @@
+/**
+ * The grid of a splat's photos on its page.
+ *
+ * Shows the photos in justified rows (each row stretched to fill the width, keeping every photo's shape), a few rows
+ * per page. Picking a photo selects its camera in the 3D viewer, and hovering one highlights it there. A photo COLMAP
+ * (the structure-from-motion tool in worker/) couldn't place in 3D is faded with a dashed outline and can't be picked.
+ * Arrow keys move between photos.
+ */
+
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";

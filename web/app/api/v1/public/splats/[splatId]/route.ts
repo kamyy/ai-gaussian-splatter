@@ -1,3 +1,10 @@
+/**
+ * GET /api/v1/public/splats/[splatId]: a shared splat, readable without signing in.
+ *
+ * Returns a splat's public details only when its owner has made it shareable and it has finished processing. This route
+ * deliberately doesn't call requireUser(), which is what makes it public.
+ */
+
 import { type NextRequest, NextResponse } from "next/server";
 
 import { getPublicSplat } from "@/lib/server/data";

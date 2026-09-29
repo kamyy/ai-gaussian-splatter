@@ -1,3 +1,11 @@
+/**
+ * The app's Postgres connection pool, through Drizzle.
+ *
+ * getDb() returns the shared Drizzle client (Drizzle is the typed SQL query builder the app uses), creating the
+ * connection pool on first use. In production the pool fetches the rotating database password for each new connection
+ * and retries once when the password has just changed. closeDb() shuts the pool, which tests call so Vitest can exit.
+ */
+
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { DatabaseError, Pool, type PoolClient } from "pg";
 

@@ -1,3 +1,10 @@
+/**
+ * The list of pipeline steps on a splat's page, with how far along the splat is.
+ *
+ * Shows each step from upload to a finished splat, marking the ones done and the one running. The two GPU steps also
+ * show how long they took, counting up live while they run.
+ */
+
 "use client";
 
 import { LuCheck } from "react-icons/lu";

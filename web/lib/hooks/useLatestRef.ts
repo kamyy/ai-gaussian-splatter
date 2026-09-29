@@ -1,7 +1,12 @@
+/**
+ * A ref that always holds a value's latest version.
+ *
+ * For an effect or a cleanup that has to read a value without re-running every time that value changes. The ref is
+ * updated after each render commits.
+ */
+
 import { useEffect, useRef } from "react";
 
-// A ref holding the latest committed value, for an effect or cleanup that has to read value without re-running each
-// time it changes.
 export function useLatestRef<T>(value: T) {
   const ref = useRef(value);
   useEffect(() => {

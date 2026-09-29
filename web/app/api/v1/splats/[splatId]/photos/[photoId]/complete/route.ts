@@ -1,3 +1,11 @@
+/**
+ * POST /api/v1/splats/[splatId]/photos/[photoId]/complete: confirm a photo finished uploading.
+ *
+ * The browser uploads each photo straight to S3 (AWS's file storage), so the app never sees the bytes. It calls this
+ * afterwards, and the route checks the objects really are in S3 and within the size limits before marking the photo
+ * uploaded. Only uploaded photos reach the worker.
+ */
+
 import { and, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { MAX_PHOTO_BYTES } from "@/lib/limits";

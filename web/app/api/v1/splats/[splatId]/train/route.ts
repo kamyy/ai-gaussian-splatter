@@ -1,3 +1,12 @@
+/**
+ * POST /api/v1/splats/[splatId]/train: start the training stage.
+ *
+ * The check stage's build button calls this once the visitor has looked over the point cloud, optionally with a crop
+ * box. It launches the second GPU spot instance for a job whose reconstruct stage stopped at "awaiting_training",
+ * reusing that job's own id and callback token rather than creating a new job row (see worker/run_job.py's stage
+ * split).
+ */
+
 import { and, desc, eq, notInArray } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -34,11 +43,6 @@ const trainSchema = z.object({
     .optional(),
 });
 
-/**
- * The check stage's build button calls this. It launches the second EC2 spot instance for a job whose reconstruct phase
- * already self-terminated at "awaiting_training", reusing that job's own id/callbackToken rather than creating a new
- * job row (see worker/run_job.py's stage split).
- */
 export const POST = withErrorHandling(
   async (request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/train">) => {
     const env = getEnv();

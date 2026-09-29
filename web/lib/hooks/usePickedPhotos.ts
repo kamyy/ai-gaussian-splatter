@@ -1,3 +1,13 @@
+/**
+ * Photo picking for the new-splat form.
+ *
+ * Holds the photos a visitor drops onto web/components/splats/NewSplatForm.tsx before they are uploaded. Each photo is
+ * measured as it's added (pixel size, a small JPEG thumbnail, and when it was taken), because the server stores that
+ * size so web/components/splats/PhotoGrid.tsx can lay out its rows before any image loads. A file over the server's
+ * size limit, or one this browser can't decode, is turned away with a snackbar (a toast message) instead of failing
+ * halfway through an upload.
+ */
+
 import { useState } from "react";
 
 import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
@@ -6,14 +16,8 @@ import { fileKey, measurePhotos, type PickedPhoto } from "@/lib/measurePhoto";
 
 const MAX_PHOTO_MB = MAX_PHOTO_BYTES / (1024 * 1024);
 
-/**
- * The photos picked for a new splat, oldest taken first, with each file picked at most once. Each photo is measured as
- * it's added, because the server stores its size for web/components/splats/PhotoGrid.tsx. A photo too large for the
- * server, or one this browser can't decode, is turned away with a snackbar rather than failing mid-upload.
- *
- * measuring is set while any added batch is still being measured. Submitting waits for it, or those photos would be
- * left out of the upload.
- */
+// The photos come back oldest taken first, with each file at most once. measuring is set while any added batch is still
+// being measured. Submitting waits for it, or those photos would be left out of the upload.
 export function usePickedPhotos() {
   const { enqueueSnackbar } = useAppSnackbar();
   const [photos, setPhotos] = useState<PickedPhoto[]>([]);

@@ -1,3 +1,12 @@
+/**
+ * How the app finds and authenticates to Postgres.
+ *
+ * Builds the connection settings from environment variables, adds TLS (encryption) when a certificate bundle is
+ * configured, and fetches the database password from AWS Secrets Manager in production. RDS, AWS's managed Postgres,
+ * rotates that password on a schedule, so the web service fetches it again for each new connection rather than once at
+ * startup.
+ */
+
 import { readFileSync } from "node:fs";
 
 import type { ConnectionOptions } from "node:tls";

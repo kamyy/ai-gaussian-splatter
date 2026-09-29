@@ -1,3 +1,11 @@
+/**
+ * Decides where the 3D view's camera starts.
+ *
+ * Frames the object from the photos' own camera positions when they're known, or from the first 3D file's bounding box
+ * until they are. It runs inside the viewer's React Three Fiber canvas, and hands web/lib/hooks/useCameraFlight.ts the
+ * up direction it chose.
+ */
+
 "use client";
 
 import type { CameraControls } from "@react-three/drei";

@@ -1,3 +1,11 @@
+/**
+ * The form on /splats/new that creates a splat from a name and a set of photos.
+ *
+ * The visitor names the splat and drops photos onto it, previewed in justified rows. Submitting creates the splat,
+ * uploads the photos straight to S3 (AWS's file storage), and starts processing, then moves to the new splat's page. If
+ * an upload fails partway, a retry reuses the splat and sends only the photos that didn't make it.
+ */
+
 "use client";
 
 import { useAuth } from "@clerk/nextjs";

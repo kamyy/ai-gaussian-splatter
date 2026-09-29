@@ -1,6 +1,12 @@
-import { clerkMiddleware } from "@clerk/nextjs/server";
+/**
+ * Runs Clerk's middleware ahead of every page and API route.
+ *
+ * Next.js runs this file's default export before each matching request. clerkMiddleware() reads the Clerk session
+ * cookie, so later code can tell who is signed in. It doesn't block anyone itself: pages and API routes check sign-in
+ * on their own. The matcher is the list of URL patterns it runs for. It skips static files by extension.
+ */
 
-// See https://clerk.com/docs/nextjs/getting-started/quickstart
+import { clerkMiddleware } from "@clerk/nextjs/server";
 
 export default clerkMiddleware();
 export const config = {

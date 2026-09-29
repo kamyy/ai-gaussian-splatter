@@ -1,3 +1,10 @@
+/**
+ * The app's button, in each of its variants and sizes.
+ *
+ * Button is a <button> with the app's styling and an optional loading spinner. buttonClassName() gives a Next.js <Link>
+ * the same look, for a navigation that should look like a button.
+ */
+
 import { forwardRef } from "react";
 import { Spinner } from "@/components/ui/Spinner";
 import { cn } from "@/lib/cn";

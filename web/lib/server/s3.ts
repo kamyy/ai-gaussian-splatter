@@ -1,3 +1,12 @@
+/**
+ * Everything the app stores in S3, AWS's file storage: photo uploads, and the worker's results.
+ *
+ * Builds the object keys (paths) photos are stored under, and presigned URLs, time-limited links that let the browser
+ * upload or download a file directly without the app handling the bytes. It also reads back an object's size, and
+ * deletes a splat's objects. Uploads are only presigned by the API, so the rate limit is enforced before any bytes
+ * reach S3.
+ */
+
 import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
@@ -11,8 +20,6 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 import type { CameraPose } from "@/lib/types";
 import { getEnv } from "./env";
-
-// Presigned S3 URLs. Uploads always go through this API, so the rate limit is enforced before any bytes hit S3.
 
 const PRESIGN_EXPIRY_SECONDS = 15 * 60;
 

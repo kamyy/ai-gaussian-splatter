@@ -1,3 +1,10 @@
+/**
+ * The /splats page: the signed-in user's library of splats.
+ *
+ * Lists every splat as a card, filterable by what it needs next, and pages them in whole rows sized to each cover
+ * photo's shape. An empty library shows a prompt to make the first splat instead.
+ */
+
 "use client";
 
 import Link from "next/link";

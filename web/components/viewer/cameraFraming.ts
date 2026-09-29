@@ -1,3 +1,11 @@
+/**
+ * The maths for where the 3D view's camera starts, and for the initial crop box.
+ *
+ * Pure functions, with no React. They frame the object from the photos' own camera positions when those are known, or
+ * from the point cloud's bounding box otherwise, trimming stray points so they don't pull the view away. They also fit
+ * the crop box the visitor starts from.
+ */
+
 import { Box3, Matrix3, Matrix4, Quaternion, Vector3 } from "three";
 
 import type { CameraPose, CropBox } from "@/lib/types";

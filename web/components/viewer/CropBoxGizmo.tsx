@@ -1,3 +1,10 @@
+/**
+ * The draggable crop box in the 3D view.
+ *
+ * The visitor drags its handles to mark the part of the point cloud worth training, so the splat leaves out the room
+ * around the object. The box is sent with the build request.
+ */
+
 "use client";
 
 import { Edges, PivotControls } from "@react-three/drei";

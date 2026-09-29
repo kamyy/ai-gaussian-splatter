@@ -1,3 +1,11 @@
+/**
+ * The 3D viewer: a WebGL canvas showing either the finished splat or COLMAP's point cloud.
+ *
+ * Built on React Three Fiber (a React renderer for the Three.js 3D library). The visitor orbits, pans and zooms with
+ * the mouse or touch. The viewer can also draw the photos' cameras, fly to one, and show a crop box. Switching between
+ * the splat and the point cloud keeps the camera where it was, because both share one coordinate frame.
+ */
+
 "use client";
 
 import { CameraControls, PerspectiveCamera } from "@react-three/drei";

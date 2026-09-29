@@ -1,5 +1,11 @@
-// Justified rows computed in JavaScript, for a paged area whose page breaks have to fall between rows. Every size is in
-// CSS pixels, and each aspect is a photo's width over its height.
+/**
+ * The maths for justified rows: fitting photos of different shapes into rows of equal width.
+ *
+ * Each row is scaled so its photos fill the width exactly while keeping their shapes, which is how the library, the
+ * photo grid and the new-splat previews lay out. It's computed in JavaScript rather than CSS because the areas are
+ * paged, and page breaks have to fall between rows. Every size is in CSS pixels, and each aspect is a photo's width
+ * over its height.
+ */
 
 export interface LayoutTile {
   // The photo's position in the list the aspects came from.

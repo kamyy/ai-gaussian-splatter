@@ -1,3 +1,10 @@
+/**
+ * The decorative vase made of dots on the signed-out landing page.
+ *
+ * It stands in for a real Gaussian Splat render (a 3D scene drawn as many soft, colored blobs) without loading any 3D
+ * library. The dots are generated from a fixed seed, so the server and the browser draw the same picture.
+ */
+
 // Every position is in the component's own 320×420 px box, which the markup below sizes with the matching rem classes.
 const WIDTH = 320;
 const HEIGHT = 420;

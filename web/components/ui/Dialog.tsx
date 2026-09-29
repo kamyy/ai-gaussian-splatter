@@ -1,3 +1,10 @@
+/**
+ * The app's modal dialog.
+ *
+ * A thin wrapper that gives Radix's Dialog the app's styling. Radix handles the hard parts of a modal, such as trapping
+ * keyboard focus inside it and closing on Escape, but ships unstyled.
+ */
+
 "use client";
 
 import * as DialogPrimitive from "@radix-ui/react-dialog";

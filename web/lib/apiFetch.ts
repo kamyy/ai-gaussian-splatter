@@ -1,5 +1,11 @@
-// Typed REST client for the Route Handlers in web/app/api/v1/. Authenticated endpoints take a Clerk session token,
-// obtained client-side via useAuth().getToken() and passed in by callers (web/lib/hooks/).
+/**
+ * The browser's typed client for the app's own REST API.
+ *
+ * Every call from the browser to the Route Handlers in web/app/api/v1/ goes through apiFetch(). It sends JSON, attaches
+ * the Clerk session token for authenticated endpoints, and turns an error response into a thrown Error carrying the
+ * response body as its message. Callers get the token with Clerk's useAuth().getToken() and pass it in, as the SWR
+ * hooks in web/lib/hooks/ do.
+ */
 
 export async function apiFetch<T>(
   path: string,

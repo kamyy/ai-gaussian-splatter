@@ -1,3 +1,12 @@
+/**
+ * Launches, looks up and stops the GPU instances that run worker jobs.
+ *
+ * Each worker-job stage (reconstruct, then train) runs on its own EC2 spot instance, a discounted AWS virtual machine
+ * that AWS can reclaim. This file starts one directly, with no job queue in between, passing it a startup script that
+ * pulls the worker's container image and runs the stage. The instance profile these launches pass is defined in
+ * infra/worker_iam.tf. In local dev it can run the worker container on this machine instead.
+ */
+
 import { execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mkdirSync, openSync } from "node:fs";
@@ -12,9 +21,6 @@ import {
 
 import type { CropBox } from "@/lib/types";
 import { getEnv } from "./env";
-
-// Launches one spot instance directly per worker-job stage, with no SQS, Batch, or Step Functions in between. The
-// instance profile these launches pass is defined in infra/worker_iam.tf.
 
 type WorkerStage = "reconstruct" | "train";
 

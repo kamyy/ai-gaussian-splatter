@@ -1,3 +1,11 @@
+/**
+ * POST /api/v1/splats/[splatId]/process: start processing a splat.
+ *
+ * Creates a worker job and launches its first GPU spot instance, which runs the reconstruct stage (COLMAP, the
+ * structure-from-motion step that works out where each photo was taken). This is the expensive step, so it is where the
+ * site-wide daily cap on worker jobs applies, and where at most one active job per splat is enforced.
+ */
+
 import { and, count, eq, lt, notInArray } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { MAX_PHOTOS_PER_SPLAT } from "@/lib/limits";

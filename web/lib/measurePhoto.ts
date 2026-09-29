@@ -1,3 +1,11 @@
+/**
+ * Reads a picked photo's size, date and a small thumbnail in the browser before upload.
+ *
+ * Decoding each photo on the visitor's machine gives the server the pixel size (which the photo grid needs to lay out
+ * rows before images load), when it was taken (from the EXIF data cameras write into the file), and a small JPEG copy
+ * for thumbnails. A photo this browser can't decode is reported rather than uploaded.
+ */
+
 // A photo picked for upload, with its size as an <img> displays it, a small JPEG copy, and when it was taken.
 // web/lib/hooks/usePickedPhotos.ts measures each photo as it's added, so every photo that reaches
 // web/lib/uploadPhotos.ts has all three to store.

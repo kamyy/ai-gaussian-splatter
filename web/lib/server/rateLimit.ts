@@ -1,20 +1,20 @@
+/**
+ * Rate limits per IP address and per user, and the site-wide daily cap on worker jobs.
+ *
+ * Each check counts one request in a Postgres counter and throws a 429 once the limit is passed. The counter update is
+ * a single INSERT ... ON CONFLICT ... DO UPDATE SET count = count + 1 RETURNING count, so the check-and-increment is
+ * race-free without a read-then-write step. The `set` clause must keep referencing the column, never a JavaScript
+ * value. AGENTS.md has the race that reopens, and how to check the SQL Postgres actually received.
+ *
+ * Checks are per endpoint rather than blanket middleware, since cheap reads shouldn't be throttled. The costly
+ * endpoints stay easy to audit this way too.
+ */
+
 import { sql } from "drizzle-orm";
 
 import { getDb } from "./db";
 import { globalJobCounters, rateLimitCounters } from "./db/schema";
 import { HttpError } from "./httpError";
-
-/**
- * Rate limiting & the global daily job cap.
- *
- * Counters are incremented with a single `INSERT ... ON CONFLICT ... DO UPDATE SET count = count + 1 RETURNING count`,
- * so the check-and-increment is race-free without a read-then-write step. The `set` clause must keep referencing the
- * column, never a JavaScript value. AGENTS.md has the race that reopens. It also documents how to check the SQL
- * Postgres actually received.
- *
- * Checks are per-endpoint rather than blanket middleware, since cheap reads shouldn't be throttled. The costly
- * endpoints stay easy to audit this way too.
- */
 
 export async function checkAndIncrementIp(ip: string, limitPerHour: number): Promise<void> {
   await checkAndIncrement(`ip:${ip}`, truncateToHour(new Date()), limitPerHour);

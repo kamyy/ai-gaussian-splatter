@@ -1,5 +1,10 @@
-// Zustand store for the client-only UI state SWR doesn't cover: upload progress before the server has acknowledged it.
-// Server data (splats, job status) lives in SWR's cache instead. See the SWR hooks in web/lib/hooks/.
+/**
+ * The browser-side store for upload progress.
+ *
+ * Zustand is a small state library. This store holds the one piece of client-only state the app has: each photo's
+ * upload progress, before the server has acknowledged it. Data the server owns (splats, job status) lives in SWR's
+ * cache instead, through the hooks in web/lib/hooks/.
+ */
 
 import { create } from "zustand";
 

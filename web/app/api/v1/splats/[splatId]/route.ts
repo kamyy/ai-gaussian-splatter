@@ -1,3 +1,10 @@
+/**
+ * GET and DELETE /api/v1/splats/[splatId]: read one splat, or delete it.
+ *
+ * GET returns the splat for its owner. DELETE removes the splat with everything it owns, in the database and in S3
+ * (AWS's file storage), after stopping any worker still running for it.
+ */
+
 import { and, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 

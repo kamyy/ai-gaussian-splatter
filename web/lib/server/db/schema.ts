@@ -1,3 +1,11 @@
+/**
+ * The database schema: every Postgres table, enum and index, as Drizzle definitions.
+ *
+ * This is the source of truth for the database. Editing it doesn't change the database by itself. `pnpm db:generate`
+ * writes a migration into web/drizzle/ from the difference, and `pnpm db:migrate` applies it. The exported table
+ * objects are also what queries import.
+ */
+
 import { sql } from "drizzle-orm";
 import {
   bigserial,

@@ -1,3 +1,11 @@
+/**
+ * Flies the 3D view to a picked photo's viewpoint, and levels it out again afterwards.
+ *
+ * When the visitor picks a photo, the view animates to where that photo was taken, matching its angle and zoom, so the
+ * 3D scene lines up with the photo. Once the visitor drags the view away, it tilts back upright and zooms back out.
+ * This runs inside the viewer's React Three Fiber canvas, animating a little every frame.
+ */
+
 "use client";
 
 import type { CameraControls } from "@react-three/drei";

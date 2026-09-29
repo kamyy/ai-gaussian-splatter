@@ -1,3 +1,10 @@
+/**
+ * Configuration for the Vitest unit and integration tests.
+ *
+ * Splits the tests into two projects: "client" runs component and browser-side tests in jsdom (a simulated browser),
+ * and "server" runs Route Handler and database tests in plain Node against a real test Postgres.
+ */
+
 import { existsSync, readFileSync } from "node:fs";
 import { parseEnv } from "node:util";
 import react from "@vitejs/plugin-react";

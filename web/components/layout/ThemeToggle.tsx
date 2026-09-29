@@ -1,12 +1,17 @@
+/**
+ * The header's button that switches between light and dark mode.
+ *
+ * It shows the icon for the mode a click switches to, not the current mode: a moon in light mode ("turn dark on") and a
+ * sun in dark mode ("turn dark off"). next-themes stores the choice and sets the data-theme attribute that
+ * web/app/globals.css reads.
+ */
+
 "use client";
 
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { LuMoon, LuSun } from "react-icons/lu";
 
-// Shows the icon for the mode a click switches to, not the current mode: a moon in light mode ("turn dark on") and a
-// sun in dark mode ("turn dark off"). web/components/layout/SiteHeader.tsx renders it, as part of the one header every
-// page shares.
 //
 // The server can't know the visitor's theme, so the first client render has to match the server's "light" (the :root
 // default in web/app/globals.css) or React reports a hydration mismatch. next-themes already knows resolvedTheme on

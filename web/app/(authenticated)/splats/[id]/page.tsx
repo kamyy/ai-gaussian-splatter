@@ -1,3 +1,11 @@
+/**
+ * The /splats/[id] page: one splat's workspace, from processing through to sharing.
+ *
+ * Loads the splat, its latest worker job, its photos and its camera positions, then shows the stage the splat is at: a
+ * card with that stage's actions, the pipeline's progress, the 3D viewer and the photo grid. The viewer and the grid
+ * share one selected photo, so picking a photo in either shows it in both.
+ */
+
 "use client";
 
 import { use, useEffect, useState } from "react";

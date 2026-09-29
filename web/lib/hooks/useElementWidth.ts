@@ -1,7 +1,12 @@
+/**
+ * Measures an element's width, and keeps measuring as it changes.
+ *
+ * Returns a setter to pass as the element's ref, and its content-box width, kept current with a ResizeObserver (the
+ * browser API that reports size changes). The width is 0 until the element has rendered and been measured.
+ */
+
 import { useEffect, useState } from "react";
 
-// An element's content-box width, kept current with a ResizeObserver. Pass the returned setter as the element's ref.
-// The width is 0 until the element has rendered and been measured.
 export function useElementWidth<T extends HTMLElement>() {
   const [element, setElement] = useState<T | null>(null);
   const [width, setWidth] = useState(0);

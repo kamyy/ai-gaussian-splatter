@@ -1,3 +1,9 @@
+/**
+ * A small colored pill for a status label.
+ *
+ * The library's cards use it to show what state a splat is in.
+ */
+
 import { cn } from "@/lib/cn";
 
 export type ChipColor = "default" | "primary" | "success" | "error" | "info";

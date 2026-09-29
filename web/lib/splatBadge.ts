@@ -1,3 +1,10 @@
+/**
+ * The status label and color a splat's card shows in the /splats library.
+ *
+ * Turns a splat's status and its latest job's status into a short label such as "Check the shape", a chip color, and
+ * the library filter tab ("Needs you", "In progress", "Complete") that lists it.
+ */
+
 import type { ChipColor } from "@/components/ui/Chip";
 import { JobStatus } from "./statuses";
 import type { SplatListItem } from "./types";

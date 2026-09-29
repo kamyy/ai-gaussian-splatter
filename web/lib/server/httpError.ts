@@ -1,3 +1,11 @@
+/**
+ * How Route Handlers report errors as HTTP responses.
+ *
+ * Code anywhere in a handler's call stack throws an HttpError with a status code, and withErrorHandling() wraps each
+ * handler to turn it into a JSON error response. Anything else is rethrown, so Next.js logs it and answers with a 500.
+ * requireUuid() checks an id from the URL before it reaches the database.
+ */
+
 import { NextResponse } from "next/server";
 
 /**

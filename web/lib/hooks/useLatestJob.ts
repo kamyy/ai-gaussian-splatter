@@ -1,3 +1,10 @@
+/**
+ * Fetches a splat's latest worker job, and keeps polling it while the job runs.
+ *
+ * An SWR hook over GET /api/v1/splats/[splatId]/jobs/latest. The splat's page polls it to show the pipeline's progress.
+ * Polling speeds up near the end of a run and stops once the job has ended.
+ */
+
 "use client";
 
 import { useAuth } from "@clerk/nextjs";

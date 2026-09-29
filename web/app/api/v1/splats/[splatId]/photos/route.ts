@@ -1,3 +1,10 @@
+/**
+ * GET /api/v1/splats/[splatId]/photos: the splat's uploaded photos.
+ *
+ * Returns every uploaded photo, oldest taken first, with presigned URLs (time-limited S3 links) for the full image and
+ * its thumbnail, plus its pixel size so the photo grid can lay out rows before any image loads.
+ */
+
 import { and, asc, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 

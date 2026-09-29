@@ -1,7 +1,12 @@
+/**
+ * Page frame for the splat workspace: the library, the new-splat form and each splat's page.
+ *
+ * Renders the site header above a content area pinned to the viewport height, so a splat page's 3D viewer can fill
+ * exactly the space the header leaves while the library and the form still scroll normally.
+ */
+
 import { SiteHeader } from "@/components/layout/SiteHeader";
 
-// Pinned to the viewport height with only the content area scrolling, so a splat page's viewer can fill exactly the
-// space the header leaves (h-full) while the library and the new-splat form still scroll normally.
 // The scrollbar's space is always reserved. web/lib/hooks/useJustifiedPages.ts lays photos out for the width it measures,
 // and a scrollbar that appears only once they render would narrow that width, re-lay them out shorter, disappear, and
 // repeat every frame.

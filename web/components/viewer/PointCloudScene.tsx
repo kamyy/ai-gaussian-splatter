@@ -1,3 +1,11 @@
+/**
+ * Loads and draws COLMAP's point cloud in the 3D view.
+ *
+ * The point cloud is the rough cloud of colored points COLMAP (the structure-from-motion tool in worker/) builds from
+ * the photos. It's the "shape sketch" the visitor checks before training. This component downloads the .ply file once
+ * when it mounts, and reports the points' bounding box so the view can frame them.
+ */
+
 "use client";
 
 import { useEffect, useState } from "react";

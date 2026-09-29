@@ -1,3 +1,10 @@
+/**
+ * How long each GPU stage of a worker job took, and how to show those durations.
+ *
+ * Splits each stage into the instance's start-up and the work itself, from the timestamps the worker reports.
+ * web/components/splats/PipelineStepper.tsx shows them beside its steps.
+ */
+
 import { JobStatus } from "./statuses";
 import type { Job } from "./types";
 

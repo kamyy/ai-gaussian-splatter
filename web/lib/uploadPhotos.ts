@@ -1,6 +1,12 @@
-// The presign, PUT, complete loop for photo uploads. web/components/splats/NewSplatForm.tsx calls it right after
-// creating a splat, which is the only place photos can be added. Progress goes through Zustand's vanilla store API, so
-// this plain async function works from that caller's event handler without a hook of its own.
+/**
+ * Uploads a new splat's photos, with per-photo progress.
+ *
+ * For each batch it asks the API for presigned URLs (time-limited links that let the browser upload straight to S3,
+ * AWS's file storage), uploads each photo and its thumbnail to them, and then tells the API each photo is complete.
+ * web/components/splats/NewSplatForm.tsx calls it right after creating a splat, which is the only place photos can be
+ * added. Progress goes through Zustand's plain store API (web/lib/store.ts), so this ordinary async function can report
+ * it from an event handler without a hook of its own.
+ */
 
 import { apiFetch } from "./apiFetch";
 import type { PickedPhoto } from "./measurePhoto";

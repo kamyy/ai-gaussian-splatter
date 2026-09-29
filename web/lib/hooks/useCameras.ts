@@ -1,3 +1,10 @@
+/**
+ * Fetches the camera positions COLMAP worked out for a splat's photos.
+ *
+ * An SWR hook over GET /api/v1/splats/[splatId]/cameras. COLMAP is the structure-from-motion tool in worker/ that works
+ * out where each photo was taken. The splat's page uses the result to draw the cameras and to fly the view to one.
+ */
+
 "use client";
 
 import { useAuth } from "@clerk/nextjs";

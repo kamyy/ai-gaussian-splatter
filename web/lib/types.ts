@@ -1,4 +1,9 @@
-// Wire types for the REST API in web/app/api/v1/. The status values these reference live in web/lib/statuses.ts.
+/**
+ * The TypeScript shapes of the REST API's JSON: what each endpoint in web/app/api/v1/ sends and receives.
+ *
+ * The browser and the Route Handlers both import these, so a field renamed on one side fails the type check on the
+ * other. The status values they reference live in web/lib/statuses.ts.
+ */
 
 import type { JobStatus, SplatStatus } from "./statuses";
 

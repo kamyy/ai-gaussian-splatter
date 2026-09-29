@@ -1,3 +1,10 @@
+/**
+ * How one snackbar (toast message) looks.
+ *
+ * notistack is the library that stacks toast messages in the corner of the screen. This component replaces its default
+ * look with the app's own: a rounded box colored for its variant, with a close button.
+ */
+
 "use client";
 
 import { type CustomContentProps, closeSnackbar } from "notistack";

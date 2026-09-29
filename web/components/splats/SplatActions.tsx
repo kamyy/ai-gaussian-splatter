@@ -1,3 +1,10 @@
+/**
+ * The Discard and Stop buttons for a splat, each behind a confirmation dialog.
+ *
+ * DeleteSplatButton deletes the splat with its photos and results. StopJobButton stops the worker job that's running
+ * for it. Neither can be undone, so both ask first.
+ */
+
 "use client";
 
 import { useAuth } from "@clerk/nextjs";

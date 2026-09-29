@@ -1,3 +1,11 @@
+/**
+ * GET /api/v1/splats/[splatId]/jobs/latest: the splat's most recent worker job.
+ *
+ * The splat's page polls this to show pipeline progress. Each poll also checks that the job's GPU instance is still
+ * alive (web/lib/server/reconcileJob.ts), because a worker that died never calls back to say so, and this poll is where
+ * that gets noticed.
+ */
+
 import { and, desc, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 

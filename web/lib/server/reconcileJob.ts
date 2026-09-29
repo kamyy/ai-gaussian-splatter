@@ -1,3 +1,10 @@
+/**
+ * Notices a worker job whose GPU instance has died, and fails it.
+ *
+ * A worker that crashes or is reclaimed never calls back to say so. Each time the splat's page polls its latest job,
+ * this checks whether a job that has been quiet for a while still has a live instance, and marks it failed if not.
+ */
+
 import { and, eq } from "drizzle-orm";
 
 import { JobStatus } from "@/lib/statuses";

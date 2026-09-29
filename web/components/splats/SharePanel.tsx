@@ -1,3 +1,9 @@
+/**
+ * The share and download controls for a finished splat.
+ *
+ * Offers the public link to the splat, a copy button for it, and a download of the full splat file.
+ */
+
 "use client";
 
 import { useAuth } from "@clerk/nextjs";

@@ -1,3 +1,11 @@
+/**
+ * Works out which stage a splat is at, from its latest worker job.
+ *
+ * The splat's page uses the result to pick the stage card to show and to mark the pipeline's current step. It turns the
+ * database's job statuses into the five steps a visitor sees: upload, place the cameras, check the shape, build, and
+ * share.
+ */
+
 import { JobStatus } from "./statuses";
 import type { Job } from "./types";
 

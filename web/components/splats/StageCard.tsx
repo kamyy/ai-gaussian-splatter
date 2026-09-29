@@ -1,3 +1,11 @@
+/**
+ * The card on a splat's page that says what happens next.
+ *
+ * Each stage of a splat (no photos, ready to process, placing the cameras, waiting for the visitor's check, building,
+ * failed, cancelled) has its own heading, explanation and buttons, such as starting processing, building the splat, or
+ * stopping a run. While the splat builds, it shows a progress bar with a time estimate.
+ */
+
 "use client";
 
 import { useAuth } from "@clerk/nextjs";

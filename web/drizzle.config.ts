@@ -1,15 +1,19 @@
+/**
+ * Configuration for the drizzle-kit CLI, which generates database migrations.
+ *
+ * Used only by the drizzle-kit CLI (`db:generate` and `db:studio`). The running app gets its connection separately,
+ * from the pg Pool in web/lib/server/db/index.ts, which takes discrete fields and re-fetches the RDS password for each
+ * new connection instead of assembling a URL.
+ *
+ * `casing` is deliberately not set. Every column in web/lib/server/db/schema.ts states its database name explicitly, so
+ * there is no naming rule that could drift between what drizzle-kit writes into a migration and what the running app
+ * queries. See AGENTS.md.
+ */
+
 import { defineConfig } from "drizzle-kit";
 
 import { databaseSsl, resolveDatabaseUrl } from "./lib/server/databaseUrl";
 
-// Used only by the drizzle-kit CLI (`db:generate` and `db:studio`). The running app gets its connection separately,
-// from the pg Pool in web/lib/server/db/index.ts, which takes discrete fields and re-fetches the RDS password for each
-// new connection instead of assembling a URL.
-//
-// `casing` is deliberately not set. Every column in web/lib/server/db/schema.ts states its database name explicitly, so
-// there is no naming rule that could drift between what drizzle-kit writes into a migration and what the running app
-// queries. See AGENTS.md.
-//
 // An empty string rather than a throw when unset, because `drizzle-kit generate` only diffs the schema against the
 // checked-in snapshot and needs no database.
 export default defineConfig({

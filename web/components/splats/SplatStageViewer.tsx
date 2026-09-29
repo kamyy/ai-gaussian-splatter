@@ -1,3 +1,11 @@
+/**
+ * The 3D viewer panel on a splat's page, with its controls.
+ *
+ * Wraps web/components/viewer/SplatViewer.tsx with the buttons around it: switching between the finished splat and
+ * COLMAP's point cloud, showing the photos' cameras, drawing a crop box, and sizing the points. It also fetches the
+ * time-limited download links each 3D file loads from.
+ */
+
 "use client";
 
 import { useMemo, useState } from "react";

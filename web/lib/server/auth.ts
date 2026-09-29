@@ -1,3 +1,12 @@
+/**
+ * Who is calling an API route, and whether they're allowed to.
+ *
+ * requireUser() and requireClerkUserId() are how each authenticated Route Handler checks for a Clerk session.
+ * requireUser() also creates the user's own database row on their first request. getJobForCallbackToken() checks the
+ * worker's per-job bearer token instead, for the status callback. getClientIp() reads the caller's IP address for rate
+ * limiting.
+ */
+
 import { auth } from "@clerk/nextjs/server";
 import { eq } from "drizzle-orm";
 import type { NextRequest } from "next/server";

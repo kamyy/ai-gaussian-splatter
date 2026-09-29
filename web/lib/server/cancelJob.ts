@@ -1,3 +1,10 @@
+/**
+ * Cancels a splat's active worker job and stops its GPU instance.
+ *
+ * Used by the cancel route, and by the delete route before a splat is removed. The update only lands while the job
+ * hasn't already ended, so a cancel racing the worker's final callback can't bring an ended job back.
+ */
+
 import { and, desc, eq, notInArray } from "drizzle-orm";
 
 import { JOB_ENDED_STATUSES, JobStatus } from "@/lib/statuses";

@@ -1,3 +1,10 @@
+/**
+ * Lays photos out in justified rows and splits the rows into pages.
+ *
+ * Measures the area it's given, fits the photos into rows of that width with web/lib/justifiedLayout.ts, and tracks the
+ * current page. The library, the photo grid and the new-splat previews all use it with web/components/ui/Pager.tsx.
+ */
+
 import { useCallback, useMemo, useState } from "react";
 
 import { type LayoutTile, layoutPages } from "@/lib/justifiedLayout";

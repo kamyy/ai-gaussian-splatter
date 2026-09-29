@@ -1,7 +1,12 @@
+/**
+ * A spinning ring that shows something is loading.
+ *
+ * A faint full ring with an arc running round it, both in the text color, so it matches whatever it sits on. "small"
+ * fits beside a button's label and "large" is a loading state on its own. Each ring is an eighth of its width thick.
+ */
+
 import { cn } from "@/lib/cn";
 
-// A faint full ring with an arc running round it, both in the text color, so it matches whatever it sits on. "small"
-// fits beside a button's label and "large" is a loading state on its own. Each ring is an eighth of its width thick.
 const SIZE = {
   small: "h-4 w-4 border-2",
   large: "h-8 w-8 border-4",

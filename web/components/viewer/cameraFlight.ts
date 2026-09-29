@@ -1,3 +1,11 @@
+/**
+ * The maths behind flying the 3D view to a photo's viewpoint.
+ *
+ * Pure functions, with no React, that work out the camera pose that sees what a photo saw, the field of view that fits
+ * the photo's frame, and the in-between poses of the flight. web/lib/hooks/useCameraFlight.ts animates the view with
+ * them.
+ */
+
 import { MathUtils, Matrix4, Quaternion, Vector3 } from "three";
 
 import type { CameraPose } from "@/lib/types";

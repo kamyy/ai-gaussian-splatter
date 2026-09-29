@@ -1,8 +1,14 @@
+/**
+ * The card frame every stage of a splat's page sits in.
+ *
+ * It gives each stage the same heading, text and actions layout. web/components/splats/StageCard.tsx and
+ * web/components/splats/SharePanel.tsx fill it in.
+ */
+
 import { useId } from "react";
 
 import { cn } from "@/lib/cn";
 
-// The card every stage of the splat page sits in, headed by what the visitor can do or is waiting on.
 export function StageShell({
   title,
   tone = "default",

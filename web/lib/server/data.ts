@@ -1,3 +1,11 @@
+/**
+ * Database reads for the public share page, called directly by Server Components.
+ *
+ * The share page (web/app/(public)/preview/splats/[id]/page.tsx) and its link-preview metadata render from these
+ * without anyone signing in. They live outside the Route Handlers so Server Components can call them directly, rather
+ * than the server making an HTTP request to itself.
+ */
+
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { and, desc, eq } from "drizzle-orm";
@@ -8,14 +16,6 @@ import { jobs, splats } from "./db/schema";
 import { getEnv } from "./env";
 import { isUuid } from "./httpError";
 import { presignSplatDownload } from "./s3";
-
-/**
- * Public, unauthenticated reads. The share pages render from these, including the og:title and og:image from
- * generateMetadata.
- *
- * These live outside the Route Handlers so Server Components can call them directly, rather than the server making an
- * HTTP request to itself.
- */
 
 const THUMBNAIL_EXPIRY_SECONDS = 3600;
 

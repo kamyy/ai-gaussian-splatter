@@ -1,3 +1,10 @@
+/**
+ * Fetches a time-limited download link for one of the viewer's 3D files, and keeps it fresh.
+ *
+ * The 3D files live in S3 (AWS's file storage), and the viewer loads them through presigned URLs, links that stop
+ * working after 15 minutes. This hook fetches one from the API and replaces it well before it expires.
+ */
+
 "use client";
 
 import { useAuth } from "@clerk/nextjs";

@@ -1,3 +1,10 @@
+/**
+ * The photos' cameras drawn in the 3D view as small pyramids.
+ *
+ * Each pyramid (a frustum) sits where a photo was taken and points the way it looked. The visitor can click one to
+ * select its photo and hover one to highlight it, and the selected one stands out while the rest fade.
+ */
+
 "use client";
 
 import type { ThreeEvent } from "@react-three/fiber";

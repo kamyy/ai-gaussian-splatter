@@ -1,3 +1,11 @@
+/**
+ * Tells a click on the 3D view apart from the start of a drag.
+ *
+ * Pressing the mouse on the view already turns it slightly, so a click on a camera looks like a tiny drag. This hook
+ * watches the pointer, so web/lib/hooks/useCameraFlight.ts can ignore that small movement while a press may still end
+ * as a click.
+ */
+
 "use client";
 
 import { useThree } from "@react-three/fiber";
