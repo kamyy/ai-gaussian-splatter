@@ -1,6 +1,6 @@
 # AI Gaussian Splatter
 
-Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian Splat viewable and shareable in-browser. This app is public-facing with real abuse protection. A secondary goal is attempting AI/ML processing in the cloud on AWS.
+Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian Splat viewable and shareable in-browser. This app is public-facing with real abuse protection. A secondary goal is using AWS to do AI processing in the cloud for as cheaply as possible. 
 
 **Read [`ARCHITECTURE.md`](ARCHITECTURE.md) for the "why" behind every stack choice, and [`RUNBOOK.md`](RUNBOOK.md) for local dev/ops commands before making changes.**
 
@@ -9,28 +9,29 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
 - [1. Writing docs and comments](#1-writing-docs-and-comments)
 - [2. Structure](#2-structure)
 - [3. Auth (Clerk)](#3-auth-clerk)
-- [4. Next.js & TypeScript](#4-nextjs--typescript)
-- [5. Tailwind & theming](#5-tailwind--theming)
-- [6. CI & repo tooling](#6-ci--repo-tooling)
-  - [6.1 Workflows & branch protection](#61-workflows--branch-protection)
-  - [6.2 Formatting & linting](#62-formatting--linting)
-  - [6.3 Shell scripts](#63-shell-scripts)
-  - [6.4 Git workflow](#64-git-workflow)
-  - [6.5 Testing](#65-testing)
-- [7. Worker (GPU pipeline)](#7-worker-gpu-pipeline)
-- [8. Infra (Terraform / AWS)](#8-infra-terraform--aws)
-  - [8.1 Structure & state](#81-structure--state)
-  - [8.2 Networking & TLS](#82-networking--tls)
-  - [8.3 IAM & secrets](#83-iam--secrets)
-  - [8.4 Deploy: image tags](#84-deploy-image-tags)
-  - [8.5 Variables & state backend](#85-variables--state-backend)
-  - [8.6 Stack construction](#86-stack-construction)
-- [9. Database](#9-database)
-  - [9.1 Schema & migrations (Drizzle)](#91-schema--migrations-drizzle)
-  - [9.2 Query patterns](#92-query-patterns)
-  - [9.3 Local dev & tests](#93-local-dev--tests)
-  - [9.4 Connecting to RDS in production](#94-connecting-to-rds-in-production)
-- [10. State / what's next](#10-state--whats-next)
+- [4. Coding standards](#4-coding-standards)
+- [5. Next.js & TypeScript](#5-nextjs--typescript)
+- [6. Tailwind & theming](#6-tailwind--theming)
+- [7. CI & repo tooling](#7-ci--repo-tooling)
+  - [7.1 Workflows & branch protection](#71-workflows--branch-protection)
+  - [7.2 Formatting & linting](#72-formatting--linting)
+  - [7.3 Shell scripts](#73-shell-scripts)
+  - [7.4 Git workflow](#74-git-workflow)
+  - [7.5 Testing](#75-testing)
+- [8. Worker (GPU pipeline)](#8-worker-gpu-pipeline)
+- [9. Infra (Terraform / AWS)](#9-infra-terraform--aws)
+  - [9.1 Structure & state](#91-structure--state)
+  - [9.2 Networking & TLS](#92-networking--tls)
+  - [9.3 IAM & secrets](#93-iam--secrets)
+  - [9.4 Deploy: image tags](#94-deploy-image-tags)
+  - [9.5 Variables & state backend](#95-variables--state-backend)
+  - [9.6 Stack construction](#96-stack-construction)
+- [10. Database](#10-database)
+  - [10.1 Schema & migrations (Drizzle)](#101-schema--migrations-drizzle)
+  - [10.2 Query patterns](#102-query-patterns)
+  - [10.3 Local dev & tests](#103-local-dev--tests)
+  - [10.4 Connecting to RDS in production](#104-connecting-to-rds-in-production)
+- [11. State / what's next](#11-state--whats-next)
 
 ---
 
@@ -124,17 +125,28 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 ---
 
-## 4. Next.js & TypeScript
+## 4. Coding standards
 
 - **Prefer `function` declarations over arrow functions**, except closures assigned to a local (`const handleClick = () => {...}`) or inline arguments (`.map(x => ...)`, `useEffect(() => {...})`). Top-level: `export function foo() {}`, not `export const foo = () => {}`.
 - **`if`/`for`/`while`/`do` bodies always use a `{ }` block** — never `if (x) return;`. Biome `style/useBlockStatements` (enabled in `biome.json`; not in `recommended`).
-- **Define a file's sub-components above the component that renders them**, so a file reads bottom-up to its main export. A sub-component used by another sub-component goes above that one too, as `Tip` sits above `ShootingTips` in `web/app/(authenticated)/splats/new/page.tsx`.
-- **Every custom hook gets its own file in `web/lib/hooks/`, named after the hook** (`web/lib/hooks/useLatestJob.ts`). This holds even for a hook only one component uses. Its tests go in `web/lib/hooks/tests/`.
+- **Define a file's sub-components and helpers above the component that uses them**, so a file reads bottom-up to its main export. A sub-component used by another sub-component goes above that one too, as `Tip` sits above `ShootingTips` in `web/app/(authenticated)/splats/new/page.tsx`.
+- **A helper that only one file uses is defined in that file, not in a module of its own.** Tests don't count as a use.
+  - Export it only when its tests need it. Those tests go in the using file's own test file, as `pageItems` in `web/components/ui/Pager.tsx` is tested in `web/components/ui/Pager.test.tsx`.
+  - Once a second file uses it, move it under `web/lib/`.
+- **Every custom hook gets its own file in `web/lib/hooks/`, named after the hook** (`web/lib/hooks/useLatestJob.ts`). This holds even for a hook only one file uses. Its tests go in `web/lib/hooks/tests/`.
+- **Split a function once it grows too large to take in at once, or does more than one job.**
+  - Pull each self-contained piece out into a helper, a sub-component, or a custom hook for stateful logic. `web/lib/hooks/useCameraFlight.ts` is the pattern: press tracking went to `web/lib/hooks/useClickPress.ts`, and the per-frame steps became `stepFlight` and `stepLevel`.
+  - Stop where a further split would make the pieces pass shared state back and forth. A flight and levelling out stay in one hook because each cancels the other.
 - **Decide which element renders before the `return`, not inside the JSX.** Branch with `if`/`else`/`switch` or a ternary into a `React.ReactNode` variable, then place `{variable}` in the JSX where the element belongs.
   - Write `let hint: React.ReactNode = null; if (failed) { hint = <p>…</p>; }` and then `{hint}`. Never render an element through `&&`, `||`, or `??` in the JSX body.
   - `web/components/splats/SplatStageViewer.tsx`'s `body` and `web/components/viewer/SplatViewer.tsx`'s `overlay` are the pattern.
   - A branch that Biome keeps on one line can stay inline as a ternary: `{loading ? <Spinner className="h-4 w-4" /> : null}`. Once Biome wraps it over several lines, it moves out to a variable.
   - A ternary that picks a string or a prop value (`className`, label text) is not a render branch and stays inline. So does `&&` inside `cn()`.
+
+---
+
+## 5. Next.js & TypeScript
+
 - **`next typegen` before `tsc --noEmit` on a clean checkout.**
   - Route Handlers use `RouteContext<"/path">`; Next writes those helpers into gitignored `web/.next/types/` during `next dev`/`build`. Without them: `TS2304: Cannot find name 'RouteContext'`.
   - CI and the root `web:check` script run `typegen` first.
@@ -145,11 +157,11 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - Next says so and then serves anyway, so a re-added `pnpm start` looks like it works.
   - `next build` emits `.next/standalone/server.js` (the container's `CMD`), which omits `.next/static`, so running it by hand serves pages with no CSS or JS unless that directory is copied in as `web/Dockerfile` does. Run the container instead ([Building and running the splat-web container locally](RUNBOOK.md#13-building-and-running-the-splat-web-container-locally)).
 - **Server Components reading request-time data need `export const dynamic = "force-dynamic"`**, or `next build` statically prerenders them. They call `web/lib/server/data.ts` directly — not the Route Handlers under `web/app/api/v1/`.
-- **Playwright `page.route()` can't intercept SSR** (different Node process). Share pages read the DB via `web/lib/server/data.ts`, so HTTP mocks don't help. Seed a test DB instead ([State / what's next](#10-state--whats-next)).
+- **Playwright `page.route()` can't intercept SSR** (different Node process). Share pages read the DB via `web/lib/server/data.ts`, so HTTP mocks don't help. Seed a test DB instead ([State / what's next](#11-state--whats-next)).
 
 ---
 
-## 5. Tailwind & theming
+## 6. Tailwind & theming
 
 - **Every theme color is a CSS custom property, not a Tailwind class keyed by scheme.** `web/app/globals.css` defines each token under `:root` (light, the default) and overrides it under `[data-theme="dark"]`; a `@theme inline` block re-exports each as a Tailwind utility (`bg-background`, `text-foreground`, …).
   - A component never needs a `dark:` variant — every color utility already resolves through the variable that changes per `[data-theme]`. Writing `dark:bg-*` alongside one of these tokens is dead code, since Tailwind's `dark:` selector strategy isn't configured at all here.
@@ -168,11 +180,11 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 ---
 
-## 6. CI & repo tooling
+## 7. CI & repo tooling
 
 Node is pinned in root `.nvmrc` (`24.18.0`); CI jobs use `node-version-file`. Run `nvm use` from repo root. Nothing executes `.ts` via Node directly (Next/Vitest/Playwright transform; root `scripts/*.js` are plain JavaScript).
 
-### 6.1 Workflows & branch protection
+### 7.1 Workflows & branch protection
 
 - **Renaming/removing a CI job blocks merges until branch protection is updated too.**
   - Required checks name jobs (`lint-format`, `worker`, `web`, `infra`); a missing context leaves PRs unmergeable — `enforce_admins` is on, so `--admin` does not override either.
@@ -185,7 +197,7 @@ Node is pinned in root `.nvmrc` (`24.18.0`); CI jobs use `node-version-file`. Ru
   - The grant can't move into `.github/workflows/deploy.yml`, because a called workflow can only narrow its caller's permissions and this repo's default token is read-only.
   - A job run through a called workflow reports its check as `<caller job> / <called job>`, so moving a required one (`lint-format`, `worker`, `web`, `infra`) into its own file is a rename as far as branch protection is concerned.
 
-### 6.2 Formatting & linting
+### 7.2 Formatting & linting
 
 - **Biome does not format Markdown, YAML, Dockerfiles, or shell scripts** (`@biomejs/biome@2.5.10`, pinned in both root and `web/`). Keep those consistent by hand.
   - It doesn't lint `.sh` either. `scripts:check` runs shellcheck instead.
@@ -196,7 +208,7 @@ Node is pinned in root `.nvmrc` (`24.18.0`); CI jobs use `node-version-file`. Ru
   - **A list a loop iterates gets one item per line, sorted, once it outgrows a single line.** Each name is then greppable, and adding or removing one touches one line of diff. `worker/Dockerfile`'s prune list is the example.
   - **A guard inside that shell is `if ... then ... fi`, not `test ... || { ...; exit 1; }`.** The condition, the message and the exit each get their own line, which is how `scripts/` already writes them.
 
-### 6.3 Shell scripts
+### 7.3 Shell scripts
 
 Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the deployed account), and are committed executable (`rwxr-xr-x`). Helpers in `scripts/lib/` are sourced, so they stay `rw-r--r--`.
 
@@ -234,7 +246,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - The image is pinned by digest, so neither a new shellcheck release nor a re-pushed tag can change the result for an unchanged tree.
   - The repo is mounted read-only with `--security-opt label=disable`, because a `:Z` mount relabels the whole checkout for SELinux.
 
-### 6.4 Git workflow
+### 7.4 Git workflow
 
 - **`main` is push-protected.** All changes land via PR, including edits to docs, config, and `.gitignore`.
 - **Branch names are type-prefixed** (`chore/`, `refactor/`, `docs/`, `fix/`, …). Commit messages are a separate convention.
@@ -242,7 +254,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 - **Merge with `gh pr merge --merge`**, not squash/rebase — preserves scoped commits on `main`.
 - **Update a stale PR with `git rebase main`** then `push --force-with-lease`, not merge `origin/main` into the branch.
 
-### 6.5 Testing
+### 7.5 Testing
 
 - `scripts/dev/run-tests.sh` runs every lint, typecheck, and test suite.
   - Postgres-dependent web tests need `TEST_DATABASE_URL` (see [`RUNBOOK.md`](RUNBOOK.md#19-full-test-suite)). Run the relevant subset of its commands after changes.
@@ -253,7 +265,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 
 ---
 
-## 7. Worker (GPU pipeline)
+## 8. Worker (GPU pipeline)
 
 - **Local pipeline runs are a Podman container: they need an NVIDIA GPU, the NVIDIA driver, and `nvidia-container-toolkit`.**
   - The CUDA runtime lives in both worker images. COLMAP lives in `worker/Dockerfile`'s `reconstruct` target and gsplat in its `train` target. Don't install any of them on the host. `worker/Dockerfile` compiles gsplat's kernels in a build stage, so neither shipped image carries `nvcc`.
@@ -271,9 +283,9 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 
 ---
 
-## 8. Infra (Terraform / AWS)
+## 9. Infra (Terraform / AWS)
 
-### 8.1 Structure & state
+### 9.1 Structure & state
 
 - **All of `infra/` shares one state**, with its seven logical areas (network, registry, data, worker IAM, worker sweeper, web, budgets) split across separate `.tf` files for readability ([Infra](ARCHITECTURE.md#8-infra)). Nothing references another file by name, only by resource address in that one state, so moving a resource between files or renaming an area is a file-organization change only.
 - **Never add the state bucket as a resource in `infra/`.** Skip creating it ([Creating account prerequisites](RUNBOOK.md#22-creating-account-prerequisites)) and `terraform init` fails.
@@ -286,7 +298,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - An older `hashicorp/aws` fails at the first `plan` with `No valid credential sources found`, even though `terraform init` succeeds, because the S3 backend reads the credentials itself.
   - `terraform version` in `infra/` names the provider version actually installed.
 
-### 8.2 Networking & TLS
+### 9.2 Networking & TLS
 
 - **The ACM cert (`infra/web.tf`) takes no explicit `provider`**, so it inherits the default provider's `var.aws_region` — required, since an ALB can only reference a certificate in its own region.
   - Same hostname in another region is normal (certs are free).
@@ -301,7 +313,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - Node's default keep-alive is 5s; Next standalone only overrides via `KEEP_ALIVE_TIMEOUT`. ALB then hands requests to sockets the app already closed — no app log entry.
   - `infra/locals.tf` sets `65000` ms. Raising ALB idle without raising this reopens the gap.
 
-### 8.3 IAM & secrets
+### 9.3 IAM & secrets
 
 - **`ec2:RunInstances` needs two separate IAM statements, not one** (`infra/web.tf`'s `aws_iam_role_policy.task`, `Sid`s `RunInstances`/`RunInstancesTagged`).
   - IAM authorizes it against each resource the request touches; `web/lib/server/ec2Launcher.ts` tags only the instance, so `aws:RequestTag` is absent for the AMI, subnet, and security group and a single conditioned statement denies the whole call.
@@ -314,7 +326,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 - **The RDS master credentials come from `manage_master_user_password = true`** (`infra/data.tf`), not a hand-rolled secret.
   - RDS creates and rotates its own Secrets Manager secret holding both `username` and `password`; `infra/web.tf` reads both fields off `aws_db_instance.main.master_user_secret[0].secret_arn`.
 
-### 8.4 Deploy: image tags
+### 9.4 Deploy: image tags
 
 - **Image tags are `<web-tree-id>-web` and `<web-tree-id>-migrate`, not commit SHAs, and the ECR repository (`infra/registry.tf`) is `IMMUTABLE`.** `scripts/lib/terraform.sh`'s `tf_get_web_image_tag` is the one definition, used by `.github/workflows/deploy.yml` and by the no-service fallback in the same file.
   - It truncates to a fixed 12 characters rather than calling `git rev-parse --short`, whose length tracks the local object count and so differs between CI's shallow checkout and a full clone. `scripts/dev/terraform-test-lib.sh` pins the width.
@@ -346,7 +358,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
     - The worker images cost real money to retain at ~1.9 GB and ~8.0 GB. They are also part of no ECS rollback mechanism, since `web/lib/server/ec2Launcher.ts` just reads whichever URI it is handed.
     - The count is per tag suffix, with one rule each for `-reconstruct` and `-train`, so both halves of a release expire together.
 
-### 8.5 Variables & state backend
+### 9.5 Variables & state backend
 
 - **No placeholder-value fallback for required variables.**
   - `terraform validate` and `terraform test` (`mock_provider`) never touch real AWS, so required variables (`worker_ami_id`, `alert_email`, `domain_zone_name`, `hosted_zone_id`, `clerk_secret_key_arn`, `web_image_tag`, `worker_image_tag`) simply have no default in `infra/variables.tf`. CI's `infra` job never has to supply one.
@@ -354,7 +366,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - `.github/workflows/deploy.yml` maps each from a GitHub repository variable, though, and an unset repository variable arrives as `""`, which Terraform accepts as a value. There only a `validation` block catches it, so every required variable has one that rejects `""`. Give any new required variable one too.
 - **`var.aws_region`'s default in `infra/variables.tf` is the only place the region is written.** `scripts/lib/terraform.sh`'s `tf_get_aws_region` reads it, and every AWS CLI call in `scripts/` plus the `Resolve region` step in `.github/workflows/deploy.yml` take it from there.
   - Two places keep their own copy, neither of which reaches AWS. `scripts/dev/create-resources.sh` uses `web/.env`'s own `AWS_REGION`, so the dev buckets match the region `web/lib/server/env.ts` signs upload URLs for; a new `web/.env` is seeded from the same default. `.github/workflows/ci.yml`'s web job sets it as a fixture beside `AWS_ACCESS_KEY_ID: testing`.
-  - The Budgets provider (`infra/budgets.tf`) stays pinned to `us-east-1` — see [Stack construction](#86-stack-construction).
+  - The Budgets provider (`infra/budgets.tf`) stays pinned to `us-east-1` — see [Stack construction](#96-stack-construction).
   - Moving the region means a teardown, then the whole of [Deploying to production](RUNBOOK.md#2-deploying-to-production) again. Nothing migrates an ALB, an RDS instance, or an ECR repository across regions. The state bucket, the Clerk secret, the CI role's ARNs, and `WORKER_AMI_ID` are region-specific as well.
   - Tear down before editing the default. `terraform init` looks for the state bucket in whatever the default currently says, so an edited default points `scripts/prod/terraform-destroy.sh` at a bucket that doesn't exist while the old stack keeps billing.
 - **The account id used to build IAM/ARN resources comes from `data.aws_caller_identity.current`**, evaluated fresh on every real plan or apply.
@@ -362,15 +374,15 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 - **The state bucket name (`ai-gaussian-splatter-tfstate-<account-id>`) is passed to `terraform init` via `-backend-config`, never hardcoded in `infra/providers.tf`.**
   - The bucket is account-specific and created once by hand; baking its name into the shared `backend "s3"` block would make the whole config account-specific too.
 
-### 8.6 Stack construction
+### 9.6 Stack construction
 
 - **The billing/budgets resources (`infra/budgets.tf`) use a second, aliased `provider = aws.billing` (`us-east-1`).** The Budgets API only exists in `us-east-1`, regardless of where the rest of the app runs.
 
 ---
 
-## 9. Database
+## 10. Database
 
-### 9.1 Schema & migrations (Drizzle)
+### 10.1 Schema & migrations (Drizzle)
 
 - **Schema edits don't write SQL — always `pnpm db:generate`.**
   - Types update on save of `web/lib/server/db/schema.ts`, so `tsc` stays green while the DB drifts.
@@ -383,7 +395,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - CI applies each migration before rolling the service forward (`.github/workflows/deploy.yml`), but a circuit-breaker rollback of the *service* does not undo an already-applied migration — the two are orthogonal once the migration has committed.
   - Expand/contract only: add a nullable column, backfill, add the constraint in a *later* release. Never a same-release drop, rename, or `NOT NULL` with no default.
 
-### 9.2 Query patterns
+### 10.2 Query patterns
 
 - **UUID-check path params before the DB** — `uuid` columns turn `/api/v1/splats/abc` into Postgres `22P02` → 500. Use `requireUuid()` (routes) or `isUuid()` (`web/lib/server/data.ts`, null → `notFound()`).
 - **A write that moves a job forward is conditional on the job not having ended** (`notInArray(jobs.status, JOB_ENDED_STATUSES)`). A cancel (`web/lib/server/cancelJob.ts`) can land between any read and write. An unconditional write resurrects the cancelled job after its worker has already been stopped.
@@ -392,7 +404,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 - **Upsert `set` must reference the column, not a pre-read JS value** — e.g. ``count: sql`${rateLimitCounters.count} + 1` ``. A plain `{ count: n + 1 }` reopens the race. Confirm real SQL with `log_statement='all'` or `drizzle(pool, { logger: true })`.
 - **`.$onUpdate(() => new Date())` drives `updatedAt`** — no DB trigger; raw `sql` UPDATE skips it.
 
-### 9.3 Local dev & tests
+### 10.3 Local dev & tests
 
 - **`await closeDb()` in `afterAll`** or Vitest hangs (open `pg` Pool). `web/tests/migrate-test-db.ts` closes its own migration pool in `finally`.
 - **The `server` Vitest project fails outright when `TEST_DATABASE_URL` is unset**, so a green run means the DB tests actually ran.
@@ -403,7 +415,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - DB-backed files share one DB and clear tables in `beforeEach`; parallel runs delete each other's fixtures. Per-worker DBs would restore parallelism.
   - Transaction-per-test can't cover the real concurrency tests (`getOrCreateUser` race, rate-limit atomicity) — one connection serializes queries.
 
-### 9.4 Connecting to RDS in production
+### 10.4 Connecting to RDS in production
 
 - **Connection string assembly.** RDS secrets are JSON (`username`/`password`); ECS can inject only one JSON field at a time — no formatted `postgresql://` URL.
   - `infra/web.tf` projects `DATABASE_USER` from the secret for both containers and passes `DATABASE_HOST`/`DATABASE_PORT`/`DATABASE_NAME` as env.
@@ -428,7 +440,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 
 ---
 
-## 10. State / what's next
+## 11. State / what's next
 
 Scaffolding (three packages + CI) is in place. Host-run `next dev` can 500 with `ECONNREFUSED ::1` in sandboxes that block loopback to the Next proxy process — use the container (own netns); not an app bug.
 

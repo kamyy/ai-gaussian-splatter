@@ -341,7 +341,7 @@ The first deploy into an empty account skips this ordering. With no service in t
 
 Rejected alternative: **running migrations from a local machine through a bastion.** The RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway and no security-group path for an ad hoc host, and no bastion exists in `infra/`. So there's no manual fallback: a bad migration is fixed the same way as any other bug, with a corrective migration through a normal PR (see [Fixing a bad migration](RUNBOOK.md#31-fixing-a-bad-migration)).
 
-A rolled-back *service* deployment does not undo an already-applied migration. Rollback and "was the migration a good idea" are orthogonal once the migration has committed. This is why every migration has to follow the expand/contract discipline in [Schema & migrations (Drizzle)](AGENTS.md#91-schema--migrations-drizzle), not an incidental style preference.
+A rolled-back *service* deployment does not undo an already-applied migration. Rollback and "was the migration a good idea" are orthogonal once the migration has committed. This is why every migration has to follow the expand/contract discipline in [Schema & migrations (Drizzle)](AGENTS.md#101-schema--migrations-drizzle), not an incidental style preference.
 
 ### 11.4 CI authentication
 
@@ -357,7 +357,7 @@ A rolled-back *service* deployment does not undo an already-applied migration. R
 Three tiers (`.github/workflows/ci.yml`):
 
 - **Unit/component** (every PR): `pytest` + `moto` for `worker/`; Vitest `client` (jsdom) and `server` (Node + real Postgres for rate limits).
-- **E2E** (every PR): Playwright without live Clerk. No specs yet (SSR reads DB; `page.route()` can't intercept; no seed — see [State / what's next](AGENTS.md#10-state--whats-next)). Server correctness is the Vitest `server` project.
+- **E2E** (every PR): Playwright without live Clerk. No specs yet (SSR reads DB; `page.route()` can't intercept; no seed — see [State / what's next](AGENTS.md#11-state--whats-next)). Server correctness is the Vitest `server` project.
 - **Real-pipeline** (manual/milestone-gated): real COLMAP + gsplat costs GPU money. `FAST_TEST_MODE` (20 iterations) for cheap end-to-end smoke tests; `worker/pipeline/train.py` derives its densify/log schedules from the iteration count so the short run still exercises densification.
 
 `web/` AWS tests use `aws-sdk-client-mock` (assert command args), not `moto`-style emulation.
@@ -366,7 +366,7 @@ Three tiers (`.github/workflows/ci.yml`):
 
 ## 13. Build order
 
-Milestones (`M0`…`M10`) name phases, not a schedule, and they are not built in order. A struck-through milestone is complete. Open gaps are in [State / what's next](AGENTS.md#10-state--whats-next).
+Milestones (`M0`…`M10`) name phases, not a schedule, and they are not built in order. A struck-through milestone is complete. Open gaps are in [State / what's next](AGENTS.md#11-state--whats-next).
 
 - ~~**M0** — shoot one real object per [Capture](RUNBOOK.md#15-capture); hand-run COLMAP → gsplat → export; view in a standalone page.~~
 - ~~**M1** — Same run via scripted `worker/pipeline/` modules.~~

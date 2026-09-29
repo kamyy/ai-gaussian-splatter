@@ -39,7 +39,7 @@ This is the only step with no automated backstop. CI can tell that a migration e
 - A **rename emitted as drop-then-add**, which means the step 2 prompt was answered "created". It silently discards every existing value. Regenerate and answer "renamed" instead.
 - `NOT NULL` added to an existing column with no `DEFAULT` — fails outright on a table that already has rows.
 - A removed or renamed enum value. drizzle-kit never emits `ALTER TYPE … RENAME VALUE`. For either change it converts the column to `text`, drops and recreates the type, then converts back, which fails if any row still holds a label the new type lacks. For a pure rename, replace that SQL by hand with `ALTER TYPE … RENAME VALUE`.
-- Anything that breaks the expand/contract discipline in [Schema & migrations (Drizzle)](../../../AGENTS.md#91-schema--migrations-drizzle). The `deploy` job applies migrations before rolling the service forward, and a rollback of the service doesn't undo one already applied.
+- Anything that breaks the expand/contract discipline in [Schema & migrations (Drizzle)](../../../AGENTS.md#101-schema--migrations-drizzle). The `deploy` job applies migrations before rolling the service forward, and a rollback of the service doesn't undo one already applied.
 
 Never hand-edit `web/drizzle/meta/*.json`. They are `generate`'s record of the last known schema; editing them makes the next diff wrong.
 
