@@ -1,16 +1,17 @@
 /**
  * The /preview/splats/[id] page: a shared splat, viewable without signing in.
  *
- * This is the link an owner hands out. It renders on the server straight from the database (web/lib/server/data.ts),
- * and it 404s unless the splat is complete and its owner has made it shareable. Its metadata gives link previews in
- * chat apps a title and thumbnail.
+ * This is the link an owner hands out. It shows the splat and COLMAP's point cloud in the 3D viewer, with the cameras
+ * each photo was taken from, beside a grid of the photos' thumbnails. It renders on the server straight from the
+ * database (web/lib/server/data.ts), and it 404s unless the splat is complete and its owner has made it shareable. Its
+ * metadata gives link previews in chat apps a title and thumbnail.
  */
 
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { SplatViewer } from "@/components/viewer/SplatViewer";
-import { getPublicSplat } from "@/lib/server/data";
+import { PublicSplatView } from "@/components/splats/PublicSplatView";
+import { getPublicSplat, getPublicSplatView } from "@/lib/server/data";
 import { readSplatCameras } from "@/lib/server/s3";
 
 /** Reads the database per request: a shared splat must not be frozen into a build artifact. */
@@ -40,18 +41,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function PublicSplatViewPage({ params }: Props) {
   const { id } = await params;
 
-  const splat = await getPublicSplat(id);
+  const splat = await getPublicSplatView(id);
   if (splat === null) {
     notFound();
   }
 
-  // Only the poses frame the view, so the photo ids stay off this public page.
-  const cameras = (await readSplatCameras(id))?.map(({ photoId: _photoId, ...pose }) => pose) ?? null;
+  const cameras = await readSplatCameras(id);
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <h2 className="font-display text-6xl">{splat.title}</h2>
-      <SplatViewer mode="splat" splatUrl={splat.splatUrl} pointCloudUrl={null} cameras={cameras} />
-    </div>
+    <PublicSplatView
+      title={splat.title}
+      splatUrl={splat.splatUrl}
+      pointCloudUrl={splat.pointCloudUrl}
+      cameras={cameras}
+      photos={splat.photos}
+    />
   );
 }

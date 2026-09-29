@@ -15,7 +15,7 @@ import { LuImage } from "react-icons/lu";
 import { Pager } from "@/components/ui/Pager";
 import { cn } from "@/lib/cn";
 import { useJustifiedPages } from "@/lib/hooks/useJustifiedPages";
-import type { PhotoListItem } from "@/lib/types";
+import type { PublicPhoto } from "@/lib/types";
 import type { PhotoSelection } from "./photoSelection";
 
 // A page is this many whole rows, so every page but the last ends on a full row.
@@ -25,7 +25,8 @@ const ROW_HEIGHT_REM = 6;
 const GAP_REM = 0.375;
 
 interface PhotoGridProps {
-  photos: PhotoListItem[];
+  // The grid shows only thumbnails, so both the owner's photos and the share page's public ones fit.
+  photos: PublicPhoto[];
   // The photos COLMAP placed, once the cameras are known. Every other photo is flagged as unused. Null means unknown,
   // which flags nothing.
   placedPhotoIds: Set<string> | null;
@@ -98,7 +99,7 @@ function PhotoTile({
   onPointerEnter,
   onPointerLeave,
 }: {
-  photo: PhotoListItem;
+  photo: PublicPhoto;
   width: number;
   height: number;
   // Both are false while the cameras are still unknown.
@@ -163,8 +164,8 @@ function PhotoTile({
 
 export function PhotoGrid({ photos, placedPhotoIds, selection, onSelect, hoveredPhotoId, onHover }: PhotoGridProps) {
   const selectedPhotoId = selection?.photoId ?? null;
-  const isPlaced = (photo: PhotoListItem) => placedPhotoIds?.has(photo.id) ?? false;
-  const isUnplaced = (photo: PhotoListItem) => placedPhotoIds !== null && !placedPhotoIds.has(photo.id);
+  const isPlaced = (photo: PublicPhoto) => placedPhotoIds?.has(photo.id) ?? false;
+  const isUnplaced = (photo: PublicPhoto) => placedPhotoIds !== null && !placedPhotoIds.has(photo.id);
 
   // photos arrives oldest taken first (web/app/api/v1/splats/[splatId]/photos/route.ts), and the grid keeps that order.
   // A photo with no recorded size lays out square.
