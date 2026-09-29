@@ -7,9 +7,11 @@ from pipeline.colmap_model import Camera, Image, SparseModel
 from pipeline.config import Settings
 from pipeline.train import (
     MAX_TRAINING_EDGE,
+    MEANS_LR,
     MIN_INIT_SCALE,
     SH_C0,
     SH_DEGREE,
+    _build_optimizers,
     _build_strategy,
     _init_gaussians,
     _is_opacity_reset_step,
@@ -227,3 +229,13 @@ def test_ssim_is_one_for_identical_images_and_lower_for_noise():
 
     assert _ssim(image, image).item() == pytest.approx(1.0)
     assert _ssim(image, noisy).item() < 0.9
+
+
+def test_means_learning_rate_scales_with_the_scene():
+    params = {
+        name: torch.nn.Parameter(torch.zeros(1)) for name in ["means", "scales", "quats", "opacities", "sh0", "shN"]
+    }
+
+    optimizers = _build_optimizers(params, scene_scale=4.0)
+
+    assert optimizers["means"].param_groups[0]["lr"] == pytest.approx(MEANS_LR * 4.0)
