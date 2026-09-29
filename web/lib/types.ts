@@ -98,8 +98,20 @@ export interface CropBox {
   quaternion: [number, number, number, number];
 }
 
+/** pointCloudUrl is null for a splat whose job was reconstructed before the point cloud was kept. */
 export interface PublicSplat {
   title: string;
   thumbnailUrl: string;
   splatUrl: string;
+  pointCloudUrl: string | null;
+}
+
+/**
+ * A photo as the public share page shows it. thumbnailUrl is always the browser-made small copy, which carries no
+ * EXIF data such as GPS position. originalFilename is a stand-in like "Photo 3", so the owner's filenames stay private.
+ */
+export type PublicPhoto = Omit<PhotoListItem, "url">;
+
+export interface PublicSplatView extends PublicSplat {
+  photos: PublicPhoto[];
 }
