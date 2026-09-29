@@ -5,8 +5,8 @@ import { LuImage } from "react-icons/lu";
 
 import { Pager } from "@/components/ui/Pager";
 import { cn } from "@/lib/cn";
+import { useJustifiedPages } from "@/lib/hooks/useJustifiedPages";
 import type { PhotoListItem } from "@/lib/types";
-import { useJustifiedPages } from "@/lib/useJustifiedPages";
 import type { PhotoSelection } from "./photoSelection";
 
 // A page is this many whole rows, so every page but the last ends on a full row.

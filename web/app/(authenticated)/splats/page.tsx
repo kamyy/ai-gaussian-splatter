@@ -8,9 +8,9 @@ import { SplatCard, splatCardAspect } from "@/components/splats/SplatCard";
 import { buttonClassName } from "@/components/ui/Button";
 import { Pager } from "@/components/ui/Pager";
 import { cn } from "@/lib/cn";
-import { useSplats } from "@/lib/hooks";
+import { useJustifiedPages } from "@/lib/hooks/useJustifiedPages";
+import { useSplats } from "@/lib/hooks/useSplats";
 import { type LibraryFilter, splatBadge } from "@/lib/splatBadge";
-import { useJustifiedPages } from "@/lib/useJustifiedPages";
 
 const FILTERS: { value: LibraryFilter | "all"; label: string }[] = [
   { value: "all", label: "All" },

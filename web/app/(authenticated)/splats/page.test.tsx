@@ -7,10 +7,10 @@ import type { SplatListItem } from "@/lib/types";
 import LibraryPage from "./page";
 
 const { useSplatsMock } = vi.hoisted(() => ({ useSplatsMock: vi.fn() }));
-vi.mock("@/lib/hooks", () => ({ useSplats: useSplatsMock }));
+vi.mock("@/lib/hooks/useSplats", () => ({ useSplats: useSplatsMock }));
 // jsdom does no layout, so the card list reports a fixed width. At 1000 wide with the default 16px root font, a row
 // holds three 4:3 cards at 238px tall, so a page of three rows holds 9.
-vi.mock("@/lib/useElementWidth", () => ({ useElementWidth: () => [() => {}, 1000] }));
+vi.mock("@/lib/hooks/useElementWidth", () => ({ useElementWidth: () => [() => {}, 1000] }));
 
 function makeSplat(i: number, overrides: Partial<SplatListItem> = {}): SplatListItem {
   return {

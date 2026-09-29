@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { LuCheck } from "react-icons/lu";
 
 import { cn } from "@/lib/cn";
+import { useNow } from "@/lib/hooks/useNow";
 import { currentStep, STEPS, type Stage, type StepKey } from "@/lib/splatStage";
 import { formatClock, formatDuration, type StageTimings, type StepTiming, stageTimings } from "@/lib/stageTimings";
 import type { Job } from "@/lib/types";
@@ -60,21 +60,6 @@ function gpuTotal(timings: StageTimings | null): string | null {
     return null;
   }
   return `${formatDuration(timings.cameras.totalMs + timings.build.totalMs)} of GPU time`;
-}
-
-// The current time, ticking once a second while ticking is set, so a running stage's clock counts up between the job
-// polls in web/lib/hooks.ts.
-function useNow(ticking: boolean): number {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    if (!ticking) {
-      return;
-    }
-    setNow(Date.now());
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, [ticking]);
-  return now;
 }
 
 // Each GPU step shows how long it took, split into the instance's start-up and the work itself. Once the splat is

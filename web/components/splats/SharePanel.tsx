@@ -5,8 +5,8 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { apiFetch } from "@/lib/apiFetch";
+import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
 import { requireToken } from "@/lib/requireToken";
-import { useAppSnackbar } from "@/lib/useAppSnackbar";
 import { StageShell } from "./StageShell";
 
 // Shown once a splat is complete. The link is the public view (web/app/(public)/preview/splats/[id]/page.tsx), which

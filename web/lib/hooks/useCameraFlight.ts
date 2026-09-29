@@ -4,9 +4,7 @@ import type { CameraControls } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import { type RefObject, useEffect, useMemo, useRef } from "react";
 import { PerspectiveCamera, Quaternion, Vector3 } from "three";
-
-import type { CameraPose } from "@/lib/types";
-import { CLICK_SLOP_PX } from "./CameraFrustums";
+import { CLICK_SLOP_PX } from "@/components/viewer/CameraFrustums";
 import {
   easeInOutCubic,
   fittedFov,
@@ -14,8 +12,9 @@ import {
   orbitTargetOf,
   photoViewPose,
   type ViewPose,
-} from "./cameraFlight";
-import { framingFromCameras } from "./cameraFraming";
+} from "@/components/viewer/cameraFlight";
+import { framingFromCameras } from "@/components/viewer/cameraFraming";
+import type { CameraPose } from "@/lib/types";
 
 // How long the camera takes to fly to a selected photo's view.
 const FLIGHT_SECONDS = 0.8;

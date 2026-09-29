@@ -6,7 +6,7 @@ import type { Job, PhotoListItem, Splat } from "@/lib/types";
 import SplatPage from "./page";
 
 // jsdom has no ResizeObserver, so the photo grid is given a fixed width to lay its rows out in.
-vi.mock("@/lib/useElementWidth", () => ({ useElementWidth: () => [() => {}, 392] }));
+vi.mock("@/lib/hooks/useElementWidth", () => ({ useElementWidth: () => [() => {}, 392] }));
 // The viewer pulls in three.js, R3F and Spark, none of which have a WebGL context under jsdom.
 vi.mock("@/components/splats/SplatStageViewer", () => ({
   SplatStageViewer: ({ complete }: { complete: boolean }) => <div data-testid="viewer">{String(complete)}</div>,
@@ -27,12 +27,10 @@ const { useSplatMock, useLatestJobMock, usePhotosMock, useCamerasMock } = vi.hoi
   usePhotosMock: vi.fn(),
   useCamerasMock: vi.fn(),
 }));
-vi.mock("@/lib/hooks", () => ({
-  useSplat: useSplatMock,
-  useLatestJob: useLatestJobMock,
-  usePhotos: usePhotosMock,
-  useCameras: useCamerasMock,
-}));
+vi.mock("@/lib/hooks/useSplat", () => ({ useSplat: useSplatMock }));
+vi.mock("@/lib/hooks/useLatestJob", () => ({ useLatestJob: useLatestJobMock }));
+vi.mock("@/lib/hooks/usePhotos", () => ({ usePhotos: usePhotosMock }));
+vi.mock("@/lib/hooks/useCameras", () => ({ useCameras: useCamerasMock }));
 
 const splat: Splat = {
   id: "11111111-1111-4111-8111-111111111111",

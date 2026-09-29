@@ -8,8 +8,8 @@ import { mutate } from "swr";
 import { Button } from "@/components/ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/Dialog";
 import { apiFetch } from "@/lib/apiFetch";
+import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
 import { requireToken } from "@/lib/requireToken";
-import { useAppSnackbar } from "@/lib/useAppSnackbar";
 
 interface ConfirmButtonProps {
   label: string;
