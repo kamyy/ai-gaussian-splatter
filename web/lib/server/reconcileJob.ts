@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 
-import { JobStatus } from "@/lib/types";
+import { JobStatus } from "@/lib/statuses";
 import { WORKER_RUNNING_STATUSES } from "./cancelJob";
 import { getDb } from "./db";
 import { jobs, splats } from "./db/schema";

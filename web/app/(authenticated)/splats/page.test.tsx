@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { JobStatus, type SplatListItem } from "@/lib/types";
+import { JobStatus } from "@/lib/statuses";
+import type { SplatListItem } from "@/lib/types";
 
 import LibraryPage from "./page";
 

@@ -5,7 +5,7 @@ vi.mock("@clerk/nextjs/server", () => ({ auth: vi.fn(async () => ({ userId: "cle
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { jobs, splats, users } from "@/lib/server/db/schema";
-import type { JobStatus, SplatStatus } from "@/lib/types";
+import type { JobStatus, SplatStatus } from "@/lib/statuses";
 import { GET } from "./route";
 
 function ctx(splatId: string) {

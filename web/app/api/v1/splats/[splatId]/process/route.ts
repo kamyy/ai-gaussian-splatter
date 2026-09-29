@@ -1,6 +1,6 @@
 import { and, count, eq, lt, notInArray } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
-
+import { MAX_PHOTOS_PER_SPLAT } from "@/lib/limits";
 import { requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { jobs, photos, splats } from "@/lib/server/db/schema";
@@ -18,7 +18,7 @@ import { getEnv } from "@/lib/server/env";
 import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
 import { jobColumns } from "@/lib/server/selects";
-import { JOB_ENDED_STATUSES, MAX_PHOTOS_PER_SPLAT } from "@/lib/types";
+import { JOB_ENDED_STATUSES } from "@/lib/statuses";
 
 // Postgres error code 23505 (unique violation). drizzle-orm wraps the raw node-postgres DatabaseError, which carries
 // `.code` itself, in its own error that adds the failed query for debugging. The driver error ends up on `.cause`

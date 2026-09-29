@@ -1,12 +1,11 @@
 import { and, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
-
+import { MAX_PHOTO_BYTES } from "@/lib/limits";
 import { requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { photos, splats } from "@/lib/server/db/schema";
 import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
 import { deleteUploadedObject, MAX_THUMBNAIL_BYTES, uploadedObjectSize } from "@/lib/server/s3";
-import { MAX_PHOTO_BYTES } from "@/lib/types";
 
 export const POST = withErrorHandling(
   async (_request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/photos/[photoId]/complete">) => {

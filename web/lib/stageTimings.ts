@@ -1,4 +1,5 @@
-import { type Job, JobStatus } from "./types";
+import { JobStatus } from "./statuses";
+import type { Job } from "./types";
 
 // How long each GPU stage of a worker job took, for web/components/splats/PipelineStepper.tsx.
 

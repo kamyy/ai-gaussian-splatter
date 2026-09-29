@@ -1,4 +1,5 @@
-import { type Job, JobStatus } from "./types";
+import { JobStatus } from "./statuses";
+import type { Job } from "./types";
 
 // The five steps a visitor sees, in order. "cameras" is COLMAP's reconstruction, "check" is the awaiting_training
 // pause, and "build" is gsplat's training run.

@@ -19,7 +19,7 @@ import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { jobs, splats, users } from "@/lib/server/db/schema";
 import { WORKER_MAX_LIFETIME_MINUTES } from "@/lib/server/ec2Launcher";
-import type { JobStatus } from "@/lib/types";
+import type { JobStatus } from "@/lib/statuses";
 import { reconcileJob } from "../reconcileJob";
 
 const MINUTE = 60 * 1000;

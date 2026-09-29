@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { currentStep, splatStage } from "../splatStage";
-import { type Job, JobStatus } from "../types";
+import { JobStatus } from "../statuses";
+import type { Job } from "../types";
 
 const baseJob: Job = {
   id: "job-1",

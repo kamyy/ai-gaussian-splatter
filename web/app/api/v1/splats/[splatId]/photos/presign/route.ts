@@ -3,6 +3,7 @@ import path from "node:path";
 import { and, count, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { MAX_PHOTO_BYTES, MAX_PHOTOS_PER_SPLAT } from "@/lib/limits";
 import { getClientIp, requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { type NewPhoto, photos, splats } from "@/lib/server/db/schema";
@@ -10,7 +11,7 @@ import { getEnv } from "@/lib/server/env";
 import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementIp, checkAndIncrementUser } from "@/lib/server/rateLimit";
 import { MAX_THUMBNAIL_BYTES, presignPhotoThumbnailUpload, presignPhotoUpload } from "@/lib/server/s3";
-import { MAX_PHOTO_BYTES, MAX_PHOTOS_PER_SPLAT, type PhotoPresignItem } from "@/lib/types";
+import type { PhotoPresignItem } from "@/lib/types";
 
 // Rate limiting happens here: it gates *before* any upload happens (per-IP + per-user), separate from the global daily
 // cap, which only gates the expensive job-launch step (web/app/api/v1/splats/[splatId]/process/route.ts).

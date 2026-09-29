@@ -8,7 +8,8 @@ import { useAuth } from "@clerk/nextjs";
 import useSWR from "swr";
 import { apiFetch } from "./apiFetch";
 import { requireToken } from "./requireToken";
-import type { CameraPose, Job, JobStatus, PhotoListItem, Splat, SplatListItem } from "./types";
+import type { JobStatus } from "./statuses";
+import type { CameraPose, Job, PhotoListItem, Splat, SplatListItem } from "./types";
 
 // Poll rate per phase. 0 tells SWR to stop polling, and only an ended status may use it. SWR keys its polling effect on
 // this function's identity rather than on the data, so once the function returns 0 it schedules no further timer, and

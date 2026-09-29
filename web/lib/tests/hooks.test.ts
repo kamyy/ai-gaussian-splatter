@@ -2,7 +2,8 @@ import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useCameras, useLatestJob, usePhotos, useSplat, useSplats } from "../hooks";
-import { JOB_ENDED_STATUSES, JOB_STATUSES, type Job, type JobStatus } from "../types";
+import { JOB_ENDED_STATUSES, JOB_STATUSES, type JobStatus } from "../statuses";
+import type { Job } from "../types";
 
 // Clerk resolves getToken() to null once it has loaded without a session, so the token is mutable here rather than a
 // fixed string.
