@@ -56,6 +56,13 @@ SSIM_SIGMA = 1.5
 SSIM_C1 = 0.01**2
 SSIM_C2 = 0.03**2
 
+# Gaussian positions learn at this rate times the scene scale, as in the reference 3DGS implementation. Scaling by the
+# scene makes a step move a Gaussian the same fraction of the object whatever units COLMAP reconstructed it in.
+MEANS_LR = 1.6e-4
+# The positions' rate decays exponentially to this fraction of MEANS_LR by the last step. Without the decay, positions
+# keep jittering around their best spot until training ends, and the render comes out soft.
+MEANS_LR_FINAL_FRACTION = 0.01
+
 
 @dataclass
 class GaussianModel:
@@ -122,16 +129,20 @@ def _train_loop(sparse: SparseModel, photos_dir: Path, settings: Settings):
     # gsplat's strategy replaces entries of this dict as it clones, splits, and prunes, carrying each optimizer's
     # state across. So nothing may hold on to an individual parameter between steps.
     params = {name: torch.nn.Parameter(tensor.detach()) for name, tensor in vars(_init_gaussians(sparse)).items()}
-    optimizers = _build_optimizers(params)
+    scene_scale = _scene_scale(viewmats)
+    optimizers = _build_optimizers(params, scene_scale)
 
     iterations = 20 if settings.fast_test_mode else settings.training_iterations
     log_every = max(1, iterations // 20)
+    means_lr_decay = torch.optim.lr_scheduler.ExponentialLR(
+        optimizers["means"], gamma=MEANS_LR_FINAL_FRACTION ** (1 / iterations)
+    )
 
     from gsplat.strategy.ops import reset_opa  # imported lazily for the same reason as in _render
 
     strategy = _build_strategy(iterations)
     strategy.check_sanity(params, optimizers)
-    strategy_state = strategy.initialize_state(scene_scale=_scene_scale(viewmats))
+    strategy_state = strategy.initialize_state(scene_scale=scene_scale)
     max_points = _max_gaussians_for_device()
 
     started = time.monotonic()
@@ -149,6 +160,7 @@ def _train_loop(sparse: SparseModel, photos_dir: Path, settings: Settings):
         for optimizer in optimizers.values():
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
+        means_lr_decay.step()
 
         if len(params["means"]) >= max_points:
             # No gradient exceeds infinity, so this stops growth while pruning carries on.
@@ -333,10 +345,10 @@ def _nearest_neighbour_scales(points: torch.Tensor) -> torch.Tensor:
     return torch.cat(scales).clamp_min(MIN_INIT_SCALE)
 
 
-def _build_optimizers(params: dict[str, torch.nn.Parameter]) -> dict[str, torch.optim.Optimizer]:
+def _build_optimizers(params: dict[str, torch.nn.Parameter], scene_scale: float) -> dict[str, torch.optim.Optimizer]:
     """One Adam per parameter, which is the shape gsplat's strategy needs to resize each one's state."""
     learning_rates = {
-        "means": 1.6e-4,
+        "means": MEANS_LR * scene_scale,
         "scales": 5e-3,
         "quats": 1e-3,
         "opacities": 5e-2,
