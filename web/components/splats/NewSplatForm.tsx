@@ -293,7 +293,7 @@ export function NewSplatForm() {
         {...getRootProps()}
         className={cn(
           "flex flex-col gap-4 rounded-3xl border-2 border-dashed p-5",
-          photos.length === 0 && "min-h-60 justify-center",
+          photos.length === 0 && "min-h-72 justify-center",
           isDragReject ? "border-error" : isDragAccept ? "border-primary" : "border-divider",
         )}
       >
