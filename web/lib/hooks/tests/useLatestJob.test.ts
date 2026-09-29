@@ -11,6 +11,7 @@ vi.mock("@clerk/nextjs", () => ({
 
 interface JobPollConfig {
   refreshInterval: (latest: Job | undefined) => number;
+  refreshWhenHidden?: boolean;
 }
 
 // SWR is stubbed so the config it receives can be inspected directly. That config is the contract under test, not
@@ -57,6 +58,13 @@ describe("useLatestJob", () => {
     expect(useSWRMock.mock.calls.length).toBeGreaterThanOrEqual(3);
     expect(capturedConfig(1).refreshInterval).toBe(capturedConfig(0).refreshInterval);
     expect(capturedConfig(2).refreshInterval).toBe(capturedConfig(0).refreshInterval);
+  });
+
+  it("keeps polling in a background tab", () => {
+    // A stage-finished notification only fires for a transition a poll has seen, and a visitor who switched tabs is the
+    // one it's for.
+    renderHook(() => useLatestJob("splat-1"));
+    expect(capturedConfig().refreshWhenHidden).toBe(true);
   });
 
   it("keeps polling while no job has been fetched yet", () => {
