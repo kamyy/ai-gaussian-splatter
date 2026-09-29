@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { IconType } from "react-icons";
 import {
   PiCameraDuotone,
@@ -18,10 +18,12 @@ import { Spinner } from "@/components/ui/Spinner";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { DEFAULT_POINT_SIZE } from "@/components/viewer/PointCloudScene";
 import { SplatViewer, type ViewMode } from "@/components/viewer/SplatViewer";
+import type { CameraSelection } from "@/components/viewer/useCameraFlight";
 import { apiFetch } from "@/lib/apiFetch";
 import { cn } from "@/lib/cn";
 import { requireToken } from "@/lib/requireToken";
 import type { CameraPose, CropBox, Job } from "@/lib/types";
+import type { PhotoSelection } from "./photoSelection";
 
 interface SplatStageViewerProps {
   splatId: string;
@@ -30,6 +32,13 @@ interface SplatStageViewerProps {
   // Undefined while loading, and for a job reconstructed before the worker wrote them.
   cameras: CameraPose[] | undefined;
   cropBox: CropBox | null;
+  selection: PhotoSelection | null;
+  onSelectPhoto: (photoId: string) => void;
+  // Clears the selection once the visitor moves the view away from the selected photo's by hand.
+  onClearSelection: () => void;
+  // The photo hovered in the grid or, through its camera, in the 3D view.
+  hoveredPhotoId: string | null;
+  onHoverPhoto: (photoId: string | null) => void;
   // Set only while the crop box can still change what gets built, which is what offers the Crop button.
   onCropBoxChange?: (box: CropBox | null) => void;
 }
@@ -167,20 +176,52 @@ function IconToggleButton({
 }
 
 // The scene behind the hint can be any color, so a dark copy offset 1px sits under a light one to keep it legible.
-function OrbitHint() {
+function HintLine({ text }: { text: string }) {
   return (
-    <p className="pointer-events-none absolute top-5 right-6 hidden text-xs whitespace-nowrap sm:block">
+    <span className="relative block">
       <span aria-hidden="true" className="absolute top-px left-px text-black/80">
-        Drag to orbit · scroll to zoom
+        {text}
       </span>
-      <span className="relative text-white/90">Drag to orbit · scroll to zoom</span>
+      <span className="relative text-white/90">{text}</span>
+    </span>
+  );
+}
+
+// The camera line shows only while clicking a frustum selects it: the frustums are drawn and the crop box is off.
+function OrbitHint({ canPickCameras }: { canPickCameras: boolean }) {
+  let pickLine: React.ReactNode = null;
+  if (canPickCameras) {
+    pickLine = <HintLine text="Click a camera to see its photo" />;
+  }
+  return (
+    <p className="pointer-events-none absolute top-5 right-6 hidden flex-col items-end gap-1 text-xs whitespace-nowrap sm:flex">
+      <HintLine text="Drag to orbit · scroll to zoom" />
+      {pickLine}
     </p>
   );
 }
 
+// The index into cameras of photoId's camera, which is how SplatViewer names a camera. null when there is none.
+function cameraIndexOf(cameras: CameraPose[] | undefined, photoId: string | null): number | null {
+  const index = photoId && cameras ? cameras.findIndex(camera => camera.photoId === photoId) : -1;
+  return index === -1 ? null : index;
+}
+
 // The page's 3D view, with a selector between the finished splat and the point cloud (the "shape sketch") COLMAP
 // produced. Both URLs go to one SplatViewer, so switching keeps the camera where the visitor left it.
-export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onCropBoxChange }: SplatStageViewerProps) {
+export function SplatStageViewer({
+  splatId,
+  job,
+  complete,
+  cameras,
+  cropBox,
+  selection,
+  onSelectPhoto,
+  onClearSelection,
+  hoveredPhotoId,
+  onHoverPhoto,
+  onCropBoxChange,
+}: SplatStageViewerProps) {
   const [showCameras, setShowCameras] = useState(true);
   const [pointSize, setPointSize] = useState(DEFAULT_POINT_SIZE);
   const [viewMode, setViewMode] = useState<ViewMode | null>(null);
@@ -196,6 +237,13 @@ export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onC
   // The viewer-splat route collapses "not ready" and "not yours" into one 404, so a failure here is usually the result
   // still being finalized.
   const splat = usePresignedUrl(complete ? ["viewer-splat", splatId] : null, `/api/v1/splats/${splatId}/viewer-splat`);
+
+  // Recomputed only when the selection or the cameras change, since each new object flies the view again.
+  const selectedCamera = useMemo<CameraSelection | null>(() => {
+    const index = cameraIndexOf(cameras, selection?.photoId ?? null);
+    return index === null ? null : { index };
+  }, [selection, cameras]);
+  const hoveredCamera = cameraIndexOf(cameras, hoveredPhotoId);
 
   const mode: ViewMode = viewMode ?? (complete ? "splat" : "colmap_points");
   const canCrop = mode === "colmap_points" && onCropBoxChange !== undefined;
@@ -233,6 +281,16 @@ export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onC
         pointCloudUrl={pointCloud.url ?? null}
         cameras={cameras ?? null}
         showCameras={showCameras}
+        selectedCamera={selectedCamera}
+        onSelectCamera={index => {
+          if (cameras?.[index]) {
+            onSelectPhoto(cameras[index].photoId);
+          }
+        }}
+        // Only while something is selected, so dragging with nothing selected doesn't set state on every frame.
+        onManualMove={selection ? onClearSelection : undefined}
+        hoveredCamera={hoveredCamera}
+        onHoverCamera={index => onHoverPhoto(index === null ? null : (cameras?.[index]?.photoId ?? null))}
         pointSize={pointSize}
         cropping={canCrop && cropping}
         cropBox={cropBox}
@@ -294,7 +352,9 @@ export function SplatStageViewer({ splatId, job, complete, cameras, cropBox, onC
 
   let orbitHint: React.ReactNode = null;
   if (available && url) {
-    orbitHint = <OrbitHint />;
+    const canPickCameras =
+      mode === "colmap_points" && showCameras && Boolean(cameras?.length) && !(canCrop && cropping);
+    orbitHint = <OrbitHint canPickCameras={canPickCameras} />;
   }
 
   return (

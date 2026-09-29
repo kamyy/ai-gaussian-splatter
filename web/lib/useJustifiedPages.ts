@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { type LayoutTile, layoutPages } from "./justifiedLayout";
 import { useElementWidth } from "./useElementWidth";
@@ -46,6 +46,12 @@ export function useJustifiedPages(
     return { pages: laidOut, areaHeight: height };
   }, [aspects, width, rowHeightRem, columnGapRem, rowGapRem, rowsPerPage, captionRem]);
 
+  // The 1-based page holding the item at index, or 0 before the area has been measured.
+  const pageOf = useCallback(
+    (index: number) => pages.findIndex(laidOutPage => index >= laidOutPage.start && index < laidOutPage.end) + 1,
+    [pages],
+  );
+
   const pageCount = Math.max(1, pages.length);
   const current = Math.min(page, pageCount);
   const layout = pages.at(current - 1);
@@ -61,6 +67,7 @@ export function useJustifiedPages(
     current,
     pageCount,
     setPage,
+    pageOf,
     start: layout?.start ?? 0,
     end: layout?.end ?? 0,
     tiles,

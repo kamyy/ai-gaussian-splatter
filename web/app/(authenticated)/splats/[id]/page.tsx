@@ -5,6 +5,7 @@ import { use, useEffect, useState } from "react";
 import { BackToLibraryButton } from "@/components/layout/BackToLibraryButton";
 import { PhotoGrid } from "@/components/splats/PhotoGrid";
 import { PipelineStepper } from "@/components/splats/PipelineStepper";
+import type { PhotoSelection } from "@/components/splats/photoSelection";
 import { SharePanel } from "@/components/splats/SharePanel";
 import { DeleteSplatButton } from "@/components/splats/SplatActions";
 import { SplatStageViewer } from "@/components/splats/SplatStageViewer";
@@ -21,6 +22,11 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
   const { data: cameras } = useCameras(id, Boolean(job?.pointCloudS3Key));
   // Drawn in the 3D view and sent with the check stage's build button, which sit on opposite sides of the page.
   const [cropBox, setCropBox] = useState<CropBox | null>(null);
+  // Picked from either the photo grid or the 3D view's cameras, and shown in both.
+  const [selection, setSelection] = useState<PhotoSelection | null>(null);
+  const selectPhoto = (photoId: string) => setSelection({ photoId });
+  // Hovering a photo marks its camera in the 3D view, and hovering a camera marks its photo in the grid.
+  const [hoveredPhotoId, setHoveredPhotoId] = useState<string | null>(null);
 
   // Only the job is polled, but the worker's callback moves the job row and the splat row in one transaction, so a job
   // that has ended means this splat is stale.
@@ -53,6 +59,20 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
     sharePanel = splat.isShareable ? <SharePanel splatId={id}>{discard}</SharePanel> : discard;
   }
 
+  let photoGrid: React.ReactNode = null;
+  if (photos && photos.length > 0) {
+    photoGrid = (
+      <PhotoGrid
+        photos={photos}
+        placedPhotoIds={placedPhotoIds}
+        selection={selection}
+        onSelect={selectPhoto}
+        hoveredPhotoId={hoveredPhotoId}
+        onHover={setHoveredPhotoId}
+      />
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6 lg:h-full lg:flex-row lg:gap-0">
       {/* The scrollbar's space is reserved for the same reason as in web/app/(authenticated)/splats/layout.tsx: the
@@ -65,15 +85,25 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
         <PipelineStepper stage={stage} job={job} photoCount={photos?.length ?? 0} />
         <StageCard splatId={id} stage={stage} cropBox={cropBox} onJobChanged={() => void refetchJob()} />
         {sharePanel}
-        {photos && photos.length > 0 ? <PhotoGrid photos={photos} placedPhotoIds={placedPhotoIds} /> : null}
+        {photoGrid}
       </div>
-      <section aria-label="3D view" className="h-120 px-4 pb-6 sm:px-12 lg:h-auto lg:flex-1 lg:py-6 lg:pr-8 lg:pl-0">
+      {/* min-w-0 lets the viewer shrink with the window. A flex item otherwise can't narrow below its content, and the
+      canvas holds the pixel width it was last drawn at, so the view would stay wide and run off the right edge. */}
+      <section
+        aria-label="3D view"
+        className="h-120 min-w-0 px-4 pb-6 sm:px-12 lg:h-auto lg:flex-1 lg:py-6 lg:pr-8 lg:pl-0"
+      >
         <SplatStageViewer
           splatId={id}
           job={job}
           complete={splat.status === "complete"}
           cameras={cameras}
           cropBox={cropBox}
+          selection={selection}
+          onSelectPhoto={selectPhoto}
+          onClearSelection={() => setSelection(null)}
+          hoveredPhotoId={hoveredPhotoId}
+          onHoverPhoto={setHoveredPhotoId}
           onCropBoxChange={stage.kind === "check" ? setCropBox : undefined}
         />
       </section>

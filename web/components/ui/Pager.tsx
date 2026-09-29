@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useRef } from "react";
 import { LuChevronLeft, LuChevronRight } from "react-icons/lu";
 
 import { cn } from "@/lib/cn";
@@ -12,12 +15,69 @@ interface PagerProps {
   current: number;
   count: number;
   onChange: (page: number) => void;
+  // A page to flag with a pip, such as the one holding the selected photo. When the pager collapses it into an
+  // ellipsis, that ellipsis carries the pip instead.
+  markedPage?: number | null;
 }
 
-// Previous and next plus numbered pages, 1-based. web/lib/useJustifiedPages.ts supplies current and count.
-export function Pager({ label, current, count, onChange }: PagerProps) {
+// Its border is the page's background color, which sets it apart from a filled current-page button too.
+function MarkPip() {
   return (
-    <nav aria-label={label} className="flex flex-wrap items-center justify-center gap-1">
+    <span
+      aria-hidden="true"
+      className="absolute -top-0.75 -right-0.75 h-2.5 w-2.5 rounded-full border-2 border-background bg-primary"
+    />
+  );
+}
+
+// Previous and next plus numbered pages, 1-based. web/lib/useJustifiedPages.ts supplies current and count. With focus
+// anywhere in the pager, the left and right arrow keys step a page and Home and End jump to the first and last.
+export function Pager({ label, current, count, onChange, markedPage = null }: PagerProps) {
+  const items = pageItems(current, count);
+  const navRef = useRef<HTMLElement>(null);
+  // A key press moves focus to the new current page's button once it renders. The button that had focus can vanish
+  // as the numbered pages shift, or be disabled, like Next on the last page.
+  const focusCurrentRef = useRef(false);
+  useEffect(() => {
+    if (focusCurrentRef.current) {
+      focusCurrentRef.current = false;
+      navRef.current?.querySelector<HTMLButtonElement>('[aria-current="page"]')?.focus();
+    }
+  });
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLElement>) {
+    let page: number;
+    switch (event.key) {
+      case "ArrowLeft":
+        page = current - 1;
+        break;
+      case "ArrowRight":
+        page = current + 1;
+        break;
+      case "Home":
+        page = 1;
+        break;
+      case "End":
+        page = count;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    page = Math.min(count, Math.max(1, page));
+    if (page !== current) {
+      focusCurrentRef.current = true;
+      onChange(page);
+    }
+  }
+
+  return (
+    <nav
+      ref={navRef}
+      aria-label={label}
+      onKeyDown={handleKeyDown}
+      className="flex flex-wrap items-center justify-center gap-1"
+    >
       <button
         type="button"
         aria-label="Previous page"
@@ -27,27 +87,39 @@ export function Pager({ label, current, count, onChange }: PagerProps) {
       >
         <LuChevronLeft aria-hidden="true" className="h-4 w-4" />
       </button>
-      {pageItems(current, count).map((item, i) => {
+      {items.map((item, i) => {
         if (item === "gap") {
+          // A gap always sits between two numbered pages and stands for every page between them.
+          const hidesMarked =
+            markedPage !== null && markedPage > Number(items[i - 1]) && markedPage < Number(items[i + 1]);
           return (
-            // Two gaps can appear in one list, so the index tells them apart.
-            // biome-ignore lint/suspicious/noArrayIndexKey: a gap has no identity of its own.
-            <span key={`gap-${i}`} aria-hidden="true" className="w-6 text-center text-sm text-muted-foreground">
-              …
+            // Two gaps can appear in one list, so each is named by the page before it.
+            <span
+              key={`gap-after-${items[i - 1]}`}
+              aria-hidden="true"
+              className="relative w-6 text-center text-sm text-muted-foreground"
+            >
+              …{hidesMarked ? <MarkPip /> : null}
             </span>
           );
         }
         const active = item === current;
+        const marked = item === markedPage;
         return (
           <button
             key={item}
             type="button"
-            aria-label={`Page ${item}`}
+            aria-label={marked ? `Page ${item}, has the selected photo` : `Page ${item}`}
             aria-current={active ? "page" : undefined}
             onClick={() => onChange(item)}
-            className={cn(PAGER_BUTTON, active && "border-primary bg-primary text-primary-foreground hover:bg-primary")}
+            className={cn(
+              PAGER_BUTTON,
+              "relative",
+              active && "border-primary bg-primary text-primary-foreground hover:bg-primary",
+            )}
           >
             {item}
+            {marked ? <MarkPip /> : null}
           </button>
         );
       })}

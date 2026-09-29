@@ -26,13 +26,31 @@ function shownFilenames() {
 
 describe("PhotoGrid", () => {
   it("shows every photo and no pager when they fit on one page", () => {
-    render(<PhotoGrid photos={makePhotos(9)} placedPhotoIds={null} />);
+    render(
+      <PhotoGrid
+        photos={makePhotos(9)}
+        placedPhotoIds={null}
+        selection={null}
+        onSelect={() => {}}
+        hoveredPhotoId={null}
+        onHover={() => {}}
+      />,
+    );
     expect(screen.getAllByRole("img")).toHaveLength(9);
     expect(screen.queryByRole("navigation", { name: "Photo pages" })).not.toBeInTheDocument();
   });
 
   it("pages through the photos three rows at a time", () => {
-    render(<PhotoGrid photos={makePhotos(30)} placedPhotoIds={null} />);
+    render(
+      <PhotoGrid
+        photos={makePhotos(30)}
+        placedPhotoIds={null}
+        selection={null}
+        onSelect={() => {}}
+        hoveredPhotoId={null}
+        onHover={() => {}}
+      />,
+    );
     expect(shownFilenames()).toHaveLength(9);
     expect(shownFilenames()[0]).toBe("IMG_1.jpg");
     expect(screen.getByText("1–9 of 30")).toBeInTheDocument();
@@ -53,16 +71,41 @@ describe("PhotoGrid", () => {
   it("keeps the order it's given and flags the photos that couldn't be placed where they fall", () => {
     const photos = makePhotos(9);
     render(
-      <PhotoGrid photos={photos} placedPhotoIds={new Set(photos.filter(p => p.id !== "photo-2").map(p => p.id))} />,
+      <PhotoGrid
+        photos={photos}
+        placedPhotoIds={new Set(photos.filter(p => p.id !== "photo-2").map(p => p.id))}
+        selection={null}
+        onSelect={() => {}}
+        hoveredPhotoId={null}
+        onHover={() => {}}
+      />,
     );
     expect(shownFilenames().slice(0, 3)).toEqual(["IMG_1.jpg", "IMG_2.jpg (couldn't be placed)", "IMG_3.jpg"]);
   });
 
   it("falls back to the last page when the photo list shrinks under it", () => {
-    const { rerender } = render(<PhotoGrid photos={makePhotos(30)} placedPhotoIds={null} />);
+    const { rerender } = render(
+      <PhotoGrid
+        photos={makePhotos(30)}
+        placedPhotoIds={null}
+        selection={null}
+        onSelect={() => {}}
+        hoveredPhotoId={null}
+        onHover={() => {}}
+      />,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Page 4" }));
 
-    rerender(<PhotoGrid photos={makePhotos(20)} placedPhotoIds={null} />);
+    rerender(
+      <PhotoGrid
+        photos={makePhotos(20)}
+        placedPhotoIds={null}
+        selection={null}
+        onSelect={() => {}}
+        hoveredPhotoId={null}
+        onHover={() => {}}
+      />,
+    );
     expect(shownFilenames()[0]).toBe("IMG_19.jpg");
     expect(screen.getByText("19–20 of 20")).toBeInTheDocument();
   });
@@ -73,6 +116,10 @@ describe("PhotoGrid", () => {
       <PhotoGrid
         photos={[landscape, { ...portrait, width: 3024, height: 4032 }, { ...unknown, width: null, height: null }]}
         placedPhotoIds={null}
+        selection={null}
+        onSelect={() => {}}
+        hoveredPhotoId={null}
+        onHover={() => {}}
       />,
     );
     // They don't fill a row, so they keep the 96px target height.
@@ -86,9 +133,252 @@ describe("PhotoGrid", () => {
   });
 
   it("fills each page with whole rows", () => {
-    render(<PhotoGrid photos={makePhotos(13)} placedPhotoIds={null} />);
+    render(
+      <PhotoGrid
+        photos={makePhotos(13)}
+        placedPhotoIds={null}
+        selection={null}
+        onSelect={() => {}}
+        hoveredPhotoId={null}
+        onHover={() => {}}
+      />,
+    );
     for (const tile of screen.getAllByRole("img").map(img => img.closest("li"))) {
       expect(tile).toHaveStyle({ width: "126.66px", height: "95px" });
+    }
+  });
+
+  it("offers only the placed photos for selection", () => {
+    const photos = makePhotos(3);
+    const onSelect = vi.fn();
+    render(
+      <PhotoGrid
+        photos={photos}
+        placedPhotoIds={new Set(["photo-1", "photo-3"])}
+        selection={null}
+        onSelect={onSelect}
+        hoveredPhotoId={null}
+        onHover={() => {}}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "IMG_2.jpg (couldn't be placed)" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "IMG_3.jpg" }));
+    expect(onSelect).toHaveBeenCalledWith("photo-3");
+  });
+
+  it("turns to the selected photo's page and marks it in the pager", () => {
+    const photos = makePhotos(30);
+    const placed = new Set(photos.map(photo => photo.id));
+    const { rerender } = render(
+      <PhotoGrid
+        photos={photos}
+        placedPhotoIds={placed}
+        selection={null}
+        onSelect={() => {}}
+        hoveredPhotoId={null}
+        onHover={() => {}}
+      />,
+    );
+
+    rerender(
+      <PhotoGrid
+        photos={photos}
+        placedPhotoIds={placed}
+        selection={{ photoId: "photo-20" }}
+        onSelect={() => {}}
+        hoveredPhotoId={null}
+        onHover={() => {}}
+      />,
+    );
+    expect(screen.getByText("19–27 of 30")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "IMG_20.jpg" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Page 3, has the selected photo" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+
+    // Paging away by hand stays there, and the pager still points back.
+    fireEvent.click(screen.getByRole("button", { name: "Page 1" }));
+    expect(screen.getByText("1–9 of 30")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Page 3, has the selected photo" })).not.toHaveAttribute("aria-current");
+
+    // A new pick turns back, even one on the same page, or the same photo picked again.
+    rerender(
+      <PhotoGrid
+        photos={photos}
+        placedPhotoIds={placed}
+        selection={{ photoId: "photo-21" }}
+        onSelect={() => {}}
+        hoveredPhotoId={null}
+        onHover={() => {}}
+      />,
+    );
+    expect(screen.getByText("19–27 of 30")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Page 1" }));
+    rerender(
+      <PhotoGrid
+        photos={photos}
+        placedPhotoIds={placed}
+        selection={{ photoId: "photo-21" }}
+        onSelect={() => {}}
+        hoveredPhotoId={null}
+        onHover={() => {}}
+      />,
+    );
+    expect(screen.getByText("19–27 of 30")).toBeInTheDocument();
+  });
+
+  it("reports hovered photos and marks the one hovered in the 3D view", () => {
+    const photos = makePhotos(3);
+    const placed = new Set(photos.map(photo => photo.id));
+    const onHover = vi.fn();
+    const { rerender } = render(
+      <PhotoGrid
+        photos={photos}
+        placedPhotoIds={placed}
+        selection={null}
+        onSelect={() => {}}
+        hoveredPhotoId={null}
+        onHover={onHover}
+      />,
+    );
+    const tile = screen.getByRole("button", { name: "IMG_2.jpg" });
+    fireEvent.pointerEnter(tile);
+    fireEvent.pointerLeave(tile);
+    expect(onHover.mock.calls).toEqual([["photo-2"], [null]]);
+    expect(tile.closest("li")).not.toHaveClass("-translate-y-0.5");
+
+    rerender(
+      <PhotoGrid
+        photos={photos}
+        placedPhotoIds={placed}
+        selection={null}
+        onSelect={() => {}}
+        hoveredPhotoId="photo-2"
+        onHover={onHover}
+      />,
+    );
+    expect(tile.closest("li")).toHaveClass("-translate-y-0.5");
+  });
+
+  it("moves the selection with the arrow keys and Home/End, skipping unplaced photos and turning pages", () => {
+    const photos = makePhotos(12);
+    const placed = new Set(photos.filter(photo => photo.id !== "photo-3").map(photo => photo.id));
+    const onSelect = vi.fn();
+    const { rerender } = render(
+      <PhotoGrid
+        photos={photos}
+        placedPhotoIds={placed}
+        selection={{ photoId: "photo-2" }}
+        onSelect={onSelect}
+        hoveredPhotoId={null}
+        onHover={() => {}}
+      />,
+    );
+    const selected = screen.getByRole("button", { name: "IMG_2.jpg" });
+    // Only the selected tile is in the tab order.
+    expect(selected).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("button", { name: "IMG_1.jpg" })).toHaveAttribute("tabindex", "-1");
+
+    fireEvent.keyDown(selected, { key: "ArrowRight" });
+    fireEvent.keyDown(selected, { key: "ArrowLeft" });
+    fireEvent.keyDown(selected, { key: "End" });
+    expect(onSelect.mock.calls).toEqual([["photo-4"], ["photo-1"], ["photo-12"]]);
+
+    // Picking a photo on the next page turns to it and focuses its tile.
+    rerender(
+      <PhotoGrid
+        photos={photos}
+        placedPhotoIds={placed}
+        selection={{ photoId: "photo-12" }}
+        onSelect={onSelect}
+        hoveredPhotoId={null}
+        onHover={() => {}}
+      />,
+    );
+    expect(screen.getByText("10–12 of 12")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "IMG_12.jpg" })).toHaveFocus();
+  });
+
+  it("clears its own hover when a page turn removes the hovered tile", () => {
+    const photos = makePhotos(30);
+    const placed = new Set(photos.map(photo => photo.id));
+    const onHover = vi.fn();
+    const { rerender } = render(
+      <PhotoGrid
+        photos={photos}
+        placedPhotoIds={placed}
+        selection={null}
+        onSelect={() => {}}
+        hoveredPhotoId={null}
+        onHover={onHover}
+      />,
+    );
+    fireEvent.pointerEnter(screen.getByRole("button", { name: "IMG_1.jpg" }));
+
+    // A pick in the 3D view turns the grid to page 3, taking the hovered tile away without a pointerleave.
+    rerender(
+      <PhotoGrid
+        photos={photos}
+        placedPhotoIds={placed}
+        selection={{ photoId: "photo-20" }}
+        onSelect={() => {}}
+        hoveredPhotoId="photo-1"
+        onHover={onHover}
+      />,
+    );
+    expect(onHover.mock.calls).toEqual([["photo-1"], [null]]);
+  });
+
+  it("moves the selection between rows with the up and down arrows", () => {
+    // jsdom does no layout, so each tile reports a layout box from its place in the list: three per row, 95px tall with
+    // 6px gaps, as the grid lays them out at this width.
+    const place = (item: HTMLElement) => [...(item.parentElement?.children ?? [])].indexOf(item);
+    const offsets = {
+      offsetTop: (item: HTMLElement) => Math.floor(place(item) / 3) * 101,
+      offsetLeft: (item: HTMLElement) => (place(item) % 3) * 132,
+      offsetWidth: () => 126,
+      offsetHeight: () => 95,
+    };
+    const restore = Object.entries(offsets).map(([name, get]) => {
+      const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, name);
+      Object.defineProperty(HTMLElement.prototype, name, {
+        configurable: true,
+        get(this: HTMLElement) {
+          return get(this);
+        },
+      });
+      return () => {
+        if (original) {
+          Object.defineProperty(HTMLElement.prototype, name, original);
+        }
+      };
+    });
+
+    try {
+      const photos = makePhotos(9);
+      const onSelect = vi.fn();
+      render(
+        <PhotoGrid
+          photos={photos}
+          placedPhotoIds={new Set(photos.map(photo => photo.id))}
+          selection={{ photoId: "photo-5" }}
+          onSelect={onSelect}
+          hoveredPhotoId={null}
+          onHover={() => {}}
+        />,
+      );
+      const middle = screen.getByRole("button", { name: "IMG_5.jpg" });
+      fireEvent.keyDown(middle, { key: "ArrowDown" });
+      fireEvent.keyDown(middle, { key: "ArrowUp" });
+      fireEvent.keyDown(screen.getByRole("button", { name: "IMG_8.jpg" }), { key: "ArrowDown" });
+      // Down from the last row has nowhere to go.
+      expect(onSelect.mock.calls).toEqual([["photo-8"], ["photo-2"]]);
+    } finally {
+      for (const undo of restore) {
+        undo();
+      }
     }
   });
 });

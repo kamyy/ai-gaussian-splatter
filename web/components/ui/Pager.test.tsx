@@ -30,4 +30,39 @@ describe("Pager", () => {
     const pages = screen.getAllByRole("button", { name: /^Page / }).map(button => button.textContent);
     expect(pages).toEqual(["1", "8", "9", "10", "17"]);
   });
+
+  it("flags the marked page, or the ellipsis hiding it", () => {
+    const { container, rerender } = render(
+      <Pager label="Photo pages" current={3} count={9} onChange={() => {}} markedPage={2} />,
+    );
+    expect(screen.getByRole("button", { name: "Page 2, has the selected photo" })).toBeInTheDocument();
+
+    rerender(<Pager label="Photo pages" current={3} count={9} onChange={() => {}} markedPage={7} />);
+    expect(screen.queryByRole("button", { name: /has the selected photo/ })).not.toBeInTheDocument();
+    // The pages run 1 to 5, then an ellipsis for 6 to 8, then 9.
+    const gap = [...container.querySelectorAll("span")].find(span => span.textContent === "…");
+    expect(gap?.querySelector("span")).not.toBeNull();
+  });
+
+  it("steps pages with the arrow keys and jumps with Home and End, focusing the new page", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<Pager label="Photo pages" current={2} count={9} onChange={onChange} />);
+    const page2 = screen.getByRole("button", { name: "Page 2" });
+
+    fireEvent.keyDown(page2, { key: "ArrowRight" });
+    fireEvent.keyDown(page2, { key: "ArrowLeft" });
+    fireEvent.keyDown(page2, { key: "End" });
+    fireEvent.keyDown(page2, { key: "Home" });
+    expect(onChange.mock.calls).toEqual([[3], [1], [9], [1]]);
+
+    rerender(<Pager label="Photo pages" current={1} count={9} onChange={onChange} />);
+    expect(screen.getByRole("button", { name: "Page 1" })).toHaveFocus();
+  });
+
+  it("ignores a key that would go past either end", () => {
+    const onChange = vi.fn();
+    render(<Pager label="Photo pages" current={1} count={3} onChange={onChange} />);
+    fireEvent.keyDown(screen.getByRole("button", { name: "Page 1" }), { key: "ArrowLeft" });
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });

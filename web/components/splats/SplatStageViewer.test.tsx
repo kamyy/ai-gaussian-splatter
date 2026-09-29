@@ -21,7 +21,20 @@ const job = { pointCloudS3Key: null } as Job;
 // SWR's default cache is the app's, and like the app's it outlives a viewer across navigations. Each test uses its own
 // splat so the tests share nothing in it.
 function viewer(splatId: string) {
-  return <SplatStageViewer splatId={splatId} job={job} complete cameras={undefined} cropBox={null} />;
+  return (
+    <SplatStageViewer
+      splatId={splatId}
+      job={job}
+      complete
+      cameras={undefined}
+      cropBox={null}
+      selection={null}
+      onSelectPhoto={() => {}}
+      onClearSelection={() => {}}
+      hoveredPhotoId={null}
+      onHoverPhoto={() => {}}
+    />
+  );
 }
 
 describe("SplatStageViewer", () => {
