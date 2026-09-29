@@ -1,6 +1,8 @@
-"""Write the trained splat as .ply and .spz, render one thumbnail image via gsplat's own rasterizer, and upload all
-three to S3. The .ply is the lossless download, readable by every splat tool. The .spz is the compressed copy the web
-viewer loads. The thumbnail reuses the same renderer training already uses, so it costs no new dependency.
+"""Saves the trained splat and uploads it to S3.
+
+Writes the splat as .ply and .spz, renders one thumbnail image with gsplat's own rasterizer, and uploads all three to
+S3, AWS's file storage. The .ply is the lossless download, readable by every splat tool. The .spz is the compressed copy
+the web viewer loads. The thumbnail reuses the renderer training already uses, so it costs no new dependency.
 """
 
 from dataclasses import dataclass

@@ -1,6 +1,8 @@
-"""Parser for COLMAP's binary sparse reconstruction format (cameras.bin, images.bin, points3D.bin), following the
-layout of COLMAP's own read_write_model.py reference. It feeds camera poses and the initial point cloud into
-worker/pipeline/train.py without adding pycolmap as a dependency.
+"""Reads COLMAP's binary reconstruction files.
+
+COLMAP writes the cameras it placed and the 3D points it found as cameras.bin, images.bin and points3D.bin. This parser
+follows the layout of COLMAP's own read_write_model.py reference, and feeds the camera poses and the starting point
+cloud into worker/pipeline/train.py without adding pycolmap as a dependency.
 """
 
 import struct

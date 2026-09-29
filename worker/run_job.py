@@ -1,7 +1,12 @@
-"""Worker entrypoint. Reads job config from env vars and runs one phase of the pipeline, chosen by settings.stage:
-"reconstruct" (fetch -> COLMAP -> point cloud, then pauses so the user can decide whether to train) or "train" (fetch ->
-gsplat training -> export). Reports status back to the web app at each phase and self-terminates the EC2 instance from
-the finally block below, on success and on failure alike, so a job never runs up spend past its own end.
+"""The worker's entrypoint: runs one stage of a worker job on a GPU instance.
+
+The web app launches an EC2 spot instance (a discounted AWS virtual machine) for each stage and passes the job's
+settings as environment variables. settings.stage picks the stage. "reconstruct" downloads the photos, runs COLMAP to
+work out where each was taken, and saves a point cloud, then pauses so the user can decide whether to train. "train"
+downloads the photos again, trains the Gaussian splat with gsplat, and uploads the results.
+
+It reports status back to the web app at each step, and terminates its own instance from the finally block below, on
+success and on failure alike, so a worker job never runs up spend past its own end.
 """
 
 import logging

@@ -1,3 +1,10 @@
+"""The worker's settings, read from environment variables.
+
+web/lib/server/ec2Launcher.ts sets these in the instance's startup script: which worker job and splat to work on, where
+to report status, the S3 buckets to read and write, and which stage to run. pydantic validates them when the worker
+starts, so a missing setting fails straight away rather than partway through a GPU run.
+"""
+
 from typing import Literal
 
 from pydantic import BaseModel

@@ -1,6 +1,7 @@
-"""Persists the COLMAP reconstruct phase's output across the pause before training: the raw sparse model (so a later,
-separate EC2 instance can resume training without re-running COLMAP), plus a viewer-facing point-cloud .ply and camera
-poses (so the browser can show both while the user decides whether to proceed).
+"""Saves the reconstruct stage's results for the pause before training.
+
+Uploads the raw COLMAP model, so a later, separate EC2 instance can train without re-running COLMAP. It also uploads a
+point-cloud .ply and the camera poses for the browser, so the user can look over both while deciding whether to train.
 """
 
 import json
