@@ -24,7 +24,7 @@ interface ChipProps {
   className?: string;
 }
 
-// A filled status pill. "primary" is solid rather than tinted, reserved for a status that needs the visitor to act.
+/** A filled status pill. "primary" is solid rather than tinted, reserved for a status that needs the visitor to act. */
 export function Chip({ color = "default", label, className }: ChipProps) {
   return (
     <span

@@ -20,10 +20,12 @@ interface JustifiedPagesOptions {
   captionRem?: number;
 }
 
-// Pages of whole justified rows, laid out for the width of the element given setArea as its ref. Every page but the
-// last ends on a full row. The requested page is clamped to the last one, so removing items or narrowing the window
-// under a later page shows what is now the last page. aspects (width over height) should keep its identity between
-// renders, or the layout is redone on every one.
+/**
+ * Pages of whole justified rows, laid out for the width of the element given setArea as its ref. Every page but the
+ * last ends on a full row. The requested page is clamped to the last one, so removing items or narrowing the window
+ * under a later page shows what is now the last page. aspects (width over height) should keep its identity between
+ * renders, or the layout is redone on every one.
+ */
 export function useJustifiedPages(
   aspects: number[],
   { rowHeightRem, columnGapRem, rowGapRem, rowsPerPage, captionRem = 0 }: JustifiedPagesOptions,

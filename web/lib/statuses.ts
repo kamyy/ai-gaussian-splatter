@@ -15,7 +15,7 @@ export type SplatStatus = (typeof SPLAT_STATUSES)[number];
 
 export const PHOTO_UPLOAD_STATUSES = ["pending", "uploaded", "failed"] as const;
 
-// Named so a comparison uses a member (JobStatus.queued) rather than repeating the label as a string.
+/** Named so a comparison uses a member (JobStatus.queued) rather than repeating the label as a string. */
 export const JobStatus = {
   queued: "queued",
   launching: "launching",
@@ -28,9 +28,11 @@ export const JobStatus = {
   cancelled: "cancelled",
 } as const;
 
-// Derived from JobStatus's own values rather than hand-listed a second time, so the two can't drift. The cast is a
-// literal tuple, not a plain `JobStatus[]`, because pgEnum (web/lib/server/db/schema.ts) requires a
-// `[string, ...string[]]` shape that Object.values()'s inferred `JobStatus[]` doesn't satisfy on its own.
+/**
+ * Derived from JobStatus's own values rather than hand-listed a second time, so the two can't drift. The cast is a
+ * literal tuple, not a plain `JobStatus[]`, because pgEnum (web/lib/server/db/schema.ts) requires a
+ * `[string, ...string[]]` shape that Object.values()'s inferred `JobStatus[]` doesn't satisfy on its own.
+ */
 export const JOB_STATUSES = Object.values(JobStatus) as [JobStatus, ...JobStatus[]];
 export type JobStatus = (typeof JobStatus)[keyof typeof JobStatus];
 

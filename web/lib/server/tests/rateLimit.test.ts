@@ -5,11 +5,9 @@ import { closeDb, getDb } from "../db";
 import { HttpError } from "../httpError";
 import { checkAndIncrementGlobalDaily, checkAndIncrementIp, checkAndIncrementUser } from "../rateLimit";
 
-/**
- * Requires a real Postgres (TEST_DATABASE_URL). These tests exercise the `INSERT ... ON CONFLICT` upsert, which is the
- * whole point of the implementation and can't be faked faithfully. CI starts that Postgres as a podman container
- * (.github/workflows/ci.yml).
- */
+// Requires a real Postgres (TEST_DATABASE_URL). These tests exercise the `INSERT ... ON CONFLICT` upsert, which is the
+// whole point of the implementation and can't be faked faithfully. CI starts that Postgres as a podman container
+// (.github/workflows/ci.yml).
 describe("rate limiting", () => {
   beforeEach(async () => {
     // Truncate rather than drop/recreate per test: the schema is applied once by the migrate step, and this is far

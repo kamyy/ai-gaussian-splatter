@@ -63,9 +63,9 @@ export async function reconcileJob(
   }
 
   // Both rows move together or not at all. The job write is conditional on the job still having the status and instance
-  // this lookup judged. A reconstruct stage that finishes during the lookup moves to awaiting_training and terminates its
-  // own instance, which the lookup would otherwise read as a dead worker. The same condition keeps a result or a cancel
-  // that landed meanwhile.
+  // this lookup judged. A reconstruct stage that finishes during the lookup moves to awaiting_training and terminates
+  // its own instance, which the lookup would otherwise read as a dead worker. The same condition keeps a result or a
+  // cancel that landed meanwhile.
   return getDb().transaction(async tx => {
     const failed = await tx
       .update(jobs)

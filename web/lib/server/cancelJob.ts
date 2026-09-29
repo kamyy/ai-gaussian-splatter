@@ -13,8 +13,10 @@ import { jobs } from "./db/schema";
 import { localLaunchEnabled, stopLocalWorker, terminateWorker } from "./ec2Launcher";
 import { jobColumns } from "./selects";
 
-// Statuses where a worker instance may be running for the job. awaiting_training is absent: the reconstruct instance
-// has already terminated itself and the train instance hasn't launched.
+/**
+ * Statuses where a worker instance may be running for the job. awaiting_training is absent: the reconstruct instance
+ * has already terminated itself and the train instance hasn't launched.
+ */
 export const WORKER_RUNNING_STATUSES: string[] = [
   JobStatus.queued,
   JobStatus.launching,

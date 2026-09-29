@@ -13,14 +13,15 @@ import type { PickedPhoto } from "./measurePhoto";
 import { useAppStore } from "./store";
 import type { PhotoPresignItem } from "./types";
 
-// onUploaded fires once per photo the server has marked uploaded, so the caller can leave it out of a retry.
+/** onUploaded fires once per photo the server has marked uploaded, so the caller can leave it out of a retry. */
 export async function uploadPhotos(
   splatId: string,
   photos: PickedPhoto[],
   token: string,
   onUploaded: (photo: PickedPhoto) => void,
 ): Promise<void> {
-  // A retry whose failed photos were all removed has nothing left to send, and the presign route rejects an empty batch.
+  // A retry whose failed photos were all removed has nothing left to send, and the presign route rejects an empty
+  // batch.
   if (photos.length === 0) {
     return;
   }

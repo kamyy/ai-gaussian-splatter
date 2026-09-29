@@ -24,7 +24,7 @@ const URL_REFRESH_MS = 5 * 60_000;
 // fetched longer than this before the page mounted is not used, and the page waits for SWR's revalidation instead.
 const URL_MAX_AGE_AT_MOUNT_MS = 10 * 60_000;
 
-// Fetches the presigned URL at path while key is set, and returns undefined until one is fresh enough to mount.
+/** Fetches the presigned URL at path while key is set, and returns undefined until one is fresh enough to mount. */
 export function usePresignedUrl(key: string[] | null, path: string) {
   const { getToken } = useAuth();
   const [mountedAt] = useState(Date.now);

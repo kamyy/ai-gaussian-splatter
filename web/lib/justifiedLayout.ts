@@ -30,9 +30,11 @@ function sizedRow(indexes: number[], aspects: number[], height: number): LayoutR
   return { tiles: indexes.map(index => ({ index, width: aspects[index] * height, height })), height };
 }
 
-// Fills each row until it reaches the width at the target height, then closes it at whichever break, with or without
-// the last photo, leaves its height nearest the target. The row is then scaled to the exact width. A part-filled last
-// row stays at the target height, or shorter if its photos are too wide to fit at that height.
+/**
+ * Fills each row until it reaches the width at the target height, then closes it at whichever break, with or without
+ * the last photo, leaves its height nearest the target. The row is then scaled to the exact width. A part-filled last
+ * row stays at the target height, or shorter if its photos are too wide to fit at that height.
+ */
 export function layoutRows(aspects: number[], width: number, targetHeight: number, gap: number): LayoutRow[] {
   const rows: LayoutRow[] = [];
   let current: number[] = [];
@@ -69,8 +71,10 @@ export function layoutRows(aspects: number[], width: number, targetHeight: numbe
   return rows;
 }
 
-// Splits the rows into pages of rowsPerPage whole rows, so every page but the last ends on a full row. Nothing is laid
-// out before the area has a width.
+/**
+ * Splits the rows into pages of rowsPerPage whole rows, so every page but the last ends on a full row. Nothing is laid
+ * out before the area has a width.
+ */
 export function layoutPages(
   aspects: number[],
   width: number,

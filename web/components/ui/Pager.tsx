@@ -53,8 +53,10 @@ function MarkPip() {
   );
 }
 
-// Previous and next plus numbered pages, 1-based. web/lib/hooks/useJustifiedPages.ts supplies current and count. With
-// focus anywhere in the pager, the left and right arrow keys step a page and Home and End jump to the first and last.
+/**
+ * Previous and next plus numbered pages, 1-based. web/lib/hooks/useJustifiedPages.ts supplies current and count. With
+ * focus anywhere in the pager, the left and right arrow keys step a page and Home and End jump to the first and last.
+ */
 export function Pager({ label, current, count, onChange, markedPage = null }: PagerProps) {
   const items = pageItems(current, count);
   const navRef = useRef<HTMLElement>(null);

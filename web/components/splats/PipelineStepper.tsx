@@ -69,8 +69,10 @@ function gpuTotal(timings: StageTimings | null): string | null {
   return `${formatDuration(timings.cameras.totalMs + timings.build.totalMs)} of GPU time`;
 }
 
-// Each GPU step shows how long it took, split into the instance's start-up and the work itself. Once the splat is
-// complete, every step shows as done, and the list stays vertical so those times stay visible.
+/**
+ * Each GPU step shows how long it took, split into the instance's start-up and the work itself. Once the splat is
+ * complete, every step shows as done, and the list stays vertical so those times stay visible.
+ */
 export function PipelineStepper({
   stage,
   job,

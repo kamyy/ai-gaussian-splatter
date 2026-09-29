@@ -11,7 +11,8 @@ import { MathUtils, Matrix4, Quaternion, Vector3 } from "three";
 import type { CameraPose } from "@/lib/types";
 
 // The shortest orbit distance a flight ends on, as a fraction of the photo's distance from the orbit target. It only
-// applies when the target is beside or behind the photo, where projecting it onto the photo's view gives little or none.
+// applies when the target is beside or behind the photo, where projecting it onto the photo's view gives little or
+// none.
 const MIN_DISTANCE_FRACTION = 0.1;
 
 export interface ViewPose {
@@ -51,8 +52,10 @@ export function fittedFov({ width, height, fx, fy }: Omit<CameraPose, "photoId">
   return MathUtils.radToDeg(2 * Math.atan(tanHalfVertical));
 }
 
-// The pose a fraction t of the way from one pose to another. The position moves in a straight line and the
-// orientation turns at a steady rate, so the view doesn't swing wide the way separately interpolated angles would.
+/**
+ * The pose a fraction t of the way from one pose to another. The position moves in a straight line and the
+ * orientation turns at a steady rate, so the view doesn't swing wide the way separately interpolated angles would.
+ */
 export function interpolatePose(from: ViewPose, to: ViewPose, t: number): ViewPose {
   return {
     position: new Vector3().lerpVectors(from.position, to.position, t),
@@ -61,12 +64,12 @@ export function interpolatePose(from: ViewPose, to: ViewPose, t: number): ViewPo
   };
 }
 
-// The point a pose orbits around: distance along the direction the pose looks.
+/** The point a pose orbits around: distance along the direction the pose looks. */
 export function orbitTargetOf({ position, quaternion, distance }: ViewPose): Vector3 {
   return new Vector3(0, 0, -1).applyQuaternion(quaternion).multiplyScalar(distance).add(position);
 }
 
-// Starts and ends gently, which reads as the camera easing into motion rather than jumping to full speed.
+/** Starts and ends gently, which reads as the camera easing into motion rather than jumping to full speed. */
 export function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
 }

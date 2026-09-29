@@ -12,10 +12,11 @@ import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { LuMoon, LuSun } from "react-icons/lu";
 
-//
-// The server can't know the visitor's theme, so the first client render has to match the server's "light" (the :root
-// default in web/app/globals.css) or React reports a hydration mismatch. next-themes already knows resolvedTheme on
-// that first client render, so it is only trusted once the component has mounted.
+/**
+ * The server can't know the visitor's theme, so the first client render has to match the server's "light" (the :root
+ * default in web/app/globals.css) or React reports a hydration mismatch. next-themes already knows resolvedTheme on
+ * that first client render, so it is only trusted once the component has mounted.
+ */
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);

@@ -189,8 +189,10 @@ function cameraIndexOf(cameras: CameraPose[] | undefined, photoId: string | null
   return index === -1 ? null : index;
 }
 
-// The page's 3D view, with a selector between the finished splat and the point cloud (the "shape sketch") COLMAP
-// produced. Both URLs go to one SplatViewer, so switching keeps the camera where the visitor left it.
+/**
+ * The page's 3D view, with a selector between the finished splat and the point cloud (the "shape sketch") COLMAP
+ * produced. Both URLs go to one SplatViewer, so switching keeps the camera where the visitor left it.
+ */
 export function SplatStageViewer({
   splatId,
   job,

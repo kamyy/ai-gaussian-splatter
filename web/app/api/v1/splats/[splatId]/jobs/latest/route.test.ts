@@ -20,7 +20,7 @@ function latestRequest() {
   return new NextRequest("http://localhost/api/v1/splats/jobs/latest");
 }
 
-/** Requires a real Postgres (TEST_DATABASE_URL). reconcileJob is mocked so this never touches real AWS. */
+// Requires a real Postgres (TEST_DATABASE_URL). reconcileJob is mocked so this never touches real AWS.
 describe("GET /api/v1/splats/[splatId]/jobs/latest", () => {
   beforeEach(async () => {
     vi.clearAllMocks();

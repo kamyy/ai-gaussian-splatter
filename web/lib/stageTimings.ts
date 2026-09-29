@@ -87,7 +87,7 @@ function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-// "22s", "7m 52s", "1h 03m": a finished duration.
+/** "22s", "7m 52s", "1h 03m": a finished duration. */
 export function formatDuration(ms: number): string {
   const seconds = Math.round(ms / 1000);
   if (seconds < 60) {
@@ -100,7 +100,7 @@ export function formatDuration(ms: number): string {
   return `${Math.floor(minutes / 60)}h ${pad(minutes % 60)}m`;
 }
 
-// "4:31", "1:02:09": a running clock.
+/** "4:31", "1:02:09": a running clock. */
 export function formatClock(ms: number): string {
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);

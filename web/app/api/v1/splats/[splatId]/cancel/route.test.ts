@@ -19,7 +19,7 @@ function ctx(splatId: string) {
   return { params: Promise.resolve({ splatId }) } as never;
 }
 
-/** Requires a real Postgres (TEST_DATABASE_URL). terminateWorker is mocked so this never touches real AWS. */
+// Requires a real Postgres (TEST_DATABASE_URL). terminateWorker is mocked so this never touches real AWS.
 describe("POST /api/v1/splats/[splatId]/cancel", () => {
   beforeEach(async () => {
     terminateWorkerMock.mockClear();

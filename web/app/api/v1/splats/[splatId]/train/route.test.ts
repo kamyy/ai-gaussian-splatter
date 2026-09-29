@@ -29,10 +29,8 @@ function ctx(splatId: string) {
   return { params: Promise.resolve({ splatId }) } as never;
 }
 
-/**
- * Requires a real Postgres (TEST_DATABASE_URL). launchJob is mocked so this never touches real AWS. Only the atomic
- * status flip and the daily-cap gate are under test here.
- */
+// Requires a real Postgres (TEST_DATABASE_URL). launchJob is mocked so this never touches real AWS. Only the atomic
+// status flip and the daily-cap gate are under test here.
 describe("POST /api/v1/splats/[splatId]/train", () => {
   beforeEach(async () => {
     launchJobMock.mockClear();

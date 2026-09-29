@@ -9,8 +9,10 @@
 import { JobStatus } from "./statuses";
 import type { Job } from "./types";
 
-// The five steps a visitor sees, in order. "cameras" is COLMAP's reconstruction, "check" is the awaiting_training
-// pause, and "build" is gsplat's training run.
+/**
+ * The five steps a visitor sees, in order. "cameras" is COLMAP's reconstruction, "check" is the awaiting_training
+ * pause, and "build" is gsplat's training run.
+ */
 export const STEPS = [
   { key: "upload", label: "Upload photos" },
   { key: "cameras", label: "Place the cameras" },
@@ -21,7 +23,7 @@ export const STEPS = [
 
 export type StepKey = (typeof STEPS)[number]["key"];
 
-// What the page's stage card shows. "no_photos" is a dead end: photos can only be added when a splat is created.
+/** What the page's stage card shows. "no_photos" is a dead end: photos can only be added when a splat is created. */
 export type Stage =
   | { kind: "no_photos" }
   | { kind: "ready" }
@@ -41,7 +43,8 @@ export function splatStage(job: Job | undefined, photoCount: number): Stage {
     case JobStatus.queued:
     case JobStatus.reconstruction_running:
       return { kind: "placing_cameras" };
-    // Both stages launch through "launching". The train stage's launch starts from a job that already has a point cloud.
+    // Both stages launch through "launching". The train stage's launch starts from a job that already has a point
+    // cloud.
     case JobStatus.launching:
       if (job.pointCloudS3Key) {
         return { kind: "building", progress: null, startedAt: null };
@@ -64,7 +67,7 @@ export function splatStage(job: Job | undefined, photoCount: number): Stage {
   }
 }
 
-// The step the stepper marks as current. Every step before it shows as done. null means every step is done.
+/** The step the stepper marks as current. Every step before it shows as done. null means every step is done. */
 export function currentStep(stage: Stage): StepKey | null {
   switch (stage.kind) {
     case "no_photos":

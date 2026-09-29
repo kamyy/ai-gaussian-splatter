@@ -14,8 +14,10 @@ import { defineConfig } from "drizzle-kit";
 
 import { databaseSsl, resolveDatabaseUrl } from "./lib/server/databaseUrl";
 
-// An empty string rather than a throw when unset, because `drizzle-kit generate` only diffs the schema against the
-// checked-in snapshot and needs no database.
+/**
+ * An empty string rather than a throw when unset, because `drizzle-kit generate` only diffs the schema against the
+ * checked-in snapshot and needs no database.
+ */
 export default defineConfig({
   dialect: "postgresql",
   schema: "./lib/server/db/schema.ts",

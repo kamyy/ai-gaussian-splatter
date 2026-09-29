@@ -15,8 +15,10 @@ import { jobs, splats } from "@/lib/server/db/schema";
 import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
 import { readSplatCameras } from "@/lib/server/s3";
 
-// Returns the poses themselves rather than a presigned URL, since they're a few kilobytes and the server has to map
-// the worker's photo filenames back to photo ids anyway.
+/**
+ * Returns the poses themselves rather than a presigned URL, since they're a few kilobytes and the server has to map
+ * the worker's photo filenames back to photo ids anyway.
+ */
 export const GET = withErrorHandling(
   async (_request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/cameras">) => {
     const user = await requireUser();

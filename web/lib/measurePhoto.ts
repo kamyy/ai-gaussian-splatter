@@ -6,9 +6,11 @@
  * for thumbnails. A photo this browser can't decode is reported rather than uploaded.
  */
 
-// A photo picked for upload, with its size as an <img> displays it, a small JPEG copy, and when it was taken.
-// web/lib/hooks/usePickedPhotos.ts measures each photo as it's added, so every photo that reaches
-// web/lib/uploadPhotos.ts has all three to store.
+/**
+ * A photo picked for upload, with its size as an <img> displays it, a small JPEG copy, and when it was taken.
+ * web/lib/hooks/usePickedPhotos.ts measures each photo as it's added, so every photo that reaches
+ * web/lib/uploadPhotos.ts has all three to store.
+ */
 export interface PickedPhoto {
   file: File;
   width: number;
@@ -18,12 +20,12 @@ export interface PickedPhoto {
   takenAt: number;
 }
 
-// Two files with the same name and size from separate drops are the same photo picked twice.
+/** Two files with the same name and size from separate drops are the same photo picked twice. */
 export function fileKey(file: File) {
   return `${file.name}:${file.size}`;
 }
 
-// Long enough that a library card, the largest place a thumbnail shows, stays sharp on a high-resolution screen.
+/** Long enough that a library card, the largest place a thumbnail shows, stays sharp on a high-resolution screen. */
 export const THUMBNAIL_LONG_SIDE = 640;
 const THUMBNAIL_QUALITY = 0.8;
 
@@ -57,9 +59,11 @@ async function readTakenAt(file: File): Promise<number> {
   return file.lastModified;
 }
 
-// createImageBitmap applies the EXIF orientation by default, so a portrait phone photo stored sideways still measures
-// as portrait, and its thumbnail comes out upright. Null for a format this browser can't decode, such as HEIC outside
-// Safari.
+/**
+ * createImageBitmap applies the EXIF orientation by default, so a portrait phone photo stored sideways still measures
+ * as portrait, and its thumbnail comes out upright. Null for a format this browser can't decode, such as HEIC outside
+ * Safari.
+ */
 export async function measurePhoto(file: File): Promise<PickedPhoto | null> {
   let bitmap: ImageBitmap | undefined;
   try {
@@ -78,11 +82,13 @@ export async function measurePhoto(file: File): Promise<PickedPhoto | null> {
   }
 }
 
-// A decoded 12-megapixel photo holds about 48 MB, so decoding a whole drop at once can exhaust the tab's memory. Only
-// this many are decoded at a time.
+/**
+ * A decoded 12-megapixel photo holds about 48 MB, so decoding a whole drop at once can exhaust the tab's memory. Only
+ * this many are decoded at a time.
+ */
 export const MEASURE_CONCURRENCY = 4;
 
-// Results line up with files, with null for each photo measurePhoto couldn't decode.
+/** Results line up with files, with null for each photo measurePhoto couldn't decode. */
 export async function measurePhotos(files: File[]): Promise<Array<PickedPhoto | null>> {
   const results: Array<PickedPhoto | null> = new Array(files.length).fill(null);
   let next = 0;

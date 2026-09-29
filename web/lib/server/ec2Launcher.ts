@@ -81,10 +81,12 @@ ${cropBoxArg}    ${p.workerImageUri}
 `;
 }
 
-// infra/web.tf sets these from its ECR repository once infra/ is deployed. The placeholders are for local development
-// before a deploy. The stages run different images. worker/Dockerfile's reconstruct target carries COLMAP and no torch,
-// and its train target carries torch and gsplat and no COLMAP, so each stage pulls only what it runs. Called by
-// web/app/api/v1/splats/[splatId]/process/route.ts and web/app/api/v1/splats/[splatId]/train/route.ts.
+/**
+ * infra/web.tf sets these from its ECR repository once infra/ is deployed. The placeholders are for local development
+ * before a deploy. The stages run different images. worker/Dockerfile's reconstruct target carries COLMAP and no torch,
+ * and its train target carries torch and gsplat and no COLMAP, so each stage pulls only what it runs. Called by
+ * web/app/api/v1/splats/[splatId]/process/route.ts and web/app/api/v1/splats/[splatId]/train/route.ts.
+ */
 export function workerImageUri(stage: WorkerStage): string {
   if (stage === "reconstruct") {
     return process.env.WORKER_RECONSTRUCT_IMAGE_URI ?? "REPLACE_WITH_ECR_IMAGE_URI";
@@ -96,8 +98,10 @@ export function ecrRegistry(): string {
   return process.env.ECR_REGISTRY ?? "REPLACE_WITH_ECR_REGISTRY";
 }
 
-// Runs the worker against the caller's own GPU via Podman instead of launching a real EC2 spot instance. See
-// launchJobLocal() below and "Triggering the worker from pnpm dev" in RUNBOOK.md.
+/**
+ * Runs the worker against the caller's own GPU via Podman instead of launching a real EC2 spot instance. See
+ * launchJobLocal() below and "Triggering the worker from pnpm dev" in RUNBOOK.md.
+ */
 export function localLaunchEnabled(): boolean {
   return process.env.WORKER_LOCAL_LAUNCH === "true";
 }
@@ -117,8 +121,9 @@ export function generateCallbackToken(): string {
  * worst-case billing and is not a tuned SLA. No stage's wall clock has been measured yet, so 30 minutes is a guess, and
  * a stage that runs longer is killed. Revisit it once real numbers exist.
  *
- * infra/locals.tf's worker_max_lifetime_minutes must match it. That is what the sweeper Lambda (infra/worker_sweeper.tf)
- * measures instance age against, and it lives in a separate Terraform config, so the two are kept in sync by hand.
+ * infra/locals.tf's worker_max_lifetime_minutes must match it. That is what the sweeper Lambda
+ * (infra/worker_sweeper.tf) measures instance age against, and it lives in a separate Terraform config, so the two are
+ * kept in sync by hand.
  */
 export const WORKER_MAX_LIFETIME_MINUTES = 30;
 
@@ -222,8 +227,8 @@ export async function describeWorker(instanceId: string): Promise<{ state: strin
 }
 
 /**
- * Stops a worker instance ahead of its own self-termination, for a cancelled or deleted splat. An instance EC2 no longer
- * knows about has already gone, which is the outcome wanted. infra/web.tf's TerminateWorker grant only covers
+ * Stops a worker instance ahead of its own self-termination, for a cancelled or deleted splat. An instance EC2 no
+ * longer knows about has already gone, which is the outcome wanted. infra/web.tf's TerminateWorker grant only covers
  * instances carrying the worker tag launchJob() applies.
  */
 export async function terminateWorker(instanceId: string): Promise<void> {

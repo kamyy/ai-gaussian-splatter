@@ -29,11 +29,13 @@ import type { CameraPose } from "@/lib/types";
 const FLIGHT_SECONDS = 0.8;
 // How long the view takes to level out and zoom back out once the visitor starts orbiting away from a photo's view.
 const LEVEL_SECONDS = 0.4;
-// The vertical field of view, in degrees, everywhere but a photo's view. R3F's own default camera has the same.
+/** The vertical field of view, in degrees, everywhere but a photo's view. R3F's own default camera has the same. */
 export const DEFAULT_FOV = 75;
 
-// A camera picked by index into the viewer's cameras. Every new object flies the view there, so selecting the same
-// camera again after orbiting away flies back to it.
+/**
+ * A camera picked by index into the viewer's cameras. Every new object flies the view there, so selecting the same
+ * camera again after orbiting away flies back to it.
+ */
 export interface CameraSelection {
   index: number;
 }

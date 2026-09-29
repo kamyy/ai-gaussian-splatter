@@ -16,8 +16,10 @@ import { useLatestRef } from "@/lib/hooks/useLatestRef";
 
 import { trimmedBox } from "./cameraFraming";
 
-// In world units. COLMAP's reconstruction has no fixed scale, so what looks right varies from one splat to the next,
-// which is why web/components/splats/SplatStageViewer.tsx offers a slider over it.
+/**
+ * In world units. COLMAP's reconstruction has no fixed scale, so what looks right varies from one splat to the next,
+ * which is why web/components/splats/SplatStageViewer.tsx offers a slider over it.
+ */
 export const DEFAULT_POINT_SIZE = 0.0125;
 
 interface PointCloudSceneProps {

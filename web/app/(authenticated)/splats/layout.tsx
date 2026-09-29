@@ -7,9 +7,11 @@
 
 import { SiteHeader } from "@/components/layout/SiteHeader";
 
-// The scrollbar's space is always reserved. web/lib/hooks/useJustifiedPages.ts lays photos out for the width it measures,
-// and a scrollbar that appears only once they render would narrow that width, re-lay them out shorter, disappear, and
-// repeat every frame.
+/**
+ * The scrollbar's space is always reserved. web/lib/hooks/useJustifiedPages.ts lays photos out for the width it
+ * measures, and a scrollbar that appears only once they render would narrow that width, re-lay them out shorter,
+ * disappear, and repeat every frame.
+ */
 export default function SplatsLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-dvh flex-col">

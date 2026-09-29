@@ -55,10 +55,8 @@ interface SplatViewerProps {
   height?: string;
 }
 
-/**
- * Spark draws every SplatMesh in the scene through one SparkRenderer, which has to be in the same scene and share R3F's
- * WebGLRenderer. Both are plain Three.js objects, so R3F's own render loop drives them through <primitive>.
- */
+// Spark draws every SplatMesh in the scene through one SparkRenderer, which has to be in the same scene and share R3F's
+// WebGLRenderer. Both are plain Three.js objects, so R3F's own render loop drives them through <primitive>.
 function SplatScene({
   splatUrl,
   onError,

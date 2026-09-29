@@ -12,7 +12,7 @@ import { Chip } from "@/components/ui/Chip";
 import { splatBadge } from "@/lib/splatBadge";
 import type { SplatListItem } from "@/lib/types";
 
-// The card image's width over height: its thumbnail's shape, or 4:3 for a splat with no sized thumbnail.
+/** The card image's width over height: its thumbnail's shape, or 4:3 for a splat with no sized thumbnail. */
 export function splatCardAspect(splat: SplatListItem) {
   if (splat.thumbnailWidth === null || splat.thumbnailHeight === null) {
     return 4 / 3;

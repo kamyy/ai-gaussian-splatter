@@ -33,8 +33,10 @@ const HOVERED_FILL_OPACITY = 0.2;
 const FILL_FADE_DEPTHS: [number, number] = [1, 3];
 // Four side triangles from the camera center plus two for the far rectangle.
 const TRIANGLES_PER_FRUSTUM = 6;
-// How far, in pixels, the pointer may move between press and release for the release to still count as a click
-// rather than the end of an orbit drag.
+/**
+ * How far, in pixels, the pointer may move between press and release for the release to still count as a click
+ * rather than the end of an orbit drag.
+ */
 export const CLICK_SLOP_PX = 4;
 
 type Vec3 = [number, number, number];
@@ -126,13 +128,11 @@ interface CameraFrustumsProps {
   onHover?: (index: number | null) => void;
 }
 
-/**
- * One frustum drawn over the full set at full strength, with its far rectangle filled at fillOpacity. The lines sit in
- * the transparent pass with a later renderOrder, so they land on top of the same lines drawn there faded.
- *
- * With fadeNearTip the fill fades out as the viewer nears the camera, measured in frustum depths from its tip. A flight
- * parks the viewer on the selected camera's tip, where the fill would tint most of the view.
- */
+// One frustum drawn over the full set at full strength, with its far rectangle filled at fillOpacity. The lines sit in
+// the transparent pass with a later renderOrder, so they land on top of the same lines drawn there faded.
+//
+// With fadeNearTip the fill fades out as the viewer nears the camera, measured in frustum depths from its tip. A flight
+// parks the viewer on the selected camera's tip, where the fill would tint most of the view.
 function HighlightedFrustum({
   frustum,
   fillOpacity,

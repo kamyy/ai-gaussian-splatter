@@ -65,7 +65,7 @@ function generatePoints(): Point[] {
 
 const POINTS = generatePoints();
 
-// The signed-out landing page's visual (web/app/page.tsx).
+/** The signed-out landing page's visual (web/app/page.tsx). */
 export function HeroPointCloud() {
   return (
     <div className="relative h-105 w-80" aria-hidden="true">

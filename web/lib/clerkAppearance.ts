@@ -7,8 +7,10 @@
  * mode. The browser resolves them against whichever [data-theme] is active, like every other themed element in the app.
  */
 
-// The installed @clerk/nextjs types `appearance` as `any`, so tsc can't catch a wrong key here. Check a change in the
-// browser, in both light and dark mode.
+/**
+ * The installed @clerk/nextjs types `appearance` as `any`, so tsc can't catch a wrong key here. Check a change in the
+ * browser, in both light and dark mode.
+ */
 export const clerkAppearanceVariables = {
   colorBackground: "var(--color-paper)",
   colorText: "var(--color-foreground)",

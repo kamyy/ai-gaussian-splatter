@@ -77,8 +77,10 @@ function ProgressBar({ label, percent, startedAt }: { label: string; percent: nu
   );
 }
 
-// What the visitor can do, or is waiting on, at the current stage. The complete stage has no card of its own. The
-// share panel (web/components/splats/SharePanel.tsx) takes its place in the same StageShell.
+/**
+ * What the visitor can do, or is waiting on, at the current stage. The complete stage has no card of its own. The
+ * share panel (web/components/splats/SharePanel.tsx) takes its place in the same StageShell.
+ */
 export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: StageCardProps) {
   const { getToken } = useAuth();
   const { enqueueSnackbar } = useAppSnackbar();

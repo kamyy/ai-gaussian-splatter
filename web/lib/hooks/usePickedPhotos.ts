@@ -16,8 +16,10 @@ import { fileKey, measurePhotos, type PickedPhoto } from "@/lib/measurePhoto";
 
 const MAX_PHOTO_MB = MAX_PHOTO_BYTES / (1024 * 1024);
 
-// The photos come back oldest taken first, with each file at most once. measuring is set while any added batch is still
-// being measured. Submitting waits for it, or those photos would be left out of the upload.
+/**
+ * The photos come back oldest taken first, with each file at most once. measuring is set while any added batch is still
+ * being measured. Submitting waits for it, or those photos would be left out of the upload.
+ */
 export function usePickedPhotos() {
   const { enqueueSnackbar } = useAppSnackbar();
   const [photos, setPhotos] = useState<PickedPhoto[]>([]);

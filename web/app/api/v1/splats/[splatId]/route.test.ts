@@ -24,7 +24,7 @@ function ctx(splatId: string) {
   return { params: Promise.resolve({ splatId }) } as never;
 }
 
-/** Requires a real Postgres (TEST_DATABASE_URL). */
+// Requires a real Postgres (TEST_DATABASE_URL).
 describe("GET /api/v1/splats/[splatId]", () => {
   beforeEach(async () => {
     await getDb().delete(jobs);
@@ -56,7 +56,7 @@ describe("GET /api/v1/splats/[splatId]", () => {
   });
 });
 
-/** Requires a real Postgres (TEST_DATABASE_URL). EC2 and S3 are mocked so this never touches real AWS. */
+// Requires a real Postgres (TEST_DATABASE_URL). EC2 and S3 are mocked so this never touches real AWS.
 describe("DELETE /api/v1/splats/[splatId]", () => {
   beforeEach(async () => {
     vi.clearAllMocks();

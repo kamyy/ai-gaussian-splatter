@@ -15,9 +15,11 @@ import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
 import { requireToken } from "@/lib/requireToken";
 import { StageShell } from "./StageShell";
 
-// Shown once a splat is complete. The link is the public view (web/app/(public)/preview/splats/[id]/page.tsx), which
-// needs no sign-in. Children sit in a row beside the download button, and the page passes its Discard button, which
-// the prose above that row describes.
+/**
+ * Shown once a splat is complete. The link is the public view (web/app/(public)/preview/splats/[id]/page.tsx), which
+ * needs no sign-in. Children sit in a row beside the download button, and the page passes its Discard button, which
+ * the prose above that row describes.
+ */
 export function SharePanel({ splatId, children }: { splatId: string; children?: React.ReactNode }) {
   const { getToken } = useAuth();
   const { enqueueSnackbar } = useAppSnackbar();

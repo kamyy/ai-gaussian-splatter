@@ -15,8 +15,10 @@ import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { buttonClassName } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 
-// The one header every page renders. <Show> resolves the session on the client, so this stays correct without a
-// layout reading auth() itself. While Clerk is still loading, neither the signed-in nor the signed-out branch renders.
+/**
+ * The one header every page renders. <Show> resolves the session on the client, so this stays correct without a
+ * layout reading auth() itself. While Clerk is still loading, neither the signed-in nor the signed-out branch renders.
+ */
 export function SiteHeader() {
   const pathname = usePathname();
   const inLibrary = pathname === "/splats";

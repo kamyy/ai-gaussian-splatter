@@ -51,10 +51,8 @@ function layoutBox(tile: HTMLElement) {
   };
 }
 
-/**
- * The photo id of the tile in the row above (-1) or below (1) whose center is nearest the one in from. Measured from
- * the laid-out tiles, because justified rows don't line up in columns. null from the page's top or bottom row.
- */
+// The photo id of the tile in the row above (-1) or below (1) whose center is nearest the one in from. Measured from
+// the laid-out tiles, because justified rows don't line up in columns. null from the page's top or bottom row.
 function tileInNextRow(list: HTMLElement, from: HTMLElement, direction: 1 | -1): string | null {
   const origin = layoutBox(from);
   const candidates = [...list.querySelectorAll<HTMLElement>("[data-photo-id]")]

@@ -141,7 +141,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - Tests and generated files have no header. That covers `web/drizzle/`, `web/next-env.d.ts`, and empty files like `worker/pipeline/__init__.py`.
   - The header describes the file. A main export's own doc comment covers how to call it. Where the two would say the same thing, the header keeps it and the export's comment is cut down.
   - Don't list a file's callers in its header. That list goes stale, and grep finds them.
-  - TypeScript and JavaScript headers are a `/** … */` block above `"use client"` and the imports.
+  - TypeScript and JavaScript headers are a `/** … */` block above `"use client"` and the imports. An exported item's doc comment is a `/** … */` block too, so editors show it on hover. Every other comment is `//` lines. A comment inside JSX stays `{/* … */}`, since JSX has no line comment.
   - Python headers are the module docstring.
   - Shell and Terraform headers are a `#` block, after a script's shebang or `# shellcheck shell=bash` line.
 - **Decide which element renders before the `return`, not inside the JSX.** Branch with `if`/`else`/`switch` or a ternary into a `React.ReactNode` variable, then place `{variable}` in the JSX where the element belongs.

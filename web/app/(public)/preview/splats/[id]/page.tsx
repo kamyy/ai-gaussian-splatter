@@ -13,7 +13,7 @@ import { SplatViewer } from "@/components/viewer/SplatViewer";
 import { getPublicSplat } from "@/lib/server/data";
 import { readSplatCameras } from "@/lib/server/s3";
 
-// Reads the database per request: a shared splat must not be frozen into a build artifact.
+/** Reads the database per request: a shared splat must not be frozen into a build artifact. */
 export const dynamic = "force-dynamic";
 
 interface Props {

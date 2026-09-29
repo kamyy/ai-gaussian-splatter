@@ -55,15 +55,19 @@ function PhotoMeter({ count }: { count: number }) {
   );
 }
 
-// Name plus photos in one step. This is the only place photos can be added to a splat, so it uploads them itself and
-// then starts processing, before navigating to the new splat's page. A failure at any step is reported through the
-// shared snackbar stack (web/components/layout/AppSnackbarProvider.tsx).
+/**
+ * Name plus photos in one step. This is the only place photos can be added to a splat, so it uploads them itself and
+ * then starts processing, before navigating to the new splat's page. A failure at any step is reported through the
+ * shared snackbar stack (web/components/layout/AppSnackbarProvider.tsx).
+ */
 export function NewSplatForm() {
   const { getToken } = useAuth();
   const router = useRouter();
   const { enqueueSnackbar } = useAppSnackbar();
   const resetUploads = useAppStore(state => state.resetUploads);
+
   const [name, setName] = useState("");
+
   const { photos, measuring, addFiles, removeFile } = usePickedPhotos();
   const aspects = useMemo(() => photos.map(photo => photo.width / photo.height), [photos]);
   const {
@@ -81,6 +85,7 @@ export function NewSplatForm() {
     rowGapRem: PREVIEW_GAP_REM,
     rowsPerPage: PREVIEW_ROWS_PER_PAGE,
   });
+
   const [phase, setPhase] = useState<Phase>("idle");
   // Set once the POST below succeeds, so a retry after a photo-upload failure reuses this splat instead of creating a
   // second one.
@@ -206,6 +211,7 @@ export function NewSplatForm() {
           {tiles.map(tile => {
             const { photo, url } = previews[tile.index - start];
             const key = fileKey(photo.file);
+
             // An uploaded photo is already on the server, and removing it here wouldn't take it off, so it can't be
             // removed. Discarding the splat is the way to drop it.
             let corner: React.ReactNode;
@@ -232,6 +238,7 @@ export function NewSplatForm() {
                 </button>
               );
             }
+
             return (
               <li
                 key={key}

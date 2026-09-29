@@ -42,10 +42,12 @@ export const POST = withErrorHandling(async (req: Request) => {
   });
 });
 
-// Batched rather than one query per splat: two extra queries use inArray() over every id in the list, and the rows are
-// reduced in JS to one per splat. That avoids both an N+1 fan-out and a more complex DISTINCT ON or lateral-join query.
-// The job and photo rows are already scoped to this user, because their splat ids come from the splats query above,
-// which filtered on userId. So no extra ownership join is needed.
+/**
+ * Batched rather than one query per splat: two extra queries use inArray() over every id in the list, and the rows are
+ * reduced in JS to one per splat. That avoids both an N+1 fan-out and a more complex DISTINCT ON or lateral-join query.
+ * The job and photo rows are already scoped to this user, because their splat ids come from the splats query above,
+ * which filtered on userId. So no extra ownership join is needed.
+ */
 export const GET = withErrorHandling(async () => {
   const user = await requireUser();
 

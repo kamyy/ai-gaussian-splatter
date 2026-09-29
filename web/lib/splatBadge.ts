@@ -18,8 +18,11 @@ interface SplatBadge {
   filter: LibraryFilter | null;
 }
 
-// A library card's status pill. "primary" marks "Ready to start" and "Check the shape", where the splat moves forward
-// only once the visitor acts. "Failed" and "Cancelled" also wait on the visitor but are dead ends, so they don't get it.
+/**
+ * A library card's status pill. "primary" marks "Ready to start" and "Check the shape", where the splat moves forward
+ * only once the visitor acts. "Failed" and "Cancelled" also wait on the visitor but are dead ends, so they don't get
+ * it.
+ */
 export function splatBadge({
   photoCount,
   latestJobStatus,
