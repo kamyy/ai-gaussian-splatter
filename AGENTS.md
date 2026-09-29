@@ -4,8 +4,6 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
 
 **Read [`ARCHITECTURE.md`](ARCHITECTURE.md) for the "why" behind every stack choice, and [`RUNBOOK.md`](RUNBOOK.md) for local dev/ops commands before making changes.**
 
-**Don't overengineer.** Solve the problem in front of you, not the general case it might become. No new abstraction, config option, or extensibility hook for a second use case that doesn't exist yet — add it when that use case actually shows up.
-
 - [1. Writing docs and comments](#1-writing-docs-and-comments)
 - [2. Structure](#2-structure)
 - [3. Auth (Clerk)](#3-auth-clerk)
@@ -127,6 +125,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 ## 4. Coding standards
 
+- **Don't overengineer.** Solve the problem in front of you, not the general case it might become. Add no abstraction, config option, or extensibility hook for a second use case that doesn't exist yet. Add it when that use case actually shows up.
 - **Prefer `function` declarations over arrow functions**, except closures assigned to a local (`const handleClick = () => {...}`) or inline arguments (`.map(x => ...)`, `useEffect(() => {...})`). Top-level: `export function foo() {}`, not `export const foo = () => {}`.
 - **`if`/`for`/`while`/`do` bodies always use a `{ }` block** — never `if (x) return;`. Biome `style/useBlockStatements` (enabled in `biome.json`; not in `recommended`).
 - **Define a file's sub-components and helpers above the component that uses them**, so a file reads bottom-up to its main export. A sub-component used by another sub-component goes above that one too, as `Tip` sits above `ShootingTips` in `web/app/(authenticated)/splats/new/page.tsx`.
