@@ -137,6 +137,13 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - **Split a function once it grows too large to take in at once, or does more than one job.**
   - Pull each self-contained piece out into a helper, a sub-component, or a custom hook for stateful logic. `web/lib/hooks/useCameraFlight.ts` is the pattern: press tracking went to `web/lib/hooks/useClickPress.ts`, and the per-frame steps became `stepFlight` and `stepLevel`.
   - Stop where a further split would make the pieces pass shared state back and forth. A flight and levelling out stay in one hook because each cancels the other.
+- **Every source file opens with a header: a one-line summary of what the file is for, a blank line, then a short paragraph a junior full-stack engineer can follow.** The paragraph says what the file does, where it fits (which page, API route, pipeline stage or deploy step), and any reason for its existence that the code doesn't show. `web/lib/hooks/usePickedPhotos.ts` is the pattern.
+  - Tests and generated files have no header. That covers `web/drizzle/`, `web/next-env.d.ts`, and empty files like `worker/pipeline/__init__.py`.
+  - The header describes the file. A main export's own doc comment covers how to call it. Where the two would say the same thing, the header keeps it and the export's comment is cut down.
+  - Don't list a file's callers in its header. That list goes stale, and grep finds them.
+  - TypeScript and JavaScript headers are a `/** … */` block above `"use client"` and the imports.
+  - Python headers are the module docstring.
+  - Shell and Terraform headers are a `#` block, after a script's shebang or `# shellcheck shell=bash` line.
 - **Decide which element renders before the `return`, not inside the JSX.** Branch with `if`/`else`/`switch` or a ternary into a `React.ReactNode` variable, then place `{variable}` in the JSX where the element belongs.
   - Write `let hint: React.ReactNode = null; if (failed) { hint = <p>…</p>; }` and then `{hint}`. Never render an element through `&&`, `||`, or `??` in the JSX body.
   - `web/components/splats/SplatStageViewer.tsx`'s `body` and `web/components/viewer/SplatViewer.tsx`'s `overlay` are the pattern.
