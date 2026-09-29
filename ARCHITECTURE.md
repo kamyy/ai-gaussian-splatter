@@ -273,9 +273,9 @@ Three request-path layers (`web/lib/server/rateLimit.ts`). A per-user quota alon
 2. Per-user, alongside it.
 3. A global daily cap on worker jobs, charged only when a worker instance launches, on the `process` and `train` routes. It bounds worst-case GPU spend whoever the caller is.
 
-The daily cap bounds how many worker instances launch, not how long each one runs. `MAX_PHOTOS_PER_SPLAT` (`web/lib/types.ts`) bounds the second, since COLMAP's exhaustive matching compares every pair of photos. The presign route rejects a batch past it, and the `process` route rejects a splat past it before charging the daily cap.
+The daily cap bounds how many worker instances launch, not how long each one runs. `MAX_PHOTOS_PER_SPLAT` (`web/lib/limits.ts`) bounds the second, since COLMAP's exhaustive matching compares every pair of photos. The presign route rejects a batch past it, and the `process` route rejects a splat past it before charging the daily cap.
 
-`MAX_PHOTO_BYTES` (`web/lib/types.ts`) bounds one photo's storage and worker download cost. `MAX_THUMBNAIL_BYTES` (`web/lib/server/s3.ts`) bounds its thumbnail, which the browser draws and so could send at any size. The presign route signs each declared size into its upload URL, so S3 itself refuses a body of any other size. The `complete` route checks both stored objects' sizes again, so a client that skipped the form still can't get an oversized upload marked uploaded.
+`MAX_PHOTO_BYTES` (`web/lib/limits.ts`) bounds one photo's storage and worker download cost. `MAX_THUMBNAIL_BYTES` (`web/lib/server/s3.ts`) bounds its thumbnail, which the browser draws and so could send at any size. The presign route signs each declared size into its upload URL, so S3 itself refuses a body of any other size. The `complete` route checks both stored objects' sizes again, so a client that skipped the form still can't get an oversized upload marked uploaded.
 
 Ops fallback: an AWS Budget (`infra/budgets.tf`) for spend the request path never sees.
 
