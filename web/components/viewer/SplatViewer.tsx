@@ -9,6 +9,7 @@ import { type Box3, Vector3 } from "three";
 import { Center } from "@/components/layout/Center";
 import { Spinner } from "@/components/ui/Spinner";
 import { type CameraSelection, DEFAULT_FOV, useCameraFlight } from "@/lib/hooks/useCameraFlight";
+import { useLatestRef } from "@/lib/hooks/useLatestRef";
 import type { CameraPose, CropBox } from "@/lib/types";
 import { CameraFrustums } from "./CameraFrustums";
 import { CropBoxGizmo } from "./CropBoxGizmo";
@@ -70,10 +71,7 @@ function SplatScene({
   // string for the same object (web/lib/server/s3.ts), so depending on it would restart the whole download whenever
   // the page re-minted one. A mount is what loads instead, and ViewerSceneManager (below) mounts a fresh scene on
   // every mode switch.
-  const splatUrlRef = useRef(splatUrl);
-  useEffect(() => {
-    splatUrlRef.current = splatUrl;
-  }, [splatUrl]);
+  const splatUrlRef = useLatestRef(splatUrl);
 
   useEffect(() => {
     let disposed = false;
@@ -110,7 +108,7 @@ function SplatScene({
       disposed = true;
       splatMesh.dispose();
     };
-  }, [onError, onLoad, onFirstLoad]);
+  }, [splatUrlRef, onError, onLoad, onFirstLoad]);
 
   return (
     <>

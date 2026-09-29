@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Box3, BufferGeometry } from "three";
 import { PLYLoader } from "three/examples/jsm/loaders/PLYLoader.js";
+
+import { useLatestRef } from "@/lib/hooks/useLatestRef";
 
 import { trimmedBox } from "./cameraFraming";
 
@@ -25,10 +27,7 @@ export function PointCloudScene({ url, pointSize, onError, onLoad, onFirstLoad }
   // Read by the load effect below instead of being a dependency of it, for the reason SplatScene
   // (web/components/viewer/SplatViewer.tsx) gives: a re-minted presigned URL is the same object, and reloading on it
   // would re-download the whole point cloud.
-  const urlRef = useRef(url);
-  useEffect(() => {
-    urlRef.current = url;
-  }, [url]);
+  const urlRef = useLatestRef(url);
 
   useEffect(() => {
     let disposed = false;
@@ -66,7 +65,7 @@ export function PointCloudScene({ url, pointSize, onError, onLoad, onFirstLoad }
       disposed = true;
       loadedGeometry?.dispose();
     };
-  }, [onError, onLoad, onFirstLoad]);
+  }, [urlRef, onError, onLoad, onFirstLoad]);
 
   if (!geometry) {
     return null;

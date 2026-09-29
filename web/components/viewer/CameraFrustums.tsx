@@ -5,6 +5,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import { DoubleSide, type MeshBasicMaterial, Vector3 } from "three";
 
+import { useLatestRef } from "@/lib/hooks/useLatestRef";
 import type { CameraPose } from "@/lib/types";
 
 // A frustum's depth as a fraction of the cameras' median distance from their own centroid. COLMAP's scale is arbitrary
@@ -203,8 +204,7 @@ function FrustumPicker({
   // selection causes, leaves a hover that came from the photo grid alone. onHover is read through a ref so the cleanup
   // doesn't rerun whenever the caller passes a new function.
   const reportedHoverRef = useRef(false);
-  const onHoverRef = useRef(onHover);
-  onHoverRef.current = onHover;
+  const onHoverRef = useLatestRef(onHover);
   useEffect(
     () => () => {
       canvas.style.removeProperty("cursor");
@@ -212,7 +212,7 @@ function FrustumPicker({
         onHoverRef.current?.(null);
       }
     },
-    [canvas],
+    [canvas, onHoverRef],
   );
 
   // R3F reports one hit per object, the nearest, so the triangle here is on the frustum closest to the viewer when
