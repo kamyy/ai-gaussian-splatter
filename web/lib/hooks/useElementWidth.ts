@@ -14,11 +14,14 @@ export function useElementWidth<T extends HTMLElement>() {
     if (element === null) {
       return;
     }
+
     const observer = new ResizeObserver(([entry]) => {
       setWidth(entry.contentRect.width);
     });
     observer.observe(element);
+
     return () => observer.disconnect();
   }, [element]);
+
   return [setElement, width] as const;
 }

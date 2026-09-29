@@ -39,6 +39,7 @@ export function requireUuid(value: string, status = 404, message = "Not found"):
   if (!UUID_PATTERN.test(value)) {
     throw new HttpError(status, message);
   }
+
   return value;
 }
 
@@ -57,6 +58,7 @@ export function withErrorHandling<Args extends unknown[]>(handler: Handler<Args>
       if (error instanceof HttpError) {
         return errorResponse(error.status, error.message);
       }
+
       throw error;
     }
   };

@@ -29,6 +29,7 @@ describe("rate limiting", () => {
     for (let i = 0; i < 3; i++) {
       await checkAndIncrementIp("203.0.113.5", 3);
     }
+
     await expect(checkAndIncrementIp("203.0.113.5", 3)).rejects.toMatchObject({ status: 429 });
   });
 
@@ -36,6 +37,7 @@ describe("rate limiting", () => {
     for (let i = 0; i < 3; i++) {
       await checkAndIncrementIp("203.0.113.5", 3);
     }
+
     // A different IP has its own counter and is unaffected.
     await expect(checkAndIncrementIp("203.0.113.9", 3)).resolves.toBeUndefined();
   });
@@ -44,6 +46,7 @@ describe("rate limiting", () => {
     for (let i = 0; i < 2; i++) {
       await checkAndIncrementUser("user-a", 2);
     }
+
     await expect(checkAndIncrementUser("user-a", 2)).rejects.toMatchObject({ status: 429 });
     await expect(checkAndIncrementUser("user-b", 2)).resolves.toBeUndefined();
   });
@@ -52,6 +55,7 @@ describe("rate limiting", () => {
     for (let i = 0; i < 2; i++) {
       await checkAndIncrementGlobalDaily(2);
     }
+
     await expect(checkAndIncrementGlobalDaily(2)).rejects.toMatchObject({ status: 503 });
   });
 

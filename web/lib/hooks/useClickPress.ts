@@ -26,20 +26,24 @@ export function useClickPress() {
     const handleDown = (event: PointerEvent) => {
       pressRef.current = { x: event.clientX, y: event.clientY, dragged: false };
     };
+
     const handleMove = (event: PointerEvent) => {
       const press = pressRef.current;
       if (press && Math.hypot(event.clientX - press.x, event.clientY - press.y) > CLICK_SLOP_PX) {
         press.dragged = true;
       }
     };
+
     const handleUp = () => {
       pressRef.current = null;
     };
+
     // The window's capture phase runs before CameraControls' own listeners on the document, so a move is measured
     // before the "control" event it causes reaches web/lib/hooks/useCameraFlight.ts.
     canvas.addEventListener("pointerdown", handleDown);
     window.addEventListener("pointermove", handleMove, { capture: true });
     window.addEventListener("pointerup", handleUp, { capture: true });
+
     return () => {
       canvas.removeEventListener("pointerdown", handleDown);
       window.removeEventListener("pointermove", handleMove, { capture: true });

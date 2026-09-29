@@ -67,6 +67,7 @@ describe("GET /api/v1/splats/[splatId]/photos", () => {
 
     expect(body.map(p => p.originalFilename)).toEqual(["first.jpg", "second.jpg"]);
     expect(body[0].url).toContain("first.jpg");
+
     // A photo with a thumbnail links to it, and one without falls back to the original.
     expect(body[0].thumbnailUrl).toContain("photo-thumbnails/first.jpg");
     expect(body[1].thumbnailUrl).toContain("photos/second.jpg");
@@ -92,6 +93,7 @@ describe("GET /api/v1/splats/[splatId]/photos", () => {
         createdAt,
       };
     }
+
     // Uploaded in one order, taken in another.
     await getDb()
       .insert(photos)

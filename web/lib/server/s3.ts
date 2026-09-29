@@ -100,6 +100,7 @@ export async function uploadedObjectSize(uploadsBucketKey: string): Promise<numb
     if (err instanceof Error && err.name === "NotFound") {
       return null;
     }
+
     throw err;
   }
 }
@@ -111,6 +112,7 @@ export async function deleteUploadedObject(uploadsBucketKey: string): Promise<vo
 export async function presignSplatDownload(splatsBucketKey: string): Promise<string> {
   const env = getEnv();
   const command = new GetObjectCommand({ Bucket: env.SPLATS_BUCKET, Key: splatsBucketKey });
+
   return getSignedUrl(s3Client(), command, { expiresIn: PRESIGN_EXPIRY_SECONDS });
 }
 
@@ -118,6 +120,7 @@ export async function presignSplatDownload(splatsBucketKey: string): Promise<str
 export async function presignPhotoDownload(uploadsBucketKey: string): Promise<string> {
   const env = getEnv();
   const command = new GetObjectCommand({ Bucket: env.UPLOADS_BUCKET, Key: uploadsBucketKey });
+
   return getSignedUrl(s3Client(), command, { expiresIn: PRESIGN_EXPIRY_SECONDS });
 }
 
@@ -143,6 +146,7 @@ export async function deleteSplatObjects(splatId: string): Promise<void> {
       if (keys.length > 0) {
         await client.send(new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: keys, Quiet: true } }));
       }
+
       continuationToken = page.NextContinuationToken;
     } while (continuationToken);
   }
@@ -167,11 +171,15 @@ export async function readSplatCameras(splatId: string): Promise<CameraPose[] | 
     if (err instanceof Error && err.name === "NoSuchKey") {
       return null;
     }
+
     throw err;
   }
+
   if (body === undefined) {
     return null;
   }
+
   const { cameras } = JSON.parse(body) as { cameras: WorkerCamera[] };
+
   return cameras.map(({ name, ...camera }) => ({ photoId: name.replace(/\.[^.]*$/, ""), ...camera }));
 }

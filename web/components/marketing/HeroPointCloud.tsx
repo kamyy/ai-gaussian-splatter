@@ -19,6 +19,7 @@ function seededRandom(seed: number) {
     t += 0x6d2b79f5;
     let r = Math.imul(t ^ (t >>> 15), 1 | t);
     r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+
     return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
   };
 }
@@ -40,6 +41,7 @@ function generatePoints(): Point[] {
   const centerX = WIDTH / 2;
   const centerY = HEIGHT / 2 - 10;
   const height = 340;
+
   const points: Point[] = [];
   for (let i = 0; i < 1500; i++) {
     const t = rand();
@@ -60,6 +62,7 @@ function generatePoints(): Point[] {
       depth,
     });
   }
+
   return points.sort((a, b) => a.depth - b.depth);
 }
 

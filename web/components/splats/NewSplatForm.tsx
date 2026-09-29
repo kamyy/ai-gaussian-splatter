@@ -87,9 +87,11 @@ export function NewSplatForm() {
   });
 
   const [phase, setPhase] = useState<Phase>("idle");
+
   // Set once the POST below succeeds, so a retry after a photo-upload failure reuses this splat instead of creating a
   // second one.
   const [createdSplat, setCreatedSplat] = useState<Splat | null>(null);
+
   // Keyed by fileKey. A retry uploads only the photos not in here, because every photo the server already has would
   // otherwise be stored again and go to COLMAP twice.
   const [uploadedKeys, setUploadedKeys] = useState<ReadonlySet<string>>(new Set());
@@ -148,6 +150,7 @@ export function NewSplatForm() {
         setPhase("idle");
         return;
       }
+
       setCreatedSplat(splat);
       await mutate("splats");
     }

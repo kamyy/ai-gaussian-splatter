@@ -139,6 +139,7 @@ describe("GET /api/v1/splats", () => {
         uploadStatus: "uploaded" as const,
       };
     }
+
     await getDb()
       .insert(photos)
       .values([uploaded(older.id, "a.jpg"), uploaded(older.id, "b.jpg"), uploaded(newer.id, "c.jpg")]);

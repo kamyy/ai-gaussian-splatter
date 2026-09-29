@@ -16,6 +16,7 @@ describe("layoutRows", () => {
         expect(tile.width / tile.height).toBeCloseTo(aspects[tile.index], 6);
       }
     }
+
     expect(rows.flatMap(row => row.tiles.map(tile => tile.index))).toEqual(aspects.map((_, i) => i));
   });
 
@@ -40,6 +41,7 @@ describe("layoutRows", () => {
     for (const row of rows) {
       expect(rowWidth(row, 6)).toBeLessThanOrEqual(600 + 1e-9);
     }
+
     expect(rows.at(-1)?.height).toBeCloseTo(600 / 8, 6);
   });
 });

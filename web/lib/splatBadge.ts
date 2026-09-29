@@ -31,8 +31,10 @@ export function splatBadge({
     if (photoCount === 0) {
       return { label: "No photos", color: "default", filter: null };
     }
+
     return { label: "Ready to start", color: "primary", filter: "needs_you" };
   }
+
   return JOB_BADGES[latestJobStatus];
 }
 

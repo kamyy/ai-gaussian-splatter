@@ -144,6 +144,10 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - TypeScript and JavaScript headers are a `/** … */` block above `"use client"` and the imports. An exported item's doc comment is a `/** … */` block too, so editors show it on hover. Every other comment is `//` lines. A comment inside JSX stays `{/* … */}`, since JSX has no line comment.
   - Python headers are the module docstring.
   - Shell and Terraform headers are a `#` block, after a script's shebang or `# shellcheck shell=bash` line.
+- **Separate a function body's logical groups with a blank line.** A reader should be able to see where one step ends and the next begins without reading every statement.
+  - In a component or hook, the groups are: context and data hooks, each piece of state with the values derived from it, effects, handlers, render branches, then the `return`.
+  - A blank line goes before a comment that introduces the next statements, after a closing `}` that is followed by more statements, and before a `return` that ends a body of more than one statement.
+  - A guard stays attached to the value it checks (`const [row] = …;` then `if (row === undefined) {`). The statements inside one `case` of a `switch` stay together.
 - **Decide which element renders before the `return`, not inside the JSX.** Branch with `if`/`else`/`switch` or a ternary into a `React.ReactNode` variable, then place `{variable}` in the JSX where the element belongs.
   - Write `let hint: React.ReactNode = null; if (failed) { hint = <p>…</p>; }` and then `{hint}`. Never render an element through `&&`, `||`, or `??` in the JSX body.
   - `web/components/splats/SplatStageViewer.tsx`'s `body` and `web/components/viewer/SplatViewer.tsx`'s `overlay` are the pattern.

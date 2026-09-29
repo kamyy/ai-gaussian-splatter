@@ -9,6 +9,7 @@ function lookingAt(center: [number, number, number], target: [number, number, nu
   const d = center.map((v, i) => target[i] - v);
   const length = Math.hypot(...d);
   const forward = d.map(v => v / length) as [number, number, number];
+
   return { photoId: "p", center, rotation: [[1, 0, 0], [0, 1, 0], forward], width: 4, height: 3, fx: 4, fy: 4 };
 }
 
@@ -65,6 +66,7 @@ describe("fittedCropBox", () => {
   it("stands the box on the photos' up and faces it toward the first photo", () => {
     const up = new Vector3(0, 1, 0).applyQuaternion(tilt);
     const towardPhoto = new Vector3(0, 0, 1).applyQuaternion(tilt);
+
     // The photo sits a little above the box, which the fit ignores.
     const position = center.clone().addScaledVector(towardPhoto, 10).addScaledVector(up, 3);
 

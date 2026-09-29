@@ -61,6 +61,7 @@ describe("Pager", () => {
 
     rerender(<Pager label="Photo pages" current={3} count={9} onChange={() => {}} markedPage={7} />);
     expect(screen.queryByRole("button", { name: /has the selected photo/ })).not.toBeInTheDocument();
+
     // The pages run 1 to 5, then an ellipsis for 6 to 8, then 9.
     const gap = [...container.querySelectorAll("span")].find(span => span.textContent === "…");
     expect(gap?.querySelector("span")).not.toBeNull();

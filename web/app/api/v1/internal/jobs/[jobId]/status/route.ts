@@ -53,6 +53,7 @@ export const PATCH = withErrorHandling(
     if (!parsed.success) {
       throw new HttpError(422, "Invalid request body");
     }
+
     const body = parsed.data;
     const { status } = body;
 
@@ -60,18 +61,23 @@ export const PATCH = withErrorHandling(
     if (body.error_message != null) {
       jobData.errorMessage = body.error_message;
     }
+
     if (body.result_s3_key != null) {
       jobData.resultS3Key = body.result_s3_key;
     }
+
     if (body.result_spz_s3_key != null) {
       jobData.resultSpzS3Key = body.result_spz_s3_key;
     }
+
     if (body.thumbnail_s3_key != null) {
       jobData.thumbnailS3Key = body.thumbnail_s3_key;
     }
+
     if (body.point_cloud_s3_key != null) {
       jobData.pointCloudS3Key = body.point_cloud_s3_key;
     }
+
     if (body.training_progress != null) {
       jobData.trainingProgress = body.training_progress;
     }
@@ -108,6 +114,7 @@ export const PATCH = withErrorHandling(
     } else if (status === JobStatus.failed) {
       splatStatus = "failed";
     }
+
     if (splatStatus !== null) {
       splatData.status = splatStatus;
     }

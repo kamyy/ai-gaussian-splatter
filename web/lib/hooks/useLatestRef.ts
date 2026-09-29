@@ -12,5 +12,6 @@ export function useLatestRef<T>(value: T) {
   useEffect(() => {
     ref.current = value;
   }, [value]);
+
   return ref;
 }

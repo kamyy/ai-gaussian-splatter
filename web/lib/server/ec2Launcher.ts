@@ -44,6 +44,7 @@ function renderUserData(p: UserDataParams): string {
   // quote of either kind.
   const cropBoxVar = p.cropBox ? `CROP_BOX='${JSON.stringify(p.cropBox)}'\n` : "";
   const cropBoxArg = p.cropBox ? `    -e CROP_BOX="$CROP_BOX" \\\n` : "";
+
   return `#!/bin/bash
 set -euo pipefail
 
@@ -91,6 +92,7 @@ export function workerImageUri(stage: WorkerStage): string {
   if (stage === "reconstruct") {
     return process.env.WORKER_RECONSTRUCT_IMAGE_URI ?? "REPLACE_WITH_ECR_IMAGE_URI";
   }
+
   return process.env.WORKER_TRAIN_IMAGE_URI ?? "REPLACE_WITH_ECR_IMAGE_URI";
 }
 
@@ -202,6 +204,7 @@ export async function launchJob(params: {
   if (instanceId === undefined) {
     throw new Error("RunInstances returned no instance ID");
   }
+
   return instanceId;
 }
 
@@ -217,11 +220,13 @@ export async function describeWorker(instanceId: string): Promise<{ state: strin
     if (instance?.State?.Name === undefined || instance.LaunchTime === undefined) {
       return null;
     }
+
     return { state: instance.State.Name, launchTime: instance.LaunchTime };
   } catch (err) {
     if (err instanceof Error && err.name === "InvalidInstanceID.NotFound") {
       return null;
     }
+
     throw err;
   }
 }
@@ -239,6 +244,7 @@ export async function terminateWorker(instanceId: string): Promise<void> {
     if (err instanceof Error && err.name === "InvalidInstanceID.NotFound") {
       return;
     }
+
     throw err;
   }
 }

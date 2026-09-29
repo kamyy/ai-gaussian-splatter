@@ -39,16 +39,19 @@ export const POST = withErrorHandling(
     if (size === null) {
       throw new HttpError(400, "Photo has not been uploaded");
     }
+
     if (size > MAX_PHOTO_BYTES) {
       await deleteUploadedObject(photo.s3Key);
       throw new HttpError(400, `A photo can be at most ${MAX_PHOTO_BYTES / (1024 * 1024)} MB`);
     }
+
     // Null only for a photo uploaded before thumbnails existed, which never reaches this route again.
     if (photo.thumbnailS3Key !== null) {
       const thumbnailSize = await uploadedObjectSize(photo.thumbnailS3Key);
       if (thumbnailSize === null) {
         throw new HttpError(400, "Thumbnail has not been uploaded");
       }
+
       if (thumbnailSize > MAX_THUMBNAIL_BYTES) {
         await deleteUploadedObject(photo.thumbnailS3Key);
         throw new HttpError(400, "Thumbnail is too large");
@@ -56,6 +59,7 @@ export const POST = withErrorHandling(
     }
 
     await getDb().update(photos).set({ uploadStatus: "uploaded" }).where(eq(photos.id, photoId));
+
     return new NextResponse(null, { status: 204 });
   },
 );

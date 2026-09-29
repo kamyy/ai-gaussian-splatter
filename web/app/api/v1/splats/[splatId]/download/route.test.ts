@@ -42,6 +42,7 @@ describe("GET /api/v1/splats/[splatId]/download", () => {
       resultS3Key,
       resultSpzS3Key: "splats/x/result.spz",
     });
+
     return splat;
   }
 

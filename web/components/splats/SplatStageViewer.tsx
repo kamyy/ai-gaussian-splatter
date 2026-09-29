@@ -175,6 +175,7 @@ function OrbitHint({ canPickCameras }: { canPickCameras: boolean }) {
   if (canPickCameras) {
     pickLine = <HintLine text="Click a camera to see its photo" />;
   }
+
   return (
     <p className="pointer-events-none absolute top-5 right-6 hidden flex-col items-end gap-1 text-xs whitespace-nowrap sm:flex">
       <HintLine text="Drag to orbit · scroll to zoom" />
@@ -295,6 +296,7 @@ export function SplatStageViewer({
         offIcon={PiSelectionSlashDuotone}
         onChange={pressed => {
           setCropping(pressed);
+
           // Cleared rather than kept hidden, so a box the visitor turned off never reaches the build.
           if (!pressed) {
             onCropBoxChange?.(null);

@@ -51,6 +51,7 @@ export const GET = withErrorHandling(
         height: row.height,
       })),
     );
+
     return NextResponse.json(items);
   },
 );

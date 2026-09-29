@@ -26,6 +26,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (splat === null) {
     return { title: "Not found — AI Gaussian Splatter" };
   }
+
   return {
     title: `${splat.title} — AI Gaussian Splatter`,
     description: "A 3D Gaussian Splat reconstruction, made with AI Gaussian Splatter.",
@@ -43,6 +44,7 @@ export default async function PublicSplatViewPage({ params }: Props) {
   if (splat === null) {
     notFound();
   }
+
   // Only the poses frame the view, so the photo ids stay off this public page.
   const cameras = (await readSplatCameras(id))?.map(({ photoId: _photoId, ...pose }) => pose) ?? null;
 

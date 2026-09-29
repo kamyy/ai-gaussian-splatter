@@ -17,6 +17,7 @@ function hashFiles(files) {
   if (files.length === 0) {
     return new Map();
   }
+
   const hashes = execFileSync("git", ["hash-object", ...files], { encoding: "utf8" })
     .trim()
     .split("\n");

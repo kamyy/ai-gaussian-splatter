@@ -25,6 +25,7 @@ export async function uploadPhotos(
   if (photos.length === 0) {
     return;
   }
+
   const { setUploadStatus, setUploadProgress } = useAppStore.getState();
 
   const presigned = await apiFetch<PhotoPresignItem[]>(
@@ -57,6 +58,7 @@ export async function uploadPhotos(
         if (failed !== undefined) {
           throw new Error(`S3 upload failed: ${failed.statusText}`);
         }
+
         setUploadProgress(file.name, 100);
         await apiFetch<void>(`/api/v1/splats/${splatId}/photos/${item.photoId}/complete`, "POST", token);
         setUploadStatus(file.name, "uploaded");

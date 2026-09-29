@@ -64,6 +64,7 @@ export const POST = withErrorHandling(
     if (!parsed.success) {
       throw new HttpError(422, "Invalid request body");
     }
+
     const { cropBox } = parsed.data;
 
     const [latestJob] = await getDb()
@@ -145,8 +146,10 @@ export const POST = withErrorHandling(
       } else {
         await terminateWorker(instanceId);
       }
+
       throw new HttpError(409, "Cancelled before the worker started");
     }
+
     return NextResponse.json(job);
   },
 );

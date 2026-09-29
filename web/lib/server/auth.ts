@@ -21,6 +21,7 @@ export async function requireClerkUserId(): Promise<string> {
   if (!userId) {
     throw new HttpError(401, "Missing bearer token");
   }
+
   return userId;
 }
 
@@ -65,6 +66,7 @@ export function getClientIp(request: NextRequest): string {
       return hops[hops.length - 1];
     }
   }
+
   return "unknown";
 }
 
@@ -78,6 +80,7 @@ export async function getJobForCallbackToken(jobId: string, request: NextRequest
   if (!authHeader.startsWith("Bearer ")) {
     throw new HttpError(401, "Missing bearer token");
   }
+
   const token = authHeader.slice("Bearer ".length).trim();
 
   // 401 rather than 404 for a malformed id, so this can't be used to probe which job ids exist. An unknown job id is
@@ -88,5 +91,6 @@ export async function getJobForCallbackToken(jobId: string, request: NextRequest
   if (job === undefined || job.callbackToken !== token) {
     throw new HttpError(401, "Invalid job token");
   }
+
   return job;
 }

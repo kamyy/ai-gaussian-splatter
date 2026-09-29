@@ -76,10 +76,12 @@ function stepFlight(
   const t = easeInOutCubic(flight.elapsed / FLIGHT_SECONDS);
   const pose = interpolatePose(flight.from, flight.to, t);
   const target = orbitTargetOf(pose);
+
   setFov(perspective, flight.fromFov + (flight.toFov - flight.fromFov) * t);
   camera.up.set(0, 1, 0).applyQuaternion(pose.quaternion);
   controls.updateCameraUp();
   void controls.setLookAt(pose.position.x, pose.position.y, pose.position.z, target.x, target.y, target.z, false);
+
   return flight.elapsed === FLIGHT_SECONDS;
 }
 
@@ -94,6 +96,7 @@ function stepLevel(
 ): boolean {
   level.elapsed = Math.min(level.elapsed + delta, LEVEL_SECONDS);
   const t = easeInOutCubic(level.elapsed / LEVEL_SECONDS);
+
   setFov(perspective, level.fromFov + (DEFAULT_FOV - level.fromFov) * t);
   if (sceneUp) {
     // CameraControls stores its orbit relative to camera.up, so turning up alone would swing the camera around the
@@ -103,6 +106,7 @@ function stepLevel(
     const target = controls.getTarget(new Vector3(), false);
     const endPosition = controls.getPosition(new Vector3(), true);
     const endTarget = controls.getTarget(new Vector3(), true);
+
     // Turned at a steady rate rather than blended. A straight blend between two up directions nearly opposite each
     // other, as after an upside-down photo, passes close to zero halfway and spins the view.
     const turn = new Quaternion().setFromUnitVectors(level.from.clone().normalize(), sceneUp.clone().normalize());
@@ -111,6 +115,7 @@ function stepLevel(
     void controls.setLookAt(position.x, position.y, position.z, target.x, target.y, target.z, false);
     void controls.setLookAt(endPosition.x, endPosition.y, endPosition.z, endTarget.x, endTarget.y, endTarget.z, true);
   }
+
   return level.elapsed === LEVEL_SECONDS;
 }
 
@@ -133,6 +138,7 @@ export function useCameraFlight(
   const camera = useThree(state => state.camera);
   const controls = useThree(state => state.controls) as CameraControls | null;
   const perspective = camera instanceof PerspectiveCamera ? camera : null;
+
   // The point the photos look toward, which each flight's orbit target lines up with.
   const captureTarget = useMemo(() => (cameras ? (framingFromCameras(cameras)?.target ?? null) : null), [cameras]);
 
@@ -142,10 +148,12 @@ export function useCameraFlight(
 
   useEffect(() => {
     const photo = selectedCamera ? cameras?.[selectedCamera.index] : undefined;
+
     // The controls are rebuilt once after the first render, which must not restart a flight already under way.
     if (!controls || !photo || flownRef.current === selectedCamera) {
       return;
     }
+
     flownRef.current = selectedCamera;
     levelRef.current = null;
     flightRef.current = {
@@ -170,19 +178,24 @@ export function useCameraFlight(
     if (!controls) {
       return;
     }
+
     const handleControl = () => {
       if (isClickPress()) {
         return;
       }
+
       flightRef.current = null;
+
       const up = sceneUp.current;
       const fov = perspective?.fov ?? DEFAULT_FOV;
       if (!levelRef.current && ((up && camera.up.angleTo(up) > 1e-4) || fov !== DEFAULT_FOV)) {
         levelRef.current = { from: camera.up.clone(), fromFov: fov, elapsed: 0 };
       }
+
       onManualMove?.();
     };
     controls.addEventListener("control", handleControl);
+
     return () => controls.removeEventListener("control", handleControl);
   }, [camera, perspective, controls, sceneUp, onManualMove, isClickPress]);
 
@@ -190,9 +203,11 @@ export function useCameraFlight(
     if (!controls) {
       return;
     }
+
     if (flightRef.current && stepFlight(flightRef.current, delta, camera, perspective, controls)) {
       flightRef.current = null;
     }
+
     if (levelRef.current && stepLevel(levelRef.current, delta, sceneUp.current, camera, perspective, controls)) {
       levelRef.current = null;
     }

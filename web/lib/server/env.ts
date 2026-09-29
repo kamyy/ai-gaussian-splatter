@@ -66,7 +66,9 @@ export function getEnv(): Env {
       const detail = parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join(", ");
       throw new Error(`Invalid server environment: ${detail}`);
     }
+
     cached = parsed.data;
   }
+
   return cached;
 }

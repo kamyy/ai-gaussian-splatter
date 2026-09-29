@@ -19,8 +19,10 @@ import { LuMoon, LuSun } from "react-icons/lu";
  */
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
+
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
   const mode = mounted ? (resolvedTheme ?? "light") : "light";
   const nextMode = mode === "dark" ? "light" : "dark";
   const Icon = mode === "dark" ? LuSun : LuMoon;

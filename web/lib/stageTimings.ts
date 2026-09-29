@@ -42,6 +42,7 @@ function stepTiming(
   if (launchedAt === null || end === null) {
     return null;
   }
+
   // The client's clock can run behind the server's that stamped launchedAt, so a fresh stage could read negative.
   return {
     totalMs: Math.max(0, end - launchedAt),
@@ -67,6 +68,7 @@ export function stageTimings(job: Job, now: number): StageTimings {
 
   const colmapFinishedAt = time(job.colmapFinishedAt);
   const trainingLaunchedAt = time(job.trainingLaunchedAt);
+
   return {
     cameras: stepTiming(time(job.createdAt), time(job.colmapStartedAt), colmapFinishedAt, placingCameras, now),
     checkMs:
@@ -93,10 +95,12 @@ export function formatDuration(ms: number): string {
   if (seconds < 60) {
     return `${seconds}s`;
   }
+
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) {
     return `${minutes}m ${pad(seconds % 60)}s`;
   }
+
   return `${Math.floor(minutes / 60)}h ${pad(minutes % 60)}m`;
 }
 
@@ -107,5 +111,6 @@ export function formatClock(ms: number): string {
   if (minutes < 60) {
     return `${minutes}:${pad(seconds % 60)}`;
   }
+
   return `${Math.floor(minutes / 60)}:${pad(minutes % 60)}:${pad(seconds % 60)}`;
 }

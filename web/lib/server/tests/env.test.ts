@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 async function loadGetEnv() {
   vi.resetModules();
   const { getEnv } = await import("../env");
+
   return getEnv;
 }
 
@@ -25,6 +26,7 @@ describe("getEnv", () => {
   // so it pins which field failed and why, rather than passing on any error that happens to name AWS_REGION.
   it("rejects an unset AWS_REGION instead of falling back to a default", async () => {
     vi.stubEnv("AWS_REGION", undefined);
+
     // stubEnv removes the key rather than assigning it, so this is the same state as delete process.env.AWS_REGION.
     expect("AWS_REGION" in process.env).toBe(false);
     const getEnv = await loadGetEnv();

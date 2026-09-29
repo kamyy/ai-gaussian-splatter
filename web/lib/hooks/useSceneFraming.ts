@@ -30,6 +30,7 @@ import type { CameraPose } from "@/lib/types";
  */
 export function useSceneFraming(cameras: Omit<CameraPose, "photoId">[] | null) {
   const camera = useThree(state => state.camera);
+
   // CameraControls' makeDefault registers it here. drei's PerspectiveCamera takes over as the default camera only after
   // the first render, so the controls are rebuilt around it once, and the framing is re-applied to whichever controls
   // are current.
@@ -42,10 +43,12 @@ export function useSceneFraming(cameras: Omit<CameraPose, "photoId">[] | null) {
     if (!controls || !framing) {
       return;
     }
+
     if (framing.up) {
       camera.up.copy(framing.up);
       controls.updateCameraUp();
     }
+
     sceneUpRef.current = camera.up.clone();
     const { position, target } = framing;
     void controls.setLookAt(position.x, position.y, position.z, target.x, target.y, target.z, false);
@@ -63,6 +66,7 @@ export function useSceneFraming(cameras: Omit<CameraPose, "photoId">[] | null) {
     if (framedByRef.current !== "nothing") {
       return;
     }
+
     framedByRef.current = "box";
     const center = box.getCenter(new Vector3());
     const radius = box.getSize(new Vector3()).length() / 2;

@@ -39,6 +39,7 @@ export const GET = withErrorHandling(
     if (job === undefined) {
       throw new HttpError(404, "No jobs for this splat");
     }
+
     // This poll is where a job whose worker died gets noticed, since that worker will never call back to end it. A
     // failed EC2 lookup only postpones that to the next poll, so the job is still returned as read.
     try {
@@ -48,6 +49,7 @@ export const GET = withErrorHandling(
     } catch (err) {
       console.error(`Couldn't reconcile job ${job.id} against its worker instance`, err);
     }
+
     return NextResponse.json(job);
   },
 );

@@ -22,6 +22,7 @@ const THUMBNAIL_EXPIRY_SECONDS = 3600;
 async function thumbnailUrl(key: string): Promise<string> {
   const env = getEnv();
   const client = new S3Client({ region: env.AWS_REGION });
+
   return getSignedUrl(client, new GetObjectCommand({ Bucket: env.SPLATS_BUCKET, Key: key }), {
     expiresIn: THUMBNAIL_EXPIRY_SECONDS,
   });

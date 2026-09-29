@@ -41,6 +41,7 @@ describe("GET /api/v1/splats/[splatId]/viewer-splat", () => {
       resultS3Key: "splats/x/result.ply",
       resultSpzS3Key,
     });
+
     return splat;
   }
 

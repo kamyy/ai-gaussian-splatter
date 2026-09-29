@@ -28,6 +28,7 @@ export async function apiFetch<T>(
     if (resp.status === 204) {
       return undefined as T; // 204 No Content: response has no body, so no json to parse.
     }
+
     return resp.json();
   }
 

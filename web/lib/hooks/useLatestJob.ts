@@ -42,6 +42,7 @@ function refreshInterval(job: Job | undefined) {
   if (job) {
     return JOB_POLL_INTERVAL_MS[job.status];
   }
+
   return JOB_POLL_INTERVAL_MS.queued;
 }
 

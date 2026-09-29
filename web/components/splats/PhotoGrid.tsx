@@ -67,6 +67,7 @@ function tileInNextRow(list: HTMLElement, from: HTMLElement, direction: 1 | -1):
   const rowTop = direction === 1 ? Math.min(...tops) : Math.max(...tops);
   const row = candidates.filter(({ box }) => box.top === rowTop);
   const distance = (box: ReturnType<typeof layoutBox>) => Math.abs(box.center - origin.center);
+
   return row.reduce((best, tile) => (distance(tile.box) < distance(best.box) ? tile : best)).id;
 }
 
@@ -164,6 +165,7 @@ export function PhotoGrid({ photos, placedPhotoIds, selection, onSelect, hovered
   const selectedPhotoId = selection?.photoId ?? null;
   const isPlaced = (photo: PhotoListItem) => placedPhotoIds?.has(photo.id) ?? false;
   const isUnplaced = (photo: PhotoListItem) => placedPhotoIds !== null && !placedPhotoIds.has(photo.id);
+
   // photos arrives oldest taken first (web/app/api/v1/splats/[splatId]/photos/route.ts), and the grid keeps that order.
   // A photo with no recorded size lays out square.
   const aspects = useMemo(
@@ -176,11 +178,13 @@ export function PhotoGrid({ photos, placedPhotoIds, selection, onSelect, hovered
     rowGapRem: GAP_REM,
     rowsPerPage: ROWS_PER_PAGE,
   });
+
   const shownPhotos = tiles.map(tile => photos[tile.index]);
   const unplacedCount = photos.filter(isUnplaced).length;
 
   const selectedIndex = photos.findIndex(photo => photo.id === selectedPhotoId);
   const selectedPage = selectedIndex === -1 ? 0 : pageOf(selectedIndex);
+
   // Turns once per pick, so paging away from the selection by hand stays put until the next one. A pick made before the
   // grid has been measured has no page yet, and turns once it does.
   const turnedForRef = useRef<PhotoSelection | null>(null);
@@ -188,6 +192,7 @@ export function PhotoGrid({ photos, placedPhotoIds, selection, onSelect, hovered
     if (selection === turnedForRef.current || selectedPage === 0) {
       return;
     }
+
     turnedForRef.current = selection;
     setPage(selectedPage);
   }, [selection, selectedPage, setPage]);
@@ -228,6 +233,7 @@ export function PhotoGrid({ photos, placedPhotoIds, selection, onSelect, hovered
     if (position === -1 || !listRef.current) {
       return;
     }
+
     let target: string | null | undefined;
     switch (event.key) {
       case "ArrowRight":
@@ -251,6 +257,7 @@ export function PhotoGrid({ photos, placedPhotoIds, selection, onSelect, hovered
       default:
         return;
     }
+
     event.preventDefault();
     if (target && target !== from.dataset.photoId) {
       pendingFocusRef.current = target;

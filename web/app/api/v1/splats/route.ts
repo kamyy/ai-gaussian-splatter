@@ -60,6 +60,7 @@ export const GET = withErrorHandling(async () => {
   if (rows.length === 0) {
     return NextResponse.json([]);
   }
+
   const ids = rows.map(row => row.id);
 
   // Neither query depends on the other's result, so they run in parallel rather than as two sequential round trips.
@@ -84,6 +85,7 @@ export const GET = withErrorHandling(async () => {
     if (!firstPhotoBySplat.has(row.splatId)) {
       firstPhotoBySplat.set(row.splatId, row);
     }
+
     photoCountBySplat.set(row.splatId, (photoCountBySplat.get(row.splatId) ?? 0) + 1);
   }
 
@@ -98,6 +100,7 @@ export const GET = withErrorHandling(async () => {
     rows.map(async splat => {
       const latestJob = latestJobBySplat.get(splat.id);
       const firstPhoto = firstPhotoBySplat.get(splat.id);
+
       return {
         ...splat,
         photoCount: photoCountBySplat.get(splat.id) ?? 0,

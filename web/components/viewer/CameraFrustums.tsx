@@ -68,10 +68,12 @@ function frustums(cameras: Omit<CameraPose, "photoId">[]): Frustum[] {
       const [r0, r1, r2] = rotation;
       return [0, 1, 2].map(i => center[i] + x * r0[i] + y * r1[i] + z * r2[i]) as Vec3;
     }
+
     // The far rectangle spans the photo's own field of view: half the image width over the focal length, both in
     // pixels, is the tangent of the half-angle.
     const halfWidth = (depth * width) / (2 * fx);
     const halfHeight = (depth * height) / (2 * fy);
+
     return {
       center,
       depth,
@@ -95,6 +97,7 @@ function segments(list: Frustum[]): Float32Array {
       out.push(...corner, ...corners[(i + 1) % corners.length]);
     });
   }
+
   return new Float32Array(out);
 }
 
@@ -109,6 +112,7 @@ function triangles(list: Frustum[]): Float32Array {
     out.push(...corners[0], ...corners[1], ...corners[2]);
     out.push(...corners[0], ...corners[2], ...corners[3]);
   }
+
   return new Float32Array(out);
 }
 
@@ -151,6 +155,7 @@ function HighlightedFrustum({
     if (!fadeNearTip || !fillRef.current) {
       return;
     }
+
     const [near, far] = FILL_FADE_DEPTHS;
     const t = (camera.position.distanceTo(tip) / frustum.depth - near) / (far - near);
     fillRef.current.opacity = fillOpacity * Math.min(1, Math.max(0, t));
@@ -207,6 +212,7 @@ function FrustumPicker({
 }) {
   const positions = useMemo(() => triangles(list.filter((_, i) => i !== selected)), [list, selected]);
   const canvas = useThree(state => state.gl.domElement);
+
   // Whether the hover in effect is one this mesh reported. On unmount it clears only its own, so a remount, which every
   // selection causes, leaves a hover that came from the photo grid alone. onHover is read through a ref so the cleanup
   // doesn't rerun whenever the caller passes a new function.
@@ -228,6 +234,7 @@ function FrustumPicker({
     if (event.delta > CLICK_SLOP_PX || event.faceIndex == null) {
       return;
     }
+
     event.stopPropagation();
     onSelect(cameraOfTriangle(event.faceIndex, selected));
   }
@@ -282,11 +289,13 @@ export function CameraFrustums({ cameras, selected, onSelect, hovered, onHover }
       />
     );
   }
+
   const hoveredFrustum = hovered !== null && hovered !== selected ? list[hovered] : undefined;
   let hover: React.ReactNode = null;
   if (hoveredFrustum) {
     hover = <HighlightedFrustum key={`hover-${hovered}`} frustum={hoveredFrustum} fillOpacity={HOVERED_FILL_OPACITY} />;
   }
+
   let picker: React.ReactNode = null;
   if (onSelect) {
     // Keyed for the same reason as the highlight: its geometry changes with the selection. The two keys share a list of

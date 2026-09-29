@@ -38,8 +38,10 @@ async function makeThumbnail(bitmap: ImageBitmap): Promise<Blob> {
   if (context === null) {
     throw new Error("No 2D canvas context");
   }
+
   context.imageSmoothingQuality = "high";
   context.drawImage(bitmap, 0, 0, width, height);
+
   return canvas.convertToBlob({ type: "image/jpeg", quality: THUMBNAIL_QUALITY });
 }
 
@@ -56,6 +58,7 @@ async function readTakenAt(file: File): Promise<number> {
   } catch {
     // A file with no readable EXIF block falls through to its file time.
   }
+
   return file.lastModified;
 }
 
@@ -92,6 +95,7 @@ export const MEASURE_CONCURRENCY = 4;
 export async function measurePhotos(files: File[]): Promise<Array<PickedPhoto | null>> {
   const results: Array<PickedPhoto | null> = new Array(files.length).fill(null);
   let next = 0;
+
   async function worker() {
     while (next < files.length) {
       const index = next;
@@ -99,6 +103,8 @@ export async function measurePhotos(files: File[]): Promise<Array<PickedPhoto | 
       results[index] = await measurePhoto(files[index]);
     }
   }
+
   await Promise.all(Array.from({ length: Math.min(MEASURE_CONCURRENCY, files.length) }, worker));
+
   return results;
 }

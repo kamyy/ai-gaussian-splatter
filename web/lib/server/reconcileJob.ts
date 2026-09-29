@@ -37,6 +37,7 @@ export async function reconcileJob(
   if (!WORKER_RUNNING_STATUSES.includes(job.status) || localLaunchEnabled()) {
     return false;
   }
+
   if (Date.now() - job.updatedAt.getTime() < CHECK_AFTER_MS) {
     return false;
   }
@@ -49,6 +50,7 @@ export async function reconcileJob(
   if (row === undefined || row.ec2InstanceId === null) {
     return false;
   }
+
   const { splatId, ec2InstanceId } = row;
 
   const instance = await describeWorker(ec2InstanceId);
@@ -75,7 +77,9 @@ export async function reconcileJob(
     if (failed.length === 0) {
       return false;
     }
+
     await tx.update(splats).set({ status: "failed" }).where(eq(splats.id, splatId));
+
     return true;
   });
 }

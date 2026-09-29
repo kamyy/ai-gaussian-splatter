@@ -41,6 +41,7 @@ export const GET = withErrorHandling(
     if (cameras === null) {
       throw new HttpError(404, "Cameras not ready");
     }
+
     return NextResponse.json(cameras);
   },
 );

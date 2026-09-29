@@ -82,6 +82,7 @@ function SplatScene({
 
   useEffect(() => {
     let disposed = false;
+
     // fileType is stated rather than inferred, because splatUrl is a presigned S3 URL whose query string follows the
     // .spz extension.
     const splatMesh = new SplatMesh({ url: splatUrlRef.current, fileType: SplatFileType.SPZ });
@@ -90,6 +91,7 @@ function SplatScene({
         if (disposed) {
           return;
         }
+
         setMesh(splatMesh);
         onLoad();
 
@@ -168,6 +170,7 @@ function ViewerSceneManager({
   if (mode === "splat" && splatUrl) {
     return <SplatScene key="splat" splatUrl={splatUrl} onError={onError} onLoad={onLoad} onFirstLoad={onFirstLoad} />;
   }
+
   if (mode === "colmap_points" && pointCloudUrl) {
     return (
       <PointCloudScene
@@ -180,6 +183,7 @@ function ViewerSceneManager({
       />
     );
   }
+
   return null;
 }
 
@@ -221,6 +225,7 @@ export function SplatViewer({
     if (!cropping || cropBox !== null || pointCloudPositions === null) {
       return;
     }
+
     const fitted = fittedCropBox(pointCloudPositions, cameras ? framingFromCameras(cameras) : null);
     if (fitted) {
       onCropBoxChange?.(fitted);
@@ -246,6 +251,7 @@ export function SplatViewer({
         />
       );
     }
+
     if (cropping && cropBox && onCropBoxChange) {
       gizmo = <CropBoxGizmo box={cropBox} onChange={onCropBoxChange} />;
     }

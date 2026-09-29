@@ -48,6 +48,7 @@ describe("LibraryPage", () => {
     useSplatsMock.mockReturnValue({ data: Array.from({ length: 14 }, (_, i) => makeSplat(i + 1)), isLoading: false });
     render(<LibraryPage />);
     expect(screen.getAllByRole("link")).toHaveLength(9);
+
     // Three 238px images, each with its 44px name line, and two 28px gaps between the rows.
     const area = screen.getByRole("list").parentElement;
     expect(area).toHaveStyle({ minHeight: "902px" });
@@ -82,9 +83,11 @@ describe("LibraryPage", () => {
     });
     render(<LibraryPage />);
     const [portrait, empty] = screen.getAllByRole("link").map(link => link.closest("li"));
+
     // They don't fill a row, so they keep the 236px target height.
     expect(portrait).toHaveStyle({ width: "177px" });
     expect(empty).toHaveStyle({ width: `${Math.floor(((236 * 4) / 3) * 100) / 100}px` });
+
     // The icon sits under each card's image until it loads, and on its own when there is none.
     expect(portrait?.querySelector("svg + img")).not.toBeNull();
     expect(empty?.querySelector("svg")).not.toBeNull();

@@ -63,11 +63,13 @@ async function checkAndIncrement(scope: string, windowStart: Date, limit: number
 function truncateToHour(dt: Date): Date {
   const out = new Date(dt);
   out.setUTCMinutes(0, 0, 0);
+
   return out;
 }
 
 function truncateToDay(dt: Date): Date {
   const out = new Date(dt);
   out.setUTCHours(0, 0, 0, 0);
+
   return out;
 }

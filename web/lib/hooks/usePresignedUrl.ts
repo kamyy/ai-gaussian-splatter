@@ -34,5 +34,6 @@ export function usePresignedUrl(key: string[] | null, path: string) {
     { refreshInterval: URL_REFRESH_MS },
   );
   const url = data && data.fetchedAt > mountedAt - URL_MAX_AGE_AT_MOUNT_MS ? data.url : undefined;
+
   return { url, error };
 }

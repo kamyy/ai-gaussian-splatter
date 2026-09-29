@@ -13,9 +13,12 @@ export function useNow(ticking: boolean): number {
     if (!ticking) {
       return;
     }
+
     setNow(Date.now());
     const interval = setInterval(() => setNow(Date.now()), 1000);
+
     return () => clearInterval(interval);
   }, [ticking]);
+
   return now;
 }

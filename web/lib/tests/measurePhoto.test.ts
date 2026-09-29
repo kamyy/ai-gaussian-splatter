@@ -11,9 +11,11 @@ class FakeOffscreenCanvas {
   constructor(width: number, height: number) {
     canvasSizes.push([width, height]);
   }
+
   getContext() {
     return { drawImage: () => {}, imageSmoothingQuality: "low" };
   }
+
   async convertToBlob(options: { type: string }) {
     return new Blob(["thumbnail"], { type: options.type });
   }
@@ -107,6 +109,7 @@ describe("measurePhoto", () => {
         if (file.name === "3.heic") {
           throw new DOMException("The source image could not be decoded.", "InvalidStateError");
         }
+
         return { width: 100 + file.size, height: 100, close: () => {} };
       }),
     );

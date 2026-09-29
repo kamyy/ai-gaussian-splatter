@@ -39,6 +39,7 @@ export function splatStage(job: Job | undefined, photoCount: number): Stage {
   if (job === undefined) {
     return photoCount === 0 ? { kind: "no_photos" } : { kind: "ready" };
   }
+
   switch (job.status) {
     case JobStatus.queued:
     case JobStatus.reconstruction_running:

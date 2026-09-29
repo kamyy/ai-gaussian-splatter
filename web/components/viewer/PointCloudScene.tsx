@@ -41,6 +41,7 @@ export function PointCloudScene({ url, pointSize, onError, onLoad, onFirstLoad }
 
   useEffect(() => {
     let disposed = false;
+
     // Captured so cleanup can dispose the GPU buffers this effect created. Nothing but this component owns a
     // BufferGeometry, and every switch of the viewer's mode unmounts and remounts it.
     let loadedGeometry: BufferGeometry | null = null;
@@ -54,9 +55,11 @@ export function PointCloudScene({ url, pointSize, onError, onLoad, onFirstLoad }
           loaded.dispose();
           return;
         }
+
         loadedGeometry = loaded;
         setGeometry(loaded);
         onLoad();
+
         const positions = loaded.getAttribute("position").array;
         const box = trimmedBox(positions);
         if (!box.isEmpty()) {
@@ -80,6 +83,7 @@ export function PointCloudScene({ url, pointSize, onError, onLoad, onFirstLoad }
   if (!geometry) {
     return null;
   }
+
   return (
     <points geometry={geometry}>
       <pointsMaterial vertexColors size={pointSize} sizeAttenuation />

@@ -34,6 +34,7 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
   async function seedSplat() {
     const user = await getOrCreateUser("clerk-user-1");
     const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "obj" }).returning();
+
     return splat;
   }
 

@@ -19,6 +19,7 @@ export function StageShell({
   children: React.ReactNode;
 }) {
   const headingId = useId();
+
   return (
     <section
       aria-labelledby={headingId}

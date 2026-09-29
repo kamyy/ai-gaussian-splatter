@@ -45,6 +45,7 @@ describe("resolveDatabaseUrl", () => {
       DATABASE_PASSWORD: "p:a?b#c%d",
     });
     expect(url).toBe("postgresql://u:p%3Aa%3Fb%23c%25d@h:5432/n");
+
     // Round-trips: pg decodes these back to the original password.
     expect(decodeURIComponent(new URL(url as string).password)).toBe("p:a?b#c%d");
   });

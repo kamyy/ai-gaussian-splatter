@@ -33,6 +33,7 @@ export const POST = withErrorHandling(
     if (job === undefined) {
       throw new HttpError(409, "Nothing is running for this splat");
     }
+
     return NextResponse.json(job);
   },
 );

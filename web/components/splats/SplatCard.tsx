@@ -17,6 +17,7 @@ export function splatCardAspect(splat: SplatListItem) {
   if (splat.thumbnailWidth === null || splat.thumbnailHeight === null) {
     return 4 / 3;
   }
+
   return splat.thumbnailWidth / splat.thumbnailHeight;
 }
 

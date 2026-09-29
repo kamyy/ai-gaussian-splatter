@@ -32,6 +32,7 @@ function fromMatrix(matrix: Matrix4): CropBox {
   const quaternion = new Quaternion();
   const size = new Vector3();
   matrix.decompose(center, quaternion, size);
+
   return { center: center.toArray(), size: size.toArray(), quaternion: quaternion.toArray() };
 }
 

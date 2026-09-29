@@ -10,5 +10,6 @@ export async function requireToken(getToken: () => Promise<string | null>): Prom
   if (!token) {
     throw new Error("Not signed in");
   }
+
   return token;
 }

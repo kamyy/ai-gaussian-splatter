@@ -29,6 +29,7 @@ export interface ViewPose {
  */
 export function photoViewPose(camera: Omit<CameraPose, "photoId">, orbitTarget: Vector3): ViewPose {
   const position = new Vector3(...camera.center);
+
   // COLMAP's rotation is world-to-camera, so its rows are the photo's axes in world space: x right, y down the image,
   // and z the viewing direction.
   const forward = new Vector3(...camera.rotation[2]).normalize();
@@ -38,6 +39,7 @@ export function photoViewPose(camera: Omit<CameraPose, "photoId">, orbitTarget: 
 
   // Matrix4.lookAt orients an object's -z toward the target, which is the way a Three.js camera looks.
   const rotation = new Matrix4().lookAt(position, position.clone().add(forward), up);
+
   return { position, quaternion: new Quaternion().setFromRotationMatrix(rotation), distance };
 }
 
@@ -49,6 +51,7 @@ export function photoViewPose(camera: Omit<CameraPose, "photoId">, orbitTarget: 
 export function fittedFov({ width, height, fx, fy }: Omit<CameraPose, "photoId">, aspect: number): number {
   // Half the image's size over the focal length, both in pixels, is the tangent of the half-angle.
   const tanHalfVertical = Math.max(height / (2 * fy), width / (2 * fx) / aspect);
+
   return MathUtils.radToDeg(2 * Math.atan(tanHalfVertical));
 }
 

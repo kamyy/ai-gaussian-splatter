@@ -36,6 +36,7 @@ describe("worker status callback", () => {
     const [user] = await getDb().insert(users).values({ clerkUserId: "u1" }).returning();
     const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "obj" }).returning();
     const [job] = await getDb().insert(jobs).values({ splatId: splat.id, callbackToken: "tok" }).returning();
+
     return { splat, job };
   }
 
@@ -49,6 +50,7 @@ describe("worker status callback", () => {
     const [updated] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
     expect(updated.status).toBe("reconstruction_running");
     expect(updated.colmapStartedAt).not.toBeNull();
+
     // updatedAt only moves via .$onUpdate(); nothing in the database does it.
     expect(updated.updatedAt.getTime()).toBeGreaterThan(job.updatedAt.getTime());
   });

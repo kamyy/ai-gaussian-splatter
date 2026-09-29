@@ -23,8 +23,10 @@ import { StageShell } from "./StageShell";
 export function SharePanel({ splatId, children }: { splatId: string; children?: React.ReactNode }) {
   const { getToken } = useAuth();
   const { enqueueSnackbar } = useAppSnackbar();
+
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
+
   // The page renders this only after its client-side fetches resolve, never on the server, so window is defined.
   const shareUrl = `${window.location.origin}/preview/splats/${splatId}`;
 

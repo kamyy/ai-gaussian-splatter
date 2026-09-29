@@ -28,15 +28,18 @@ function timingExtras(timing: StepTiming | null, workLabel: string): StepExtras 
   if (timing === null) {
     return NO_EXTRAS;
   }
+
   let detail: string | null = null;
   if (timing.startupMs !== null && timing.workMs !== null) {
     detail = `GPU start-up ${formatDuration(timing.startupMs)} · ${workLabel} ${formatDuration(timing.workMs)}`;
   } else if (timing.running) {
     detail = "Starting a GPU";
   }
+
   if (timing.running) {
     return { aside: `${formatClock(timing.totalMs)} so far`, running: true, detail };
   }
+
   return { aside: formatDuration(timing.totalMs), running: false, detail };
 }
 
@@ -66,6 +69,7 @@ function gpuTotal(timings: StageTimings | null): string | null {
   if (!timings?.cameras || !timings.build) {
     return null;
   }
+
   return `${formatDuration(timings.cameras.totalMs + timings.build.totalMs)} of GPU time`;
 }
 
@@ -85,6 +89,7 @@ export function PipelineStepper({
   const ticking = stage.kind === "placing_cameras" || stage.kind === "building";
   const now = useNow(ticking);
   const timings = job ? stageTimings(job, now) : null;
+
   const current = currentStep(stage);
   const complete = current === null;
   const currentIndex = complete ? STEPS.length : STEPS.findIndex(step => step.key === current);
@@ -107,6 +112,7 @@ export function PipelineStepper({
           if (index < STEPS.length - 1) {
             connector = <span className={cn("min-h-2.5 w-0.5 flex-1", done ? "bg-primary" : "bg-divider")} />;
           }
+
           let aside: React.ReactNode = null;
           if (extras.aside !== null) {
             aside = (
@@ -117,6 +123,7 @@ export function PipelineStepper({
               </span>
             );
           }
+
           let detail: React.ReactNode = null;
           if (extras.detail !== null) {
             detail = <span className="text-xs font-normal text-muted-foreground tabular-nums">{extras.detail}</span>;

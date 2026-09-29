@@ -45,6 +45,7 @@ export function layoutRows(aspects: number[], width: number, targetHeight: numbe
     if (aspectSum * targetHeight + gap * (current.length - 1) < width) {
       continue;
     }
+
     const withHeight = (width - gap * (current.length - 1)) / aspectSum;
     const withoutHeight =
       current.length > 1
@@ -55,6 +56,7 @@ export function layoutRows(aspects: number[], width: number, targetHeight: numbe
       rows.push(sizedRow(current, aspects, withoutHeight));
       current = [];
       aspectSum = 0;
+
       // The photo left out starts the next row. Going round again for it puts it through the width check, which
       // closes that row at once if the photo alone is too wide for the target height.
       index--;
@@ -64,10 +66,12 @@ export function layoutRows(aspects: number[], width: number, targetHeight: numbe
       aspectSum = 0;
     }
   }
+
   if (current.length > 0) {
     const fitHeight = (width - gap * (current.length - 1)) / aspectSum;
     rows.push(sizedRow(current, aspects, Math.min(targetHeight, fitHeight)));
   }
+
   return rows;
 }
 
@@ -85,6 +89,7 @@ export function layoutPages(
   if (width <= 0) {
     return [];
   }
+
   const rows = layoutRows(aspects, width, targetHeight, gap);
   const pages: LayoutPage[] = [];
   for (let first = 0; first < rows.length; first += rowsPerPage) {
@@ -96,5 +101,6 @@ export function layoutPages(
       rows: pageRows,
     });
   }
+
   return pages;
 }

@@ -35,9 +35,11 @@ function isUniqueViolation(err: unknown): boolean {
   if (typeof err !== "object" || err === null) {
     return false;
   }
+
   if ("code" in err && err.code === "23505") {
     return true;
   }
+
   return "cause" in err && isUniqueViolation(err.cause);
 }
 
@@ -69,6 +71,7 @@ export const POST = withErrorHandling(
     if (uploaded.n < env.MIN_PHOTOS_PER_SPLAT) {
       throw new HttpError(400, `Need at least ${env.MIN_PHOTOS_PER_SPLAT} uploaded photos, have ${uploaded.n}`);
     }
+
     // The presign route enforces this too, but two concurrent presign batches can each pass it. This is the check that
     // stands between an oversized photo set and a GPU instance.
     if (uploaded.n > MAX_PHOTOS_PER_SPLAT) {
@@ -110,6 +113,7 @@ export const POST = withErrorHandling(
       if (isUniqueViolation(err)) {
         throw new HttpError(409, "A job is already in progress for this splat");
       }
+
       throw err;
     }
 
@@ -166,8 +170,10 @@ export const POST = withErrorHandling(
       } else {
         await terminateWorker(instanceId);
       }
+
       throw new HttpError(409, "Cancelled before the worker started");
     }
+
     return NextResponse.json(job, { status: 201 });
   },
 );

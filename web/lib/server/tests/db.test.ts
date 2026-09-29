@@ -29,6 +29,7 @@ describe("SecretPasswordPool", () => {
       user: decodeURIComponent(url.username),
       password: () => fetchDatabasePassword(arn, "us-west-2"),
     });
+
     return pool;
   }
 

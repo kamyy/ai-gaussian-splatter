@@ -31,6 +31,7 @@ export const GET = withErrorHandling(async (_request: NextRequest, ctx: RouteCon
   if (splat === undefined) {
     throw new HttpError(404, "Splat not found");
   }
+
   return NextResponse.json(splat);
 });
 
@@ -63,6 +64,7 @@ export const DELETE = withErrorHandling(
     } catch (err) {
       console.error(`Deleted splat ${splatId} but not all of its S3 objects`, err);
     }
+
     return new NextResponse(null, { status: 204 });
   },
 );

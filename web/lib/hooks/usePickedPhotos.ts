@@ -33,6 +33,7 @@ export function usePickedPhotos() {
         variant: "error",
       });
     }
+
     const accepted = dropped.filter(file => file.size <= MAX_PHOTO_BYTES);
     setMeasuringCount(count => count + 1);
     try {
@@ -41,9 +42,11 @@ export function usePickedPhotos() {
       if (unreadable.length > 0) {
         enqueueSnackbar(`Couldn't read ${unreadable.join(", ")}. Try exporting as JPEG.`, { variant: "error" });
       }
+
       const readable = measured.filter(photo => photo !== null);
       setPhotos(current => {
         const seen = new Set(current.map(photo => fileKey(photo.file)));
+
         // Oldest taken first, matching the order the splat's page shows them in. The sort is stable, so photos taken at
         // the same moment keep the order they were added in.
         return [...current, ...readable.filter(photo => !seen.has(fileKey(photo.file)))].sort(

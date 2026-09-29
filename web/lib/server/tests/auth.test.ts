@@ -88,6 +88,7 @@ describe("database-backed auth helpers", () => {
         .returning();
       const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "s" }).returning();
       const [job] = await getDb().insert(jobs).values({ splatId: splat.id, callbackToken }).returning();
+
       return job;
     }
 

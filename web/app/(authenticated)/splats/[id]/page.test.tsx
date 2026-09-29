@@ -125,6 +125,7 @@ describe("SplatPage", () => {
     expect(screen.getByRole("list", { name: "Progress" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "a.jpg" })).toBeInTheDocument();
     expect(screen.queryByTestId("share-panel")).not.toBeInTheDocument();
+
     // Before the splat is complete, the stage card offers "Discard" itself.
     expect(screen.queryByRole("button", { name: "Discard" })).not.toBeInTheDocument();
   });

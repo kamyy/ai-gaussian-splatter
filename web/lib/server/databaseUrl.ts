@@ -27,6 +27,7 @@ export function databaseSsl(env: Record<string, string | undefined> = process.en
   if (!caPath) {
     return undefined;
   }
+
   return { ca: readFileSync(caPath, "utf8") };
 }
 
@@ -53,6 +54,7 @@ export function resolveDatabaseUrl(env: Record<string, string | undefined> = pro
   }
 
   const port = env.DATABASE_PORT || "5432";
+
   return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${name}`;
 }
 
@@ -99,6 +101,7 @@ export async function fetchDatabasePassword(secretArn: string, region: string): 
   }
 
   cachedPassword = { secretArn, value: password, fetchedAt: now };
+
   return password;
 }
 
