@@ -16,10 +16,12 @@ const COLOR = "#d4764a";
 // How faint the other frustums go while one is selected. WebGL draws every line 1px wide, so fading the rest is what
 // makes the selected one stand out.
 const UNSELECTED_OPACITY = 0.3;
-// The selected frustum's far rectangle is filled at this opacity when seen from a distance.
-const FILL_OPACITY = 0.35;
-// The fill fades out as the viewer nears the selected camera, measured in frustum depths from its tip: invisible within
-// the first, full by the last. A flight parks the viewer on the tip, where the fill would tint most of the view.
+// How strongly the selected and the hovered frustum fill their far rectangles. The hovered one's fill is what marks it
+// when nothing is selected and every frustum is drawn at full strength.
+const SELECTED_FILL_OPACITY = 0.35;
+const HOVERED_FILL_OPACITY = 0.2;
+// The selected frustum's fill is invisible within the first of these many frustum depths from its tip, and full by the
+// last.
 const FILL_FADE_DEPTHS: [number, number] = [1, 3];
 // Four side triangles from the camera center plus two for the far rectangle.
 const TRIANGLES_PER_FRUSTUM = 6;
@@ -110,32 +112,51 @@ interface CameraFrustumsProps {
   selected: number | null;
   // Offered only when clicking a frustum should select it.
   onSelect?: (index: number) => void;
+  // The camera to mark as hovered, whether the pointer is over its frustum or over its photo in the grid.
+  hovered: number | null;
+  // Reports the camera under the pointer while frustums can be clicked, or null once the pointer leaves them.
+  onHover?: (index: number | null) => void;
 }
 
-function SelectedFrustum({ frustum }: { frustum: Frustum }) {
+/**
+ * One frustum drawn over the full set at full strength, with its far rectangle filled at fillOpacity. The lines sit in
+ * the transparent pass with a later renderOrder, so they land on top of the same lines drawn there faded.
+ *
+ * With fadeNearTip the fill fades out as the viewer nears the camera, measured in frustum depths from its tip. A flight
+ * parks the viewer on the selected camera's tip, where the fill would tint most of the view.
+ */
+function HighlightedFrustum({
+  frustum,
+  fillOpacity,
+  fadeNearTip = false,
+}: {
+  frustum: Frustum;
+  fillOpacity: number;
+  fadeNearTip?: boolean;
+}) {
   const lines = useMemo(() => segments([frustum]), [frustum]);
   const face = useMemo(() => farFace(frustum), [frustum]);
   const tip = useMemo(() => new Vector3(...frustum.center), [frustum]);
   const fillRef = useRef<MeshBasicMaterial>(null);
 
   useFrame(({ camera }) => {
-    if (!fillRef.current) {
+    if (!fadeNearTip || !fillRef.current) {
       return;
     }
     const [near, far] = FILL_FADE_DEPTHS;
     const t = (camera.position.distanceTo(tip) / frustum.depth - near) / (far - near);
-    fillRef.current.opacity = FILL_OPACITY * Math.min(1, Math.max(0, t));
+    fillRef.current.opacity = fillOpacity * Math.min(1, Math.max(0, t));
   });
 
   return (
     <>
-      <lineSegments>
+      <lineSegments renderOrder={1}>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[lines, 3]} />
         </bufferGeometry>
-        <lineBasicMaterial color={COLOR} />
+        <lineBasicMaterial color={COLOR} transparent />
       </lineSegments>
-      <mesh>
+      <mesh renderOrder={1}>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[face, 3]} />
         </bufferGeometry>
@@ -143,7 +164,7 @@ function SelectedFrustum({ frustum }: { frustum: Frustum }) {
           ref={fillRef}
           color={COLOR}
           transparent
-          opacity={FILL_OPACITY}
+          opacity={fillOpacity}
           side={DoubleSide}
           depthWrite={false}
         />
@@ -168,16 +189,28 @@ function FrustumPicker({
   list,
   selected,
   onSelect,
+  onHover,
 }: {
   list: Frustum[];
   selected: number | null;
   onSelect: (index: number) => void;
+  // The camera under the pointer, or null once the pointer leaves every frustum.
+  onHover?: (index: number | null) => void;
 }) {
   const positions = useMemo(() => triangles(list.filter((_, i) => i !== selected)), [list, selected]);
   const canvas = useThree(state => state.gl.domElement);
+  // Whether the hover in effect is one this mesh reported. On unmount it clears only its own, so a remount, which every
+  // selection causes, leaves a hover that came from the photo grid alone. onHover is read through a ref so the cleanup
+  // doesn't rerun whenever the caller passes a new function.
+  const reportedHoverRef = useRef(false);
+  const onHoverRef = useRef(onHover);
+  onHoverRef.current = onHover;
   useEffect(
     () => () => {
       canvas.style.removeProperty("cursor");
+      if (reportedHoverRef.current) {
+        onHoverRef.current?.(null);
+      }
     },
     [canvas],
   );
@@ -197,7 +230,18 @@ function FrustumPicker({
     <mesh
       onClick={handleClick}
       onPointerOver={() => canvas.style.setProperty("cursor", "pointer")}
-      onPointerOut={() => canvas.style.removeProperty("cursor")}
+      // Moving within the mesh can cross from one frustum to another, which pointerover alone wouldn't report.
+      onPointerMove={event => {
+        if (event.faceIndex != null) {
+          reportedHoverRef.current = true;
+          onHover?.(cameraOfTriangle(event.faceIndex, selected));
+        }
+      }}
+      onPointerOut={() => {
+        canvas.style.removeProperty("cursor");
+        reportedHoverRef.current = false;
+        onHover?.(null);
+      }}
     >
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
@@ -208,7 +252,7 @@ function FrustumPicker({
   );
 }
 
-export function CameraFrustums({ cameras, selected, onSelect }: CameraFrustumsProps) {
+export function CameraFrustums({ cameras, selected, onSelect, hovered, onHover }: CameraFrustumsProps) {
   const list = useMemo(() => frustums(cameras), [cameras]);
   const positions = useMemo(() => segments(list), [list]);
 
@@ -222,14 +266,28 @@ export function CameraFrustums({ cameras, selected, onSelect }: CameraFrustumsPr
     // Keyed so a new selection mounts fresh geometry. Three.js computes a geometry's bounding sphere once and culls by
     // it, so geometry reused for another camera keeps the old camera's sphere and vanishes whenever that one is out of
     // view.
-    highlight = <SelectedFrustum key={`highlight-${selected}`} frustum={selectedFrustum} />;
+    highlight = (
+      <HighlightedFrustum
+        key={`highlight-${selected}`}
+        frustum={selectedFrustum}
+        fillOpacity={SELECTED_FILL_OPACITY}
+        fadeNearTip
+      />
+    );
+  }
+  const hoveredFrustum = hovered !== null && hovered !== selected ? list[hovered] : undefined;
+  let hover: React.ReactNode = null;
+  if (hoveredFrustum) {
+    hover = <HighlightedFrustum key={`hover-${hovered}`} frustum={hoveredFrustum} fillOpacity={HOVERED_FILL_OPACITY} />;
   }
   let picker: React.ReactNode = null;
   if (onSelect) {
     // Keyed for the same reason as the highlight: its geometry changes with the selection. The two keys share a list of
     // siblings, so each carries its own prefix. With the same key, React can't tell them apart and leaves stale copies
     // of earlier highlights mounted.
-    picker = <FrustumPicker key={`picker-${selected}`} list={list} selected={selected} onSelect={onSelect} />;
+    picker = (
+      <FrustumPicker key={`picker-${selected}`} list={list} selected={selected} onSelect={onSelect} onHover={onHover} />
+    );
   }
 
   return (
@@ -243,6 +301,7 @@ export function CameraFrustums({ cameras, selected, onSelect }: CameraFrustumsPr
         <lineBasicMaterial color={COLOR} transparent opacity={selectedFrustum ? UNSELECTED_OPACITY : 1} />
       </lineSegments>
       {highlight}
+      {hover}
       {picker}
     </>
   );

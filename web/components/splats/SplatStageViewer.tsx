@@ -36,6 +36,9 @@ interface SplatStageViewerProps {
   onSelectPhoto: (photoId: string) => void;
   // Clears the selection once the visitor moves the view away from the selected photo's by hand.
   onClearSelection: () => void;
+  // The photo hovered in the grid or, through its camera, in the 3D view.
+  hoveredPhotoId: string | null;
+  onHoverPhoto: (photoId: string | null) => void;
   // Set only while the crop box can still change what gets built, which is what offers the Crop button.
   onCropBoxChange?: (box: CropBox | null) => void;
 }
@@ -198,6 +201,12 @@ function OrbitHint({ canPickCameras }: { canPickCameras: boolean }) {
   );
 }
 
+// The index into cameras of photoId's camera, which is how SplatViewer names a camera. null when there is none.
+function cameraIndexOf(cameras: CameraPose[] | undefined, photoId: string | null): number | null {
+  const index = photoId && cameras ? cameras.findIndex(camera => camera.photoId === photoId) : -1;
+  return index === -1 ? null : index;
+}
+
 // The page's 3D view, with a selector between the finished splat and the point cloud (the "shape sketch") COLMAP
 // produced. Both URLs go to one SplatViewer, so switching keeps the camera where the visitor left it.
 export function SplatStageViewer({
@@ -209,6 +218,8 @@ export function SplatStageViewer({
   selection,
   onSelectPhoto,
   onClearSelection,
+  hoveredPhotoId,
+  onHoverPhoto,
   onCropBoxChange,
 }: SplatStageViewerProps) {
   const [showCameras, setShowCameras] = useState(true);
@@ -229,9 +240,10 @@ export function SplatStageViewer({
 
   // Recomputed only when the selection or the cameras change, since each new object flies the view again.
   const selectedCamera = useMemo<CameraSelection | null>(() => {
-    const index = selection && cameras ? cameras.findIndex(camera => camera.photoId === selection.photoId) : -1;
-    return index === -1 ? null : { index };
+    const index = cameraIndexOf(cameras, selection?.photoId ?? null);
+    return index === null ? null : { index };
   }, [selection, cameras]);
+  const hoveredCamera = cameraIndexOf(cameras, hoveredPhotoId);
 
   const mode: ViewMode = viewMode ?? (complete ? "splat" : "colmap_points");
   const canCrop = mode === "colmap_points" && onCropBoxChange !== undefined;
@@ -277,6 +289,8 @@ export function SplatStageViewer({
         }}
         // Only while something is selected, so dragging with nothing selected doesn't set state on every frame.
         onManualMove={selection ? onClearSelection : undefined}
+        hoveredCamera={hoveredCamera}
+        onHoverCamera={index => onHoverPhoto(index === null ? null : (cameras?.[index]?.photoId ?? null))}
         pointSize={pointSize}
         cropping={canCrop && cropping}
         cropBox={cropBox}

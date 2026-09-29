@@ -25,6 +25,8 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
   // Picked from either the photo grid or the 3D view's cameras, and shown in both.
   const [selection, setSelection] = useState<PhotoSelection | null>(null);
   const selectPhoto = (photoId: string) => setSelection({ photoId });
+  // Hovering a photo marks its camera in the 3D view, and hovering a camera marks its photo in the grid.
+  const [hoveredPhotoId, setHoveredPhotoId] = useState<string | null>(null);
 
   // Only the job is polled, but the worker's callback moves the job row and the splat row in one transaction, so a job
   // that has ended means this splat is stale.
@@ -60,7 +62,14 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
   let photoGrid: React.ReactNode = null;
   if (photos && photos.length > 0) {
     photoGrid = (
-      <PhotoGrid photos={photos} placedPhotoIds={placedPhotoIds} selection={selection} onSelect={selectPhoto} />
+      <PhotoGrid
+        photos={photos}
+        placedPhotoIds={placedPhotoIds}
+        selection={selection}
+        onSelect={selectPhoto}
+        hoveredPhotoId={hoveredPhotoId}
+        onHover={setHoveredPhotoId}
+      />
     );
   }
 
@@ -93,6 +102,8 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
           selection={selection}
           onSelectPhoto={selectPhoto}
           onClearSelection={() => setSelection(null)}
+          hoveredPhotoId={hoveredPhotoId}
+          onHoverPhoto={setHoveredPhotoId}
           onCropBoxChange={stage.kind === "check" ? setCropBox : undefined}
         />
       </section>

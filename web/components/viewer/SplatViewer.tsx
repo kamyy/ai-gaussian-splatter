@@ -31,6 +31,10 @@ interface SplatViewerProps {
   onSelectCamera?: (index: number) => void;
   // Called as the visitor drags, zooms or pans the view, which leaves the selected camera's view behind.
   onManualMove?: () => void;
+  // Marks this camera's frustum as hovered, such as while the pointer is over its photo in the grid.
+  hoveredCamera?: number | null;
+  // Reports the camera whose frustum is under the pointer, or null once the pointer leaves them.
+  onHoverCamera?: (index: number | null) => void;
   // How big each point of the point cloud is drawn, in world units.
   pointSize?: number;
   // Shows a crop box over the point cloud, which the visitor moves and resizes. A null box while cropping is
@@ -231,6 +235,8 @@ export function SplatViewer({
   selectedCamera = null,
   onSelectCamera,
   onManualMove,
+  hoveredCamera = null,
+  onHoverCamera,
   pointSize = DEFAULT_POINT_SIZE,
   cropping = false,
   cropBox = null,
@@ -278,6 +284,8 @@ export function SplatViewer({
           selected={selectedCamera?.index ?? null}
           // Not while cropping: the crop box's handles let a click through, which would pick the camera behind them.
           onSelect={cropping ? undefined : onSelectCamera}
+          hovered={hoveredCamera}
+          onHover={onHoverCamera}
         />
       );
     }

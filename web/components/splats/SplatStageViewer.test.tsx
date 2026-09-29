@@ -31,6 +31,8 @@ function viewer(splatId: string) {
       selection={null}
       onSelectPhoto={() => {}}
       onClearSelection={() => {}}
+      hoveredPhotoId={null}
+      onHoverPhoto={() => {}}
     />
   );
 }
