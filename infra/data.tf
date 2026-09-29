@@ -115,9 +115,9 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "splats" {
   }
 }
 
-# Needed for the same reason as on the uploads bucket, in the other direction. The viewer fetches the .ply straight from
-# S3 in the browser (web/components/viewer/SplatViewer.tsx hands the presigned URL to Spark's SplatMesh). That is a
-# cross-origin GET, which S3 rejects without a matching rule.
+# Needed for the same reason as on the uploads bucket, in the other direction. The 3D viewer fetches the .spz splat and
+# the point cloud's .ply straight from S3 in the browser, on presigned URLs. That is a cross-origin GET, which S3
+# rejects without a matching rule.
 resource "aws_s3_bucket_cors_configuration" "splats" {
   bucket = aws_s3_bucket.splats.id
 

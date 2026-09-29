@@ -144,7 +144,7 @@ jobs:
             exit 1
           fi
       # Builds and runs the real migration image (web/Dockerfile's `migrator` stage) against this job's Postgres, rather
-      # than only testing the `drizzle-kit migrate` script underneath it. The Terraform tests in
+      # than only testing the web/scripts/db-migrate.cjs script underneath it. The Terraform tests in
       # infra/tests/web.tftest.hcl check that the task definition is wired correctly, but not that the image itself
       # applies a migration.
       - name: Build and run the migrator image against the CI database

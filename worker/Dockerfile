@@ -1,4 +1,4 @@
-# Worker image: COLMAP plus the Python deps for the gsplat training pipeline.
+# The GPU worker's images: COLMAP for the reconstruct stage, and gsplat plus its Python deps for the train stage.
 #
 # Two final targets, each carrying only what its worker-job stage runs. There is no default, so every caller passes
 # --target. A stage pays its image pull before its GPU does anything, and reconstruct runs on every upload while only

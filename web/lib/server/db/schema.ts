@@ -22,9 +22,6 @@ import { JOB_STATUS_DB_VALUES, PHOTO_UPLOAD_STATUSES, SPLAT_STATUSES } from "@/l
  * database name explicitly rather than relying on drizzle's `casing` option. So a migration and a runtime query can
  * never silently disagree on a name.
  *
- * The table export is `splats`, not `objects`, to avoid shadowing JS's `Object`. The same naming is used throughout
- * the app, including REST paths and hooks.
- *
  * Enum labels come from web/lib/types.ts, so the client-side unions and the Postgres labels are one list.
  */
 
