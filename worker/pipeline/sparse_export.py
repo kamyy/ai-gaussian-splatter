@@ -1,7 +1,6 @@
-"""Persists the COLMAP reconstruct phase's output across the pause before training:
-the raw sparse model (so a later, separate EC2 instance can resume training without
-re-running COLMAP), plus a viewer-facing point-cloud .ply and camera poses (so the browser
-can show both while the user decides whether to proceed).
+"""Persists the COLMAP reconstruct phase's output across the pause before training: the raw sparse model (so a later,
+separate EC2 instance can resume training without re-running COLMAP), plus a viewer-facing point-cloud .ply and camera
+poses (so the browser can show both while the user decides whether to proceed).
 """
 
 import json
@@ -25,8 +24,8 @@ def _sparse_model_prefix(settings: Settings) -> str:
 
 
 def upload_sparse_model(sparse_dir: Path, settings: Settings) -> None:
-    """Uploads cameras.bin/images.bin/points3D.bin so a later train-phase instance can
-    download them back down instead of re-running COLMAP.
+    """Uploads cameras.bin/images.bin/points3D.bin so a later train-phase instance can download them back instead of
+    re-running COLMAP.
     """
     s3 = boto3.client("s3")
     prefix = _sparse_model_prefix(settings)
@@ -63,8 +62,8 @@ def download_sparse_model(settings: Settings, dest_dir: Path) -> Path:
 
 
 def export_and_upload_point_cloud(sfm_sparse_dir: Path, settings: Settings) -> str:
-    """Writes the COLMAP sparse point cloud as a plain x/y/z/red/green/blue .ply and
-    uploads it to s3://{splats_bucket}/splats/{splat_id}/point_cloud.ply.
+    """Writes the COLMAP sparse point cloud as a plain x/y/z/red/green/blue .ply and uploads it to
+    s3://{splats_bucket}/splats/{splat_id}/point_cloud.ply.
 
     Unlike worker/pipeline/export.py's result.ply, the colors here are already 0-255 RGB straight from COLMAP. There is
     no spherical-harmonics DC-term encoding to apply, since this isn't a trained Gaussian.

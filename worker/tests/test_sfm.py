@@ -13,9 +13,8 @@ def _fake_run(stdout: str, stderr: str):
 
 
 def test_count_registered_images_reads_stderr(monkeypatch, tmp_path):
-    """Where COLMAP actually reports it: the count goes through glog, which
-    writes to stderr and never to stdout. A fixture that puts it on stdout
-    passes while the real pipeline raises on every successful reconstruction.
+    """Where COLMAP actually reports it: the count goes through glog, which writes to stderr and never to stdout. A
+    fixture that puts it on stdout passes while the real pipeline raises on every successful reconstruction.
     """
     monkeypatch.setattr("pipeline.sfm.subprocess.run", _fake_run("", FAKE_ANALYZER_OUTPUT))
 
@@ -23,8 +22,7 @@ def test_count_registered_images_reads_stderr(monkeypatch, tmp_path):
 
 
 def test_count_registered_images_reads_stdout(monkeypatch, tmp_path):
-    """Both streams are searched, so a future COLMAP that prints the summary
-    directly keeps working."""
+    """Both streams are searched, so a future COLMAP that prints the summary directly keeps working."""
     monkeypatch.setattr("pipeline.sfm.subprocess.run", _fake_run(FAKE_ANALYZER_OUTPUT, ""))
 
     assert _count_registered_images(tmp_path) == 47

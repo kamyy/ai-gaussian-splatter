@@ -5,9 +5,8 @@ from pipeline.config import Settings
 
 @pytest.fixture(autouse=True)
 def aws_test_credentials(monkeypatch):
-    """moto intercepts AWS calls but boto3 clients still need *some*
-    region/credentials configured to construct. These are fake and never
-    used to hit real AWS.
+    """moto intercepts AWS calls, but boto3 clients still need *some* region and credentials configured to construct.
+    These are fake and never used to hit real AWS.
     """
     for var, value in {
         "AWS_ACCESS_KEY_ID": "testing",
