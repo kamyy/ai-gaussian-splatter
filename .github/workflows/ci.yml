@@ -164,9 +164,13 @@ jobs:
       - run: pnpm db:migrate
       - run: pnpm test
       - run: pnpm build
+      # Skipped until web/e2e/ holds a spec, so the browser download isn't paid for zero tests. The first spec turns both
+      # steps on.
       - name: Install Playwright browsers
+        if: hashFiles('web/e2e/**') != ''
         run: npx playwright install --with-deps chromium
-      - run: pnpm test:e2e
+      - if: hashFiles('web/e2e/**') != ''
+        run: pnpm test:e2e
 
   infra:
     runs-on: ubuntu-latest
@@ -189,6 +193,9 @@ jobs:
       - name: terraform test
         working-directory: infra
         run: terraform test
+      # Stdlib only, with boto3 stubbed, so the runner's own python3 runs them with nothing to install.
+      - name: worker sweeper Lambda tests
+        run: python3 -B -m unittest discover -s infra/lambda
 
   # Records DEPLOY_ENABLED shortly after this run starts, once a runner picks this job up. The deploy job's if:
   # reads this output, not live vars when that job starts. Not a required check. It only runs on push to main.
