@@ -16,7 +16,7 @@ export default function SplatsLayout({ children }: { children: React.ReactNode }
   return (
     <div className="flex h-dvh flex-col">
       <SiteHeader />
-      <main className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">{children}</main>
+      <main className="relative min-h-0 flex-1 overflow-y-auto scrollbar-gutter-stable">{children}</main>
     </div>
   );
 }
