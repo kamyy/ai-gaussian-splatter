@@ -12,12 +12,13 @@ import { Input } from "@/components/ui/Input";
 import { Pager } from "@/components/ui/Pager";
 import { apiFetch } from "@/lib/apiFetch";
 import { cn } from "@/lib/cn";
+import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
+import { useJustifiedPages } from "@/lib/hooks/useJustifiedPages";
+import { MAX_PHOTO_BYTES, MAX_PHOTOS_PER_SPLAT } from "@/lib/limits";
 import { measurePhotos, type PickedPhoto } from "@/lib/measurePhoto";
 import { useAppStore } from "@/lib/store";
-import { type Job, MAX_PHOTO_BYTES, MAX_PHOTOS_PER_SPLAT, type Splat } from "@/lib/types";
+import type { Job, Splat } from "@/lib/types";
 import { uploadPhotos } from "@/lib/uploadPhotos";
-import { useAppSnackbar } from "@/lib/useAppSnackbar";
-import { useJustifiedPages } from "@/lib/useJustifiedPages";
 
 // Guidance, not a limit: the meter fills at this count. The server's own minimum is MIN_PHOTOS_PER_SPLAT.
 const TARGET_PHOTOS = 50;

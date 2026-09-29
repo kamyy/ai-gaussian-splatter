@@ -12,11 +12,11 @@ vi.mock("@/lib/server/ec2Launcher", async importOriginal => {
   return { ...actual, launchJob: launchJobMock, terminateWorker: terminateWorkerMock };
 });
 
+import { MAX_PHOTOS_PER_SPLAT } from "@/lib/limits";
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { globalJobCounters, jobs, photos, splats, users } from "@/lib/server/db/schema";
 import { getEnv } from "@/lib/server/env";
-import { MAX_PHOTOS_PER_SPLAT } from "@/lib/types";
 import { POST } from "./route";
 
 function ctx(splatId: string) {

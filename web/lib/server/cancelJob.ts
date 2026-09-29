@@ -1,6 +1,6 @@
 import { and, desc, eq, notInArray } from "drizzle-orm";
 
-import { JOB_ENDED_STATUSES, JobStatus } from "@/lib/types";
+import { JOB_ENDED_STATUSES, JobStatus } from "@/lib/statuses";
 import { getDb } from "./db";
 import { jobs } from "./db/schema";
 import { localLaunchEnabled, stopLocalWorker, terminateWorker } from "./ec2Launcher";

@@ -1,5 +1,6 @@
 import type { ChipColor } from "@/components/ui/Chip";
-import { JobStatus, type SplatListItem } from "./types";
+import { JobStatus } from "./statuses";
+import type { SplatListItem } from "./types";
 
 export type LibraryFilter = "needs_you" | "in_progress" | "complete";
 

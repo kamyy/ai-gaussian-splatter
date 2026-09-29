@@ -8,12 +8,12 @@ import { type Box3, Vector3 } from "three";
 
 import { Center } from "@/components/layout/Center";
 import { Spinner } from "@/components/ui/Spinner";
+import { type CameraSelection, DEFAULT_FOV, useCameraFlight } from "@/lib/hooks/useCameraFlight";
 import type { CameraPose, CropBox } from "@/lib/types";
 import { CameraFrustums } from "./CameraFrustums";
 import { CropBoxGizmo } from "./CropBoxGizmo";
 import { type Framing, fittedCropBox, framingFromCameras, trimmedBox } from "./cameraFraming";
 import { DEFAULT_POINT_SIZE, PointCloudScene } from "./PointCloudScene";
-import { type CameraSelection, DEFAULT_FOV, useCameraFlight } from "./useCameraFlight";
 
 export type ViewMode = "splat" | "colmap_points";
 

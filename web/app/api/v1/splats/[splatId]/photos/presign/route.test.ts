@@ -3,11 +3,11 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@clerk/nextjs/server", () => ({ auth: vi.fn(async () => ({ userId: "clerk-user-1" })) }));
 
+import { MAX_PHOTO_BYTES, MAX_PHOTOS_PER_SPLAT } from "@/lib/limits";
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { photos, rateLimitCounters, splats, users } from "@/lib/server/db/schema";
 import { MAX_THUMBNAIL_BYTES } from "@/lib/server/s3";
-import { MAX_PHOTO_BYTES, MAX_PHOTOS_PER_SPLAT } from "@/lib/types";
 import { POST } from "./route";
 
 function ctx(splatId: string) {

@@ -1,5 +1,5 @@
 // Typed REST client for the Route Handlers in web/app/api/v1/. Authenticated endpoints take a Clerk session token,
-// obtained client-side via useAuth().getToken() and passed in by callers (web/lib/hooks.ts).
+// obtained client-side via useAuth().getToken() and passed in by callers (web/lib/hooks/).
 
 export async function apiFetch<T>(
   path: string,

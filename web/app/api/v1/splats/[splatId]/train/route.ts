@@ -18,7 +18,7 @@ import { getEnv } from "@/lib/server/env";
 import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
 import { jobColumns } from "@/lib/server/selects";
-import { JOB_ENDED_STATUSES } from "@/lib/types";
+import { JOB_ENDED_STATUSES } from "@/lib/statuses";
 
 // Nothing but numbers survives the parse, which is what lets web/lib/server/ec2Launcher.ts single-quote the box's JSON
 // inside the user-data script.

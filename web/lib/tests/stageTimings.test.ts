@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { formatClock, formatDuration, stageTimings } from "../stageTimings";
-import { type Job, JobStatus } from "../types";
+import { JobStatus } from "../statuses";
+import type { Job } from "../types";
 
 const T0 = Date.parse("2026-01-01T10:00:00Z");
 

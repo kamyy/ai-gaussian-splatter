@@ -17,11 +17,11 @@ vi.mock("@/lib/server/s3", async importOriginal => {
   };
 });
 
+import { MAX_PHOTO_BYTES } from "@/lib/limits";
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { photos, splats, users } from "@/lib/server/db/schema";
 import { MAX_THUMBNAIL_BYTES } from "@/lib/server/s3";
-import { MAX_PHOTO_BYTES } from "@/lib/types";
 import { POST } from "./route";
 
 function ctx(splatId: string, photoId: string) {

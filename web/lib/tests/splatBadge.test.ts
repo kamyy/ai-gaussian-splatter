@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { splatBadge } from "../splatBadge";
-import { JOB_STATUSES } from "../types";
+import { JOB_STATUSES } from "../statuses";
 
 describe("splatBadge", () => {
   it("shows a splat with no job as a dead end without photos, and ready to start with them", () => {

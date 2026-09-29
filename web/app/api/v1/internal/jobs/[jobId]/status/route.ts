@@ -6,7 +6,7 @@ import { getJobForCallbackToken } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { jobs, splats } from "@/lib/server/db/schema";
 import { HttpError, withErrorHandling } from "@/lib/server/httpError";
-import { JOB_ENDED_STATUSES, JOB_STATUSES, JobStatus, type SplatStatus } from "@/lib/types";
+import { JOB_ENDED_STATUSES, JOB_STATUSES, JobStatus, type SplatStatus } from "@/lib/statuses";
 
 /**
  * The worker's status callback to the app.
@@ -39,7 +39,7 @@ export const PATCH = withErrorHandling(
     // (web/lib/server/db/schema.ts). 204 rather than an error because there is nothing for the worker to retry:
     // worker/pipeline/status.py only logs a failed callback anyway.
     //
-    // job.status's column type also includes the unused "colmap_running" label (web/lib/types.ts), which is not an
+    // job.status's column type also includes the unused "colmap_running" label (web/lib/statuses.ts), which is not an
     // ended status either, so the cast is safe for this membership check.
     if (JOB_ENDED_STATUSES.includes(job.status as JobStatus)) {
       return new NextResponse(null, { status: 204 });

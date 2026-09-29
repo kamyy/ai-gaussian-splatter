@@ -1,6 +1,5 @@
 "use client";
 
-import { useAuth } from "@clerk/nextjs";
 import { useMemo, useState } from "react";
 import type { IconType } from "react-icons";
 import {
@@ -11,17 +10,15 @@ import {
   PiSelectionDuotone,
   PiSelectionSlashDuotone,
 } from "react-icons/pi";
-import useSWR from "swr";
 
 import { Center } from "@/components/layout/Center";
 import { Spinner } from "@/components/ui/Spinner";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { DEFAULT_POINT_SIZE } from "@/components/viewer/PointCloudScene";
 import { SplatViewer, type ViewMode } from "@/components/viewer/SplatViewer";
-import type { CameraSelection } from "@/components/viewer/useCameraFlight";
-import { apiFetch } from "@/lib/apiFetch";
 import { cn } from "@/lib/cn";
-import { requireToken } from "@/lib/requireToken";
+import type { CameraSelection } from "@/lib/hooks/useCameraFlight";
+import { usePresignedUrl } from "@/lib/hooks/usePresignedUrl";
 import type { CameraPose, CropBox, Job } from "@/lib/types";
 import type { PhotoSelection } from "./photoSelection";
 
@@ -41,29 +38,6 @@ interface SplatStageViewerProps {
   onHoverPhoto: (photoId: string | null) => void;
   // Set only while the crop box can still change what gets built, which is what offers the Crop button.
   onCropBoxChange?: (box: CropBox | null) => void;
-}
-
-// A presigned URL is only read once, when a scene mounts, so a revalidated one that has since been re-minted is never
-// reloaded (web/components/viewer/SplatViewer.tsx). What matters is that the URL in hand is still valid whenever a
-// scene next mounts, such as on a mode switch.
-//
-// web/lib/server/s3.ts presigns for 15 minutes, so each URL is re-minted well inside that while the page is open.
-const URL_REFRESH_MS = 5 * 60_000;
-// SWR's cache outlives the page, so a return visit starts from the last visit's URL, which may have expired. One
-// fetched longer than this before the page mounted is not used, and the page waits for SWR's revalidation instead.
-const URL_MAX_AGE_AT_MOUNT_MS = 10 * 60_000;
-
-// Fetches the presigned URL at path while key is set, and returns undefined until one is fresh enough to mount.
-function usePresignedUrl(key: string[] | null, path: string) {
-  const { getToken } = useAuth();
-  const [mountedAt] = useState(Date.now);
-  const { data, error } = useSWR(
-    key,
-    async () => ({ url: await apiFetch<string>(path, "GET", await requireToken(getToken)), fetchedAt: Date.now() }),
-    { refreshInterval: URL_REFRESH_MS },
-  );
-  const url = data && data.fetchedAt > mountedAt - URL_MAX_AGE_AT_MOUNT_MS ? data.url : undefined;
-  return { url, error };
 }
 
 function ModeButton({

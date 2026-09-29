@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 
-import { type LayoutTile, layoutPages } from "./justifiedLayout";
+import { type LayoutTile, layoutPages } from "@/lib/justifiedLayout";
 import { useElementWidth } from "./useElementWidth";
 
 interface JustifiedPagesOptions {

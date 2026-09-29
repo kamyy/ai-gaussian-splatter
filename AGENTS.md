@@ -88,7 +88,7 @@ Monorepo, three independent packages:
 - `worker/` — COLMAP + gsplat pipeline, runs on an EC2 GPU spot instance per worker-job stage.
 - `infra/` — Terraform. Network, registry, data, worker IAM, worker sweeper, web, and budgets in separate `.tf` files, one state.
 
-Server-only code lives in `web/lib/server/` — never import it from a `"use client"` file. The one shared client-safe module is `web/lib/types.ts` (status-value tuples for Drizzle `pgEnum`s); import runs types → schema, never the reverse.
+Server-only code lives in `web/lib/server/` — never import it from a `"use client"` file. Modules directly under `web/lib/` are client-safe and shared with the server. `web/lib/statuses.ts` holds the status-value tuples that `web/lib/server/db/schema.ts` hands to Drizzle `pgEnum`s, so import runs statuses → schema, never the reverse.
 
 ---
 
@@ -129,6 +129,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - **Prefer `function` declarations over arrow functions**, except closures assigned to a local (`const handleClick = () => {...}`) or inline arguments (`.map(x => ...)`, `useEffect(() => {...})`). Top-level: `export function foo() {}`, not `export const foo = () => {}`.
 - **`if`/`for`/`while`/`do` bodies always use a `{ }` block** — never `if (x) return;`. Biome `style/useBlockStatements` (enabled in `biome.json`; not in `recommended`).
 - **Define a file's sub-components above the component that renders them**, so a file reads bottom-up to its main export. A sub-component used by another sub-component goes above that one too, as `Tip` sits above `ShootingTips` in `web/app/(authenticated)/splats/new/page.tsx`.
+- **Every custom hook gets its own file in `web/lib/hooks/`, named after the hook** (`web/lib/hooks/useLatestJob.ts`). This holds even for a hook only one component uses. Its tests go in `web/lib/hooks/tests/`.
 - **Decide which element renders before the `return`, not inside the JSX.** Branch with `if`/`else`/`switch` or a ternary into a `React.ReactNode` variable, then place `{variable}` in the JSX where the element belongs.
   - Write `let hint: React.ReactNode = null; if (failed) { hint = <p>…</p>; }` and then `{hint}`. Never render an element through `&&`, `||`, or `??` in the JSX body.
   - `web/components/splats/SplatStageViewer.tsx`'s `body` and `web/components/viewer/SplatViewer.tsx`'s `overlay` are the pattern.
@@ -377,7 +378,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 - **Write column names explicitly (`uuid("user_id")`); don't use `casing: "snake_case"`.**
   - That option must match in both `web/drizzle.config.ts` and the runtime `drizzle()` call, or schema and queries disagree silently. It affects identifiers only, not enum values.
 - **Enum values are snake_case in Postgres, TypeScript, and JSON.**
-  - `pgEnum` labels *are* the DB labels; tuples live in `web/lib/types.ts`, imported by `web/lib/server/db/schema.ts`. Worker emits the same strings — no translation on the callback route.
+  - `pgEnum` labels *are* the DB labels; tuples live in `web/lib/statuses.ts`, imported by `web/lib/server/db/schema.ts`. Worker emits the same strings — no translation on the callback route.
 - **Migrations must be safe to run against the *previous* release's code.**
   - CI applies each migration before rolling the service forward (`.github/workflows/deploy.yml`), but a circuit-breaker rollback of the *service* does not undo an already-applied migration — the two are orthogonal once the migration has committed.
   - Expand/contract only: add a nullable column, backfill, add the constraint in a *later* release. Never a same-release drop, rename, or `NOT NULL` with no default.

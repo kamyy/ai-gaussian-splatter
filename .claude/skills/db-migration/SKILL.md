@@ -15,7 +15,7 @@ All commands run from `web/`.
 
 Every column states its database name explicitly (`uuid("user_id")`). Do not add drizzle's `casing` option to fix a name. It would have to be set in both `web/drizzle.config.ts` and the runtime `drizzle()` call, and setting one without the other produces a schema and a query layer that disagree silently.
 
-Enum values live in `web/lib/types.ts` and are imported here, so the TypeScript union and the Postgres labels stay one list. Add values there, not inline.
+Enum values live in `web/lib/statuses.ts` and are imported here, so the TypeScript union and the Postgres labels stay one list. Add values there, not inline.
 
 **2. Generate.**
 

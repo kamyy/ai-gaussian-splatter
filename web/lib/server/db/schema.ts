@@ -13,7 +13,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { JOB_STATUS_DB_VALUES, PHOTO_UPLOAD_STATUSES, SPLAT_STATUSES } from "@/lib/types";
+import { JOB_STATUS_DB_VALUES, PHOTO_UPLOAD_STATUSES, SPLAT_STATUSES } from "@/lib/statuses";
 
 /**
  * Data model.
@@ -22,13 +22,13 @@ import { JOB_STATUS_DB_VALUES, PHOTO_UPLOAD_STATUSES, SPLAT_STATUSES } from "@/l
  * database name explicitly rather than relying on drizzle's `casing` option. So a migration and a runtime query can
  * never silently disagree on a name.
  *
- * Enum labels come from web/lib/types.ts, so the client-side unions and the Postgres labels are one list.
+ * Enum labels come from web/lib/statuses.ts, so the client-side unions and the Postgres labels are one list.
  */
 
 export const splatStatus = pgEnum("splat_status", SPLAT_STATUSES);
 export const photoUploadStatus = pgEnum("photo_upload_status", PHOTO_UPLOAD_STATUSES);
 // JOB_STATUS_DB_VALUES, not JOB_STATUSES: the enum's label set also holds the unused "colmap_running" label
-// (web/lib/types.ts).
+// (web/lib/statuses.ts).
 export const jobStatus = pgEnum("job_status", JOB_STATUS_DB_VALUES);
 
 export const users = pgTable("users", {
@@ -124,7 +124,7 @@ export const jobs = pgTable(
     // Enforces "at most one active job per splat" in the database. web/app/api/v1/splats/[splatId]/process/route.ts
     // relies on this to make its double-trigger guard atomic: a racing request fails at the INSERT with a unique
     // violation, so no separate read-then-write check is needed. Keep the excluded statuses in sync with
-    // JOB_ENDED_STATUSES (web/lib/types.ts) by hand. This is a raw SQL fragment, so it can't import that constant.
+    // JOB_ENDED_STATUSES (web/lib/statuses.ts) by hand. This is a raw SQL fragment, so it can't import that constant.
     uniqueIndex("uq_jobs_splat_id_active")
       .on(table.splatId)
       .where(sql`${table.status} not in ('complete', 'failed', 'cancelled')`),

@@ -15,7 +15,7 @@ vi.mock("@/lib/server/ec2Launcher", async importOriginal => {
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { globalJobCounters, jobs, splats, users } from "@/lib/server/db/schema";
-import type { JobStatus } from "@/lib/types";
+import type { JobStatus } from "@/lib/statuses";
 import { POST } from "./route";
 
 function trainRequest(body: unknown = {}) {

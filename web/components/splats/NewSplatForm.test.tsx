@@ -24,13 +24,13 @@ vi.mock("@/lib/measurePhoto", () => ({ measurePhotos: measurePhotosMock }));
 
 // jsdom does no layout, so the preview area reports a fixed width. At 800 wide with the default 16px root font, a row
 // holds five 4:3 previews at 115.2px tall, so a page of four rows holds 20.
-vi.mock("@/lib/useElementWidth", () => ({ useElementWidth: () => [() => {}, 800] }));
+vi.mock("@/lib/hooks/useElementWidth", () => ({ useElementWidth: () => [() => {}, 800] }));
 
 const { mutateMock } = vi.hoisted(() => ({ mutateMock: vi.fn() }));
 vi.mock("swr", () => ({ mutate: mutateMock }));
 
 const { enqueueSnackbarMock } = vi.hoisted(() => ({ enqueueSnackbarMock: vi.fn() }));
-vi.mock("@/lib/useAppSnackbar", () => ({ useAppSnackbar: () => ({ enqueueSnackbar: enqueueSnackbarMock }) }));
+vi.mock("@/lib/hooks/useAppSnackbar", () => ({ useAppSnackbar: () => ({ enqueueSnackbar: enqueueSnackbarMock }) }));
 
 // jsdom has no object URLs.
 URL.createObjectURL = vi.fn(() => "blob:preview");

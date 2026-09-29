@@ -28,7 +28,12 @@ export default defineConfig({
           name: "client",
           environment: "jsdom",
           setupFiles: ["./tests/jsdom-setup.ts"],
-          include: ["app/**/*.test.{ts,tsx}", "components/**/*.test.{ts,tsx}", "lib/tests/*.test.ts"],
+          include: [
+            "app/**/*.test.{ts,tsx}",
+            "components/**/*.test.{ts,tsx}",
+            "lib/tests/*.test.ts",
+            "lib/hooks/tests/*.test.ts",
+          ],
           exclude: ["node_modules", ".next", "e2e/**", "app/api/**"],
         },
       },

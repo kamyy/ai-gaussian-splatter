@@ -7,10 +7,10 @@ import { mutate } from "swr";
 
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { apiFetch } from "@/lib/apiFetch";
+import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
 import { requireToken } from "@/lib/requireToken";
 import type { Stage } from "@/lib/splatStage";
 import type { CropBox, Job } from "@/lib/types";
-import { useAppSnackbar } from "@/lib/useAppSnackbar";
 import { DeleteSplatButton, StopJobButton } from "./SplatActions";
 import { StageShell } from "./StageShell";
 

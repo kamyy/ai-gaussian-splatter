@@ -10,9 +10,13 @@ import { SharePanel } from "@/components/splats/SharePanel";
 import { DeleteSplatButton } from "@/components/splats/SplatActions";
 import { SplatStageViewer } from "@/components/splats/SplatStageViewer";
 import { StageCard } from "@/components/splats/StageCard";
-import { useCameras, useLatestJob, usePhotos, useSplat } from "@/lib/hooks";
+import { useCameras } from "@/lib/hooks/useCameras";
+import { useLatestJob } from "@/lib/hooks/useLatestJob";
+import { usePhotos } from "@/lib/hooks/usePhotos";
+import { useSplat } from "@/lib/hooks/useSplat";
 import { splatStage } from "@/lib/splatStage";
-import { type CropBox, JOB_ENDED_STATUSES } from "@/lib/types";
+import { JOB_ENDED_STATUSES } from "@/lib/statuses";
+import type { CropBox } from "@/lib/types";
 
 export default function SplatPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);

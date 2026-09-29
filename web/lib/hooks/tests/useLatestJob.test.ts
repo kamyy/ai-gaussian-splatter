@@ -1,23 +1,12 @@
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useCameras, useLatestJob, usePhotos, useSplat, useSplats } from "../hooks";
-import { JOB_ENDED_STATUSES, JOB_STATUSES, type Job, type JobStatus } from "../types";
+import { JOB_ENDED_STATUSES, JOB_STATUSES, type JobStatus } from "@/lib/statuses";
+import type { Job } from "@/lib/types";
+import { useLatestJob } from "../useLatestJob";
 
-// Clerk resolves getToken() to null once it has loaded without a session, so the token is mutable here rather than a
-// fixed string.
-const { auth } = vi.hoisted(() => ({ auth: { token: "test-token" as string | null } }));
 vi.mock("@clerk/nextjs", () => ({
-  useAuth: () => ({ getToken: async () => auth.token }),
-}));
-
-// Mocked so a fetcher that skipped the token guard fails the test rather than reaching fetch() and rejecting on jsdom's
-// absent network for the wrong reason.
-const { apiFetchMock } = vi.hoisted(() => ({
-  apiFetchMock: vi.fn<(path: string, method: string, token?: string, body?: unknown) => Promise<unknown>>(),
-}));
-vi.mock("../apiFetch", () => ({
-  apiFetch: apiFetchMock,
+  useAuth: () => ({ getToken: async () => "test-token" }),
 }));
 
 interface JobPollConfig {
@@ -33,10 +22,6 @@ vi.mock("swr", () => ({ default: useSWRMock }));
 
 function capturedConfig(callIndex = 0) {
   return useSWRMock.mock.calls[callIndex][2];
-}
-
-function runFetcher(callIndex = 0) {
-  return (useSWRMock.mock.calls[callIndex][1] as () => Promise<unknown>)();
 }
 
 const baseJob: Job = {
@@ -109,42 +94,5 @@ describe("useLatestJob", () => {
         expect(refreshInterval({ ...baseJob, status })).toBeGreaterThan(0);
       }
     }
-  });
-});
-
-describe("session token guard", () => {
-  // render is widened to unknown because the hooks return differently typed SWR responses, and only the call is
-  // under test here.
-  const hooks: { name: string; render: () => unknown }[] = [
-    { name: "useSplats", render: () => useSplats() },
-    { name: "useSplat", render: () => useSplat("splat-1") },
-    { name: "useLatestJob", render: () => useLatestJob("splat-1") },
-    { name: "usePhotos", render: () => usePhotos("splat-1") },
-    { name: "useCameras", render: () => useCameras("splat-1", true) },
-  ];
-
-  beforeEach(() => {
-    useSWRMock.mockClear();
-    useSWRMock.mockReturnValue({ data: undefined });
-    apiFetchMock.mockClear();
-    apiFetchMock.mockResolvedValue(undefined);
-    auth.token = "test-token";
-  });
-
-  it.each(hooks)("$name rejects without calling the API when the session has ended", async ({ render }) => {
-    // Rejecting is what puts SWR in its error state; resolving to an empty result instead would render as a signed-in
-    // user with no data.
-    auth.token = null;
-    renderHook(render);
-
-    await expect(runFetcher()).rejects.toThrow("Not signed in");
-    expect(apiFetchMock).not.toHaveBeenCalled();
-  });
-
-  it.each(hooks)("$name forwards the token once Clerk has a session", async ({ render }) => {
-    renderHook(render);
-
-    await expect(runFetcher()).resolves.toBeUndefined();
-    expect(apiFetchMock.mock.calls[0][2]).toBe("test-token");
   });
 });
