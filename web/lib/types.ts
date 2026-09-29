@@ -43,28 +43,20 @@ export const JobStatus = {
 export const JOB_STATUSES = Object.values(JobStatus) as [JobStatus, ...JobStatus[]];
 export type JobStatus = (typeof JobStatus)[keyof typeof JobStatus];
 
-// The one status value the app renamed. A worker built before that rename can still be running against a newer database
-// (a worker instance runs for up to WORKER_MAX_LIFETIME_MINUTES, which can outlast a deploy), and its callback still
-// sends this name. web/app/api/v1/internal/jobs/[jobId]/status/route.ts is the only place that reads it. That route
-// turns an incoming "colmap_running" into JobStatus.reconstruction_running before anything else sees it, so nothing
-// else needs to know the old name.
-export const LEGACY_COLMAP_RUNNING_STATUS = "colmap_running";
-
 // The Postgres enum's own label set: every value the type has ever had, in the order each was added, rather than in
-// JOB_STATUSES' order. LEGACY_COLMAP_RUNNING_STATUS stays a valid column value so a stale worker's callback is still
-// written instead of rejected, even though JobStatus no longer names it. Postgres has no cheap way to drop an enum
-// label short of recreating the whole type, so an added label stays.
+// JOB_STATUSES' order. "colmap_running" is a label nothing writes any more. Postgres has no cheap way to drop an enum
+// label short of recreating the whole type, so it stays in the list.
 //
-// Written out in this exact historical order, not derived from JOB_STATUSES, so that `pnpm db:generate` sees a new
-// value as a plain append and emits a single ALTER TYPE … ADD VALUE. Reordering the existing values makes drizzle-kit
-// drop and recreate the type around the column instead, which .claude/skills/db-migration/SKILL.md flags as unsafe on a
-// live table.
-type JobStatusDbValue = JobStatus | typeof LEGACY_COLMAP_RUNNING_STATUS;
+// Written out in this exact order, not derived from JOB_STATUSES, so that `pnpm db:generate` sees a new value as a
+// plain append and emits a single ALTER TYPE … ADD VALUE. Reordering the existing values makes drizzle-kit drop and
+// recreate the type around the column instead, which .claude/skills/db-migration/SKILL.md flags as unsafe on a live
+// table.
+type JobStatusDbValue = JobStatus | "colmap_running";
 
 export const JOB_STATUS_DB_VALUES = [
   JobStatus.queued,
   JobStatus.launching,
-  LEGACY_COLMAP_RUNNING_STATUS,
+  "colmap_running",
   JobStatus.awaiting_training,
   JobStatus.training_running,
   JobStatus.uploading_result,

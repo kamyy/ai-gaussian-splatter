@@ -18,7 +18,6 @@ def report_status(
     result_spz_s3_key: str | None = None,
     thumbnail_s3_key: str | None = None,
     point_cloud_s3_key: str | None = None,
-    ec2_instance_id: str | None = None,
     training_progress: int | None = None,
 ) -> None:
     """PATCH the job's status back to the web app. Best effort: network errors are logged and swallowed rather than
@@ -36,8 +35,6 @@ def report_status(
         payload["thumbnail_s3_key"] = thumbnail_s3_key
     if point_cloud_s3_key is not None:
         payload["point_cloud_s3_key"] = point_cloud_s3_key
-    if ec2_instance_id is not None:
-        payload["ec2_instance_id"] = ec2_instance_id
     if training_progress is not None:
         payload["training_progress"] = training_progress
 

@@ -6,33 +6,25 @@ import { getJobForCallbackToken } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { jobs, splats } from "@/lib/server/db/schema";
 import { HttpError, withErrorHandling } from "@/lib/server/httpError";
-import {
-  JOB_ENDED_STATUSES,
-  JOB_STATUS_DB_VALUES,
-  JobStatus,
-  LEGACY_COLMAP_RUNNING_STATUS,
-  type SplatStatus,
-} from "@/lib/types";
+import { JOB_ENDED_STATUSES, JOB_STATUSES, JobStatus, type SplatStatus } from "@/lib/types";
 
 /**
  * The worker's status callback to the app.
  *
  * This is the one endpoint whose field *names* are snake_case, because worker/pipeline/status.py PATCHes a literal
- * snake_case body. Most status values need no translation. They are the Postgres enum labels as-is, so
- * `JOB_STATUS_DB_VALUES` validates the incoming value and it goes straight into the column.
- * `LEGACY_COLMAP_RUNNING_STATUS` is the one exception, normalized below. Changing either the field names or the status
+ * snake_case body. Status values need no translation. They are the Postgres enum labels as-is, so `JOB_STATUSES`
+ * validates the incoming value and it goes straight into the column. Changing either the field names or the status
  * list means changing worker/ at the same time.
  *
  * Auth is the per-job bearer token, not a Clerk session.
  */
 const workerStatusSchema = z.object({
-  status: z.enum(JOB_STATUS_DB_VALUES),
+  status: z.enum(JOB_STATUSES),
   error_message: z.string().nullish(),
   result_s3_key: z.string().nullish(),
   result_spz_s3_key: z.string().nullish(),
   thumbnail_s3_key: z.string().nullish(),
   point_cloud_s3_key: z.string().nullish(),
-  ec2_instance_id: z.string().nullish(),
   training_progress: z.number().int().min(0).max(100).nullish(),
 });
 
@@ -47,9 +39,8 @@ export const PATCH = withErrorHandling(
     // (web/lib/server/db/schema.ts). 204 rather than an error because there is nothing for the worker to retry:
     // worker/pipeline/status.py only logs a failed callback anyway.
     //
-    // job.status's column type also includes the legacy LEGACY_COLMAP_RUNNING_STATUS (JOB_STATUS_DB_VALUES); it's
-    // never actually one of these three ended statuses, so treating it as JobStatus for this membership check is
-    // safe without normalizing it first.
+    // job.status's column type also includes the unused "colmap_running" label (web/lib/types.ts), which is not an
+    // ended status either, so the cast is safe for this membership check.
     if (JOB_ENDED_STATUSES.includes(job.status as JobStatus)) {
       return new NextResponse(null, { status: 204 });
     }
@@ -59,11 +50,7 @@ export const PATCH = withErrorHandling(
       throw new HttpError(422, "Invalid request body");
     }
     const body = parsed.data;
-    // A worker built before "colmap_running" was renamed to "reconstruction_running" can still be running against
-    // this database (a worker instance runs for up to WORKER_MAX_LIFETIME_MINUTES, which can outlast a deploy).
-    // Normalized here so nothing past this point needs to know the old name ever existed.
-    const status: JobStatus =
-      body.status === LEGACY_COLMAP_RUNNING_STATUS ? JobStatus.reconstruction_running : body.status;
+    const { status } = body;
 
     const jobData: Partial<typeof jobs.$inferInsert> = { status };
     if (body.error_message != null) {
@@ -80,9 +67,6 @@ export const PATCH = withErrorHandling(
     }
     if (body.point_cloud_s3_key != null) {
       jobData.pointCloudS3Key = body.point_cloud_s3_key;
-    }
-    if (body.ec2_instance_id != null) {
-      jobData.ec2InstanceId = body.ec2_instance_id;
     }
     if (body.training_progress != null) {
       jobData.trainingProgress = body.training_progress;

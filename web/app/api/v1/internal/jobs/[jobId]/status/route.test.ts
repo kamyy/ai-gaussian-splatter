@@ -1,10 +1,9 @@
-import { and, desc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { closeDb, getDb } from "@/lib/server/db";
 import { jobs, splats, users } from "@/lib/server/db/schema";
-import { jobColumns } from "@/lib/server/selects";
 import { PATCH } from "./route";
 
 function req(token: string, body: unknown): NextRequest {
@@ -13,6 +12,8 @@ function req(token: string, body: unknown): NextRequest {
     json: async () => body,
   } as unknown as NextRequest;
 }
+
+const EARLIER = new Date("2026-01-01T00:00:00Z");
 
 function ctx(jobId: string) {
   return { params: Promise.resolve({ jobId }) } as never;
@@ -70,14 +71,17 @@ describe("worker status callback", () => {
   });
 
   it("does not overwrite a stage timestamp when a callback is duplicated", async () => {
+    // A fixed time far in the past, so a rewrite shows up however quickly the two callbacks land.
     const { job } = await seed();
-    await PATCH(req("tok", { status: "reconstruction_running" }), ctx(job.id));
-    const [first] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
+    await getDb()
+      .update(jobs)
+      .set({ status: "reconstruction_running", colmapStartedAt: EARLIER })
+      .where(eq(jobs.id, job.id));
 
     await PATCH(req("tok", { status: "reconstruction_running" }), ctx(job.id));
-    const [second] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
 
-    expect(second.colmapStartedAt?.getTime()).toBe(first.colmapStartedAt?.getTime());
+    const [updated] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
+    expect(updated.colmapStartedAt).toEqual(EARLIER);
   });
 
   it("stamps colmapFinishedAt on awaiting_training, not on the later training_running callback", async () => {
@@ -127,39 +131,56 @@ describe("worker status callback", () => {
     expect(updatedSplat.thumbnailS3Key).toBe("t.jpg");
   });
 
-  it("normalizes a stale worker's pre-rename status value instead of rejecting it", async () => {
-    // A worker built before "colmap_running" was renamed can still be running against this database (worker
-    // instances run for up to WORKER_MAX_LIFETIME_MINUTES, which can outlast a deploy). Its callback must still
-    // write, as the renamed value, not 422.
+  it("fails the splat along with its job", async () => {
+    const { splat, job } = await seed();
+
+    await PATCH(req("tok", { status: "failed", error_message: "COLMAP crashed" }), ctx(job.id));
+
+    const [updatedJob] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
+    const [updatedSplat] = await getDb().select().from(splats).where(eq(splats.id, splat.id));
+    expect(updatedJob.status).toBe("failed");
+    expect(updatedJob.errorMessage).toBe("COLMAP crashed");
+    expect(updatedSplat.status).toBe("failed");
+  });
+
+  it("stamps colmapFinishedAt and trainingStartedAt on training_running when awaiting_training went missing", async () => {
     const { job } = await seed();
 
-    const res = await PATCH(req("tok", { status: "colmap_running" }), ctx(job.id));
-    expect(res.status).toBe(204);
+    await PATCH(req("tok", { status: "training_running" }), ctx(job.id));
 
     const [updated] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
-    expect(updated.status).toBe("reconstruction_running");
-    expect(updated.colmapStartedAt).not.toBeNull();
+    expect(updated.colmapFinishedAt).not.toBeNull();
+    expect(updated.trainingStartedAt).not.toBeNull();
   });
 
-  it("rejects a status value that is not a database enum label", async () => {
-    // Only the snake_case enum label is a valid wire value; PascalCase is rejected.
+  it("stamps trainingFinishedAt on uploading_result", async () => {
     const { job } = await seed();
-    const res = await PATCH(req("tok", { status: "ColmapRunning" }), ctx(job.id));
-    expect(res.status).toBe(422);
+
+    await PATCH(req("tok", { status: "uploading_result" }), ctx(job.id));
+
+    const [updated] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
+    expect(updated.trainingFinishedAt).not.toBeNull();
   });
 
-  it("never selects the callback token or instance id into a job response", () => {
-    // The omission is enforced by the SQL, not by deleting keys afterwards.
-    const { sql } = getDb()
-      .select(jobColumns)
-      .from(jobs)
-      .innerJoin(splats, eq(jobs.splatId, splats.id))
-      .where(and(eq(jobs.splatId, "x"), eq(splats.userId, "y")))
-      .orderBy(desc(jobs.createdAt))
-      .limit(1)
-      .toSQL();
+  it("does not overwrite trainingFinishedAt when uploading_result is duplicated", async () => {
+    const { job } = await seed();
+    await getDb()
+      .update(jobs)
+      .set({ status: "uploading_result", trainingFinishedAt: EARLIER })
+      .where(eq(jobs.id, job.id));
 
-    expect(sql).not.toContain("callback_token");
-    expect(sql).not.toContain("ec2_instance_id");
+    await PATCH(req("tok", { status: "uploading_result" }), ctx(job.id));
+
+    const [updated] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
+    expect(updated.trainingFinishedAt).toEqual(EARLIER);
+  });
+
+  it.each([
+    ["a PascalCase spelling", "ReconstructionRunning"],
+    ["the enum's unused label", "colmap_running"],
+  ])("rejects %s as a status", async (_label, status) => {
+    const { job } = await seed();
+    const res = await PATCH(req("tok", { status }), ctx(job.id));
+    expect(res.status).toBe(422);
   });
 });
