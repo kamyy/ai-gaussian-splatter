@@ -1,5 +1,7 @@
-// Upload limits. They live outside web/lib/server/ because web/components/splats/NewSplatForm.tsx enforces them in the
-// browser as well as the API routes enforcing them on the server.
+// Upload limits. They live outside web/lib/server/ because the browser enforces them as well as the API routes. These
+// files enforce them in the browser:
+// - web/components/splats/NewSplatForm.tsx
+// - web/lib/hooks/usePickedPhotos.ts
 
 // The most photos one splat can hold. COLMAP's exhaustive matcher (worker/pipeline/sfm.py) compares every pair of
 // photos, so reconstruct time grows with the square of this number. 100 is twice the capture guide's target of 50.

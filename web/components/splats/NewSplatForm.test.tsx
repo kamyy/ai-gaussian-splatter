@@ -20,7 +20,10 @@ const { uploadPhotosMock } = vi.hoisted(() => ({ uploadPhotosMock: vi.fn() }));
 vi.mock("@/lib/uploadPhotos", () => ({ uploadPhotos: uploadPhotosMock }));
 
 const { measurePhotosMock } = vi.hoisted(() => ({ measurePhotosMock: vi.fn() }));
-vi.mock("@/lib/measurePhoto", () => ({ measurePhotos: measurePhotosMock }));
+vi.mock("@/lib/measurePhoto", async importOriginal => ({
+  ...(await importOriginal<typeof import("@/lib/measurePhoto")>()),
+  measurePhotos: measurePhotosMock,
+}));
 
 // jsdom does no layout, so the preview area reports a fixed width. At 800 wide with the default 16px root font, a row
 // holds five 4:3 previews at 115.2px tall, so a page of four rows holds 20.

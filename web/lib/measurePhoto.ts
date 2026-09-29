@@ -1,5 +1,5 @@
 // A photo picked for upload, with its size as an <img> displays it, a small JPEG copy, and when it was taken.
-// web/components/splats/NewSplatForm.tsx measures each photo as it's added, so every photo that reaches
+// web/lib/hooks/usePickedPhotos.ts measures each photo as it's added, so every photo that reaches
 // web/lib/uploadPhotos.ts has all three to store.
 export interface PickedPhoto {
   file: File;
@@ -8,6 +8,11 @@ export interface PickedPhoto {
   thumbnail: Blob;
   // Milliseconds since the epoch.
   takenAt: number;
+}
+
+// Two files with the same name and size from separate drops are the same photo picked twice.
+export function fileKey(file: File) {
+  return `${file.name}:${file.size}`;
 }
 
 // Long enough that a library card, the largest place a thumbnail shows, stays sharp on a high-resolution screen.
