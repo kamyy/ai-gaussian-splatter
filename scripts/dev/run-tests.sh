@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Runs every lint, type check and test suite in the repo.
+#
+# Covers web/, worker/, infra/ and scripts/, the same suites CI runs, so it's the check to run before opening a PR.
+
 # The Postgres-backed web tests need splat-pg up (scripts/dev/db-up.sh) and TEST_DATABASE_URL in web/.env.
 
 set -euo pipefail

@@ -1,5 +1,7 @@
 # shellcheck shell=bash
-# Not meant to be run directly.
+# Asks the person running a script to confirm before it changes anything.
+#
+# Sourced by other scripts, not run directly.
 
 # Asks before a script creates or deletes anything, and exits unless the answer is y or Y. In the AWS scripts it follows
 # aws_require_login's identity line, which is the last chance to catch the wrong account.

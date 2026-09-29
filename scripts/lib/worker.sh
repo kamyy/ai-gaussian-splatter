@@ -1,5 +1,8 @@
 # shellcheck shell=bash
-# Not meant to be run directly.
+# Shared helpers for the local worker scripts.
+#
+# Sourced by other scripts, not run directly. They build the worker images and run a pipeline stage in the worker
+# container, as the dev IAM user from web/.env.
 
 ROOT=$(git rev-parse --show-toplevel)
 source "$ROOT/scripts/lib/env.sh"

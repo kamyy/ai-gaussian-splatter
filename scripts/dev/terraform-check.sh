@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Checks that infra/'s Terraform is formatted and valid.
+#
+# Uses the Terraform CLI version infra/providers.tf pins, not whichever terraform is first on PATH. It never contacts
+# AWS.
+
 # The root package.json's infra:check runs this, from the pre-commit hook, CI's infra job, and
 # scripts/dev/run-tests.sh.
 

@@ -1,5 +1,7 @@
 # shellcheck shell=bash
-# Not meant to be run directly.
+# Shared helpers for scripts that call the AWS CLI.
+#
+# Sourced by other scripts, not run directly.
 
 # Fails fast when no AWS credentials are active, and exports AWS_ACCOUNT_ID for the caller. GetCallerIdentity needs no
 # IAM permission, so this works for the dev IAM user as well as an admin signed in with `aws login`.

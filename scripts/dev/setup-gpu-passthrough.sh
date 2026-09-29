@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# One-time machine setup that lets the worker container use this machine's NVIDIA GPU.
+#
+# Local pipeline runs execute the worker in a Podman container, which can't see the GPU until the NVIDIA container
+# toolkit is installed and configured. This script does that on Fedora.
+
 # Needs the NVIDIA GPU driver already installed. Asks for sudo.
 
 set -euo pipefail

@@ -1,12 +1,16 @@
 #!/usr/bin/env node
-// Formats and lints the staged files, then stages the result again. This is the pre-commit auto-fix step for both JS/TS
-// (Biome) and Python (ruff format), so nobody has to remember to run either by hand before committing. CI enforces the
-// same thing as a hard check (`biome:ci` and `worker:check`'s `ruff format --check`), since CI can't fix files and
-// carry on.
-//
-// Only files the formatters actually changed are staged again, found by comparing file hashes before and after. Running
-// `git add` on every originally staged file would also stage any other unstaged edit in that file, such as the rest of
-// a deliberate `git add -p`, silently pulling unrelated changes into the commit.
+/**
+ * The pre-commit hook's auto-format step.
+ *
+ * Formats and lints the staged files, then stages the result again, for both JS/TS (Biome) and Python (ruff format), so
+ * nobody has to remember to run either by hand before committing. CI enforces the same thing as a hard check
+ * (`biome:ci` and `worker:check`'s `ruff format --check`), since CI can't fix files and carry on.
+ *
+ * Only files the formatters actually changed are staged again, found by comparing file hashes before and after. Running
+ * `git add` on every originally staged file would also stage any other unstaged edit in that file, such as the rest of
+ * a deliberate `git add -p`, silently pulling unrelated changes into the commit.
+ */
+
 import { execFileSync } from "node:child_process";
 
 function hashFiles(files) {

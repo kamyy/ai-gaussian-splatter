@@ -1,6 +1,8 @@
 # shellcheck shell=bash
-# Callers that run terraform assign TERRAFORM=$(tf_get_bin). tf_export_vars needs scripts/lib/github.sh's
-# gh_get_repo_var, so source that first when calling it. Not meant to be run directly.
+# Shared helpers for scripts that run Terraform or read values from infra/.
+#
+# Sourced by other scripts, not run directly. Callers that run terraform assign TERRAFORM=$(tf_get_bin). tf_export_vars
+# needs scripts/lib/github.sh's gh_get_repo_var, so source that first when calling it.
 
 ROOT=$(git rev-parse --show-toplevel)
 

@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# One-time setup of what infra/ can't create for itself in a fresh AWS account.
+#
+# Creates the Clerk secret, the Spot service-linked role and the Terraform state bucket. The first deploy fails without
+# them.
+
 # Safe to re-run. Anything that already exists is kept, and the Clerk secret's value is never overwritten.
 
 set -euo pipefail

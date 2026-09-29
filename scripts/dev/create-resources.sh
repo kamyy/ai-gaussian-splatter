@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+# Creates the AWS resources local development uses.
+#
+# Local dev stores photos and results in real S3 buckets (AWS's file storage) under your own account, reached through a
+# dedicated dev IAM user. This script creates web/.env if it's missing, then the two buckets and that user. Run it once
+# when setting up a machine for development.
+
 # Writes the dev IAM user's access key into web/.env when it creates one. Safe to re-run. Existing buckets and the
 # existing user are kept, and their CORS rules, tags, and policy are rewritten.
 

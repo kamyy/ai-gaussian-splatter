@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Builds the worker images and publishes them for the deployed app.
+#
+# No deploy builds the worker, so this is how a worker/ change reaches AWS. It pushes both images to the worker ECR
+# repository (AWS's container registry) tagged with this commit, then points the WORKER_IMAGE_TAG repository variable at
+# them. The next deploy carries that tag to the web app.
 
 set -euo pipefail
 

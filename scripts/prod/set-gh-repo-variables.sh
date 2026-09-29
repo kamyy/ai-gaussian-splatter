@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Sets the GitHub repository variables the deploy job reads.
+#
+# Works out each value (the AWS account, region, domain, secret ARN and so on), prompts with it, and stores it with gh
+# variable set.
+
 # scripts/prod/terraform-plan.sh and scripts/prod/terraform-destroy.sh read the same variables back. Run it after
 # scripts/prod/create-account-prereqs.sh, since it looks up the Clerk secret that script creates. Safe to re-run. Each
 # prompt defaults to the variable's current value.

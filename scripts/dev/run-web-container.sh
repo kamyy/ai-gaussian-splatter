@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Builds and runs the production web container on this machine.
+#
+# Serves the same image production runs, on http://localhost:8000, for checking a change the dev server might hide, such
+# as a missing file in the standalone build.
+
 # Needs splat-pg up (scripts/dev/db-up.sh) and a filled-in web/.env. Replaces any splat-web container from an earlier
 # run.
 

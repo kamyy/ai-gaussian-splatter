@@ -1,5 +1,8 @@
 # shellcheck shell=bash
-# Not meant to be run directly.
+# Shared helpers for scripts that call the GitHub CLI.
+#
+# Sourced by other scripts, not run directly. They check the gh login, read repository variables, and check the state of
+# CI runs.
 
 # Fails fast when the GitHub CLI has no working login. Without it, a failed gh call looks the same as an unset
 # repository variable.

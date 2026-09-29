@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Lints every shell script in scripts/ with shellcheck.
+#
+# The shellcheck linter catches common shell mistakes, such as unquoted variables. It runs from a pinned container
+# image, so every machine and CI get the same result.
+
 # The root package.json's scripts:check calls it, from the pre-commit hook and CI's lint-format job.
 
 set -euo pipefail

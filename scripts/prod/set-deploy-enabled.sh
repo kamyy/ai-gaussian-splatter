@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Turns continuous deployment on or off.
+#
+# Sets the DEPLOY_ENABLED GitHub repository variable, which decides whether a push to main runs the deploy job.
+
 # scripts/prod/set-gh-repo-variables.sh leaves this variable alone. Safe to re-run. A value that already matches is a
 # no-op.
 
