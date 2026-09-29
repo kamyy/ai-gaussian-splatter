@@ -3,17 +3,18 @@
 import { CameraControls, PerspectiveCamera } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
 import { SparkRenderer, SplatFileType, SplatMesh } from "@sparkjsdev/spark";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type Box3, Vector3 } from "three";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Box3 } from "three";
 
 import { Center } from "@/components/layout/Center";
 import { Spinner } from "@/components/ui/Spinner";
 import { type CameraSelection, DEFAULT_FOV, useCameraFlight } from "@/lib/hooks/useCameraFlight";
 import { useLatestRef } from "@/lib/hooks/useLatestRef";
+import { useSceneFraming } from "@/lib/hooks/useSceneFraming";
 import type { CameraPose, CropBox } from "@/lib/types";
 import { CameraFrustums } from "./CameraFrustums";
 import { CropBoxGizmo } from "./CropBoxGizmo";
-import { type Framing, fittedCropBox, framingFromCameras, trimmedBox } from "./cameraFraming";
+import { fittedCropBox, framingFromCameras, trimmedBox } from "./cameraFraming";
 import { DEFAULT_POINT_SIZE, PointCloudScene } from "./PointCloudScene";
 
 export type ViewMode = "splat" | "colmap_points";
@@ -118,16 +119,8 @@ function SplatScene({
   );
 }
 
-/**
- * Lives inside <Canvas> (needs useThree()) so it can place the camera directly, unlike SplatViewer itself. Owns the
- * camera framing, which happens once per viewer: switching the view mode never re-frames. That's what makes "same
- * camera pose across a mode switch" hold with no manual save/restore: both assets share one coordinate frame, since
- * worker/pipeline/train.py seeds Gaussian means directly from COLMAP's points_xyz with no rescale.
- *
- * The photos' own camera poses frame it when they're known (web/components/viewer/cameraFraming.ts). Otherwise the
- * first asset to load frames it by its bounding box. The poses arrive separately from either asset, so when they land
- * after a bounding-box framing they replace it, once.
- */
+// Lives inside <Canvas>, since web/lib/hooks/useSceneFraming.ts and web/lib/hooks/useCameraFlight.ts both place the
+// camera through useThree(), which SplatViewer itself can't call.
 function ViewerSceneManager({
   mode,
   splatUrl,
@@ -151,50 +144,10 @@ function ViewerSceneManager({
   onLoad: () => void;
   onPointCloudLoad: (positions: ArrayLike<number>) => void;
 }) {
-  const camera = useThree(state => state.camera);
-  // CameraControls' makeDefault registers it here. drei's PerspectiveCamera takes over as the default camera only after
-  // the first render, so the controls are rebuilt around it once, and the framing below is re-applied to whichever
-  // controls are current.
-  const controls = useThree(state => state.controls) as CameraControls | null;
-  const [framing, setFraming] = useState<(Omit<Framing, "up"> & { up?: Vector3 }) | null>(null);
-  const framedByRef = useRef<"nothing" | "box" | "cameras">("nothing");
-  // The up direction the framing set, which orbiting returns to after a flight has taken on a photo's roll.
-  const sceneUpRef = useRef<Vector3 | null>(null);
-
-  useEffect(() => {
-    if (!controls || !framing) {
-      return;
-    }
-    if (framing.up) {
-      camera.up.copy(framing.up);
-      controls.updateCameraUp();
-    }
-    sceneUpRef.current = camera.up.clone();
-    const { position, target } = framing;
-    void controls.setLookAt(position.x, position.y, position.z, target.x, target.y, target.z, false);
-  }, [camera, controls, framing]);
-
-  useEffect(() => {
-    const fromCameras = cameras ? framingFromCameras(cameras) : null;
-    if (fromCameras && framedByRef.current !== "cameras") {
-      framedByRef.current = "cameras";
-      setFraming(fromCameras);
-    }
-  }, [cameras]);
-
+  const { sceneUpRef, onFirstLoad } = useSceneFraming(cameras);
   useCameraFlight(cameras, selectedCamera, sceneUpRef, onManualMove);
 
-  const onFirstLoad = useCallback((box: Box3) => {
-    if (framedByRef.current !== "nothing") {
-      return;
-    }
-    framedByRef.current = "box";
-    const center = box.getCenter(new Vector3());
-    const radius = box.getSize(new Vector3()).length() / 2;
-    setFraming({ position: new Vector3(center.x, center.y, center.z + radius * 2.5), target: center });
-  }, []);
-
-  // Stable for the same reason as onFirstLoad: PointCloudScene's load effect depends on it.
+  // Stable, like onFirstLoad, because PointCloudScene's load effect depends on it.
   const onPointCloudFirstLoad = useCallback(
     (box: Box3, positions: ArrayLike<number>) => {
       onPointCloudLoad(positions);
