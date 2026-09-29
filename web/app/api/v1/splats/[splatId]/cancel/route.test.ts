@@ -60,11 +60,34 @@ describe("POST /api/v1/splats/[splatId]/cancel", () => {
   });
 
   it("cancels a job paused for review without terminating anything", async () => {
-    const { splat } = await seed("awaiting_training");
+    const { splat, job } = await seed("awaiting_training");
 
     const res = await POST({} as never, ctx(splat.id));
     expect(res.status).toBe(200);
     expect(terminateWorkerMock).not.toHaveBeenCalled();
+    const [row] = await getDb()
+      .select()
+      .from(jobs)
+      .where(eq(jobs.id, job?.id ?? ""));
+    expect(row.status).toBe("cancelled");
+  });
+
+  it("keeps the result of a job that completed while its worker was being stopped", async () => {
+    const { splat, job } = await seed("uploading_result");
+    terminateWorkerMock.mockImplementationOnce(async () => {
+      await getDb()
+        .update(jobs)
+        .set({ status: "complete" })
+        .where(eq(jobs.id, job?.id ?? ""));
+    });
+
+    const res = await POST({} as never, ctx(splat.id));
+    expect(res.status).toBe(409);
+    const [row] = await getDb()
+      .select()
+      .from(jobs)
+      .where(eq(jobs.id, job?.id ?? ""));
+    expect(row.status).toBe("complete");
   });
 
   it("leaves the job running when the worker can't be stopped", async () => {

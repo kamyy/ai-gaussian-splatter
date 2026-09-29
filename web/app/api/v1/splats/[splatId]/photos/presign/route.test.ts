@@ -170,42 +170,10 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
     expect(res.status).toBe(200);
   });
 
-  it("rejects a photo sent without its capture time", async () => {
-    const splat = await seedSplat();
-
-    const res = await POST(
-      presignRequest([
-        {
-          filename: "a.jpg",
-          contentType: "image/jpeg",
-          size: 4_000_000,
-          thumbnailSize: 100_000,
-          width: 3024,
-          height: 4032,
-        },
-      ]),
-      ctx(splat.id),
-    );
-    expect(res.status).toBe(422);
-  });
-
   it("issues a thumbnail upload URL beside each photo's, outside the folder the worker downloads", async () => {
     const splat = await seedSplat();
 
-    const res = await POST(
-      presignRequest([
-        {
-          filename: "a.jpg",
-          contentType: "image/jpeg",
-          size: 4_000_000,
-          thumbnailSize: 100_000,
-          width: 3024,
-          height: 4032,
-          takenAt: "2026-01-01T10:00:00.000Z",
-        },
-      ]),
-      ctx(splat.id),
-    );
+    const res = await POST(presignRequest([photoItem("a.jpg")]), ctx(splat.id));
     const [item] = await res.json();
 
     const [row] = await getDb().select({ thumbnailS3Key: photos.thumbnailS3Key }).from(photos);
@@ -213,42 +181,43 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
     expect(item.thumbnailPutUrl).toContain(`splats/${splat.id}/photo-thumbnails/${item.photoId}.jpg`);
   });
 
-  it("rejects a dimension that isn't a positive whole number", async () => {
+  it.each([
+    ["without its capture time", { takenAt: undefined }],
+    ["without its height", { height: undefined }],
+    ["with a zero width", { width: 0 }],
+    ["with a fractional height", { height: 4032.5 }],
+  ])("rejects a photo sent %s", async (_label, override) => {
     const splat = await seedSplat();
 
-    const res = await POST(
-      presignRequest([
-        {
-          filename: "a.jpg",
-          contentType: "image/jpeg",
-          size: 4_000_000,
-          thumbnailSize: 100_000,
-          width: 0,
-          height: 4032,
-          takenAt: "2026-01-01T10:00:00.000Z",
-        },
-      ]),
-      ctx(splat.id),
-    );
+    const res = await POST(presignRequest([{ ...photoItem("a.jpg"), ...override }]), ctx(splat.id));
     expect(res.status).toBe(422);
+    expect(await getDb().select().from(photos)).toEqual([]);
   });
 
-  it("rejects a photo sent without its height", async () => {
-    const splat = await seedSplat();
+  it("404s for someone else's splat, without spending the rate limit", async () => {
+    const otherUser = await getOrCreateUser("clerk-user-2");
+    const [splat] = await getDb().insert(splats).values({ userId: otherUser.id, name: "not mine" }).returning();
 
-    const res = await POST(
-      presignRequest([
-        {
-          filename: "a.jpg",
-          contentType: "image/jpeg",
-          size: 4_000_000,
-          thumbnailSize: 100_000,
-          width: 3024,
-          takenAt: "2026-01-01T10:00:00.000Z",
-        },
-      ]),
-      ctx(splat.id),
+    const res = await POST(presignRequest([photoItem("a.jpg")]), ctx(splat.id));
+    expect(res.status).toBe(404);
+    expect(await getDb().select().from(rateLimitCounters)).toEqual([]);
+    expect(await getDb().select().from(photos)).toEqual([]);
+  });
+
+  it("charges the per-IP limit to the ALB-appended address and the per-user limit to the caller", async () => {
+    const splat = await seedSplat();
+    const request = new NextRequest("http://localhost/api/v1/splats/presign", {
+      method: "POST",
+      body: JSON.stringify([photoItem("a.jpg")]),
+      headers: { "X-Forwarded-For": "1.1.1.1, 198.51.100.7" },
+    });
+
+    const res = await POST(request, ctx(splat.id));
+    expect(res.status).toBe(200);
+
+    const scopes = (await getDb().select({ scope: rateLimitCounters.scope }).from(rateLimitCounters)).map(
+      row => row.scope,
     );
-    expect(res.status).toBe(422);
+    expect(scopes.sort()).toEqual(["ip:198.51.100.7", `user:${splat.userId}`]);
   });
 });

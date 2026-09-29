@@ -23,8 +23,8 @@ describe("GET /api/v1/splats/[splatId]/point-cloud", () => {
     await closeDb();
   });
 
-  async function seed(jobStatus: JobStatus, pointCloudS3Key: string | null) {
-    const user = await getOrCreateUser("clerk-user-1");
+  async function seed(jobStatus: JobStatus, pointCloudS3Key: string | null, clerkUserId = "clerk-user-1") {
+    const user = await getOrCreateUser(clerkUserId);
     const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "obj" }).returning();
     const [job] = await getDb()
       .insert(jobs)
@@ -41,7 +41,9 @@ describe("GET /api/v1/splats/[splatId]/point-cloud", () => {
   });
 
   it("404s for a splat the caller doesn't own", async () => {
-    const res = await GET({} as never, ctx("11111111-1111-4111-8111-111111111111"));
+    const { splat } = await seed("awaiting_training", "splats/x/point_cloud.ply", "clerk-user-2");
+
+    const res = await GET({} as never, ctx(splat.id));
     expect(res.status).toBe(404);
   });
 

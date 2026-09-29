@@ -33,14 +33,32 @@ describe("GET /api/v1/splats/[splatId]/jobs/latest", () => {
     await closeDb();
   });
 
-  async function seed() {
-    const user = await getOrCreateUser("clerk-user-1");
+  async function seed(clerkUserId = "clerk-user-1") {
+    const user = await getOrCreateUser(clerkUserId);
     const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "obj" }).returning();
     await getDb()
       .insert(jobs)
       .values({ splatId: splat.id, status: "reconstruction_running", callbackToken: "t", ec2InstanceId: "i-0abc123" });
     return splat;
   }
+
+  it("404s for someone else's splat, without reconciling its job", async () => {
+    const splat = await seed("clerk-user-2");
+
+    const res = await GET(latestRequest(), ctx(splat.id));
+
+    expect(res.status).toBe(404);
+    expect(reconcileJobMock).not.toHaveBeenCalled();
+  });
+
+  it("404s for a splat with no job yet", async () => {
+    const user = await getOrCreateUser("clerk-user-1");
+    const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "obj" }).returning();
+
+    const res = await GET(latestRequest(), ctx(splat.id));
+
+    expect(res.status).toBe(404);
+  });
 
   it("returns the job as reconciled when reconciling failed it", async () => {
     const splat = await seed();

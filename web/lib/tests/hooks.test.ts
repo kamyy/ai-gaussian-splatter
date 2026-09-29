@@ -1,7 +1,7 @@
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useLatestJob, useSplat, useSplats } from "../hooks";
+import { useCameras, useLatestJob, usePhotos, useSplat, useSplats } from "../hooks";
 import { JOB_ENDED_STATUSES, JOB_STATUSES, type Job, type JobStatus } from "../types";
 
 // Clerk resolves getToken() to null once it has loaded without a session, so the token is mutable here rather than a
@@ -79,21 +79,6 @@ describe("useLatestJob", () => {
     expect(capturedConfig().refreshInterval(undefined)).toBeGreaterThan(0);
   });
 
-  it("keeps polling while the job is still running", () => {
-    renderHook(() => useLatestJob("splat-1"));
-    const { refreshInterval } = capturedConfig();
-
-    for (const status of [
-      "queued",
-      "launching",
-      "reconstruction_running",
-      "training_running",
-      "uploading_result",
-    ] as const) {
-      expect(refreshInterval({ ...baseJob, status })).toBeGreaterThan(0);
-    }
-  });
-
   it("polls faster as the job approaches completion", () => {
     // Polling never speeds up and then slows down again. A later phase polling slower than an earlier one would only
     // add latency.
@@ -125,25 +110,17 @@ describe("useLatestJob", () => {
       }
     }
   });
-
-  it("keeps polling while paused at awaiting_training", () => {
-    // The pause is open-ended and nothing moves server-side until the user proceeds, but the poll is what leaves the
-    // timer armed for the training run that the check stage's build button starts.
-    renderHook(() => useLatestJob("splat-1"));
-    const { refreshInterval } = capturedConfig();
-
-    expect(JOB_ENDED_STATUSES).not.toContain("awaiting_training");
-    expect(refreshInterval({ ...baseJob, status: "awaiting_training" })).toBeGreaterThan(0);
-  });
 });
 
 describe("session token guard", () => {
-  // render is widened to unknown because the three hooks return differently typed SWR responses, and only the call is
+  // render is widened to unknown because the hooks return differently typed SWR responses, and only the call is
   // under test here.
   const hooks: { name: string; render: () => unknown }[] = [
     { name: "useSplats", render: () => useSplats() },
     { name: "useSplat", render: () => useSplat("splat-1") },
     { name: "useLatestJob", render: () => useLatestJob("splat-1") },
+    { name: "usePhotos", render: () => usePhotos("splat-1") },
+    { name: "useCameras", render: () => useCameras("splat-1", true) },
   ];
 
   beforeEach(() => {

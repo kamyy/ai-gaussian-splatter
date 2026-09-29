@@ -27,8 +27,8 @@ import { JOB_STATUS_DB_VALUES, PHOTO_UPLOAD_STATUSES, SPLAT_STATUSES } from "@/l
 
 export const splatStatus = pgEnum("splat_status", SPLAT_STATUSES);
 export const photoUploadStatus = pgEnum("photo_upload_status", PHOTO_UPLOAD_STATUSES);
-// JOB_STATUS_DB_VALUES, not JOB_STATUSES: the enum's label set is a superset that also keeps the pre-rename
-// "colmap_running" value valid (web/lib/types.ts).
+// JOB_STATUS_DB_VALUES, not JOB_STATUSES: the enum's label set also holds the unused "colmap_running" label
+// (web/lib/types.ts).
 export const jobStatus = pgEnum("job_status", JOB_STATUS_DB_VALUES);
 
 export const users = pgTable("users", {

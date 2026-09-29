@@ -3,12 +3,13 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@clerk/nextjs/server", () => ({ auth: vi.fn(async () => ({ userId: "clerk-user-1" })) }));
 
-const { launchJobMock } = vi.hoisted(() => ({
-  launchJobMock: vi.fn(async () => "i-0abc123"),
+const { launchJobMock, terminateWorkerMock } = vi.hoisted(() => ({
+  launchJobMock: vi.fn(async (_params: { jobId: string }) => "i-0abc123"),
+  terminateWorkerMock: vi.fn(async () => {}),
 }));
 vi.mock("@/lib/server/ec2Launcher", async importOriginal => {
   const actual = await importOriginal<typeof import("@/lib/server/ec2Launcher")>();
-  return { ...actual, launchJob: launchJobMock };
+  return { ...actual, launchJob: launchJobMock, terminateWorker: terminateWorkerMock };
 });
 
 import { getOrCreateUser } from "@/lib/server/auth";
@@ -35,6 +36,7 @@ function ctx(splatId: string) {
 describe("POST /api/v1/splats/[splatId]/train", () => {
   beforeEach(async () => {
     launchJobMock.mockClear();
+    terminateWorkerMock.mockClear();
     await getDb().delete(jobs);
     await getDb().delete(splats);
     await getDb().delete(users);
@@ -45,8 +47,8 @@ describe("POST /api/v1/splats/[splatId]/train", () => {
     await closeDb();
   });
 
-  async function seed(jobStatus: JobStatus = "awaiting_training") {
-    const user = await getOrCreateUser("clerk-user-1");
+  async function seed(jobStatus: JobStatus = "awaiting_training", clerkUserId = "clerk-user-1") {
+    const user = await getOrCreateUser(clerkUserId);
     const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "obj" }).returning();
     const [job] = await getDb()
       .insert(jobs)
@@ -55,10 +57,14 @@ describe("POST /api/v1/splats/[splatId]/train", () => {
     return { user, splat, job };
   }
 
-  it("404s for a splat the caller doesn't own", async () => {
-    const res = await POST(trainRequest(), ctx("11111111-1111-4111-8111-111111111111"));
+  it("404s for a splat the caller doesn't own, leaving its job untouched", async () => {
+    const { splat, job } = await seed("awaiting_training", "clerk-user-2");
+
+    const res = await POST(trainRequest(), ctx(splat.id));
     expect(res.status).toBe(404);
     expect(launchJobMock).not.toHaveBeenCalled();
+    const [unchanged] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
+    expect(unchanged.status).toBe("awaiting_training");
   });
 
   it("launches the train stage, reusing the job's own id and callback token", async () => {
@@ -109,6 +115,21 @@ describe("POST /api/v1/splats/[splatId]/train", () => {
     expect(updated.status).toBe("awaiting_training");
     expect(updated.trainingLaunchedAt).toBeNull();
     expect(launchJobMock).not.toHaveBeenCalled();
+  });
+
+  it("terminates the worker it just launched when the job was cancelled during the launch", async () => {
+    const { splat, job } = await seed();
+    launchJobMock.mockImplementationOnce(async ({ jobId }) => {
+      await getDb().update(jobs).set({ status: "cancelled" }).where(eq(jobs.id, jobId));
+      return "i-0late";
+    });
+
+    const res = await POST(trainRequest(), ctx(splat.id));
+    expect(res.status).toBe(409);
+    expect(terminateWorkerMock).toHaveBeenCalledWith("i-0late");
+    const [row] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
+    expect(row.status).toBe("cancelled");
+    expect(row.ec2InstanceId).toBeNull();
   });
 
   it("passes a crop box through to the train stage's worker", async () => {

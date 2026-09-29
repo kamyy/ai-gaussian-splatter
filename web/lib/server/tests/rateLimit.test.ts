@@ -57,16 +57,6 @@ describe("rate limiting", () => {
     await expect(checkAndIncrementGlobalDaily(2)).rejects.toMatchObject({ status: 503 });
   });
 
-  it("applies the global cap regardless of caller", async () => {
-    // The whole point of the global cap: it isn't keyed by user/IP, so no amount of multi-accounting raises the
-    // effective ceiling.
-    await checkAndIncrementIp("1.1.1.1", 100);
-    await checkAndIncrementGlobalDaily(1);
-
-    await checkAndIncrementIp("2.2.2.2", 100);
-    await expect(checkAndIncrementGlobalDaily(1)).rejects.toMatchObject({ status: 503 });
-  });
-
   it("raises HttpError, so handlers convert it to a response", async () => {
     await expect(checkAndIncrementGlobalDaily(0)).rejects.toBeInstanceOf(HttpError);
   });

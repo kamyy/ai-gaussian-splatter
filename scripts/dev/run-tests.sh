@@ -29,3 +29,4 @@ uv --directory "$ROOT/worker" run pytest -v
 
 TERRAFORM=$(tf_get_bin)
 "$TERRAFORM" -chdir="$ROOT/infra" test
+python3 -B -m unittest discover -s "$ROOT/infra/lambda"

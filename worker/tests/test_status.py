@@ -1,4 +1,7 @@
+import json
+
 import httpx
+import pytest
 import respx
 
 from pipeline.status import report_status
@@ -18,68 +21,41 @@ def test_report_status_sends_expected_payload_and_auth(settings):
     assert request.content == b'{"status":"training_running"}'
 
 
+@pytest.mark.parametrize(
+    ("status", "fields"),
+    [
+        (
+            "complete",
+            {
+                "result_s3_key": "splats/x/result.ply",
+                "result_spz_s3_key": "splats/x/result.spz",
+                "thumbnail_s3_key": "splats/x/thumbnail.png",
+            },
+        ),
+        ("awaiting_training", {"point_cloud_s3_key": "splats/x/point_cloud.ply"}),
+        ("training_running", {"training_progress": 45}),
+        ("failed", {"error_message": "boom"}),
+    ],
+)
 @respx.mock
-def test_report_status_includes_optional_fields_when_provided(settings):
+def test_report_status_includes_optional_fields_when_provided(settings, status, fields):
     route = respx.patch(f"{settings.app_public_url}/api/v1/internal/jobs/{settings.job_id}/status").mock(
         return_value=httpx.Response(200)
     )
 
-    report_status(
-        settings,
-        "complete",
-        result_s3_key="splats/x/result.ply",
-        result_spz_s3_key="splats/x/result.spz",
-        thumbnail_s3_key="splats/x/thumbnail.png",
-    )
+    report_status(settings, status, **fields)
 
-    import json
-
-    payload = json.loads(route.calls.last.request.content)
-    assert payload == {
-        "status": "complete",
-        "result_s3_key": "splats/x/result.ply",
-        "result_spz_s3_key": "splats/x/result.spz",
-        "thumbnail_s3_key": "splats/x/thumbnail.png",
-    }
+    assert json.loads(route.calls.last.request.content) == {"status": status, **fields}
 
 
+@pytest.mark.parametrize(
+    "mock",
+    [{"side_effect": httpx.ConnectError("connection refused")}, {"return_value": httpx.Response(500)}],
+)
 @respx.mock
-def test_report_status_includes_point_cloud_key_when_provided(settings):
-    route = respx.patch(f"{settings.app_public_url}/api/v1/internal/jobs/{settings.job_id}/status").mock(
-        return_value=httpx.Response(200)
-    )
-
-    report_status(settings, "awaiting_training", point_cloud_s3_key="splats/x/point_cloud.ply")
-
-    import json
-
-    payload = json.loads(route.calls.last.request.content)
-    assert payload == {
-        "status": "awaiting_training",
-        "point_cloud_s3_key": "splats/x/point_cloud.ply",
-    }
-
-
-@respx.mock
-def test_report_status_swallows_network_errors(settings):
-    respx.patch(f"{settings.app_public_url}/api/v1/internal/jobs/{settings.job_id}/status").mock(
-        side_effect=httpx.ConnectError("connection refused")
-    )
+def test_report_status_swallows_network_and_http_errors(settings, mock):
+    respx.patch(f"{settings.app_public_url}/api/v1/internal/jobs/{settings.job_id}/status").mock(**mock)
 
     # Must not raise. A failed status update should never crash the pipeline (see worker/pipeline/status.py's docstring
     # and worker/run_job.py's finally block).
     report_status(settings, "failed", error_message="boom")
-
-
-@respx.mock
-def test_report_status_includes_training_progress_when_provided(settings):
-    route = respx.patch(f"{settings.app_public_url}/api/v1/internal/jobs/{settings.job_id}/status").mock(
-        return_value=httpx.Response(200)
-    )
-
-    report_status(settings, "training_running", training_progress=45)
-
-    import json
-
-    payload = json.loads(route.calls.last.request.content)
-    assert payload == {"status": "training_running", "training_progress": 45}
