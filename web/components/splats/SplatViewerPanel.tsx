@@ -9,17 +9,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { IconType } from "react-icons";
-import {
-  PiCameraDuotone,
-  PiCameraSlashDuotone,
-  PiCircleDuotone,
-  PiDotOutlineDuotone,
-  PiSelectionDuotone,
-  PiSelectionSlashDuotone,
-} from "react-icons/pi";
 
 import { Center } from "@/components/layout/Center";
+import {
+  CamerasHiddenIcon,
+  CamerasShownIcon,
+  CropOffIcon,
+  CropOnIcon,
+  type IconType,
+  LargePointIcon,
+  SmallPointIcon,
+} from "@/components/ui/icons";
 import { Spinner } from "@/components/ui/Spinner";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { DEFAULT_POINT_SIZE } from "@/components/viewer/PointCloudScene";
@@ -116,7 +116,7 @@ function PointSizeSlider({ value, onChange }: { value: number; onChange: (value:
   return (
     <Tooltip label="Point size: how large each point in the shape sketch is drawn.">
       <label className="raised flex h-9 items-center gap-2 rounded-full border border-divider bg-paper px-3.5 text-foreground whitespace-nowrap">
-        <PiDotOutlineDuotone aria-hidden="true" className="h-5 w-5" />
+        <SmallPointIcon aria-hidden="true" className="h-5 w-5" />
         <input
           type="range"
           aria-label="Point size"
@@ -127,7 +127,7 @@ function PointSizeSlider({ value, onChange }: { value: number; onChange: (value:
           onChange={event => onChange(event.target.valueAsNumber)}
           className="w-16 accent-primary"
         />
-        <PiCircleDuotone aria-hidden="true" className="h-4 w-4" />
+        <LargePointIcon aria-hidden="true" className="h-4 w-4" />
       </label>
     </Tooltip>
   );
@@ -287,8 +287,8 @@ export function SplatViewerPanel({
         label="Crop"
         tooltip="Crop: fit a box around the object. Anything outside it is left out of the 3D splat."
         pressed={cropping}
-        onIcon={PiSelectionDuotone}
-        offIcon={PiSelectionSlashDuotone}
+        onIcon={CropOnIcon}
+        offIcon={CropOffIcon}
         onChange={pressed => {
           setCropping(pressed);
 
@@ -313,8 +313,8 @@ export function SplatViewerPanel({
         label="Cameras"
         tooltip="Cameras: show where each photo was taken from."
         pressed={showCameras}
-        onIcon={PiCameraDuotone}
-        offIcon={PiCameraSlashDuotone}
+        onIcon={CamerasShownIcon}
+        offIcon={CamerasHiddenIcon}
         onChange={setShowCameras}
       />
     );

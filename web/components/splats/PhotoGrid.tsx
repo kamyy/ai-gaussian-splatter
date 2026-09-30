@@ -10,8 +10,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { LuImage } from "react-icons/lu";
 
+import { PhotoPlaceholderIcon } from "@/components/ui/icons";
 import { Pager } from "@/components/ui/Pager";
 import { cn } from "@/lib/cn";
 import { useJustifiedPages } from "@/lib/hooks/useJustifiedPages";
@@ -156,7 +156,11 @@ function PhotoTile({
       )}
     >
       {/* Shows until the photo loads and covers it. The photo is relative so it paints above this icon. */}
-      <LuImage aria-hidden="true" strokeWidth={1} className="absolute inset-0 m-auto h-5 w-5 text-muted-foreground" />
+      <PhotoPlaceholderIcon
+        aria-hidden="true"
+        strokeWidth={1}
+        className="absolute inset-0 m-auto h-5 w-5 text-muted-foreground"
+      />
       {content}
     </li>
   );

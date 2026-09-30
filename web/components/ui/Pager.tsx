@@ -8,8 +8,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { LuChevronLeft, LuChevronRight } from "react-icons/lu";
 
+import { NextPageIcon, PreviousPageIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 
 const PAGER_BUTTON =
@@ -115,7 +115,7 @@ export function Pager({ label, current, count, onChange, markedPage = null }: Pa
         disabled={current === 1}
         className={PAGER_BUTTON}
       >
-        <LuChevronLeft aria-hidden="true" className="h-4 w-4" />
+        <PreviousPageIcon aria-hidden="true" className="h-4 w-4" />
       </button>
       {items.map((item, i) => {
         if (item === "gap") {
@@ -162,7 +162,7 @@ export function Pager({ label, current, count, onChange, markedPage = null }: Pa
         disabled={current === count}
         className={PAGER_BUTTON}
       >
-        <LuChevronRight aria-hidden="true" className="h-4 w-4" />
+        <NextPageIcon aria-hidden="true" className="h-4 w-4" />
       </button>
     </nav>
   );

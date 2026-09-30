@@ -10,8 +10,8 @@
 
 import { type CustomContentProps, closeSnackbar } from "notistack";
 import { forwardRef } from "react";
-import { LuCircleAlert, LuCircleCheck, LuInfo, LuTriangleAlert, LuX } from "react-icons/lu";
 
+import { CloseIcon, ErrorIcon, InfoIcon, SuccessIcon, WarningIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 
 // Lets every variant's enqueueSnackbar options carry `detail`, which notistack hands to this component as a prop.
@@ -27,11 +27,11 @@ declare module "notistack" {
 
 // --tone is the variant's color, which the card's tint, border and icon all read.
 const VARIANT_TONE = {
-  default: { Icon: LuInfo, tone: "[--tone:var(--color-info)]" },
-  success: { Icon: LuCircleCheck, tone: "[--tone:var(--color-success)]" },
-  error: { Icon: LuCircleAlert, tone: "[--tone:var(--color-error)]" },
-  warning: { Icon: LuTriangleAlert, tone: "[--tone:var(--color-primary)]" },
-  info: { Icon: LuInfo, tone: "[--tone:var(--color-info)]" },
+  default: { Icon: InfoIcon, tone: "[--tone:var(--color-info)]" },
+  success: { Icon: SuccessIcon, tone: "[--tone:var(--color-success)]" },
+  error: { Icon: ErrorIcon, tone: "[--tone:var(--color-error)]" },
+  warning: { Icon: WarningIcon, tone: "[--tone:var(--color-primary)]" },
+  info: { Icon: InfoIcon, tone: "[--tone:var(--color-info)]" },
 } as const;
 
 /**
@@ -70,7 +70,7 @@ export const AlertSnackbar = forwardRef<HTMLDivElement, CustomContentProps & { d
           onClick={() => closeSnackbar(id)}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:text-foreground"
         >
-          <LuX className="h-4 w-4" aria-hidden />
+          <CloseIcon className="h-4 w-4" aria-hidden />
         </button>
       </div>
     );

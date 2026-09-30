@@ -11,10 +11,10 @@
 import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { LuBell } from "react-icons/lu";
 import { mutate } from "swr";
 
 import { Button, buttonClassName } from "@/components/ui/Button";
+import { NotifyIcon } from "@/components/ui/icons";
 import { apiFetch } from "@/lib/apiFetch";
 import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
 import { requireToken } from "@/lib/requireToken";
@@ -109,7 +109,7 @@ function NotifyButton() {
 
   return (
     <Button variant="text" onClick={ask}>
-      <LuBell aria-hidden="true" className="h-4 w-4" />
+      <NotifyIcon aria-hidden="true" className="h-4 w-4" />
       Notify me when it&apos;s done
     </Button>
   );
