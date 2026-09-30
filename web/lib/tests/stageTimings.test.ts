@@ -18,9 +18,11 @@ const baseJob: Job = {
   resultS3Key: null,
   thumbnailS3Key: null,
   pointCloudS3Key: null,
+  colmapBootedAt: null,
   colmapStartedAt: null,
   colmapFinishedAt: null,
   trainingLaunchedAt: null,
+  trainingBootedAt: null,
   trainingStartedAt: null,
   trainingProgress: null,
   createdAt: at(0),
@@ -39,20 +41,57 @@ describe("stageTimings", () => {
   it("splits placing the cameras into start-up and work once it has finished", () => {
     const timings = stageTimings({ ...reconstructed, status: JobStatus.awaiting_training }, T0 + 10_000_000);
 
-    expect(timings.cameras).toEqual({ totalMs: 472_000, running: false, startupMs: 220_000, workMs: 252_000 });
+    expect(timings.cameras).toEqual({
+      totalMs: 472_000,
+      running: false,
+      startupMs: 220_000,
+      bootMs: null,
+      pullMs: null,
+      workMs: 252_000,
+    });
     expect(timings.checkMs).toBeNull();
     expect(timings.build).toBeNull();
   });
 
+  it("splits start-up into boot and image pull when the worker reported its boot time", () => {
+    const timings = stageTimings(
+      { ...reconstructed, status: JobStatus.awaiting_training, colmapBootedAt: at(70) },
+      T0 + 10_000_000,
+    );
+
+    expect(timings.cameras).toEqual({
+      totalMs: 472_000,
+      running: false,
+      startupMs: 220_000,
+      bootMs: 70_000,
+      pullMs: 150_000,
+      workMs: 252_000,
+    });
+  });
+
   it("counts a running stage up to now, with no split before the worker's first callback", () => {
     const starting = stageTimings({ ...baseJob, status: JobStatus.launching }, T0 + 60_000);
-    expect(starting.cameras).toEqual({ totalMs: 60_000, running: true, startupMs: null, workMs: null });
+    expect(starting.cameras).toEqual({
+      totalMs: 60_000,
+      running: true,
+      startupMs: null,
+      bootMs: null,
+      pullMs: null,
+      workMs: null,
+    });
 
     const working = stageTimings(
       { ...baseJob, status: JobStatus.reconstruction_running, colmapStartedAt: at(220) },
       T0 + 300_000,
     );
-    expect(working.cameras).toEqual({ totalMs: 300_000, running: true, startupMs: 220_000, workMs: 80_000 });
+    expect(working.cameras).toEqual({
+      totalMs: 300_000,
+      running: true,
+      startupMs: 220_000,
+      bootMs: null,
+      pullMs: null,
+      workMs: 80_000,
+    });
   });
 
   it("times the visitor's check and a running build from the train stage's launch", () => {
@@ -67,7 +106,14 @@ describe("stageTimings", () => {
     );
 
     expect(timings.checkMs).toBe(720_000);
-    expect(timings.build).toEqual({ totalMs: 271_000, running: true, startupMs: 185_000, workMs: 86_000 });
+    expect(timings.build).toEqual({
+      totalMs: 271_000,
+      running: true,
+      startupMs: 185_000,
+      bootMs: null,
+      pullMs: null,
+      workMs: 86_000,
+    });
   });
 
   it("ends a complete build at the job's last update", () => {
@@ -82,7 +128,14 @@ describe("stageTimings", () => {
       T0 + 99_000_000,
     );
 
-    expect(timings.build).toEqual({ totalMs: 615_000, running: false, startupMs: 185_000, workMs: 430_000 });
+    expect(timings.build).toEqual({
+      totalMs: 615_000,
+      running: false,
+      startupMs: 185_000,
+      bootMs: null,
+      pullMs: null,
+      workMs: 430_000,
+    });
   });
 
   it("gives a stage that failed partway no timing", () => {

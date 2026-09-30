@@ -1,7 +1,8 @@
 /**
  * How long each GPU stage of a worker job took, and how to show those durations.
  *
- * Splits each stage into the instance's start-up and the work itself, from the timestamps the worker reports.
+ * Splits each stage into the instance's start-up and the work itself, from the timestamps the worker reports. Where the
+ * worker also reported when its instance finished booting, start-up splits again into the boot and the image pull.
  * web/components/splats/PipelineStepper.tsx shows them beside its steps.
  */
 
@@ -16,6 +17,9 @@ export interface StepTiming {
   running: boolean;
   // The instance's boot and image pull, up to the worker's first callback. Null until that callback arrives.
   startupMs: number | null;
+  // startupMs's two parts. Null until the first callback, and for a run that reported no boot time.
+  bootMs: number | null;
+  pullMs: number | null;
   // The stage's own work, so far while it runs. Null until the worker's first callback.
   workMs: number | null;
 }
@@ -33,6 +37,7 @@ function time(iso: string | null): number | null {
 
 function stepTiming(
   launchedAt: number | null,
+  bootedAt: number | null,
   startedAt: number | null,
   finishedAt: number | null,
   running: boolean,
@@ -43,11 +48,15 @@ function stepTiming(
     return null;
   }
 
-  // The client's clock can run behind the server's that stamped launchedAt, so a fresh stage could read negative.
+  // The client's clock can run behind the server's that stamped launchedAt, so a fresh stage could read negative. The
+  // instance's clock stamps bootedAt, so it can disagree with the server's the same way.
+  const split = bootedAt !== null && startedAt !== null;
   return {
     totalMs: Math.max(0, end - launchedAt),
     running,
     startupMs: startedAt === null ? null : Math.max(0, startedAt - launchedAt),
+    bootMs: split ? Math.max(0, bootedAt - launchedAt) : null,
+    pullMs: split ? Math.max(0, startedAt - bootedAt) : null,
     workMs: startedAt === null ? null : Math.max(0, end - startedAt),
   };
 }
@@ -70,13 +79,21 @@ export function stageTimings(job: Job, now: number): StageTimings {
   const trainingLaunchedAt = time(job.trainingLaunchedAt);
 
   return {
-    cameras: stepTiming(time(job.createdAt), time(job.colmapStartedAt), colmapFinishedAt, placingCameras, now),
+    cameras: stepTiming(
+      time(job.createdAt),
+      time(job.colmapBootedAt),
+      time(job.colmapStartedAt),
+      colmapFinishedAt,
+      placingCameras,
+      now,
+    ),
     checkMs:
       colmapFinishedAt === null || trainingLaunchedAt === null
         ? null
         : Math.max(0, trainingLaunchedAt - colmapFinishedAt),
     build: stepTiming(
       trainingLaunchedAt,
+      time(job.trainingBootedAt),
       time(job.trainingStartedAt),
       job.status === JobStatus.complete ? time(job.updatedAt) : null,
       building,
