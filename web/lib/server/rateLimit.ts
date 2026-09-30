@@ -8,6 +8,9 @@
  *
  * Checks are per endpoint rather than blanket middleware, since cheap reads shouldn't be throttled. The costly
  * endpoints stay easy to audit this way too.
+ *
+ * Each rejection names the limit that was hit and how long until it resets, since the message is shown to the user
+ * as it is. The per-IP and per-user messages speak of uploads, because photo presigning is the one endpoint they guard.
  */
 
 import { sql } from "drizzle-orm";
@@ -16,12 +19,31 @@ import { getDb } from "./db";
 import { globalJobCounters, rateLimitCounters } from "./db/schema";
 import { HttpError } from "./httpError";
 
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+
 export async function checkAndIncrementIp(ip: string, limitPerHour: number): Promise<void> {
-  await checkAndIncrement(`ip:${ip}`, truncateToHour(new Date()), limitPerHour);
+  const hour = truncateToHour(new Date());
+  const wait = formatWaitUntil(new Date(hour.getTime() + HOUR_MS));
+
+  await checkAndIncrement(
+    `ip:${ip}`,
+    hour,
+    limitPerHour,
+    `Too many uploads from your network. It can make ${limitPerHour} an hour, so try again in ${wait}.`,
+  );
 }
 
 export async function checkAndIncrementUser(userId: string, limitPerDay: number): Promise<void> {
-  await checkAndIncrement(`user:${userId}`, truncateToDay(new Date()), limitPerDay);
+  const day = truncateToDay(new Date());
+  const wait = formatWaitUntil(new Date(day.getTime() + DAY_MS));
+
+  await checkAndIncrement(
+    `user:${userId}`,
+    day,
+    limitPerDay,
+    `You've used all ${limitPerDay} of today's uploads for your account. Try again in ${wait}, after midnight UTC.`,
+  );
 }
 
 /**
@@ -41,11 +63,16 @@ export async function checkAndIncrementGlobalDaily(maxJobsPerDay: number): Promi
     .returning({ jobsStarted: globalJobCounters.jobsStarted });
 
   if (counter.jobsStarted > maxJobsPerDay) {
-    throw new HttpError(503, "Daily processing limit reached — try again tomorrow.");
+    const wait = formatWaitUntil(new Date(day.getTime() + DAY_MS));
+    throw new HttpError(
+      503,
+      `The site has used all ${maxJobsPerDay} of today's GPU runs, which every user shares. ` +
+        `Try again in ${wait}, after midnight UTC.`,
+    );
   }
 }
 
-async function checkAndIncrement(scope: string, windowStart: Date, limit: number): Promise<void> {
+async function checkAndIncrement(scope: string, windowStart: Date, limit: number, message: string): Promise<void> {
   const [counter] = await getDb()
     .insert(rateLimitCounters)
     .values({ scope, windowStart, count: 1 })
@@ -56,8 +83,20 @@ async function checkAndIncrement(scope: string, windowStart: Date, limit: number
     .returning({ count: rateLimitCounters.count });
 
   if (counter.count > limit) {
-    throw new HttpError(429, "Rate limit exceeded — please slow down.");
+    throw new HttpError(429, message);
   }
+}
+
+/** "12 minutes" under an hour, "about 5 hours" beyond it. Exported for its tests. */
+export function formatWaitUntil(end: Date, now = new Date()): string {
+  const minutes = Math.max(1, Math.ceil((end.getTime() - now.getTime()) / 60_000));
+  if (minutes < 60) {
+    return minutes === 1 ? "1 minute" : `${minutes} minutes`;
+  }
+
+  const hours = Math.round(minutes / 60);
+
+  return hours === 1 ? "about 1 hour" : `about ${hours} hours`;
 }
 
 function truncateToHour(dt: Date): Date {

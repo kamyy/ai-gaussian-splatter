@@ -3,7 +3,12 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { closeDb, getDb } from "../db";
 import { HttpError } from "../httpError";
-import { checkAndIncrementGlobalDaily, checkAndIncrementIp, checkAndIncrementUser } from "../rateLimit";
+import {
+  checkAndIncrementGlobalDaily,
+  checkAndIncrementIp,
+  checkAndIncrementUser,
+  formatWaitUntil,
+} from "../rateLimit";
 
 // Requires a real Postgres (TEST_DATABASE_URL). These tests exercise the `INSERT ... ON CONFLICT` upsert, which is the
 // whole point of the implementation and can't be faked faithfully. CI starts that Postgres as a podman container
@@ -59,8 +64,29 @@ describe("rate limiting", () => {
     await expect(checkAndIncrementGlobalDaily(2)).rejects.toMatchObject({ status: 503 });
   });
 
+  it("names the limit that was hit in each message", async () => {
+    await checkAndIncrementIp("203.0.113.5", 1);
+    await expect(checkAndIncrementIp("203.0.113.5", 1)).rejects.toThrow(/uploads from your network.*1 an hour/);
+
+    await checkAndIncrementUser("user-a", 1);
+    await expect(checkAndIncrementUser("user-a", 1)).rejects.toThrow(/all 1 of today's uploads for your account/);
+
+    await expect(checkAndIncrementGlobalDaily(0)).rejects.toThrow(/all 0 of today's GPU runs, which every user shares/);
+  });
+
   it("raises HttpError, so handlers convert it to a response", async () => {
     await expect(checkAndIncrementGlobalDaily(0)).rejects.toBeInstanceOf(HttpError);
+  });
+
+  it.each([
+    [30_000, "1 minute"],
+    [12 * 60_000, "12 minutes"],
+    [59 * 60_000 + 1, "about 1 hour"],
+    [5 * 60 * 60_000 + 10 * 60_000, "about 5 hours"],
+  ])("formats a wait of %i ms as %s", (ms, expected) => {
+    const now = new Date("2026-09-30T12:00:00Z");
+
+    expect(formatWaitUntil(new Date(now.getTime() + ms), now)).toBe(expected);
   });
 
   it("increments atomically under concurrency", async () => {
