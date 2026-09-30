@@ -183,7 +183,7 @@ flowchart LR
 ```
 
 - Infra: **Terraform**. One configuration (`infra/`) holding one state. The S3 bucket that state lives in is created by hand ([Creating account prerequisites](RUNBOOK.md#22-creating-account-prerequisites)). `terraform init` needs the bucket before any apply. Managing it inside `infra/` would store state in a bucket `infra/` also owns. A second Terraform module with its own local state was rejected.
-- Eight logical areas, one per `.tf` file, rather than one CloudFormation-style stack each. A single state resolves the dependencies between them directly, so there's no cross-stack export/import to keep in sync:
+- Nine logical areas, one per `.tf` file, rather than one CloudFormation-style stack each. A single state resolves the dependencies between them directly, so there's no cross-stack export/import to keep in sync:
   - **network** — VPC, subnets, security groups.
   - **data** — RDS, S3.
   - **registry** — ECR alone, so the image can push before the service exists.
@@ -191,6 +191,7 @@ flowchart LR
   - **worker_sweeper** — the scheduled Lambda that terminates overdue worker instances, and its alert topic.
   - **web** — ALB + Fargate.
   - **settings** — the SSM parameters behind the runtime settings ([Runtime settings](#95-runtime-settings)).
+  - **alarms** — the CloudWatch alarms that email the sweeper's alert topic when the site degrades.
   - **budgets** — a second, `us-east-1`-aliased provider, since the Budgets API only operates there.
 - `infra/tests/*.tftest.hcl` (native `terraform test`, `mock_provider "aws" {}`) replaces hand-written assertions against synthesized templates with the same offline, zero-credential guarantee, run by `.github/workflows/ci.yml`'s `infra` job on every PR.
 

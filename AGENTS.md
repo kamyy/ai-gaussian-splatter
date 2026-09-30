@@ -297,6 +297,9 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 - **The worker container is two hops from IMDS, so `RunInstances` sets `HttpPutResponseHopLimit: 2`** (`web/lib/server/ec2Launcher.ts`).
   - At EC2's default of 1 the token PUT in `worker/pipeline/instance.py` gets no reply, `get_self_instance_id()` returns `None`, and the instance never terminates itself — logging one INFO line indistinguishable from a local run while a GPU instance keeps billing.
   - `HttpTokens: "required"` is paired with it and depends on it: on its own it removes the IMDSv1 fallback and breaks credentials too, not just self-termination.
+- **The worker container's `docker run` ships its output to CloudWatch, and that depends on the instance role.** `web/lib/server/ec2Launcher.ts` sets `--log-driver=awslogs`, and the role's `WriteLogs` statement (`infra/worker_iam.tf`) is what lets it write.
+  - The user-data creates the log stream before `docker run` and drops the log driver when that fails, because Docker refuses to start a container whose stream it can't create. Dropping the grant therefore costs the stage its logs without failing it, and the error lands in the instance's system log. `infra/worker_iam.tf` creates the log group, because the role has no `logs:CreateLogGroup`.
+  - Nothing is logged when the instance never boots or `docker login` fails, since the container never starts. The EC2 console's system log covers those ([Debugging a failed worker job](RUNBOOK.md#32-debugging-a-failed-worker-job)).
 - **An agent whose shell runs on a host with that setup can run the pipeline itself.** Check `nvidia-smi` and `podman images` before handing a real run back to the user.
   - A `podman run` outside `scripts/lib/worker.sh` also needs `--security-opt label=disable` on an SELinux host. Without it, SELinux blocks the GPU device nodes and `nvidia-smi` in the container fails with `Insufficient Permissions`.
 - **gsplat 1.5.3's `DefaultStrategy` never resets opacities, so `worker/pipeline/train.py` does it itself** (`_is_opacity_reset_step`). The opacity reset is the step that clears floaters, the stray Gaussians left hanging in mid-air.
@@ -309,7 +312,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 
 ### 9.1 Structure & state
 
-- **All of `infra/` shares one state**, with its eight logical areas (network, registry, data, worker IAM, worker sweeper, web, settings, budgets) split across separate `.tf` files for readability ([Infra](ARCHITECTURE.md#8-infra)). Nothing references another file by name, only by resource address in that one state, so moving a resource between files or renaming an area is a file-organization change only.
+- **All of `infra/` shares one state**, with its nine logical areas (network, registry, data, worker IAM, worker sweeper, web, settings, alarms, budgets) split across separate `.tf` files for readability ([Infra](ARCHITECTURE.md#8-infra)). Nothing references another file by name, only by resource address in that one state, so moving a resource between files or renaming an area is a file-organization change only.
 - **Never add the state bucket as a resource in `infra/`.** Skip creating it ([Creating account prerequisites](RUNBOOK.md#22-creating-account-prerequisites)) and `terraform init` fails.
 - **`infra/tests/*.tftest.hcl` run fully offline via `mock_provider "aws" {}`.**
   - Every file needs two `mock_provider "aws"` blocks — one default, one `alias = "billing"` — since a bare `mock_provider "aws" {}` only covers the unaliased provider configuration and `providers.tf` declares a second one for `us-east-1`.

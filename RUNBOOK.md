@@ -26,6 +26,7 @@ Most procedures below run a script from `scripts/dev/` or `scripts/prod/`, and e
 - [3. Troubleshooting](#3-troubleshooting)
   - [3.1 Fixing a bad migration](#31-fixing-a-bad-migration)
   - [3.2 Debugging a failed worker job](#32-debugging-a-failed-worker-job)
+  - [3.3 Reading logs and alarms](#33-reading-logs-and-alarms)
 - [4. Tearing down](#4-tearing-down)
 
 ---
@@ -133,7 +134,7 @@ cd web
 pnpm dev
 ```
 
-Create a splat at `/splats/new` as normal: uploading its photos starts the worker job. The job goes through the same DB rows, callback token, and `/api/v1/internal/jobs/[jobId]/status` route a real EC2 run would use, so the splat's page shows each stage live. Leave `WORKER_LOCAL_LAUNCH` unset (or `false`) to go back to launching a real spot instance.
+Create a splat at `/splats/new` as normal: uploading its photos starts the worker job. The job goes through the same DB rows, callback token, and `/api/v1/internal/jobs/[jobId]/status` route a real EC2 run would use, so the splat's page shows each stage live. Nothing else about the worker needs setting with `WORKER_LOCAL_LAUNCH=true`. Leaving it unset (or `false`) launches a real spot instance, and then `web/lib/server/env.ts` requires the `WORKER_AMI_ID`, `WORKER_SUBNET_ID`, `WORKER_SECURITY_GROUP_ID`, `WORKER_INSTANCE_PROFILE_ARN` and `WORKER_LOG_GROUP` variables that `infra/web.tf` sets in production.
 
 ### 1.8 Installing Terraform
 
@@ -345,11 +346,35 @@ If the `deploy` job's migration step fails for an infra reason rather than a bad
 ### 3.2 Debugging a failed worker job
 
 1. Check `jobs.status` and `jobs.error_message` for the splat (`GET /api/v1/splats/{id}/jobs/latest`).
-2. A job whose instance has gone without reporting moves to `failed` on the splat page's next poll, once it has gone 15 minutes without a callback (`web/lib/server/reconcileJob.ts`). A job that stays in progress with no callback still has a running instance. Check the EC2 console for the tagged instance (`Role=worker`, `JobId=<job_id>`) and its system log.
+2. A job whose instance has gone without reporting moves to `failed` on the splat page's next poll, once it has gone 15 minutes without a callback (`web/lib/server/reconcileJob.ts`). A job that stays in progress with no callback still has a running instance. Check the EC2 console for the tagged instance (`Role=worker`, `JobId=<job_id>`) and its system log. `aws ec2 get-console-output --instance-id <id>` prints the same log, and keeps it for a short while after the instance terminates.
 3. Confirm the instance actually went away. It self-terminates once the worker job reaches a terminal state, and `web/lib/server/ec2Launcher.ts` schedules a hard `shutdown` at the instance's lifetime ceiling (its `MaxLifetimeMinutes` tag, 30 minutes by default) as the first thing user-data runs.
    - **Still running past that ceiling means cloud-init, which runs user-data, never started.** That is a boot failure (a bad AMI, or an instance metadata or networking problem), the one case the scheduled shutdown can't catch.
    - The sweeper (`infra/worker_sweeper.tf`) terminates such an instance within 10 minutes of it passing the ceiling plus 15 minutes, and emails `ALERT_EMAIL` its ID.
-4. `docker logs` on the instance (if still running) or CloudWatch Logs (once wired up) for the actual COLMAP/gsplat stack trace.
+4. `scripts/prod/logs-tail.sh worker` for the actual COLMAP/gsplat stack trace. Each stage writes its own log stream, named `<job_id>-<stage>` ([Reading logs and alarms](#33-reading-logs-and-alarms)). A stage whose container never started has no stream, because the instance failed before `docker run`. Use the system log from step 2 instead.
+
+### 3.3 Reading logs and alarms
+
+`scripts/prod/logs-tail.sh SOURCE [SINCE]` follows one CloudWatch log group. Each group keeps its logs for 30 days.
+
+| Source | Shows |
+|---|---|
+| `web` | The web service's own output: API errors, stack traces, failed database queries. |
+| `migrate` | Each deploy's database migration task. |
+| `sweeper` | The Lambda that terminates overdue worker instances. It prints one line when it terminates something. |
+| `worker` | COLMAP and gsplat output from every worker instance. |
+
+The ALB access logs are in the S3 bucket named by `terraform output access_logs_bucket`, kept for 90 days. They record every request, including ones the ALB rejected before the web service saw them, so use them to investigate abuse.
+
+CloudTrail records who called which AWS API. Its 90-day event history needs no setup. For example, `aws cloudtrail lookup-events --lookup-attributes AttributeKey=EventName,AttributeValue=RunInstances` lists each launch of a worker instance with the role that made it. Nothing in `infra/` configures a trail that writes to S3, so history older than 90 days is gone.
+
+CloudWatch also keeps default metrics for the ALB (`TargetResponseTime`, `HTTPCode_Target_5XX_Count`), the ECS service (CPU and memory), and RDS (CPU, connections, free storage). Look at them in the CloudWatch console.
+
+`infra/alarms.tf` emails `ALERT_EMAIL` through the same SNS topic as the sweeper ([Going live](#26-going-live)). Each alarm names a first step:
+
+- **`ai-gaussian-splatter-alb-target-5xx`:** the web tasks returned several 5xx responses in five minutes. Run `scripts/prod/logs-tail.sh web`.
+- **`ai-gaussian-splatter-alb-unhealthy-hosts`:** a web task is failing its health check. Check the ECS service's events with `aws ecs describe-services --cluster ai-gaussian-splatter --services ai-gaussian-splatter-web`.
+- **`ai-gaussian-splatter-worker-sweeper-errors`:** the sweeper failed, so an overdue worker instance may keep billing. Run `scripts/prod/logs-tail.sh sweeper`, then list instances tagged `Role=worker` in the EC2 console.
+- **`ai-gaussian-splatter-rds-low-storage`:** the database has under 2 GB free. Raise `allocated_storage` in `infra/data.tf`.
 
 ---
 
