@@ -164,6 +164,17 @@ resource "aws_iam_role_policy" "task" {
         Action   = "secretsmanager:GetSecretValue"
         Resource = aws_db_instance.main.master_user_secret[0].secret_arn
       },
+      # web/lib/server/runtimeSettings.ts reads every runtime setting (infra/settings.tf) in one GetParametersByPath
+      # call. IAM authorizes that call against the path itself, so the path is listed beside the parameters under it.
+      {
+        Sid    = "RuntimeSettingsRead"
+        Effect = "Allow"
+        Action = "ssm:GetParametersByPath"
+        Resource = [
+          "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${local.settings_path}",
+          "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${local.settings_path}/*",
+        ]
+      },
       # RunInstances is authorized against every resource the request touches, each one separately. Only the
       # instance carries the worker tag (web/lib/server/ec2Launcher.ts tags ResourceType "instance"), so
       # aws:RequestTag is absent from the request context for the rest. A single statement conditioned on that
@@ -524,8 +535,8 @@ resource "aws_ecs_task_definition" "web" {
       # Read by Next's standalone server.js to replace Node's 5-second idle-socket timeout, which the ALB's own idle
       # timeout outlasts. See AGENTS.md.
       { name = "KEEP_ALIVE_TIMEOUT", value = local.keep_alive_timeout_ms },
-      # Read by web/app/page.tsx to pick the landing page's examples. Empty shows none.
-      { name = "SHOWCASE_CLERK_USER_ID", value = var.showcase_clerk_user_id },
+      # Where web/lib/server/runtimeSettings.ts reads the runtime settings from (infra/settings.tf).
+      { name = "RUNTIME_SETTINGS_PATH", value = local.settings_path },
       # Read by web/lib/server/databaseUrl.ts's fetchDatabasePassword to fetch the current master password at
       # connect time, instead of trusting the static value db_password_secret injects for the migration task
       # below. A plain env var naming the secret, not the secret's value itself, so no `secrets` entry is needed.

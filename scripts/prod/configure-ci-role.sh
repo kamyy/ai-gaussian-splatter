@@ -95,7 +95,9 @@ aws iam tag-role --role-name "$ROLE" --tags "Key=Project,Value=$PROJECT_TAG"
 # IAM is additive, so a narrower tfstate statement would not cancel DeleteBucket on that bucket.
 # iam:CreateServiceLinkedRole is for the ECS, ELB, RDS, and Application Auto Scaling SLRs a first apply creates.
 # scripts/prod/create-account-prereqs.sh only creates AWSServiceRoleForEC2Spot.
-# logs:DescribeLogGroups is a list API and ignores a log-group resource ARN.
+# logs:DescribeLogGroups and ssm:DescribeParameters are list APIs and ignore a resource ARN.
+# The SSM grants cover the runtime settings infra/settings.tf creates. PutParameter only runs when Terraform creates a
+# setting, since infra/settings.tf ignores later changes to each value.
 DEPLOY_POLICY=$(
   cat <<EOF
 {
@@ -402,6 +404,24 @@ DEPLOY_POLICY=$(
         "secretsmanager:TagResource"
       ],
       "Resource": "arn:aws:secretsmanager:$REGION:$AWS_ACCOUNT_ID:secret:rds!*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "ssm:DescribeParameters",
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ssm:AddTagsToResource",
+        "ssm:GetParameter",
+        "ssm:GetParameters",
+        "ssm:ListTagsForResource",
+        "ssm:PutParameter",
+        "ssm:RemoveTagsFromResource",
+        "ssm:DeleteParameter"
+      ],
+      "Resource": "arn:aws:ssm:$REGION:$AWS_ACCOUNT_ID:parameter/ai-gaussian-splatter/settings/*"
     },
     {
       "Effect": "Allow",

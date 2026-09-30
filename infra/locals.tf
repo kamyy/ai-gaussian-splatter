@@ -18,10 +18,11 @@ locals {
   worker_tag_key   = "Role"
   worker_tag_value = "worker"
 
-  # How long after boot a worker instance's own `shutdown -h` terminates it, which the sweeper (infra/worker_sweeper.tf)
-  # measures instance age against. It must match WORKER_MAX_LIFETIME_MINUTES in web/lib/server/ec2Launcher.ts, which
-  # schedules that shutdown. The two live in separate packages, so they are kept in sync by hand.
-  worker_max_lifetime_minutes = 30
+  # The longest lifetime ceiling a worker instance can be launched with. Each instance's own ceiling comes from the
+  # worker-max-lifetime-minutes runtime setting and is tagged on the instance. The sweeper (infra/worker_sweeper.tf)
+  # uses this bound for an instance whose tag is missing, and never waits longer than it. It must not be lower than
+  # the upper bound web/lib/server/runtimeSettings.ts accepts for that setting.
+  worker_max_lifetime_upper_bound_minutes = 240
 
   # All four named explicitly rather than left to a generated name, so `aws ecs update-service
   # --force-new-deployment` (a Clerk secret rotation still needs one) can be written down literally in
@@ -109,6 +110,31 @@ locals {
   db_password_secret = [
     { name = "DATABASE_PASSWORD", valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:password::" },
   ]
+
+  # ---------------------------------------------------------------------------
+  # Runtime settings
+  # ---------------------------------------------------------------------------
+
+  # The SSM Parameter Store path infra/settings.tf creates the runtime settings under. The web service reads every
+  # parameter below it (web/lib/server/runtimeSettings.ts).
+  settings_path = "/ai-gaussian-splatter/settings"
+
+  # Each setting's value when infra/settings.tf first creates it. Terraform ignores later edits to these, so on an
+  # existing stack a value is changed with scripts/prod/ssm-set.sh instead. The initial values match the defaults
+  # web/lib/server/runtimeSettings.ts falls back to.
+  runtime_settings = {
+    "processing-enabled"          = "true"
+    "max-jobs-per-day"            = "20"
+    "uploads-per-ip-per-hour"     = "5"
+    "uploads-per-user-per-day"    = "3"
+    "min-photos-per-splat"        = "20"
+    "worker-max-lifetime-minutes" = "30"
+    "reconstruct-instance-type"   = "g4dn.xlarge"
+    "train-instance-type"         = "g5.xlarge"
+    "training-iterations"         = "10000"
+    # SSM refuses an empty value, so "none" stands for no showcase account.
+    "showcase-clerk-user-id" = "none"
+  }
 
   # ---------------------------------------------------------------------------
   # Web container runtime

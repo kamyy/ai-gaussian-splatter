@@ -125,14 +125,6 @@ variable "worker_image_tag" {
   }
 }
 
-# Optional, unlike the variables above: left empty, the landing page just shows no examples. Set from the
-# SHOWCASE_CLERK_USER_ID repository variable, and changing it takes a deploy, since it reaches the app as a task env var.
-variable "showcase_clerk_user_id" {
-  description = "Clerk user id (user_...) of the account whose complete, shareable splats the landing page shows as examples. Empty shows none."
-  type        = string
-  default     = ""
-}
-
 variable "monthly_budget_limit_usd" {
   description = "AWS Budget threshold. Must stay above the stack's own fixed monthly cost (~$35) or both notifications fire every month regardless of usage."
   type        = number

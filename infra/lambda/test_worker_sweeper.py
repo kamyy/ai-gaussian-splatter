@@ -20,6 +20,11 @@ def reservation(*instances):
     return {"Instances": [{"InstanceId": instance_id, "LaunchTime": launched} for instance_id, launched in instances]}
 
 
+def tagged(instance_id, launched, lifetime):
+    tags = [{"Key": "MaxLifetimeMinutes", "Value": lifetime}]
+    return {"InstanceId": instance_id, "LaunchTime": launched, "Tags": tags}
+
+
 class OverdueInstanceIdsTest(unittest.TestCase):
     def test_returns_only_instances_older_than_the_ceiling_across_reservations(self):
         reservations = [
@@ -33,6 +38,29 @@ class OverdueInstanceIdsTest(unittest.TestCase):
 
     def test_keeps_an_instance_exactly_at_the_ceiling(self):
         reservations = [reservation(("i-edge", NOW - timedelta(minutes=45)))]
+
+        self.assertEqual(worker_sweeper.overdue_instance_ids(reservations, NOW, timedelta(minutes=45)), [])
+
+    def test_uses_each_instances_own_ceiling_plus_the_grace(self):
+        # Both have run 40 minutes. Only the one launched under a 20-minute ceiling is past its ceiling plus 15.
+        reservations = [
+            {
+                "Instances": [
+                    tagged("i-short", NOW - timedelta(minutes=40), "20"),
+                    tagged("i-long", NOW - timedelta(minutes=40), "60"),
+                ]
+            }
+        ]
+
+        self.assertEqual(worker_sweeper.overdue_instance_ids(reservations, NOW, timedelta(minutes=255)), ["i-short"])
+
+    def test_caps_a_tagged_ceiling_at_max_age(self):
+        reservations = [{"Instances": [tagged("i-huge", NOW - timedelta(minutes=50), "600")]}]
+
+        self.assertEqual(worker_sweeper.overdue_instance_ids(reservations, NOW, timedelta(minutes=45)), ["i-huge"])
+
+    def test_falls_back_to_max_age_for_a_tag_that_does_not_parse(self):
+        reservations = [{"Instances": [tagged("i-bad", NOW - timedelta(minutes=40), "thirty")]}]
 
         self.assertEqual(worker_sweeper.overdue_instance_ids(reservations, NOW, timedelta(minutes=45)), [])
 
