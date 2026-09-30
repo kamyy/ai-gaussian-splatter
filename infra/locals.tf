@@ -81,6 +81,16 @@ locals {
   worker_releases_kept = 2
 
   # ---------------------------------------------------------------------------
+  # Alarms
+  # ---------------------------------------------------------------------------
+
+  # First guesses for infra/alarms.tf, to be tuned once real traffic shows what normal looks like.
+  alarm_period_seconds = 300
+  alarm_5xx_threshold  = 5
+  # 10% of the 20 GB aws_db_instance.main allocates.
+  alarm_rds_free_storage_bytes = 2 * 1024 * 1024 * 1024
+
+  # ---------------------------------------------------------------------------
   # Database wiring
   # ---------------------------------------------------------------------------
 
