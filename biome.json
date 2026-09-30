@@ -22,7 +22,8 @@
     "rules": {
       "preset": "recommended",
       "style": {
-        "useBlockStatements": "error"
+        "useBlockStatements": "error",
+        "noDefaultExport": "error"
       }
     }
   },
@@ -44,6 +45,24 @@
     }
   },
   "overrides": [
+    {
+      "includes": [
+        "web/app/**/layout.tsx",
+        "web/app/**/page.tsx",
+        "web/drizzle.config.ts",
+        "web/next.config.ts",
+        "web/playwright.config.ts",
+        "web/postcss.config.mjs",
+        "web/vitest.config.mts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDefaultExport": "off"
+          }
+        }
+      }
+    },
     {
       "includes": ["web/**"],
       "linter": {

@@ -12,7 +12,7 @@ import { Pool } from "pg";
  * instead of going through web/drizzle.config.ts. Its pool is separate from the one the tests use and must be closed
  * here, or Vitest hangs before a single test runs.
  */
-export default async function setup(): Promise<void> {
+export async function setup(): Promise<void> {
   const databaseUrl = process.env.TEST_DATABASE_URL;
   if (!databaseUrl) {
     throw new Error(
