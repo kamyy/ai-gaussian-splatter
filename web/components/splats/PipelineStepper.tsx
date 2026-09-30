@@ -20,6 +20,8 @@ import {
   type TimedJob,
 } from "@/lib/stageTimings";
 
+const NO_EXTRAS: StepExtras = { aside: null, running: false, detail: null };
+
 // Who is reading the stepper: the splat's owner on their own page, or a visitor on the share page.
 type Audience = "owner" | "visitor";
 
@@ -29,8 +31,6 @@ interface StepExtras {
   running: boolean;
   detail: string | null;
 }
-
-const NO_EXTRAS: StepExtras = { aside: null, running: false, detail: null };
 
 function timingExtras(timing: StepTiming | null, workLabel: string): StepExtras {
   if (timing === null) {

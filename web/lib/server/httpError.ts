@@ -8,6 +8,10 @@
 
 import { NextResponse } from "next/server";
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+type Handler<Args extends unknown[]> = (...args: Args) => Promise<NextResponse>;
+
 /**
  * Thrown from anywhere in a handler's call stack and turned into a response by `withErrorHandling`, so services can
  * reject from deep inside rather than threading error tuples back up.
@@ -21,8 +25,6 @@ export class HttpError extends Error {
     this.status = status;
   }
 }
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function isUuid(value: string): boolean {
   return UUID_PATTERN.test(value);
@@ -47,8 +49,6 @@ export function requireUuid(value: string, status = 404, message = "Not found"):
 export function errorResponse(status: number, detail: string): NextResponse {
   return NextResponse.json({ detail }, { status });
 }
-
-type Handler<Args extends unknown[]> = (...args: Args) => Promise<NextResponse>;
 
 export function withErrorHandling<Args extends unknown[]>(handler: Handler<Args>): Handler<Args> {
   return async (...args: Args) => {

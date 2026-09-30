@@ -6,8 +6,6 @@
 
 import { cn } from "@/lib/cn";
 
-export type ChipColor = "default" | "primary" | "success" | "error" | "info";
-
 // The tints are mixed into the paper color rather than made translucent, so a chip reads the same over a photo as over
 // the page.
 const COLOR: Record<ChipColor, string> = {
@@ -17,6 +15,8 @@ const COLOR: Record<ChipColor, string> = {
   error: "bg-[color-mix(in_srgb,var(--color-error)_15%,var(--color-paper))] text-error",
   info: "bg-[color-mix(in_srgb,var(--color-info)_15%,var(--color-paper))] text-info",
 };
+
+export type ChipColor = "default" | "primary" | "success" | "error" | "info";
 
 interface ChipProps {
   color?: ChipColor;

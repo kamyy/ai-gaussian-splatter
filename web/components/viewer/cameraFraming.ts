@@ -14,6 +14,12 @@ import type { CameraPose, CropBox } from "@/lib/types";
 // points both scatter a few strays far from the object, and an untrimmed box grows to take in every one of them.
 const BOX_TRIM = 0.05;
 
+export interface Framing {
+  target: Vector3;
+  position: Vector3;
+  up: Vector3;
+}
+
 /**
  * The bounding box of interleaved x, y, z positions after dropping BOX_TRIM of the values from each end of every axis.
  * It is how the viewer frames a capture whose camera poses it doesn't have. An empty box when there are no positions.
@@ -37,12 +43,6 @@ export function trimmedBox(positions: ArrayLike<number>): Box3 {
   }
 
   return box;
-}
-
-export interface Framing {
-  target: Vector3;
-  position: Vector3;
-  up: Vector3;
 }
 
 /**

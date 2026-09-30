@@ -40,6 +40,11 @@ const PREVIEW_ROW_HEIGHT_REM = 7.5;
 // Matches the preview list's gap-2.
 const PREVIEW_GAP_REM = 0.5;
 
+const FLAG_LABELS: Record<PhotoFlag, string> = {
+  blurry: "Looks blurry",
+  low_res: `Low resolution (under ${MIN_SHARP_PHOTO_EDGE}px)`,
+};
+
 type Phase = "idle" | "creating" | "uploading" | "starting";
 
 function PhotoMeter({ count }: { count: number }) {
@@ -56,11 +61,6 @@ function PhotoMeter({ count }: { count: number }) {
     </div>
   );
 }
-
-const FLAG_LABELS: Record<PhotoFlag, string> = {
-  blurry: "Looks blurry",
-  low_res: `Low resolution (under ${MIN_SHARP_PHOTO_EDGE}px)`,
-};
 
 // Marks a photo that will likely make the splat worse. The photo can still be uploaded.
 function FlagBadge({ filename, flag }: { filename: string; flag: PhotoFlag }) {

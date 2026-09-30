@@ -23,6 +23,14 @@ import { getEnv } from "./env";
 
 const PRESIGN_EXPIRY_SECONDS = 15 * 60;
 
+/**
+ * The largest a thumbnail can be, in bytes. web/lib/measurePhoto.ts draws it at THUMBNAIL_LONG_SIDE pixels, which
+ * comes out well under this. The cap exists because the client, not the server, produces the thumbnail.
+ */
+export const MAX_THUMBNAIL_BYTES = 1024 * 1024;
+
+type WorkerCamera = Omit<CameraPose, "photoId"> & { name: string };
+
 function s3Client(): S3Client {
   return new S3Client({ region: getEnv().AWS_REGION });
 }
@@ -61,12 +69,6 @@ export async function presignPhotoUpload(
   const url = await getSignedUrl(s3Client(), command, { expiresIn: PRESIGN_EXPIRY_SECONDS });
   return { key, url };
 }
-
-/**
- * The largest a thumbnail can be, in bytes. web/lib/measurePhoto.ts draws it at THUMBNAIL_LONG_SIDE pixels, which
- * comes out well under this. The cap exists because the client, not the server, produces the thumbnail.
- */
-export const MAX_THUMBNAIL_BYTES = 1024 * 1024;
 
 /**
  * A thumbnail is always a JPEG, drawn in the browser by web/lib/measurePhoto.ts. contentLength is signed into the URL
@@ -151,8 +153,6 @@ export async function deleteSplatObjects(splatId: string): Promise<void> {
     } while (continuationToken);
   }
 }
-
-type WorkerCamera = Omit<CameraPose, "photoId"> & { name: string };
 
 /**
  * The camera poses the reconstruct stage wrote beside the point cloud (worker/pipeline/sparse_export.py), keyed back to

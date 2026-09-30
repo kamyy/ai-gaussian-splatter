@@ -19,6 +19,17 @@ const PAGER_BUTTON =
 // pages the list is always seven items long, so the pager keeps one width as the visitor pages through.
 const MAX_ITEMS = 7;
 
+interface PagerProps {
+  // Names the navigation landmark, such as "Photo pages".
+  label: string;
+  current: number;
+  count: number;
+  onChange: (page: number) => void;
+  // A page to flag with a pip, such as the one holding the selected photo. When the pager collapses it into an
+  // ellipsis, that ellipsis carries the pip instead.
+  markedPage?: number | null;
+}
+
 export function pageItems(current: number, count: number): Array<number | "gap"> {
   if (count <= MAX_ITEMS) {
     return Array.from({ length: count }, (_, i) => i + 1);
@@ -33,17 +44,6 @@ export function pageItems(current: number, count: number): Array<number | "gap">
   }
 
   return [1, "gap", current - 1, current, current + 1, "gap", count];
-}
-
-interface PagerProps {
-  // Names the navigation landmark, such as "Photo pages".
-  label: string;
-  current: number;
-  count: number;
-  onChange: (page: number) => void;
-  // A page to flag with a pip, such as the one holding the selected photo. When the pager collapses it into an
-  // ellipsis, that ellipsis carries the pip instead.
-  markedPage?: number | null;
 }
 
 // Its border is the page's background color, which sets it apart from a filled current-page button too.

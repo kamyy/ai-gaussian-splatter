@@ -17,13 +17,13 @@ import { fileKey, measurePhotos, type PickedPhoto } from "@/lib/measurePhoto";
 
 const MAX_PHOTO_MB = MAX_PHOTO_BYTES / (1024 * 1024);
 
-export type PhotoFlag = "blurry" | "low_res";
-
 // A photo scoring under this fraction of the batch's median sharpness is flagged as blurry. The score is compared
 // within the batch because its absolute value depends mostly on how much texture the object has.
 const BLURRY_FRACTION_OF_MEDIAN = 0.35;
 // Below this many photos the median says too little about how sharp this capture's photos normally are.
 const MIN_PHOTOS_TO_JUDGE_BLUR = 8;
+
+export type PhotoFlag = "blurry" | "low_res";
 
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);

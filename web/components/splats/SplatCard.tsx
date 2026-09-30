@@ -13,11 +13,6 @@ import { ThumbnailPlaceholderIcon } from "@/components/ui/icons";
 import type { SplatBadge } from "@/lib/splatBadge";
 import type { SplatListItem } from "@/lib/types";
 
-type SplatCardFields = Pick<
-  SplatListItem,
-  "name" | "photoCount" | "thumbnailPhotoUrl" | "thumbnailWidth" | "thumbnailHeight"
->;
-
 /**
  * The web/lib/hooks/useJustifiedPages.ts options for a list of these cards. The list the cards render in needs the
  * matching `flex flex-wrap gap-x-6 gap-y-7` classes.
@@ -31,6 +26,18 @@ export const SPLAT_CARD_ROWS = {
   captionRem: 2.75,
 };
 
+type SplatCardFields = Pick<
+  SplatListItem,
+  "name" | "photoCount" | "thumbnailPhotoUrl" | "thumbnailWidth" | "thumbnailHeight"
+>;
+
+interface SplatCardProps {
+  splat: SplatCardFields;
+  href: string;
+  // The status chip over the image. Null shows none.
+  badge: SplatBadge | null;
+}
+
 /** The card image's width over height: its thumbnail's shape, or 4:3 for a splat with no sized thumbnail. */
 export function splatCardAspect(splat: SplatCardFields) {
   if (splat.thumbnailWidth === null || splat.thumbnailHeight === null) {
@@ -38,13 +45,6 @@ export function splatCardAspect(splat: SplatCardFields) {
   }
 
   return splat.thumbnailWidth / splat.thumbnailHeight;
-}
-
-interface SplatCardProps {
-  splat: SplatCardFields;
-  href: string;
-  // The status chip over the image. Null shows none.
-  badge: SplatBadge | null;
 }
 
 export function SplatCard({ splat, href, badge }: SplatCardProps) {

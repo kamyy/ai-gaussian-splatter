@@ -28,6 +28,11 @@ import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
 import { jobColumns } from "@/lib/server/selects";
 import { JOB_ENDED_STATUSES } from "@/lib/statuses";
 
+// How long a job may sit in a non-terminal status without its worker reporting anything before this route treats it
+// as dead and cancels it. The window has to clear the longest gap a healthy job can go between callbacks, which is a
+// whole training run, so it is deliberately generous.
+const JOB_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
+
 // Postgres error code 23505 (unique violation). drizzle-orm wraps the raw node-postgres DatabaseError, which carries
 // `.code` itself, in its own error that adds the failed query for debugging. The driver error ends up on `.cause`
 // rather than `.code`, so both layers need checking.
@@ -42,11 +47,6 @@ function isUniqueViolation(err: unknown): boolean {
 
   return "cause" in err && isUniqueViolation(err.cause);
 }
-
-// How long a job may sit in a non-terminal status without its worker reporting anything before this route treats it
-// as dead and cancels it. The window has to clear the longest gap a healthy job can go between callbacks, which is a
-// whole training run, so it is deliberately generous.
-const JOB_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
 
 export const POST = withErrorHandling(
   async (_request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/process">) => {
