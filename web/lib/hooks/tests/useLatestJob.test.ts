@@ -63,8 +63,8 @@ describe("useLatestJob", () => {
   });
 
   it("keeps polling in a background tab", () => {
-    // A stage-finished notification only fires for a transition a poll has seen, and a visitor who switched tabs is the
-    // one it's for.
+    // The tab title only announces a finished stage for a transition a poll has seen, and a visitor who switched tabs
+    // is the one it's for.
     renderHook(() => useLatestJob("splat-1"));
     expect(capturedConfig().refreshWhenHidden).toBe(true);
   });

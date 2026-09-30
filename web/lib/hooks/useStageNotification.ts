@@ -1,10 +1,10 @@
 /**
- * Tells the visitor when a splat's running stage finishes, through the tab title and a browser notification.
+ * Tells the visitor when a splat's running stage finishes, through the tab title.
  *
  * Each GPU stage takes minutes, so a visitor on a splat's page usually switches to another tab while it runs. The tab
  * title names the running stage. When a stage finishes while the tab is hidden, the title says so until the tab is
- * looked at again, and a system notification fires if the visitor allowed them. Both depend on the page's own polling
- * (web/lib/hooks/useLatestJob.ts), so they only work while the tab stays open.
+ * looked at again. The title depends on the page's own polling (web/lib/hooks/useLatestJob.ts), so it only works while
+ * the tab stays open.
  */
 
 "use client";
@@ -60,20 +60,7 @@ export function useStageNotification(splatName: string | undefined, stage: Stage
     }
 
     setUnseen(finished);
-    if ("Notification" in window && Notification.permission === "granted") {
-      // Chrome on Android throws "Illegal constructor" here, since it only shows notifications through a service
-      // worker. The title above still tells that visitor.
-      try {
-        const notification = new Notification(finished, { body: splatName });
-        notification.onclick = () => {
-          window.focus();
-          notification.close();
-        };
-      } catch {
-        // Nothing else to try without a service worker.
-      }
-    }
-  }, [kind, splatName]);
+  }, [kind]);
 
   useEffect(() => {
     if (unseen === null) {

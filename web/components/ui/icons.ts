@@ -8,7 +8,6 @@
 
 import {
   LuArrowLeft,
-  LuBell,
   LuCheck,
   LuChevronLeft,
   LuChevronRight,
@@ -57,7 +56,6 @@ export const RemovePhotoIcon = LuX;
 // The splat library and a splat's progress through the pipeline.
 export const ThumbnailPlaceholderIcon = LuImage;
 export const StepDoneIcon = LuCheck;
-export const NotifyIcon = LuBell;
 
 // The 3D viewer's controls.
 export const SmallPointIcon = PiDotOutlineDuotone;
