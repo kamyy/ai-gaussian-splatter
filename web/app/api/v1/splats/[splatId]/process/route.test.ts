@@ -16,7 +16,7 @@ import { MAX_PHOTOS_PER_SPLAT } from "@/lib/limits";
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { globalJobCounters, jobs, photos, splats, users } from "@/lib/server/db/schema";
-import { getEnv } from "@/lib/server/env";
+import { getRuntimeSettings } from "@/lib/server/runtimeSettings";
 import { POST } from "./route";
 
 function ctx(splatId: string) {
@@ -43,13 +43,14 @@ describe("POST /api/v1/splats/[splatId]/process", () => {
     await closeDb();
   });
 
-  async function seed(photoCount = getEnv().MIN_PHOTOS_PER_SPLAT, clerkUserId = "clerk-user-1") {
+  async function seed(photoCount?: number, clerkUserId = "clerk-user-1") {
+    const length = photoCount ?? (await getRuntimeSettings()).minPhotosPerSplat;
     const user = await getOrCreateUser(clerkUserId);
     const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "obj" }).returning();
     await getDb()
       .insert(photos)
       .values(
-        Array.from({ length: photoCount }, (_, i) => ({
+        Array.from({ length }, (_, i) => ({
           splatId: splat.id,
           s3Key: `splats/${splat.id}/photos/${i}.jpg`,
           originalFilename: `${i}.jpg`,
@@ -61,6 +62,23 @@ describe("POST /api/v1/splats/[splatId]/process", () => {
       );
     return { user, splat };
   }
+
+  it("refuses while processing is paused, before claiming a job or charging the daily cap", async () => {
+    const { splat } = await seed();
+    process.env.PROCESSING_ENABLED = "false";
+    try {
+      const res = await POST({} as never, ctx(splat.id));
+
+      expect(res.status).toBe(503);
+      expect((await res.json()).detail).toMatch(/^Processing is paused for the whole site/);
+    } finally {
+      delete process.env.PROCESSING_ENABLED;
+    }
+
+    expect(launchJobMock).not.toHaveBeenCalled();
+    expect(await getDb().select().from(jobs)).toEqual([]);
+    expect(await getDb().select().from(globalJobCounters)).toEqual([]);
+  });
 
   it("launches a reconstruct-stage job", async () => {
     const { splat } = await seed();
@@ -79,8 +97,8 @@ describe("POST /api/v1/splats/[splatId]/process", () => {
     expect(await getDb().select().from(jobs)).toEqual([]);
   });
 
-  it("refuses a splat with fewer than MIN_PHOTOS_PER_SPLAT uploaded photos, before charging the daily cap", async () => {
-    const { splat } = await seed(getEnv().MIN_PHOTOS_PER_SPLAT - 1);
+  it("refuses a splat with fewer than the minimum photos uploaded, before charging the daily cap", async () => {
+    const { splat } = await seed((await getRuntimeSettings()).minPhotosPerSplat - 1);
 
     const res = await POST({} as never, ctx(splat.id));
     expect(res.status).toBe(400);
@@ -139,7 +157,7 @@ describe("POST /api/v1/splats/[splatId]/process", () => {
 
   it("charges the daily cap only for a POST that actually claims a job", async () => {
     // The cap is the site-wide GPU budget. A rejected duplicate that still consumed a unit would let one user lock
-    // every other user out for the day with GLOBAL_MAX_JOBS_PER_DAY clicks on a button that launches nothing.
+    // every other user out for the day with max-jobs-per-day clicks on a button that launches nothing.
     const { splat } = await seed();
 
     const first = await POST({} as never, ctx(splat.id));

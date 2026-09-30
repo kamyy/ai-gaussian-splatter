@@ -22,9 +22,9 @@ import {
   terminateWorker,
   workerImageUri,
 } from "@/lib/server/ec2Launcher";
-import { getEnv } from "@/lib/server/env";
 import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
+import { requireProcessingEnabled } from "@/lib/server/runtimeSettings";
 import { jobColumns } from "@/lib/server/selects";
 import { JOB_ENDED_STATUSES } from "@/lib/statuses";
 
@@ -50,7 +50,6 @@ function isUniqueViolation(err: unknown): boolean {
 
 export const POST = withErrorHandling(
   async (_request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/process">) => {
-    const env = getEnv();
     const user = await requireUser();
     const { splatId } = await ctx.params;
     requireUuid(splatId, 404, "Splat not found");
@@ -64,12 +63,15 @@ export const POST = withErrorHandling(
       throw new HttpError(404, "Splat not found");
     }
 
+    // Checked before anything else about the splat, so a paused site says so rather than naming some other problem.
+    const settings = await requireProcessingEnabled();
+
     const [uploaded] = await getDb()
       .select({ n: count() })
       .from(photos)
       .where(and(eq(photos.splatId, splatId), eq(photos.uploadStatus, "uploaded")));
-    if (uploaded.n < env.MIN_PHOTOS_PER_SPLAT) {
-      throw new HttpError(400, `Need at least ${env.MIN_PHOTOS_PER_SPLAT} uploaded photos, have ${uploaded.n}`);
+    if (uploaded.n < settings.minPhotosPerSplat) {
+      throw new HttpError(400, `Need at least ${settings.minPhotosPerSplat} uploaded photos, have ${uploaded.n}`);
     }
 
     // The presign route enforces this too, but two concurrent presign batches can each pass it. This is the check that
@@ -101,7 +103,7 @@ export const POST = withErrorHandling(
     // read-then-write check that could itself race.
     //
     // The row is claimed before the daily cap is charged. A rejected duplicate must not consume one of the day's
-    // GLOBAL_MAX_JOBS_PER_DAY units, or a user clicking a dead button could exhaust the site-wide GPU budget without
+    // max-jobs-per-day units, or a user clicking a dead button could exhaust the site-wide GPU budget without
     // ever launching an instance.
     const callbackToken = generateCallbackToken();
     let created: { id: string };
@@ -123,7 +125,7 @@ export const POST = withErrorHandling(
     // rejects: nothing has run for it, and leaving a failed job behind would make the next attempt report a failure
     // that never happened.
     try {
-      await checkAndIncrementGlobalDaily(env.GLOBAL_MAX_JOBS_PER_DAY);
+      await checkAndIncrementGlobalDaily(settings.maxJobsPerDay);
     } catch (err) {
       await getDb().delete(jobs).where(eq(jobs.id, created.id));
       throw err;
@@ -144,6 +146,7 @@ export const POST = withErrorHandling(
           stage: "reconstruct",
           workerImageUri: workerImageUri("reconstruct"),
           ecrRegistry: ecrRegistry(),
+          settings,
         });
       }
     } catch (err) {

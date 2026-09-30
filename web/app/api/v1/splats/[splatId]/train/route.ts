@@ -23,9 +23,9 @@ import {
   terminateWorker,
   workerImageUri,
 } from "@/lib/server/ec2Launcher";
-import { getEnv } from "@/lib/server/env";
 import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
+import { requireProcessingEnabled } from "@/lib/server/runtimeSettings";
 import { jobColumns } from "@/lib/server/selects";
 import { JOB_ENDED_STATUSES } from "@/lib/statuses";
 
@@ -45,7 +45,6 @@ const trainSchema = z.object({
 
 export const POST = withErrorHandling(
   async (request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/train">) => {
-    const env = getEnv();
     const user = await requireUser();
     const { splatId } = await ctx.params;
     requireUuid(splatId, 404, "Splat not found");
@@ -67,6 +66,9 @@ export const POST = withErrorHandling(
 
     const { cropBox } = parsed.data;
 
+    // Checked before the flip below, so a paused site leaves the job waiting at "awaiting_training".
+    const settings = await requireProcessingEnabled();
+
     const [latestJob] = await getDb()
       .select()
       .from(jobs)
@@ -82,7 +84,7 @@ export const POST = withErrorHandling(
     // to launch.
     //
     // The flip happens before the daily cap is charged. A double-click's losing request must not use up one of the
-    // day's GLOBAL_MAX_JOBS_PER_DAY units, or repeated clicking could exhaust the site-wide GPU budget without ever
+    // day's max-jobs-per-day units, or repeated clicking could exhaust the site-wide GPU budget without ever
     // launching an instance.
     const [flipped] = await getDb()
       .update(jobs)
@@ -97,7 +99,7 @@ export const POST = withErrorHandling(
     // reconstruct-phase launch did. The flip is reverted when the cap rejects, so hitting it leaves the job back at
     // "awaiting_training" for the user to retry once the cap resets rather than stranding it at "launching".
     try {
-      await checkAndIncrementGlobalDaily(env.GLOBAL_MAX_JOBS_PER_DAY);
+      await checkAndIncrementGlobalDaily(settings.maxJobsPerDay);
     } catch (err) {
       await getDb()
         .update(jobs)
@@ -109,7 +111,14 @@ export const POST = withErrorHandling(
     let instanceId: string | null;
     try {
       if (localLaunchEnabled()) {
-        launchJobLocal({ jobId: flipped.id, splatId, callbackToken: flipped.callbackToken, stage: "train", cropBox });
+        launchJobLocal({
+          jobId: flipped.id,
+          splatId,
+          callbackToken: flipped.callbackToken,
+          stage: "train",
+          trainingIterations: settings.trainingIterations,
+          cropBox,
+        });
         instanceId = null;
       } else {
         instanceId = await launchJob({
@@ -119,6 +128,7 @@ export const POST = withErrorHandling(
           stage: "train",
           workerImageUri: workerImageUri("train"),
           ecrRegistry: ecrRegistry(),
+          settings,
           cropBox,
         });
       }

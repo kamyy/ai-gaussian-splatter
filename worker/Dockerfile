@@ -104,8 +104,9 @@ RUN uv sync --no-dev --locked && \
 # sees none. 8.6 is the g5.xlarge's A10G and 8.9 an Ada dev GPU for scripts/dev/worker-train.sh. `+PTX` emits PTX for
 # the last of them as well, which the driver JITs for any newer architecture: without it a GPU outside 8.6/8.9 fails
 # at the first rasterization() with "no kernel image is available", since the prebuilt csrc.so means gsplat never
-# compiles at run time to cover itself. That reaches an A100, an H100, a Blackwell dev card, or any other
-# WORKER_TRAIN_INSTANCE_TYPE. The version comes from what uv resolved, so worker/uv.lock stays the single pin.
+# compiles at run time to cover itself. That reaches an A100, an H100, a Blackwell dev card, or any other GPU the
+# train-instance-type runtime setting names (web/lib/server/runtimeSettings.ts keeps an allow-list of the ones covered).
+# The version comes from what uv resolved, so worker/uv.lock stays the single pin.
 FROM build AS build-train
 
 RUN TORCH_CUDA_ARCH_LIST="8.6;8.9+PTX" uv pip install --no-build-isolation --no-deps --force-reinstall \

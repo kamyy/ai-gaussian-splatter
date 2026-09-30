@@ -21,17 +21,13 @@ import {
 
 import type { CropBox } from "@/lib/types";
 import { getEnv } from "./env";
+import type { RuntimeSettings } from "./runtimeSettings";
 
 /**
- * How long after boot renderUserData's `shutdown -h` terminates a worker, whatever its job is doing. It caps
- * worst-case billing and is not a tuned SLA. No stage's wall clock has been measured yet, so 30 minutes is a guess, and
- * a stage that runs longer is killed. Revisit it once real numbers exist.
- *
- * infra/locals.tf's worker_max_lifetime_minutes must match it. That is what the sweeper Lambda
- * (infra/worker_sweeper.tf) measures instance age against, and it lives in a separate Terraform config, so the two are
- * kept in sync by hand.
+ * The tag each worker instance carries its own lifetime ceiling in. infra/lambda/worker_sweeper.py reads the same key,
+ * so the two must match.
  */
-export const WORKER_MAX_LIFETIME_MINUTES = 30;
+const LIFETIME_TAG_KEY = "MaxLifetimeMinutes";
 
 type WorkerStage = "reconstruct" | "train";
 
@@ -47,6 +43,7 @@ interface UserDataParams {
   ecrRegistry: string;
   awsRegion: string;
   maxLifetimeMinutes: number;
+  trainingIterations?: number;
   cropBox?: CropBox;
 }
 
@@ -55,6 +52,7 @@ function renderUserData(p: UserDataParams): string {
   // quote of either kind.
   const cropBoxVar = p.cropBox ? `CROP_BOX='${JSON.stringify(p.cropBox)}'\n` : "";
   const cropBoxArg = p.cropBox ? `    -e CROP_BOX="$CROP_BOX" \\\n` : "";
+  const iterationsArg = p.trainingIterations ? `    -e TRAINING_ITERATIONS=${p.trainingIterations} \\\n` : "";
 
   return `#!/bin/bash
 set -euo pipefail
@@ -94,7 +92,7 @@ docker run --rm --gpus all \\
     -e SPLATS_BUCKET="$SPLATS_BUCKET" \\
     -e STAGE="$STAGE" \\
     -e BOOTED_AT="$BOOTED_AT" \\
-${cropBoxArg}    ${p.workerImageUri}
+${iterationsArg}${cropBoxArg}    ${p.workerImageUri}
 `;
 }
 
@@ -134,7 +132,10 @@ export function generateCallbackToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
-/** Launches the spot worker instance and returns its instance ID. */
+/**
+ * Launches the spot worker instance and returns its instance ID. The instance type, the lifetime ceiling and the
+ * training iterations come from the runtime settings the caller read.
+ */
 export async function launchJob(params: {
   jobId: string;
   splatId: string;
@@ -142,6 +143,7 @@ export async function launchJob(params: {
   stage: WorkerStage;
   workerImageUri: string;
   ecrRegistry: string;
+  settings: RuntimeSettings;
   cropBox?: CropBox;
 }): Promise<string> {
   const env = getEnv();
@@ -158,7 +160,8 @@ export async function launchJob(params: {
     workerImageUri: params.workerImageUri,
     ecrRegistry: params.ecrRegistry,
     awsRegion: env.AWS_REGION,
-    maxLifetimeMinutes: WORKER_MAX_LIFETIME_MINUTES,
+    maxLifetimeMinutes: params.settings.workerMaxLifetimeMinutes,
+    trainingIterations: params.stage === "train" ? params.settings.trainingIterations : undefined,
     cropBox: params.cropBox,
   });
 
@@ -166,8 +169,8 @@ export async function launchJob(params: {
     new RunInstancesCommand({
       ImageId: env.WORKER_AMI_ID,
       InstanceType: (params.stage === "reconstruct"
-        ? env.WORKER_RECONSTRUCT_INSTANCE_TYPE
-        : env.WORKER_TRAIN_INSTANCE_TYPE) as never,
+        ? params.settings.reconstructInstanceType
+        : params.settings.trainInstanceType) as never,
       MinCount: 1,
       MaxCount: 1,
       SubnetId: env.WORKER_SUBNET_ID,
@@ -196,6 +199,9 @@ export async function launchJob(params: {
             // stay in sync by hand.
             { Key: "Role", Value: "worker" },
             { Key: "JobId", Value: params.jobId },
+            // The sweeper and web/lib/server/reconcileJob.ts judge this instance by the ceiling it was launched with,
+            // so lowering the setting later never cuts short a stage already running.
+            { Key: LIFETIME_TAG_KEY, Value: String(params.settings.workerMaxLifetimeMinutes) },
           ],
         },
       ],
@@ -214,10 +220,13 @@ export async function launchJob(params: {
 }
 
 /**
- * A worker instance's EC2 state name (pending, running, shutting-down, terminated, …) and launch time, or null when EC2
- * no longer knows the instance. EC2 forgets a terminated instance about an hour after it ends.
+ * A worker instance's EC2 state name (pending, running, shutting-down, terminated, …), launch time and lifetime
+ * ceiling, or null when EC2 no longer knows the instance. EC2 forgets a terminated instance about an hour after it
+ * ends. The ceiling is null when the instance's tag is missing or doesn't parse.
  */
-export async function describeWorker(instanceId: string): Promise<{ state: string; launchTime: Date } | null> {
+export async function describeWorker(
+  instanceId: string,
+): Promise<{ state: string; launchTime: Date; maxLifetimeMinutes: number | null } | null> {
   const ec2 = new EC2Client({ region: getEnv().AWS_REGION });
   try {
     const response = await ec2.send(new DescribeInstancesCommand({ InstanceIds: [instanceId] }));
@@ -226,7 +235,10 @@ export async function describeWorker(instanceId: string): Promise<{ state: strin
       return null;
     }
 
-    return { state: instance.State.Name, launchTime: instance.LaunchTime };
+    const lifetimeTag = instance.Tags?.find(tag => tag.Key === LIFETIME_TAG_KEY)?.Value;
+    const maxLifetimeMinutes = lifetimeTag !== undefined && /^\d+$/.test(lifetimeTag) ? Number(lifetimeTag) : null;
+
+    return { state: instance.State.Name, launchTime: instance.LaunchTime, maxLifetimeMinutes };
   } catch (err) {
     if (err instanceof Error && err.name === "InvalidInstanceID.NotFound") {
       return null;
@@ -280,6 +292,7 @@ export function launchJobLocal(params: {
   splatId: string;
   callbackToken: string;
   stage: WorkerStage;
+  trainingIterations?: number;
   cropBox?: CropBox;
 }): void {
   const env = getEnv();
@@ -329,6 +342,7 @@ export function launchJobLocal(params: {
       `AWS_SECRET_ACCESS_KEY=${secretAccessKey}`,
       "-e",
       `AWS_DEFAULT_REGION=${env.AWS_REGION}`,
+      ...(params.trainingIterations ? ["-e", `TRAINING_ITERATIONS=${params.trainingIterations}`] : []),
       ...(params.cropBox ? ["-e", `CROP_BOX=${JSON.stringify(params.cropBox)}`] : []),
       "-v",
       `${jobDir}:/tmp/job`,

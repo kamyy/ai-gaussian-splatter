@@ -1,7 +1,7 @@
 /**
  * The / landing page for signed-out visitors.
  *
- * Explains what the app does and links to sign-up and sign-in. When the showcase account (SHOWCASE_CLERK_USER_ID) has
+ * Explains what the app does and links to sign-up and sign-in. When the showcase account (a runtime setting) has
  * examples, the page is laid out around them, so a visitor can open a finished splat without an account. Otherwise the
  * hero shows a decorative point cloud beside the text instead. A signed-in visitor is sent straight to their library at
  * /splats.
@@ -16,7 +16,7 @@ import { ExampleSplats } from "@/components/marketing/ExampleSplats";
 import { HeroPointCloud } from "@/components/marketing/HeroPointCloud";
 import { buttonClassName } from "@/components/ui/Button";
 import { getExampleSplats } from "@/lib/server/data";
-import { getEnv } from "@/lib/server/env";
+import { getRuntimeSettings } from "@/lib/server/runtimeSettings";
 import type { ExampleSplat } from "@/lib/types";
 
 const STEPS = [
@@ -131,9 +131,9 @@ export default async function RootPage() {
   // needs nothing else from the database.
   let exampleSplats: ExampleSplat[] = [];
   try {
-    const showcaseUserId = getEnv().SHOWCASE_CLERK_USER_ID;
-    if (showcaseUserId) {
-      exampleSplats = await getExampleSplats(showcaseUserId);
+    const { showcaseClerkUserId } = await getRuntimeSettings();
+    if (showcaseClerkUserId !== null) {
+      exampleSplats = await getExampleSplats(showcaseClerkUserId);
     }
   } catch (err) {
     console.error("Couldn't load the landing page's examples", err);

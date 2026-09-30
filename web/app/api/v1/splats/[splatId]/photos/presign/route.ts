@@ -16,9 +16,9 @@ import { MAX_PHOTO_BYTES, MAX_PHOTOS_PER_SPLAT } from "@/lib/limits";
 import { getClientIp, requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { type NewPhoto, photos, splats } from "@/lib/server/db/schema";
-import { getEnv } from "@/lib/server/env";
 import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementIp, checkAndIncrementUser } from "@/lib/server/rateLimit";
+import { getRuntimeSettings } from "@/lib/server/runtimeSettings";
 import { MAX_THUMBNAIL_BYTES, presignPhotoThumbnailUpload, presignPhotoUpload } from "@/lib/server/s3";
 import type { PhotoPresignItem } from "@/lib/types";
 
@@ -40,7 +40,6 @@ const presignSchema = z
 
 export const POST = withErrorHandling(
   async (request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/photos/presign">) => {
-    const env = getEnv();
     const user = await requireUser();
     const { splatId } = await ctx.params;
     requireUuid(splatId, 404, "Splat not found");
@@ -71,8 +70,9 @@ export const POST = withErrorHandling(
 
     // Both checks run before any S3 URL is issued. The per-IP limit is the real defense against one person using many
     // accounts, and the per-user limit is a quota on top of it.
-    await checkAndIncrementIp(getClientIp(request), env.RATE_LIMIT_IP_PER_HOUR);
-    await checkAndIncrementUser(user.id, env.RATE_LIMIT_USER_PER_DAY);
+    const { uploadsPerIpPerHour, uploadsPerUserPerDay } = await getRuntimeSettings();
+    await checkAndIncrementIp(getClientIp(request), uploadsPerIpPerHour);
+    await checkAndIncrementUser(user.id, uploadsPerUserPerDay);
 
     const items: PhotoPresignItem[] = [];
     const rows: NewPhoto[] = [];

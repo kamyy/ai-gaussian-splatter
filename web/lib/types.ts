@@ -100,6 +100,11 @@ export interface CropBox {
   quaternion: [number, number, number, number];
 }
 
+/** GET /api/v1/processing: false while processing is paused for the whole site. */
+export interface ProcessingStatus {
+  enabled: boolean;
+}
+
 /** pointCloudUrl is null for a splat whose job was reconstructed before the point cloud was kept. */
 export interface PublicSplat {
   title: string;

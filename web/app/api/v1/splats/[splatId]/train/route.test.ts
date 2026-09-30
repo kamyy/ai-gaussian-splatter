@@ -65,6 +65,24 @@ describe("POST /api/v1/splats/[splatId]/train", () => {
     expect(unchanged.status).toBe("awaiting_training");
   });
 
+  it("refuses while processing is paused, leaving the job awaiting training and the daily cap uncharged", async () => {
+    const { splat, job } = await seed();
+    process.env.PROCESSING_ENABLED = "false";
+    try {
+      const res = await POST(trainRequest(), ctx(splat.id));
+
+      expect(res.status).toBe(503);
+      expect((await res.json()).detail).toMatch(/^Processing is paused for the whole site/);
+    } finally {
+      delete process.env.PROCESSING_ENABLED;
+    }
+
+    expect(launchJobMock).not.toHaveBeenCalled();
+    const [unchanged] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
+    expect(unchanged.status).toBe("awaiting_training");
+    expect(await getDb().select().from(globalJobCounters)).toEqual([]);
+  });
+
   it("launches the train stage, reusing the job's own id and callback token", async () => {
     const { splat, job } = await seed();
 

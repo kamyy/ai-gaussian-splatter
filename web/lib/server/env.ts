@@ -29,25 +29,16 @@ const envSchema = z
     AWS_REGION: z.string().min(1),
 
     WORKER_AMI_ID: z.string().min(1),
-    // Reconstruct is mostly COLMAP's CPU-bound mapper, so it runs on the cheaper T4 instance. Train needs the A10G,
-    // which is also what worker/Dockerfile's train target compiles gsplat's kernels for.
-    WORKER_RECONSTRUCT_INSTANCE_TYPE: z.string().min(1).default("g4dn.xlarge"),
-    WORKER_TRAIN_INSTANCE_TYPE: z.string().min(1).default("g5.xlarge"),
     WORKER_SUBNET_ID: z.string().min(1),
     WORKER_SECURITY_GROUP_ID: z.string().min(1),
     WORKER_INSTANCE_PROFILE_ARN: z.string().min(1),
 
-    // Rate limiting. These are simple config knobs, not architecture. Tune them from real usage once deployed.
-    RATE_LIMIT_IP_PER_HOUR: z.coerce.number().int().positive().default(5),
-    RATE_LIMIT_USER_PER_DAY: z.coerce.number().int().positive().default(3),
-    GLOBAL_MAX_JOBS_PER_DAY: z.coerce.number().int().positive().default(20),
-    MIN_PHOTOS_PER_SPLAT: z.coerce.number().int().positive().default(20),
-
     // Where the GPU worker PATCHes its status back to.
     APP_PUBLIC_URL: z.string().url(),
 
-    // The Clerk user whose complete, shareable splats the / landing page shows as examples. Unset or empty shows none.
-    SHOWCASE_CLERK_USER_ID: z.string().optional(),
+    // The SSM Parameter Store path web/lib/server/runtimeSettings.ts reads the runtime settings from. Unset in local
+    // dev and tests, which read those settings from env vars instead.
+    RUNTIME_SETTINGS_PATH: z.string().min(1).optional(),
   })
   .refine(v => (v.DATABASE_PASSWORD === undefined) !== (v.DATABASE_SECRET_ARN === undefined), {
     message: "set exactly one of DATABASE_PASSWORD or DATABASE_SECRET_ARN",

@@ -11,17 +11,25 @@ import { JobStatus } from "@/lib/statuses";
 import { WORKER_RUNNING_STATUSES } from "./cancelJob";
 import { getDb } from "./db";
 import { jobs, splats } from "./db/schema";
-import { describeWorker, localLaunchEnabled, terminateWorker, WORKER_MAX_LIFETIME_MINUTES } from "./ec2Launcher";
+import { describeWorker, localLaunchEnabled, terminateWorker } from "./ec2Launcher";
+import { WORKER_MAX_LIFETIME_BOUNDS } from "./runtimeSettings";
 
 // How long a job goes without a status callback before its instance is looked up. A healthy reconstruct stage can go
 // many minutes between callbacks, so this only decides when to check, never on its own that the job is dead.
 const CHECK_AFTER_MS = 15 * 60 * 1000;
 
-// Past the lifetime ceiling, a still-running instance is one whose user-data `shutdown -h` never fired. The grace
+// Past its lifetime ceiling, a still-running instance is one whose user-data `shutdown -h` never fired. The grace
 // covers boot time, since the ceiling counts from when user-data runs rather than from launch.
-const OVERDUE_AFTER_MS = (WORKER_MAX_LIFETIME_MINUTES + 15) * 60 * 1000;
+// infra/lambda/worker_sweeper.py allows the same.
+const OVERDUE_GRACE_MINUTES = 15;
 
 const ALIVE_STATES = ["pending", "running"];
+
+// Each instance is judged by the ceiling it was launched with. One without a readable lifetime tag gets the longest
+// ceiling the setting allows, as the sweeper does.
+function overdueAfterMs(maxLifetimeMinutes: number | null): number {
+  return ((maxLifetimeMinutes ?? WORKER_MAX_LIFETIME_BOUNDS.max) + OVERDUE_GRACE_MINUTES) * 60 * 1000;
+}
 
 /**
  * Fails a job whose worker instance has gone without reporting a result, or that has run past the lifetime ceiling, so
@@ -57,7 +65,7 @@ export async function reconcileJob(
   let errorMessage: string;
   if (instance === null || !ALIVE_STATES.includes(instance.state)) {
     errorMessage = "The worker stopped without reporting a result.";
-  } else if (Date.now() - instance.launchTime.getTime() > OVERDUE_AFTER_MS) {
+  } else if (Date.now() - instance.launchTime.getTime() > overdueAfterMs(instance.maxLifetimeMinutes)) {
     await terminateWorker(ec2InstanceId);
     errorMessage = "The worker ran past its time limit and was stopped.";
   } else {
