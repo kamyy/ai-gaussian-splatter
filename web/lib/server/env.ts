@@ -45,6 +45,9 @@ const envSchema = z
 
     // Where the GPU worker PATCHes its status back to.
     APP_PUBLIC_URL: z.string().url(),
+
+    // The Clerk user whose complete, shareable splats the / landing page shows as examples. Unset or empty shows none.
+    SHOWCASE_CLERK_USER_ID: z.string().optional(),
   })
   .refine(v => (v.DATABASE_PASSWORD === undefined) !== (v.DATABASE_SECRET_ARN === undefined), {
     message: "set exactly one of DATABASE_PASSWORD or DATABASE_SECRET_ARN",

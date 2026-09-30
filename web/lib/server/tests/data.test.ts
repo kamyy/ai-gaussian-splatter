@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { getPublicSplat, getPublicSplatView } from "../data";
+import { getExampleSplats, getPublicSplat, getPublicSplatView } from "../data";
 import { closeDb, getDb } from "../db";
 import { jobs, photos, splats, users } from "../db/schema";
 
@@ -176,5 +176,136 @@ describe("getPublicSplatView", () => {
 
     expect(view?.photos).toHaveLength(1);
     expect(JSON.stringify(view)).not.toContain("splats/x/photos/");
+  });
+});
+
+describe("getExampleSplats", () => {
+  beforeEach(async () => {
+    await getDb().delete(photos);
+    await getDb().delete(jobs);
+    await getDb().delete(splats);
+    await getDb().delete(users);
+  });
+
+  async function seedUser(clerkUserId: string) {
+    const [user] = await getDb().insert(users).values({ clerkUserId }).returning();
+    return user;
+  }
+
+  async function seedExample(userId: string, name: string, overrides: Partial<typeof splats.$inferInsert> = {}) {
+    const [splat] = await getDb()
+      .insert(splats)
+      .values({ userId, name, status: "complete", thumbnailS3Key: `splats/${name}/thumbnail.jpg`, ...overrides })
+      .returning();
+    await getDb()
+      .insert(jobs)
+      .values({
+        splatId: splat.id,
+        callbackToken: `tok-${name}`,
+        status: "complete",
+        resultSpzS3Key: `splats/${name}/result.spz`,
+      });
+    return splat;
+  }
+
+  it("lists only the showcase account's splats that the share page would serve", async () => {
+    const owner = await seedUser("showcase");
+    const other = await seedUser("someone-else");
+    await seedExample(owner.id, "shown");
+    await seedExample(owner.id, "private", { isShareable: false });
+    await seedExample(owner.id, "processing", { status: "processing" });
+    await seedExample(owner.id, "no-preview", { thumbnailS3Key: null });
+    await seedExample(other.id, "not-theirs");
+    const [noSpz] = await getDb()
+      .insert(splats)
+      .values({ userId: owner.id, name: "no-spz", status: "complete", thumbnailS3Key: "splats/no-spz/thumbnail.jpg" })
+      .returning();
+    await getDb().insert(jobs).values({ splatId: noSpz.id, callbackToken: "tok-no-spz", status: "complete" });
+
+    const examples = await getExampleSplats("showcase");
+
+    expect(examples.map(example => example.name)).toEqual(["shown"]);
+  });
+
+  it("judges a splat by its newest complete job's .spz, as the share page does", async () => {
+    const owner = await seedUser("showcase");
+    const splat = await seedExample(owner.id, "retrained");
+    await getDb()
+      .update(jobs)
+      .set({ createdAt: new Date("2026-01-01T00:00:00Z") })
+      .where(eq(jobs.splatId, splat.id));
+    await getDb()
+      .insert(jobs)
+      .values({
+        splatId: splat.id,
+        callbackToken: "tok-newer",
+        status: "complete",
+        createdAt: new Date("2026-01-02T00:00:00Z"),
+      });
+
+    expect(await getPublicSplat(splat.id)).toBeNull();
+    expect(await getExampleSplats("showcase")).toEqual([]);
+  });
+
+  it("lists the newest eight, newest first", async () => {
+    const owner = await seedUser("showcase");
+    for (let day = 1; day <= 10; day++) {
+      await seedExample(owner.id, `day-${day}`, { createdAt: new Date(`2026-01-${String(day).padStart(2, "0")}`) });
+    }
+
+    const examples = await getExampleSplats("showcase");
+
+    expect(examples.map(example => example.name)).toEqual([
+      "day-10",
+      "day-9",
+      "day-8",
+      "day-7",
+      "day-6",
+      "day-5",
+      "day-4",
+      "day-3",
+    ]);
+  });
+
+  it("covers each card with the first photo's thumbnail and counts only photos with one", async () => {
+    const owner = await seedUser("showcase");
+    const splat = await seedExample(owner.id, "mug");
+    const photo = (name: string, overrides: Partial<typeof photos.$inferInsert> = {}) => ({
+      splatId: splat.id,
+      s3Key: `splats/mug/photos/${name}.jpg`,
+      originalFilename: `${name}.jpg`,
+      contentType: "image/jpeg",
+      thumbnailS3Key: `splats/mug/photo-thumbnails/${name}.jpg`,
+      uploadStatus: "uploaded" as const,
+      ...overrides,
+    });
+    await getDb()
+      .insert(photos)
+      .values([
+        photo("late", { takenAt: new Date("2026-01-02T00:00:00Z") }),
+        photo("early", { takenAt: new Date("2026-01-01T00:00:00Z"), width: 3024, height: 4032 }),
+        photo("legacy", { thumbnailS3Key: null, takenAt: new Date("2025-12-31T00:00:00Z") }),
+        photo("pending", { uploadStatus: "pending" }),
+      ]);
+
+    const [example] = await getExampleSplats("showcase");
+
+    expect(example.photoCount).toBe(2);
+    expect(example.thumbnailPhotoUrl).toContain("photo-thumbnails/early.jpg");
+    expect(example).toMatchObject({ thumbnailWidth: 3024, thumbnailHeight: 4032 });
+    expect(JSON.stringify(example)).not.toContain("splats/mug/photos/");
+  });
+
+  it("leaves the cover empty for a splat with no photo thumbnails", async () => {
+    const owner = await seedUser("showcase");
+    await seedExample(owner.id, "bare");
+
+    const [example] = await getExampleSplats("showcase");
+
+    expect(example).toMatchObject({ photoCount: 0, thumbnailPhotoUrl: null, thumbnailWidth: null });
+  });
+
+  it("returns nothing for an account with no row yet", async () => {
+    expect(await getExampleSplats("never-signed-in")).toEqual([]);
   });
 });

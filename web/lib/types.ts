@@ -117,3 +117,13 @@ export type PublicPhoto = Omit<PhotoListItem, "url">;
 export interface PublicSplatView extends PublicSplat {
   photos: PublicPhoto[];
 }
+
+/**
+ * One of the examples on the / landing page, which anyone can open at /preview/splats/[id]. It carries the fields a
+ * library card shows. thumbnailPhotoUrl is the first photo's browser-made small copy, never the original, so it carries
+ * no EXIF data.
+ */
+export type ExampleSplat = Pick<
+  SplatListItem,
+  "id" | "name" | "photoCount" | "thumbnailPhotoUrl" | "thumbnailWidth" | "thumbnailHeight"
+>;
