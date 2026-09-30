@@ -97,7 +97,7 @@ COPY --chown=app:app scripts/db-migrate.cjs ./scripts/db-migrate.cjs
 # moves.
 RUN mkdir -p /app/certs \
   && wget -qO /app/certs/rds-global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
-  && echo "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3  /app/certs/rds-global-bundle.pem" \
+  && echo "fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c  /app/certs/rds-global-bundle.pem" \
        | sha256sum -c - \
   && chown app:app /app/certs/rds-global-bundle.pem
 
@@ -128,7 +128,7 @@ RUN addgroup -g 1001 -S app && adduser -u 1001 -S app -G app
 # download by hand rather than ADD --checksum. The migrator stage above explains both.
 RUN mkdir -p /app/certs \
   && wget -qO /app/certs/rds-global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
-  && echo "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3  /app/certs/rds-global-bundle.pem" \
+  && echo "fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c  /app/certs/rds-global-bundle.pem" \
        | sha256sum -c - \
   && chown app:app /app/certs/rds-global-bundle.pem
 
