@@ -10,11 +10,10 @@
 
 import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { mutate } from "swr";
 
 import { Button, buttonClassName } from "@/components/ui/Button";
-import { NotifyIcon } from "@/components/ui/icons";
 import { apiFetch } from "@/lib/apiFetch";
 import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
 import { requireToken } from "@/lib/requireToken";
@@ -80,41 +79,6 @@ function ProgressBar({ label, percent, startedAt }: { label: string; percent: nu
   );
 }
 
-// Offered while a stage runs, because a browser only asks for permission in answer to a click. The notification itself
-// comes from web/lib/hooks/useStageNotification.ts. Hidden once the visitor has answered, and in a browser without
-// notifications.
-function NotifyButton() {
-  const [permission, setPermission] = useState<NotificationPermission | "unsupported">("unsupported");
-
-  // Read after mount, since the server has no Notification to read and its HTML must match the first client render.
-  useEffect(() => {
-    if ("Notification" in window) {
-      setPermission(Notification.permission);
-    }
-  }, []);
-
-  // Some contexts, such as a cross-origin iframe, reject the request rather than answer it. The button then goes away,
-  // since clicking it again would fail the same way.
-  const ask = async () => {
-    try {
-      setPermission(await Notification.requestPermission());
-    } catch {
-      setPermission("unsupported");
-    }
-  };
-
-  if (permission !== "default") {
-    return null;
-  }
-
-  return (
-    <Button variant="text" onClick={ask}>
-      <NotifyIcon aria-hidden="true" className="h-4 w-4" />
-      Notify me when it&apos;s done
-    </Button>
-  );
-}
-
 /**
  * What the visitor can do, or is waiting on, at the current stage. The complete stage has no card of its own. The
  * share panel (web/components/splats/SharePanel.tsx) takes its place in the same StageShell.
@@ -171,13 +135,12 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
         <StageShell title="Placing the cameras">
           <p>
             A cloud GPU is working out where each photo was taken from. This takes a few minutes, and you can close this
-            tab while it runs. Keep it open in the background to be notified when it finishes.
+            tab while it runs.
           </p>
           <WorkingBar label="Placing the cameras" />
           <div className="flex flex-wrap gap-2">
             <StopJobButton splatId={splatId} onJobChanged={onJobChanged} />
             {discardButton}
-            <NotifyButton />
           </div>
         </StageShell>
       );
@@ -210,13 +173,12 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
         <StageShell title="Building your 3D splat">
           <p>
             A cloud GPU is turning the sketch into a 3D splat. You can close this tab. It keeps going, and this page
-            will be ready when you come back. Keep it open in the background to be notified when it finishes.
+            will be ready when you come back.
           </p>
           {bar}
           <div className="flex flex-wrap gap-2">
             <StopJobButton splatId={splatId} onJobChanged={onJobChanged} />
             {discardButton}
-            <NotifyButton />
           </div>
         </StageShell>
       );

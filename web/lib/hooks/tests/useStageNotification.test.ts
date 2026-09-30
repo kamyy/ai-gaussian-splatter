@@ -1,21 +1,10 @@
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { Stage } from "@/lib/splatStage";
 import { useStageNotification } from "../useStageNotification";
 
-const notifications: Array<{ title: string; body?: string }> = [];
-
-class FakeNotification {
-  static permission: NotificationPermission = "granted";
-  onclick: (() => void) | null = null;
-
-  constructor(title: string, options?: NotificationOptions) {
-    notifications.push({ title, body: options?.body });
-  }
-
-  close() {}
-}
+const ORIGINAL_TITLE = "AI Gaussian Splatter";
 
 function setHidden(hidden: boolean) {
   Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
@@ -30,47 +19,43 @@ function renderStages(first: Stage | undefined) {
 
 describe("useStageNotification", () => {
   beforeEach(() => {
-    notifications.length = 0;
-    FakeNotification.permission = "granted";
-    vi.stubGlobal("Notification", FakeNotification);
-    document.title = "AI Gaussian Splatter";
+    document.title = ORIGINAL_TITLE;
     setHidden(true);
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
     setHidden(false);
   });
 
-  it("notifies once when the cameras finish in a hidden tab", () => {
+  it("marks the title when the cameras finish in a hidden tab", () => {
     const { rerender } = renderStages({ kind: "placing_cameras" });
     rerender({ stage: { kind: "check" } });
-    rerender({ stage: { kind: "check" } });
 
-    expect(notifications).toStrictEqual([{ title: "The shape is ready to check", body: "Vase" }]);
+    expect(document.title).toBe("The shape is ready to check · Vase");
   });
 
-  it("notifies when a build completes or a stage fails", () => {
+  it("marks the title when a build completes or a stage fails", () => {
     const { rerender } = renderStages({ kind: "building", progress: 90, startedAt: null });
     rerender({ stage: { kind: "complete" } });
+    expect(document.title).toBe("Your 3D splat is ready · Vase");
+
     rerender({ stage: { kind: "placing_cameras" } });
     rerender({ stage: { kind: "failed", step: "cameras", message: null } });
-
-    expect(notifications.map(n => n.title)).toStrictEqual(["Your 3D splat is ready", "Processing failed"]);
+    expect(document.title).toBe("Processing failed · Vase");
   });
 
   it("stays quiet for a splat that had already finished when the page opened", () => {
     const { rerender } = renderStages(undefined);
     rerender({ stage: { kind: "complete" } });
 
-    expect(notifications).toStrictEqual([]);
+    expect(document.title).toBe(ORIGINAL_TITLE);
   });
 
   it("stays quiet for a cancel", () => {
     const { rerender } = renderStages({ kind: "placing_cameras" });
     rerender({ stage: { kind: "cancelled", step: "cameras" } });
 
-    expect(notifications).toStrictEqual([]);
+    expect(document.title).toBe(ORIGINAL_TITLE);
   });
 
   it("stays quiet while the tab is visible", () => {
@@ -78,32 +63,7 @@ describe("useStageNotification", () => {
     const { rerender } = renderStages({ kind: "placing_cameras" });
     rerender({ stage: { kind: "check" } });
 
-    expect(notifications).toStrictEqual([]);
-  });
-
-  it("sends no notification without permission, but still marks the title", () => {
-    FakeNotification.permission = "default";
-    const { rerender } = renderStages({ kind: "placing_cameras" });
-    rerender({ stage: { kind: "check" } });
-
-    expect(notifications).toStrictEqual([]);
-    expect(document.title).toBe("The shape is ready to check · Vase");
-  });
-
-  it("survives a browser that refuses to construct a notification, and still marks the title", () => {
-    vi.stubGlobal(
-      "Notification",
-      class {
-        static permission = "granted";
-        constructor() {
-          throw new TypeError("Illegal constructor");
-        }
-      },
-    );
-    const { rerender } = renderStages({ kind: "placing_cameras" });
-
-    expect(() => rerender({ stage: { kind: "check" } })).not.toThrow();
-    expect(document.title).toBe("The shape is ready to check · Vase");
+    expect(document.title).toBe(ORIGINAL_TITLE);
   });
 
   it("names the running stage in the title and restores it afterwards", () => {
@@ -114,7 +74,7 @@ describe("useStageNotification", () => {
     expect(document.title).toBe("Building · Vase");
 
     unmount();
-    expect(document.title).toBe("AI Gaussian Splatter");
+    expect(document.title).toBe(ORIGINAL_TITLE);
   });
 
   it("keeps the finished title until the tab is seen", () => {
@@ -123,6 +83,6 @@ describe("useStageNotification", () => {
     expect(document.title).toBe("Your 3D splat is ready · Vase");
 
     act(() => setHidden(false));
-    expect(document.title).toBe("AI Gaussian Splatter");
+    expect(document.title).toBe(ORIGINAL_TITLE);
   });
 });
