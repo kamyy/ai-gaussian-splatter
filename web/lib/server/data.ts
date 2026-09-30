@@ -33,6 +33,46 @@ async function presignPublic(bucket: string, key: string): Promise<string> {
   });
 }
 
+// The ids and names of the splats the landing page shows as examples, newest first.
+async function findExampleSplatRows(ownerClerkUserId: string): Promise<{ id: string; name: string }[]> {
+  return getDb()
+    .select({ id: splats.id, name: splats.name })
+    .from(splats)
+    .innerJoin(users, eq(users.id, splats.userId))
+    .where(
+      and(
+        eq(users.clerkUserId, ownerClerkUserId),
+        eq(splats.status, "complete"),
+        eq(splats.isShareable, true),
+        isNotNull(splats.thumbnailS3Key),
+        // The newest complete job's .spz, the one getPublicSplat serves. An older job's result doesn't count, because
+        // the share page 404s when the newest one has none.
+        isNotNull(
+          sql`(${getDb()
+            .select({ resultSpzS3Key: jobs.resultSpzS3Key })
+            .from(jobs)
+            .where(and(eq(jobs.splatId, splats.id), eq(jobs.status, "complete")))
+            .orderBy(desc(jobs.createdAt))
+            .limit(1)})`,
+        ),
+      ),
+    )
+    .orderBy(desc(splats.createdAt))
+    .limit(EXAMPLE_LIMIT);
+}
+
+// True only for a splat the landing page lists, so an older showcase splat that has dropped off the list isn't indexed.
+async function isExampleSplat(splatId: string, ownerClerkUserId: string): Promise<boolean> {
+  const { SHOWCASE_CLERK_USER_ID } = getEnv();
+  if (!SHOWCASE_CLERK_USER_ID || ownerClerkUserId !== SHOWCASE_CLERK_USER_ID) {
+    return false;
+  }
+
+  const rows = await findExampleSplatRows(SHOWCASE_CLERK_USER_ID);
+
+  return rows.some(row => row.id === splatId);
+}
+
 // A public splat with the worker job that produced it. Null for anything but a complete, shareable splat.
 async function findPublicSplat(
   splatId: string,
@@ -66,12 +106,12 @@ async function findPublicSplat(
     return null;
   }
 
-  const { SPLATS_BUCKET, SHOWCASE_CLERK_USER_ID } = getEnv();
+  const { SPLATS_BUCKET } = getEnv();
 
   return {
     publicSplat: {
       title: splat.name,
-      isShowcase: Boolean(SHOWCASE_CLERK_USER_ID) && ownerClerkUserId === SHOWCASE_CLERK_USER_ID,
+      isShowcase: await isExampleSplat(splatId, ownerClerkUserId),
       thumbnailUrl: await presignPublic(SPLATS_BUCKET, splat.thumbnailS3Key),
       splatUrl: await presignPublic(SPLATS_BUCKET, latestJob.resultSpzS3Key),
       pointCloudUrl: latestJob.pointCloudS3Key ? await presignPublic(SPLATS_BUCKET, latestJob.pointCloudS3Key) : null,
@@ -152,30 +192,7 @@ export async function getPublicSplatView(splatId: string): Promise<PublicSplatVi
  * photos the share page shows.
  */
 export async function getExampleSplats(ownerClerkUserId: string): Promise<ExampleSplat[]> {
-  const rows = await getDb()
-    .select({ id: splats.id, name: splats.name })
-    .from(splats)
-    .innerJoin(users, eq(users.id, splats.userId))
-    .where(
-      and(
-        eq(users.clerkUserId, ownerClerkUserId),
-        eq(splats.status, "complete"),
-        eq(splats.isShareable, true),
-        isNotNull(splats.thumbnailS3Key),
-        // The newest complete job's .spz, the one getPublicSplat serves. An older job's result doesn't count, because
-        // the share page 404s when the newest one has none.
-        isNotNull(
-          sql`(${getDb()
-            .select({ resultSpzS3Key: jobs.resultSpzS3Key })
-            .from(jobs)
-            .where(and(eq(jobs.splatId, splats.id), eq(jobs.status, "complete")))
-            .orderBy(desc(jobs.createdAt))
-            .limit(1)})`,
-        ),
-      ),
-    )
-    .orderBy(desc(splats.createdAt))
-    .limit(EXAMPLE_LIMIT);
+  const rows = await findExampleSplatRows(ownerClerkUserId);
   if (rows.length === 0) {
     return [];
   }
