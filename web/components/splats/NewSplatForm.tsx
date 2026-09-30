@@ -69,9 +69,9 @@ function FlagBadge({ filename, flag }: { filename: string; flag: PhotoFlag }) {
       <span
         role="img"
         aria-label={`${filename}: ${FLAG_LABELS[flag]}`}
-        className="absolute top-1 left-1 flex h-7 w-7 items-center justify-center rounded-full bg-paper text-error"
+        className="absolute top-1 left-1 flex h-6 w-6 items-center justify-center rounded-full bg-paper text-error"
       >
-        <PhotoFlagIcon aria-hidden="true" className="h-3.5 w-3.5" />
+        <PhotoFlagIcon aria-hidden="true" className="h-3 w-3" />
       </span>
     </Tooltip>
   );
@@ -252,9 +252,9 @@ export function NewSplatForm() {
                 <span
                   role="img"
                   aria-label={`${photo.file.name} uploaded`}
-                  className="absolute top-1 right-1 flex h-7 w-7 items-center justify-center rounded-full bg-paper text-success"
+                  className="absolute top-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-paper text-success"
                 >
-                  <PhotoUploadedIcon aria-hidden="true" className="h-3.5 w-3.5" />
+                  <PhotoUploadedIcon aria-hidden="true" className="h-3 w-3" />
                 </span>
               );
             } else {
@@ -264,9 +264,9 @@ export function NewSplatForm() {
                   aria-label={`Remove ${photo.file.name}`}
                   onClick={() => removeFiles([key])}
                   disabled={submitting}
-                  className="absolute top-1 right-1 flex h-7 w-7 items-center justify-center rounded-full bg-paper text-foreground disabled:hidden"
+                  className="absolute top-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-paper text-foreground disabled:hidden"
                 >
-                  <RemovePhotoIcon aria-hidden="true" className="h-3.5 w-3.5" />
+                  <RemovePhotoIcon aria-hidden="true" className="h-3 w-3" />
                 </button>
               );
             }

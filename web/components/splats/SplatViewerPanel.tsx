@@ -181,13 +181,13 @@ function HintLine({ text }: { text: string }) {
 function OrbitHint({ canPickCameras }: { canPickCameras: boolean }) {
   let pickLine: React.ReactNode = null;
   if (canPickCameras) {
-    pickLine = <HintLine text="Click a camera to see its photo" />;
+    pickLine = <HintLine text="Click a camera frustum for photo" />;
   }
 
   return (
     <p className="pointer-events-none absolute top-5 right-6 hidden flex-col items-end gap-1 text-xs whitespace-nowrap sm:flex">
-      <HintLine text="Drag to orbit · scroll to zoom" />
       {pickLine}
+      <HintLine text="Drag to orbit · scroll to zoom" />
     </p>
   );
 }
