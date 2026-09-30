@@ -1,6 +1,6 @@
 # AI Gaussian Splatter
 
-Upload multi-angle photos of a physical object, get back a real-time, interactive 3D Gaussian Splat you can view in the browser and share.
+Upload multi-angle photos of a physical object, get back a real-time, interactive 3D Gaussian Splat you can view in the browser and share. Photogrammetry places the photos in 3D, and AI training on a CUDA GPU in the cloud turns them into the splat.
 
 > 🚧 **Under construction.** The pipeline has run end to end on a local GPU. The AWS stack has been deployed before for testing, but is currently torn down while development continues. Several gaps remain. See [State / what's next](AGENTS.md#11-state--whats-next).
 
@@ -31,12 +31,12 @@ Built with the help of [Claude Code](https://claude.com/product/claude-code) and
 A 3D Gaussian Splat represents an object as millions of small, semi-transparent, colored blobs (Gaussians). Unlike a mesh, it captures fine detail and view-dependent shine, and it renders in real time in a browser.
 
 1. **Upload.** Sign in and drop in 20–100 photos taken while walking around one object. About 50 well-spaced shots work best: every side, a couple of heights, each overlapping its neighbors. Coverage matters more than count ([Capture](RUNBOOK.md#15-capture)).
-2. **Reconstruct.** COLMAP works out where each photo was taken and builds a sparse point cloud of the object.
+2. **Reconstruct.** COLMAP's photogrammetry (structure-from-motion) works out where each photo was taken and builds a sparse point cloud of the object.
 3. **Review.** Check the point cloud and camera positions, and optionally draw a crop box around the object to drop the background from the result.
-4. **Train.** gsplat fits a Gaussian Splat to the photos on a GPU.
+4. **Train.** gsplat trains a Gaussian Splat on the photos with its CUDA kernels on an NVIDIA GPU.
 5. **View and share.** Orbit the splat in the browser, share a public link (with an Open Graph preview image), or download the `.ply` to edit in other splat tools.
 
-The "AI" is per-object gradient descent through a differentiable renderer, not a pretrained model ([Pipeline](ARCHITECTURE.md#2-pipeline)).
+The AI training is per-object gradient descent through a differentiable renderer, not a pretrained model ([Pipeline](ARCHITECTURE.md#2-pipeline)).
 
 ---
 
