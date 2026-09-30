@@ -58,6 +58,10 @@ class Settings(BaseSettings):
 
     local_workdir: str = "/tmp/job"
 
+    # Epoch milliseconds at which the instance finished booting, stamped by the launch's user-data. Reported with the
+    # stage's first status so the web app can split the stage's start-up into boot and image pull. Unset on a local run.
+    booted_at: int | None = None
+
 
 def get_settings() -> Settings:
     return Settings()  # type: ignore[call-arg]  # populated from env vars

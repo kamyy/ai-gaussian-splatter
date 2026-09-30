@@ -57,6 +57,10 @@ set -euo pipefail
 # and no ceiling, billing until someone notices. -f skips systemd, in case systemd is why shutdown failed.
 shutdown -h +${p.maxLifetimeMinutes} || poweroff -f
 
+# Epoch milliseconds. User-data starts once the instance has booted, so the worker reports this to split the stage's
+# start-up into boot and image pull (web/lib/stageTimings.ts).
+BOOTED_AT="$(date +%s%3N)"
+
 # Plaintext, and EC2 user-data is readable by anyone holding ec2:DescribeInstances. The token is per-job and only
 # authorizes status updates on that one job (web/lib/server/auth.ts), which is what bounds this.
 CALLBACK_TOKEN="${p.callbackToken}"
@@ -78,6 +82,7 @@ docker run --rm --gpus all \\
     -e UPLOADS_BUCKET="$UPLOADS_BUCKET" \\
     -e SPLATS_BUCKET="$SPLATS_BUCKET" \\
     -e STAGE="$STAGE" \\
+    -e BOOTED_AT="$BOOTED_AT" \\
 ${cropBoxArg}    ${p.workerImageUri}
 `;
 }

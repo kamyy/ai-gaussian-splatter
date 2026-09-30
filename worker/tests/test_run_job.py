@@ -35,7 +35,7 @@ def test_reconstruct_pauses_at_awaiting_training_with_the_point_cloud_and_termin
     assert run_job._run_reconstruct(settings) == 0
 
     assert statuses == [
-        ("reconstruction_running", {}),
+        ("reconstruction_running", {"booted_at": None}),
         ("awaiting_training", {"point_cloud_s3_key": "splats/s/point_cloud.ply"}),
     ]
     terminate.assert_called_once()
@@ -89,6 +89,7 @@ def test_train_reports_every_result_key_on_completion_and_terminates(mocker, set
     assert run_job._run_train(settings) == 0
 
     assert [status for status, _ in statuses] == ["training_running", "uploading_result", "complete"]
+    assert statuses[0][1] == {"booted_at": None}
     assert statuses[-1][1] == {"result_s3_key": "r.ply", "result_spz_s3_key": "r.spz", "thumbnail_s3_key": "t.jpg"}
     terminate.assert_called_once()
 
@@ -118,7 +119,27 @@ def test_train_reports_a_failed_torch_import_and_still_terminates(monkeypatch, s
 
     assert run_job._run_train(settings) == 1
 
-    [(status, fields)] = statuses
-    assert status == "failed"
-    assert "pipeline.train" in fields["error_message"]
+    assert [status for status, _ in statuses] == ["training_running", "failed"]
+    assert "pipeline.train" in statuses[-1][1]["error_message"]
     terminate.assert_called_once()
+
+
+def test_each_stage_reports_its_boot_time_with_its_first_status(mocker, settings, calls):
+    statuses, _ = calls
+    mocker.patch.object(run_job.sfm, "run_colmap", return_value=_colmap_result(20, 20))
+
+    run_job._run_reconstruct(settings.model_copy(update={"booted_at": 1_767_225_660_000}))
+
+    assert statuses[0] == ("reconstruction_running", {"booted_at": 1_767_225_660_000})
+    assert "booted_at" not in statuses[1][1]
+
+
+def test_train_reports_its_start_before_loading_torch(monkeypatch, settings, calls):
+    # The gap from the boot time to this first report is shown as the image pull, so it mustn't include the import.
+    statuses, _ = calls
+    monkeypatch.setitem(sys.modules, "pipeline.train", None)
+    monkeypatch.delattr(pipeline, "train", raising=False)
+
+    run_job._run_train(settings.model_copy(update={"booted_at": 1_767_225_660_000}))
+
+    assert statuses[0] == ("training_running", {"booted_at": 1_767_225_660_000})

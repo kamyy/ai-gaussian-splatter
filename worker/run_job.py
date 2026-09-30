@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 def _run_reconstruct(settings: Settings) -> int:
     try:
-        status.report_status(settings, "reconstruction_running")
+        status.report_status(settings, "reconstruction_running", booted_at=settings.booted_at)
         photos_dir = fetch.fetch_photos(settings)
 
         sfm_result = sfm.run_colmap(photos_dir, Path(settings.local_workdir) / "colmap")
@@ -64,13 +64,16 @@ def _run_reconstruct(settings: Settings) -> int:
 
 def _run_train(settings: Settings) -> int:
     try:
+        # Reported before the import below, so the web app's image-pull time for this stage stops at the container's
+        # start rather than also counting the seconds torch takes to load.
+        status.report_status(settings, "training_running", booted_at=settings.booted_at)
+
         # Imported here rather than at module scope because both modules reach torch, which the reconstruct image does
         # not carry (worker/Dockerfile). worker/pipeline/export.py reaches it through worker/pipeline/train.py rather
         # than directly. Inside the try so that a failed import is still reported and still self-terminates: raised
         # above it, the worker job would sit at training_running while the instance billed until user-data's shutdown.
         from pipeline import export, train
 
-        status.report_status(settings, "training_running")
         photos_dir = fetch.fetch_photos(settings)
 
         sparse_dir = Path(settings.local_workdir) / "colmap_sparse"
