@@ -131,14 +131,14 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
       onJobChanged();
       await mutate("splats");
     } catch (err) {
-      enqueueSnackbar(err instanceof Error ? err.message : failure, { variant: "error" });
+      enqueueSnackbar(failure, { variant: "error", detail: err instanceof Error ? err.message : undefined });
     } finally {
       setPending(false);
     }
   }
 
-  const startProcessing = () => post("process", "Failed to start");
-  const startTraining = () => post("train", "Failed to start building", cropBox ? { cropBox } : {});
+  const startProcessing = () => post("process", "Couldn't start processing");
+  const startTraining = () => post("train", "Couldn't start building", cropBox ? { cropBox } : {});
   const discardButton = <DeleteSplatButton splatId={splatId} label="Discard" variant="outlined" />;
 
   switch (stage.kind) {

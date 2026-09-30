@@ -7,20 +7,22 @@
 
 "use client";
 
-import type { SnackbarMessage, VariantType } from "notistack";
+import type { VariantType } from "notistack";
 import { useSnackbar as useNotistackSnackbar } from "notistack";
 import { useCallback } from "react";
 
 interface AppSnackbarOptions {
   variant: VariantType;
+  /** A line under the title, such as the server's error message. */
+  detail?: string;
 }
 
 export function useAppSnackbar() {
   const { enqueueSnackbar } = useNotistackSnackbar();
 
   const enqueue = useCallback(
-    (message: SnackbarMessage, options: AppSnackbarOptions) =>
-      enqueueSnackbar(message, { ...options, persist: options.variant === "error" }),
+    (title: string, options: AppSnackbarOptions) =>
+      enqueueSnackbar(title, { ...options, persist: options.variant === "error" }),
     [enqueueSnackbar],
   );
 

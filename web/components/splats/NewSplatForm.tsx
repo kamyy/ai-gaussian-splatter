@@ -171,7 +171,10 @@ export function NewSplatForm() {
       try {
         splat = await apiFetch<Splat>("/api/v1/splats", "POST", token, { name: trimmedName });
       } catch (err) {
-        enqueueSnackbar(err instanceof Error ? err.message : "Failed to create splat", { variant: "error" });
+        enqueueSnackbar("Couldn't create the splat", {
+          variant: "error",
+          detail: err instanceof Error ? err.message : undefined,
+        });
         setPhase("idle");
         return;
       }
@@ -188,12 +191,10 @@ export function NewSplatForm() {
         setUploadedKeys(current => new Set(current).add(fileKey(photo.file)));
       });
     } catch (err) {
-      enqueueSnackbar(
-        err instanceof Error
-          ? `"${trimmedName}" was created, but photo upload failed: ${err.message}`
-          : `"${trimmedName}" was created, but photo upload failed.`,
-        { variant: "error" },
-      );
+      enqueueSnackbar("Photo upload failed", {
+        variant: "error",
+        detail: `"${trimmedName}" was created. ${err instanceof Error ? err.message : "Submit again to retry."}`,
+      });
       setPhase("idle");
       return;
     }
@@ -204,7 +205,10 @@ export function NewSplatForm() {
     try {
       await apiFetch<Job>(`/api/v1/splats/${splat.id}/process`, "POST", token);
     } catch (err) {
-      enqueueSnackbar(err instanceof Error ? err.message : "Failed to start processing", { variant: "error" });
+      enqueueSnackbar("Couldn't start processing", {
+        variant: "error",
+        detail: err instanceof Error ? err.message : undefined,
+      });
     }
 
     await mutate("splats");

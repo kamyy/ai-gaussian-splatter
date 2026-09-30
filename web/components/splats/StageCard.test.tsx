@@ -60,7 +60,12 @@ describe("StageCard", () => {
     render(<StageCard splatId="splat-1" stage={{ kind: "check" }} onJobChanged={onJobChanged} />);
     fireEvent.click(screen.getByRole("button", { name: "Looks right, build it" }));
 
-    await waitFor(() => expect(enqueueSnackbarMock).toHaveBeenCalledWith("Daily limit reached", { variant: "error" }));
+    await waitFor(() =>
+      expect(enqueueSnackbarMock).toHaveBeenCalledWith("Couldn't start building", {
+        variant: "error",
+        detail: "Daily limit reached",
+      }),
+    );
     expect(onJobChanged).not.toHaveBeenCalled();
   });
 
