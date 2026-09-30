@@ -10,7 +10,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-import { SplatCard, splatCardAspect } from "@/components/splats/SplatCard";
+import { SPLAT_CARD_ROWS, SplatCard, splatCardAspect } from "@/components/splats/SplatCard";
 import { buttonClassName } from "@/components/ui/Button";
 import { ThumbnailPlaceholderIcon } from "@/components/ui/icons";
 import { Pager } from "@/components/ui/Pager";
@@ -28,13 +28,6 @@ const FILTERS: { value: LibraryFilter | "all"; label: string }[] = [
 
 // A page is this many whole rows of cards, so every page but the last ends on a full row.
 const ROWS_PER_PAGE = 3;
-// About the height of a card image. Each full row stretches a little past it to fill the width.
-const ROW_HEIGHT_REM = 14.75;
-// Match the card list's gap-x-6 and gap-y-7.
-const COLUMN_GAP_REM = 1.5;
-const ROW_GAP_REM = 1.75;
-// The name line below each card image (web/components/splats/SplatCard.tsx): its gap-3 plus text-2xl's 2rem line.
-const CAPTION_REM = 2.75;
 
 function SplatGridSkeleton() {
   return (
@@ -75,11 +68,8 @@ export default function LibraryPage() {
 
   const aspects = useMemo(() => filtered.map(splatCardAspect), [filtered]);
   const { setArea, areaHeight, current, pageCount, setPage, tiles } = useJustifiedPages(aspects, {
-    rowHeightRem: ROW_HEIGHT_REM,
-    columnGapRem: COLUMN_GAP_REM,
-    rowGapRem: ROW_GAP_REM,
+    ...SPLAT_CARD_ROWS,
     rowsPerPage: ROWS_PER_PAGE,
-    captionRem: CAPTION_REM,
   });
 
   let body: React.ReactNode;
@@ -107,7 +97,7 @@ export default function LibraryPage() {
               const splat = filtered[tile.index];
               return (
                 <li key={splat.id} style={{ width: tile.width }} className="shrink-0">
-                  <SplatCard splat={splat} />
+                  <SplatCard splat={splat} href={`/splats/${splat.id}`} badge={splatBadge(splat)} />
                 </li>
               );
             })}

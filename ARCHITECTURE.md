@@ -111,6 +111,9 @@ A baked AMI would attack the smaller half — fixed overhead, not training. Trai
   - The app's visual identity (a serif display face, pill-shaped controls, recessed viewer surfaces) is bespoke rather than a stock component look, which a utility-first approach expresses directly instead of overriding a component library's own defaults for each one.
   - Radix's primitives ship unstyled, so accessibility (focus trap, focus return) stays decoupled from styling: only a component that needs that behavior pulls in a Radix package, rather than a whole component library's runtime for every static element too.
   - Trade-off accepted: no ready-made component catalog. Each primitive (`Button`, `Chip`, `Input`, plus the `Dialog` wrapper) is a small hand-built file (`web/components/ui/`) instead of an import.
+- The landing page's examples are one showcase account's shareable splats, so a visitor can try the viewer without an account.
+  - A shareable splat is meant for anyone who has its link, not for a public list. So the examples can't simply be every shareable splat.
+  - A per-splat "featured" flag was rejected because nothing in the repo reaches the production database to set one. The showcase account is curated through the app's own UI instead.
 - SWR for server-derived data (worker-job polling via `refreshInterval`).
 - Zustand, not Redux, for pure client UI (upload progress). Zustand needs less boilerplate.
 - Splats render with **Spark** (`@sparkjsdev/spark`), whose `SplatMesh` and `SparkRenderer` are plain Three.js objects added to the r3f scene via `<primitive>`.

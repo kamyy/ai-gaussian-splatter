@@ -524,6 +524,8 @@ resource "aws_ecs_task_definition" "web" {
       # Read by Next's standalone server.js to replace Node's 5-second idle-socket timeout, which the ALB's own idle
       # timeout outlasts. See AGENTS.md.
       { name = "KEEP_ALIVE_TIMEOUT", value = local.keep_alive_timeout_ms },
+      # Read by web/app/page.tsx to pick the landing page's examples. Empty shows none.
+      { name = "SHOWCASE_CLERK_USER_ID", value = var.showcase_clerk_user_id },
       # Read by web/lib/server/databaseUrl.ts's fetchDatabasePassword to fetch the current master password at
       # connect time, instead of trusting the static value db_password_secret injects for the migration task
       # below. A plain env var naming the secret, not the secret's value itself, so no `secrets` entry is needed.

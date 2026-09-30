@@ -1,21 +1,24 @@
 /**
- * Database reads for the public share page, called directly by Server Components.
+ * Database reads for the pages anyone can see without signing in, called directly by Server Components.
  *
- * The share page (web/app/(public)/preview/splats/[id]/page.tsx) and its link-preview metadata render from these
- * without anyone signing in. They return the splat, its point cloud and its photos' thumbnails as presigned URLs
+ * The share page (web/app/(public)/preview/splats/[id]/page.tsx), its link-preview metadata and the examples on the /
+ * landing page render from these. They return splats, point clouds and photo thumbnails as presigned URLs
  * (time-limited S3 links). They live outside the Route Handlers so Server Components can call them directly, rather
  * than the server making an HTTP request to itself.
  */
 
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 
-import type { PublicSplat, PublicSplatView } from "../types";
+import type { ExampleSplat, PublicSplat, PublicSplatView } from "../types";
 import { getDb } from "./db";
-import { jobs, photos, splats } from "./db/schema";
+import { jobs, photos, splats, users } from "./db/schema";
 import { getEnv } from "./env";
 import { isUuid } from "./httpError";
+
+// The landing page has no pager, so this is every example it shows.
+const EXAMPLE_LIMIT = 8;
 
 // The page is rendered once and never re-fetches its links, so they outlive the owner's page's 15 minutes. The viewer
 // loads a 3D file when the visitor switches to it, and the grid loads thumbnails as the visitor pages through them.
@@ -106,4 +109,87 @@ export async function getPublicSplatView(splatId: string): Promise<PublicSplatVi
   );
 
   return { ...splat, photos: publicPhotos };
+}
+
+/**
+ * The landing page's examples: the newest complete, shareable splats the showcase account owns, each one a splat
+ * getPublicSplat would serve. Only a photo with a thumbnail counts toward a card's cover and photo count, the same
+ * photos the share page shows.
+ */
+export async function getExampleSplats(ownerClerkUserId: string): Promise<ExampleSplat[]> {
+  const rows = await getDb()
+    .select({ id: splats.id, name: splats.name })
+    .from(splats)
+    .innerJoin(users, eq(users.id, splats.userId))
+    .where(
+      and(
+        eq(users.clerkUserId, ownerClerkUserId),
+        eq(splats.status, "complete"),
+        eq(splats.isShareable, true),
+        isNotNull(splats.thumbnailS3Key),
+        // The newest complete job's .spz, the one getPublicSplat serves. An older job's result doesn't count, because
+        // the share page 404s when the newest one has none.
+        isNotNull(
+          sql`(${getDb()
+            .select({ resultSpzS3Key: jobs.resultSpzS3Key })
+            .from(jobs)
+            .where(and(eq(jobs.splatId, splats.id), eq(jobs.status, "complete")))
+            .orderBy(desc(jobs.createdAt))
+            .limit(1)})`,
+        ),
+      ),
+    )
+    .orderBy(desc(splats.createdAt))
+    .limit(EXAMPLE_LIMIT);
+  if (rows.length === 0) {
+    return [];
+  }
+
+  // Oldest taken first per splat, as the share page orders them, so the cover is the share page's "Photo 1".
+  const photoRows = await getDb()
+    .select({
+      splatId: photos.splatId,
+      thumbnailS3Key: photos.thumbnailS3Key,
+      width: photos.width,
+      height: photos.height,
+    })
+    .from(photos)
+    .where(
+      and(
+        inArray(
+          photos.splatId,
+          rows.map(row => row.id),
+        ),
+        eq(photos.uploadStatus, "uploaded"),
+        isNotNull(photos.thumbnailS3Key),
+      ),
+    )
+    .orderBy(photos.splatId, asc(photos.takenAt), asc(photos.createdAt), asc(photos.id));
+
+  const coverBySplat = new Map<string, (typeof photoRows)[number]>();
+  const photoCountBySplat = new Map<string, number>();
+  for (const row of photoRows) {
+    if (!coverBySplat.has(row.splatId)) {
+      coverBySplat.set(row.splatId, row);
+    }
+
+    photoCountBySplat.set(row.splatId, (photoCountBySplat.get(row.splatId) ?? 0) + 1);
+  }
+
+  const { UPLOADS_BUCKET } = getEnv();
+
+  return Promise.all(
+    rows.map(async row => {
+      const cover = coverBySplat.get(row.id);
+
+      return {
+        id: row.id,
+        name: row.name,
+        photoCount: photoCountBySplat.get(row.id) ?? 0,
+        thumbnailPhotoUrl: cover?.thumbnailS3Key ? await presignPublic(UPLOADS_BUCKET, cover.thumbnailS3Key) : null,
+        thumbnailWidth: cover?.width ?? null,
+        thumbnailHeight: cover?.height ?? null,
+      };
+    }),
+  );
 }
