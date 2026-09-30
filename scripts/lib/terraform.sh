@@ -133,12 +133,9 @@ tf_export_vars() {
   TF_VAR_worker_ami_id=$(gh_get_repo_var WORKER_AMI_ID)
   TF_VAR_worker_image_tag=$(gh_get_repo_var WORKER_IMAGE_TAG)
   TF_VAR_web_image_tag=$(tf_get_live_web_image_tag)
-  # Optional, so an unset variable reads as empty rather than exiting. Left out, a plan would show the landing page's
-  # examples being switched off.
-  TF_VAR_showcase_clerk_user_id=$(gh variable get SHOWCASE_CLERK_USER_ID 2>/dev/null || true)
 
   export TF_VAR_hosted_zone_id TF_VAR_clerk_secret_key_arn TF_VAR_alert_email TF_VAR_domain_zone_name \
-    TF_VAR_worker_ami_id TF_VAR_worker_image_tag TF_VAR_web_image_tag TF_VAR_showcase_clerk_user_id
+    TF_VAR_worker_ami_id TF_VAR_worker_image_tag TF_VAR_web_image_tag
 }
 
 # Points infra/ at the state bucket. -reconfigure because the bucket name follows the signed-in account. A leftover

@@ -35,6 +35,9 @@ vi.mock("swr", () => ({ mutate: mutateMock }));
 const { enqueueSnackbarMock } = vi.hoisted(() => ({ enqueueSnackbarMock: vi.fn() }));
 vi.mock("@/lib/hooks/useAppSnackbar", () => ({ useAppSnackbar: () => ({ enqueueSnackbar: enqueueSnackbarMock }) }));
 
+const { processingPausedMock } = vi.hoisted(() => ({ processingPausedMock: vi.fn(() => false) }));
+vi.mock("@/lib/hooks/useProcessingPaused", () => ({ useProcessingPaused: processingPausedMock }));
+
 // jsdom has no object URLs.
 URL.createObjectURL = vi.fn(() => "blob:preview");
 URL.revokeObjectURL = vi.fn();
@@ -60,6 +63,7 @@ function fillName(value: string) {
 describe("NewSplatForm", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    processingPausedMock.mockReturnValue(false);
     apiFetchMock.mockImplementation(async (path: string) => (path === "/api/v1/splats" ? { id: "new-splat-1" } : {}));
     uploadPhotosMock.mockResolvedValue(undefined);
     getTokenMock.mockResolvedValue("test-token");
@@ -333,5 +337,21 @@ describe("NewSplatForm", () => {
       variant: "error",
       detail: "Need at least 20 uploaded photos, have 1",
     });
+  });
+
+  it("warns while processing is paused, and uploads without trying to start", async () => {
+    processingPausedMock.mockReturnValue(true);
+    render(<NewSplatForm />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("Processing is paused for the whole site.");
+
+    fillName("Coffee mug");
+    await addPhotos("a.jpg");
+    fireEvent.click(screen.getByRole("button", { name: "Upload" }));
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/splats/new-splat-1"));
+    expect(uploadPhotosMock).toHaveBeenCalled();
+    expect(apiFetchMock).not.toHaveBeenCalledWith("/api/v1/splats/new-splat-1/process", "POST", "test-token");
+    expect(enqueueSnackbarMock).not.toHaveBeenCalled();
   });
 });

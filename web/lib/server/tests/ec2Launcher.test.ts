@@ -14,14 +14,8 @@ vi.mock("node:child_process", () => ({ spawn: spawnMock }));
 vi.mock("node:fs", () => ({ mkdirSync: vi.fn(), openSync: vi.fn(() => 0) }));
 
 import type { CropBox } from "@/lib/types";
-import {
-  describeWorker,
-  generateCallbackToken,
-  launchJob,
-  launchJobLocal,
-  terminateWorker,
-  WORKER_MAX_LIFETIME_MINUTES,
-} from "../ec2Launcher";
+import { describeWorker, generateCallbackToken, launchJob, launchJobLocal, terminateWorker } from "../ec2Launcher";
+import type { RuntimeSettings } from "../runtimeSettings";
 
 // aws-sdk-client-mock is a call stub with no simulated EC2 state, so these assert on the arguments RunInstances
 // received rather than on state after.
@@ -62,6 +56,19 @@ describe("launchJob", () => {
     stage: "reconstruct" as const,
     workerImageUri: "123456789012.dkr.ecr.us-east-1.amazonaws.com/worker:latest",
     ecrRegistry: "123456789012.dkr.ecr.us-east-1.amazonaws.com",
+    // Values unlike the settings' defaults, so a test fails if the launcher ignores them for its own.
+    settings: {
+      processingEnabled: true,
+      maxJobsPerDay: 20,
+      uploadsPerIpPerHour: 5,
+      uploadsPerUserPerDay: 3,
+      minPhotosPerSplat: 20,
+      workerMaxLifetimeMinutes: 45,
+      reconstructInstanceType: "g6.xlarge",
+      trainInstanceType: "g6e.xlarge",
+      trainingIterations: 7000,
+      showcaseClerkUserId: null,
+    } satisfies RuntimeSettings,
   };
 
   it("returns the launched instance ID", async () => {
@@ -69,7 +76,7 @@ describe("launchJob", () => {
     await expect(launchJob(params)).resolves.toBe("i-0abc123");
   });
 
-  it("tags the instance with JobId and Role=worker", async () => {
+  it("tags the instance with JobId, Role=worker and its own lifetime ceiling", async () => {
     ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
     await launchJob(params);
 
@@ -81,6 +88,9 @@ describe("launchJob", () => {
     expect(byKey.Role).toBe("worker");
     expect(byKey.JobId).toBe("job-123");
     expect(byKey.Name).toBe("ai-gaussian-splatter-worker-job-123");
+
+    // infra/lambda/worker_sweeper.py and web/lib/server/reconcileJob.ts judge the instance by this, not by the setting.
+    expect(byKey.MaxLifetimeMinutes).toBe("45");
   });
 
   it("requests a one-time spot instance that terminates on shutdown", async () => {
@@ -93,13 +103,25 @@ describe("launchJob", () => {
     expect(input.InstanceInitiatedShutdownBehavior).toBe("terminate");
   });
 
-  it("launches each stage on its own instance type", async () => {
+  it("launches each stage on its own instance type from the settings", async () => {
     ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
     await launchJob(params);
     await launchJob({ ...params, stage: "train" });
 
     const calls = ec2Mock.commandCalls(RunInstancesCommand);
-    expect(calls.map(call => call.args[0].input.InstanceType)).toEqual(["g4dn.xlarge", "g5.xlarge"]);
+    expect(calls.map(call => call.args[0].input.InstanceType)).toEqual(["g6.xlarge", "g6e.xlarge"]);
+  });
+
+  it("passes the training iterations to a train stage only", async () => {
+    ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
+    await launchJob({ ...params, stage: "train" });
+    await launchJob(params);
+
+    const [train, reconstruct] = ec2Mock
+      .commandCalls(RunInstancesCommand)
+      .map(call => Buffer.from(call.args[0].input.UserData ?? "", "base64").toString());
+    expect(train).toContain("-e TRAINING_ITERATIONS=7000 \\\n");
+    expect(reconstruct).not.toContain("TRAINING_ITERATIONS");
   });
 
   it("lets the worker container reach IMDS, two hops away", async () => {
@@ -158,7 +180,7 @@ describe("launchJob", () => {
     expect(shutdownLine).toBeLessThan(dockerLoginLine);
 
     // Under set -e, a failed shutdown with no fallback would exit before the job and leave no ceiling scheduled.
-    expect(userData).toContain(`shutdown -h +${WORKER_MAX_LIFETIME_MINUTES} || poweroff -f`);
+    expect(userData).toContain("shutdown -h +45 || poweroff -f");
   });
 
   it("stamps the boot time once user-data starts and passes it to the worker", async () => {
@@ -211,6 +233,13 @@ describe("launchJobLocal", () => {
     expect(args).toEqual(expect.arrayContaining(["-e", "STAGE=reconstruct"]));
   });
 
+  it("passes the training iterations when given", () => {
+    launchJobLocal({ ...params, trainingIterations: 7000 });
+
+    const [, args] = spawnMock.mock.calls[0];
+    expect(args).toEqual(expect.arrayContaining(["-e", "TRAINING_ITERATIONS=7000"]));
+  });
+
   it("passes a crop box to the worker container as JSON, only when one is set", () => {
     launchJobLocal({ ...params, cropBox: { center: [1, 2, 3], size: [4, 5, 6], quaternion: [0, 0, 0, 1] } });
     launchJobLocal(params);
@@ -260,13 +289,37 @@ describe("terminateWorker", () => {
 });
 
 describe("describeWorker", () => {
-  it("returns the instance's state and launch time", async () => {
+  it("returns the instance's state, launch time and lifetime ceiling", async () => {
     const launchTime = new Date("2026-01-01T10:00:00Z");
-    ec2Mock
-      .on(DescribeInstancesCommand, { InstanceIds: ["i-0abc123"] })
-      .resolves({ Reservations: [{ Instances: [{ State: { Name: "running" }, LaunchTime: launchTime }] }] });
+    ec2Mock.on(DescribeInstancesCommand, { InstanceIds: ["i-0abc123"] }).resolves({
+      Reservations: [
+        {
+          Instances: [
+            {
+              State: { Name: "running" },
+              LaunchTime: launchTime,
+              Tags: [{ Key: "MaxLifetimeMinutes", Value: "45" }],
+            },
+          ],
+        },
+      ],
+    });
 
-    expect(await describeWorker("i-0abc123")).toEqual({ state: "running", launchTime });
+    expect(await describeWorker("i-0abc123")).toEqual({ state: "running", launchTime, maxLifetimeMinutes: 45 });
+  });
+
+  it("reports no ceiling for an instance whose lifetime tag is missing or doesn't parse", async () => {
+    const launchTime = new Date("2026-01-01T10:00:00Z");
+    const instance = { State: { Name: "running" as const }, LaunchTime: launchTime };
+    ec2Mock
+      .on(DescribeInstancesCommand)
+      .resolvesOnce({ Reservations: [{ Instances: [instance] }] })
+      .resolvesOnce({
+        Reservations: [{ Instances: [{ ...instance, Tags: [{ Key: "MaxLifetimeMinutes", Value: "x" }] }] }],
+      });
+
+    expect((await describeWorker("i-0abc123"))?.maxLifetimeMinutes).toBeNull();
+    expect((await describeWorker("i-0abc123"))?.maxLifetimeMinutes).toBeNull();
   });
 
   it("returns null for an instance EC2 no longer knows about", async () => {

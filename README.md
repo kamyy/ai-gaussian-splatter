@@ -77,6 +77,7 @@ The app is public, and every splat costs real GPU time, so spending is bounded a
 - **Runaway instances get killed.** Each worker instance schedules its own shutdown at boot, and a sweeper Lambda terminates any that outlive the ceiling anyway.
 - **Rate limits** per IP and per user, plus a global daily cap on worker instance launches.
 - **Upload limits** on photo count and size. S3 itself enforces the size, since it's signed into each upload URL.
+- **A site-wide switch** pauses all GPU processing within a minute, with no deploy.
 - **An AWS Budget** alerts on any spend the request path never sees.
 
 ---

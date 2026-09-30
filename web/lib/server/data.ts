@@ -16,6 +16,7 @@ import { getDb } from "./db";
 import { jobs, photos, splats, users } from "./db/schema";
 import { getEnv } from "./env";
 import { isUuid } from "./httpError";
+import { getRuntimeSettings } from "./runtimeSettings";
 
 // The landing page has no pager, so this is every example it shows.
 const EXAMPLE_LIMIT = 8;
@@ -63,12 +64,12 @@ async function findExampleSplatRows(ownerClerkUserId: string): Promise<{ id: str
 
 // True only for a splat the landing page lists, so an older showcase splat that has dropped off the list isn't indexed.
 async function isExampleSplat(splatId: string, ownerClerkUserId: string): Promise<boolean> {
-  const { SHOWCASE_CLERK_USER_ID } = getEnv();
-  if (!SHOWCASE_CLERK_USER_ID || ownerClerkUserId !== SHOWCASE_CLERK_USER_ID) {
+  const { showcaseClerkUserId } = await getRuntimeSettings();
+  if (showcaseClerkUserId === null || ownerClerkUserId !== showcaseClerkUserId) {
     return false;
   }
 
-  const rows = await findExampleSplatRows(SHOWCASE_CLERK_USER_ID);
+  const rows = await findExampleSplatRows(showcaseClerkUserId);
 
   return rows.some(row => row.id === splatId);
 }

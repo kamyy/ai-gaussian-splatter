@@ -2,7 +2,9 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { describeWorkerMock, terminateWorkerMock } = vi.hoisted(() => ({
-  describeWorkerMock: vi.fn(async (_id: string): Promise<{ state: string; launchTime: Date } | null> => null),
+  describeWorkerMock: vi.fn(
+    async (_id: string): Promise<{ state: string; launchTime: Date; maxLifetimeMinutes: number | null } | null> => null,
+  ),
   terminateWorkerMock: vi.fn(async (_id: string) => {}),
 }));
 vi.mock("@/lib/server/ec2Launcher", async importOriginal => {
@@ -18,7 +20,6 @@ vi.mock("@/lib/server/ec2Launcher", async importOriginal => {
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { jobs, splats, users } from "@/lib/server/db/schema";
-import { WORKER_MAX_LIFETIME_MINUTES } from "@/lib/server/ec2Launcher";
 import type { JobStatus } from "@/lib/statuses";
 import { reconcileJob } from "../reconcileJob";
 
@@ -73,7 +74,11 @@ describe("reconcileJob", () => {
 
   it("leaves a quiet job alone while its instance is running inside the ceiling", async () => {
     const job = await seed("reconstruction_running", 30);
-    describeWorkerMock.mockResolvedValueOnce({ state: "running", launchTime: new Date(Date.now() - 20 * MINUTE) });
+    describeWorkerMock.mockResolvedValueOnce({
+      state: "running",
+      launchTime: new Date(Date.now() - 20 * MINUTE),
+      maxLifetimeMinutes: 30,
+    });
 
     expect(await reconcileJob(job)).toBe(false);
     expect((await statuses()).job).toBe("reconstruction_running");
@@ -81,7 +86,11 @@ describe("reconcileJob", () => {
 
   it("fails a job whose instance has terminated", async () => {
     const job = await seed("training_running", 30);
-    describeWorkerMock.mockResolvedValueOnce({ state: "terminated", launchTime: new Date(Date.now() - 40 * MINUTE) });
+    describeWorkerMock.mockResolvedValueOnce({
+      state: "terminated",
+      launchTime: new Date(Date.now() - 40 * MINUTE),
+      maxLifetimeMinutes: 30,
+    });
 
     expect(await reconcileJob(job)).toBe(true);
     expect(await statuses()).toEqual({
@@ -100,11 +109,12 @@ describe("reconcileJob", () => {
     expect((await statuses()).job).toBe("failed");
   });
 
-  it("terminates an instance running past the ceiling and fails its job", async () => {
+  it("terminates an instance running past its own ceiling and fails its job", async () => {
     const job = await seed("training_running", 30);
     describeWorkerMock.mockResolvedValueOnce({
       state: "running",
-      launchTime: new Date(Date.now() - (WORKER_MAX_LIFETIME_MINUTES + 30) * MINUTE),
+      launchTime: new Date(Date.now() - 60 * MINUTE),
+      maxLifetimeMinutes: 30,
     });
 
     expect(await reconcileJob(job)).toBe(true);
@@ -114,6 +124,30 @@ describe("reconcileJob", () => {
       splat: "failed",
       errorMessage: "The worker ran past its time limit and was stopped.",
     });
+  });
+
+  it("leaves an instance inside the longer ceiling it was launched with", async () => {
+    const job = await seed("training_running", 30);
+    describeWorkerMock.mockResolvedValueOnce({
+      state: "running",
+      launchTime: new Date(Date.now() - 60 * MINUTE),
+      maxLifetimeMinutes: 90,
+    });
+
+    expect(await reconcileJob(job)).toBe(false);
+    expect(terminateWorkerMock).not.toHaveBeenCalled();
+  });
+
+  it("gives an instance with no lifetime tag the longest ceiling the setting allows", async () => {
+    const job = await seed("training_running", 30);
+    describeWorkerMock.mockResolvedValueOnce({
+      state: "running",
+      launchTime: new Date(Date.now() - 200 * MINUTE),
+      maxLifetimeMinutes: null,
+    });
+
+    expect(await reconcileJob(job)).toBe(false);
+    expect(terminateWorkerMock).not.toHaveBeenCalled();
   });
 
   it("leaves a job awaiting training alone, since no instance runs then", async () => {
@@ -127,7 +161,7 @@ describe("reconcileJob", () => {
     const job = await seed("reconstruction_running", 30);
     describeWorkerMock.mockImplementationOnce(async () => {
       await getDb().update(jobs).set({ status: "awaiting_training" }).where(eq(jobs.id, job.id));
-      return { state: "shutting-down", launchTime: new Date(Date.now() - 20 * MINUTE) };
+      return { state: "shutting-down", launchTime: new Date(Date.now() - 20 * MINUTE), maxLifetimeMinutes: 30 };
     });
 
     expect(await reconcileJob(job)).toBe(false);

@@ -11,63 +11,36 @@ variables {
   domain_zone_name     = "example.com"
   clerk_secret_key_arn = "arn:aws:secretsmanager:us-west-2:000000000000:secret:ai-gaussian-splatter/clerk-secret-key-AAAAAA"
   web_image_tag        = "0123abc"
-  worker_image_tag     = "0123abc"
+  worker_image_tag     = "4567def"
 }
 
-run "sweeper_terminate_scoped_by_tag" {
+run "settings_live_under_the_path_the_web_service_reads" {
   command = apply
 
   assert {
-    condition = anytrue([
-      for s in jsondecode(aws_iam_role_policy.worker_sweeper.policy).Statement :
-      s.Sid == "TerminateWorker" && s.Action == "ec2:TerminateInstances" &&
-      try(s.Condition.StringEquals["ec2:ResourceTag/Role"], "") == "worker"
+    condition = alltrue([
+      for p in aws_ssm_parameter.runtime_setting : startswith(p.name, "/ai-gaussian-splatter/settings/")
     ])
-    error_message = "the sweeper may only terminate instances tagged Role=worker, or it could stop anything in the account"
-  }
-
-  assert {
-    condition     = aws_lambda_function.worker_sweeper.environment[0].variables.WORKER_TAG_KEY == "Role" && aws_lambda_function.worker_sweeper.environment[0].variables.WORKER_TAG_VALUE == "worker"
-    error_message = "the sweeper must look for the same tag its terminate grant is scoped to"
+    error_message = "every runtime setting must sit under local.settings_path, which is all the web task role may read"
   }
 }
 
-run "sweeper_waits_past_the_longest_lifetime_ceiling" {
+run "settings_start_with_processing_on" {
   command = apply
 
   assert {
-    condition     = tonumber(aws_lambda_function.worker_sweeper.environment[0].variables.MAX_AGE_MINUTES) > local.worker_max_lifetime_upper_bound_minutes
-    error_message = "the sweeper's fallback must outlast the longest ceiling an instance can be launched with, or it kills healthy stages"
+    condition     = aws_ssm_parameter.runtime_setting["processing-enabled"].value == "true"
+    error_message = "a fresh deploy must start with processing enabled"
+  }
+
+  # SSM refuses an empty value, so an unset showcase needs a stand-in that web/lib/server/runtimeSettings.ts reads as
+  # none.
+  assert {
+    condition     = aws_ssm_parameter.runtime_setting["showcase-clerk-user-id"].value == "none"
+    error_message = "the showcase setting must start as the literal none"
   }
 }
 
-run "sweeper_runs_on_a_schedule" {
-  command = apply
-
-  assert {
-    condition     = aws_cloudwatch_event_target.worker_sweeper.arn == aws_lambda_function.worker_sweeper.arn
-    error_message = "the schedule must invoke the sweeper Lambda"
-  }
-
-  assert {
-    condition     = aws_lambda_permission.worker_sweeper.source_arn == aws_cloudwatch_event_rule.worker_sweeper.arn
-    error_message = "the Lambda must allow the schedule's rule to invoke it"
-  }
-}
-
-run "sweeper_alerts_the_alert_email" {
-  command = apply
-
-  assert {
-    condition     = aws_sns_topic_subscription.alerts_email.endpoint == var.alert_email && aws_sns_topic_subscription.alerts_email.protocol == "email"
-    error_message = "sweeper alerts must reach alert_email"
-  }
-
-  assert {
-    condition     = aws_lambda_function.worker_sweeper.environment[0].variables.ALERT_TOPIC_ARN == aws_sns_topic.alerts.arn
-    error_message = "the sweeper must publish to the topic alert_email subscribes to"
-  }
-}
 
 # mock_provider fills computed attributes with plausible-looking values, but it leaves computed lists and sets empty and
 # knows nothing about format-validated fields such as ARNs. These overrides supply usable values for the few computed

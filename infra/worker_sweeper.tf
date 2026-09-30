@@ -1,8 +1,9 @@
 # The sweeper: a scheduled Lambda that terminates overdue worker instances.
 #
-# It runs every 10 minutes, terminates any worker instance older than the lifetime ceiling, and emails alert_email the
-# list. It backstops the `shutdown -h` each instance schedules for itself in user-data (web/lib/server/ec2Launcher.ts),
-# which never gets scheduled when cloud-init itself fails to run.
+# It runs every 10 minutes, terminates any worker instance older than its own lifetime ceiling, and emails alert_email
+# the list. Each instance carries its ceiling as a MaxLifetimeMinutes tag set at launch. It backstops the `shutdown -h`
+# each instance schedules for itself in user-data (web/lib/server/ec2Launcher.ts), which never gets scheduled when
+# cloud-init itself fails to run.
 #
 # The email subscription below needs a one-time confirmation click before anything is delivered (RUNBOOK.md).
 
@@ -87,9 +88,10 @@ resource "aws_lambda_function" "worker_sweeper" {
 
   environment {
     variables = {
-      # The grace over the ceiling covers boot, since the ceiling counts from when user-data runs rather than from
-      # launch. web/lib/server/reconcileJob.ts allows the same.
-      MAX_AGE_MINUTES  = tostring(local.worker_max_lifetime_minutes + 15)
+      # The most the sweeper waits for any instance, and its wait for one without a MaxLifetimeMinutes tag. The grace
+      # over the ceiling covers boot, since the ceiling counts from when user-data runs rather than from launch.
+      # web/lib/server/reconcileJob.ts allows the same.
+      MAX_AGE_MINUTES  = tostring(local.worker_max_lifetime_upper_bound_minutes + 15)
       WORKER_TAG_KEY   = local.worker_tag_key
       WORKER_TAG_VALUE = local.worker_tag_value
       ALERT_TOPIC_ARN  = aws_sns_topic.alerts.arn

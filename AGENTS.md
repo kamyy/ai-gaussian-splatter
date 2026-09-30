@@ -85,7 +85,7 @@ Monorepo, three independent packages:
 
 - `web/` — Next.js 16 (App Router) + Tailwind CSS + SWR + Zustand + React Three Fiber, **and** the REST API as Route Handlers under `app/api/v1/` backed by Drizzle.
 - `worker/` — COLMAP + gsplat pipeline, runs on an EC2 GPU spot instance per worker-job stage.
-- `infra/` — Terraform. Network, registry, data, worker IAM, worker sweeper, web, and budgets in separate `.tf` files, one state.
+- `infra/` — Terraform. Network, registry, data, worker IAM, worker sweeper, web, settings, and budgets in separate `.tf` files, one state.
 
 Server-only code lives in `web/lib/server/` — never import it from a `"use client"` file. Modules directly under `web/lib/` are client-safe and shared with the server. `web/lib/statuses.ts` holds the status-value tuples that `web/lib/server/db/schema.ts` hands to Drizzle `pgEnum`s, so import runs statuses → schema, never the reverse.
 
@@ -291,8 +291,9 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 - **Local pipeline runs are a Podman container: they need an NVIDIA GPU, the NVIDIA driver, and `nvidia-container-toolkit`.**
   - The CUDA runtime lives in both worker images. COLMAP lives in `worker/Dockerfile`'s `reconstruct` target and gsplat in its `train` target. Don't install any of them on the host. `worker/Dockerfile` compiles gsplat's kernels in a build stage, so neither shipped image carries `nvcc`.
   - Setup and the run scripts are in [`RUNBOOK.md`](RUNBOOK.md#14-worker-local-pipeline-run).
-- **The worker lifetime ceiling is written twice: `WORKER_MAX_LIFETIME_MINUTES` in `web/lib/server/ec2Launcher.ts` and `worker_max_lifetime_minutes` in `infra/locals.tf`.** Change both together.
-  - The sweeper Lambda (`infra/worker_sweeper.tf`) terminates any worker instance older than the `infra/` value plus 15 minutes. Raising only the web value lets it kill healthy stages that the new ceiling allows.
+- **Each worker instance carries its own lifetime ceiling as a `MaxLifetimeMinutes` tag, which the sweeper Lambda (`infra/lambda/worker_sweeper.py`) and `web/lib/server/reconcileJob.ts` read.** The tag key is written in `web/lib/server/ec2Launcher.ts` and in the sweeper, so change both together.
+  - The sweeper never waits longer than `worker_max_lifetime_upper_bound_minutes` (`infra/locals.tf`) plus 15 minutes, whatever the tag says. Keep that local at or above the largest ceiling `web/lib/server/runtimeSettings.ts` accepts, or the sweeper kills healthy stages the setting allows.
+- **A train instance type needs a GPU that `worker/Dockerfile`'s `TORCH_CUDA_ARCH_LIST` covers.** Adding one to the `train-instance-type` allow-list in `web/lib/server/runtimeSettings.ts` means checking that list, then adding it to `scripts/prod/ssm-set.sh` too.
 - **The worker container is two hops from IMDS, so `RunInstances` sets `HttpPutResponseHopLimit: 2`** (`web/lib/server/ec2Launcher.ts`).
   - At EC2's default of 1 the token PUT in `worker/pipeline/instance.py` gets no reply, `get_self_instance_id()` returns `None`, and the instance never terminates itself — logging one INFO line indistinguishable from a local run while a GPU instance keeps billing.
   - `HttpTokens: "required"` is paired with it and depends on it: on its own it removes the IMDSv1 fallback and breaks credentials too, not just self-termination.
@@ -308,7 +309,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 
 ### 9.1 Structure & state
 
-- **All of `infra/` shares one state**, with its seven logical areas (network, registry, data, worker IAM, worker sweeper, web, budgets) split across separate `.tf` files for readability ([Infra](ARCHITECTURE.md#8-infra)). Nothing references another file by name, only by resource address in that one state, so moving a resource between files or renaming an area is a file-organization change only.
+- **All of `infra/` shares one state**, with its eight logical areas (network, registry, data, worker IAM, worker sweeper, web, settings, budgets) split across separate `.tf` files for readability ([Infra](ARCHITECTURE.md#8-infra)). Nothing references another file by name, only by resource address in that one state, so moving a resource between files or renaming an area is a file-organization change only.
 - **Never add the state bucket as a resource in `infra/`.** Skip creating it ([Creating account prerequisites](RUNBOOK.md#22-creating-account-prerequisites)) and `terraform init` fails.
 - **`infra/tests/*.tftest.hcl` run fully offline via `mock_provider "aws" {}`.**
   - Every file needs two `mock_provider "aws"` blocks — one default, one `alias = "billing"` — since a bare `mock_provider "aws" {}` only covers the unaliased provider configuration and `providers.tf` declares a second one for `us-east-1`.
@@ -385,6 +386,8 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - `terraform validate` and `terraform test` (`mock_provider`) never touch real AWS, so required variables (`worker_ami_id`, `alert_email`, `domain_zone_name`, `hosted_zone_id`, `clerk_secret_key_arn`, `web_image_tag`, `worker_image_tag`) simply have no default in `infra/variables.tf`. CI's `infra` job never has to supply one.
   - A real `terraform plan`/`apply` fails immediately when one is unset.
   - `.github/workflows/deploy.yml` maps each from a GitHub repository variable, though, and an unset repository variable arrives as `""`, which Terraform accepts as a value. There only a `validation` block catches it, so every required variable has one that rejects `""`. Give any new required variable one too.
+- **Editing an initial value in `local.runtime_settings` (`infra/locals.tf`) changes nothing on an existing stack.** `infra/settings.tf` ignores later changes to each parameter's value, so an apply never resets a tuned setting. Change a live value with `scripts/prod/ssm-set.sh` ([Tuning runtime settings](RUNBOOK.md#210-tuning-runtime-settings)).
+- **The runtime settings' env vars (`MAX_JOBS_PER_DAY`, `PROCESSING_ENABLED`, …) only apply where `RUNTIME_SETTINGS_PATH` is unset.** The ECS task sets it, so in production those env vars are ignored and SSM is the only source. Local dev and the tests leave it unset.
 - **`var.aws_region`'s default in `infra/variables.tf` is the only place the region is written.** `scripts/lib/terraform.sh`'s `tf_get_aws_region` reads it, and every AWS CLI call in `scripts/` plus the `Resolve region` step in `.github/workflows/deploy.yml` take it from there.
   - Two places keep their own copy, neither of which reaches AWS. `scripts/dev/create-resources.sh` uses `web/.env`'s own `AWS_REGION`, so the dev buckets match the region `web/lib/server/env.ts` signs upload URLs for; a new `web/.env` is seeded from the same default. `.github/workflows/ci.yml`'s web job sets it as a fixture beside `AWS_ACCESS_KEY_ID: testing`.
   - The Budgets provider (`infra/budgets.tf`) stays pinned to `us-east-1` — see [Stack construction](#96-stack-construction).
@@ -472,7 +475,7 @@ Scaffolding (three packages + CI) is in place. Host-run `next dev` can 500 with 
 Known gaps, priority order:
 
 1. **No E2E coverage.** `web/e2e/` has no specs; share/view pages SSR from the DB with no seeded test DB to run against. Seed one and add a spec.
-2. **The worker's lifetime ceiling is a guess.** `WORKER_MAX_LIFETIME_MINUTES`'s 30 minutes hasn't been measured against a real worker job's wall clock.
+2. **The worker's lifetime ceiling is a guess.** The `worker-max-lifetime-minutes` setting's default of 30 minutes hasn't been measured against a real worker job's wall clock.
    - A legitimately slow stage that runs past it is terminated and failed exactly like a hang.
    - When the instance's own shutdown fires, no one is emailed. The sweeper only emails about instances whose own shutdown never fired ([Compute](ARCHITECTURE.md#3-compute)).
 3. **A well-formed but wrong `alert_email` still deploys green.**

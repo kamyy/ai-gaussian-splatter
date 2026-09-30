@@ -336,19 +336,27 @@ run "hostnames_follow_the_zone_variable" {
   }
 }
 
-run "showcase_user_reaches_the_web_container" {
+run "web_service_reads_the_runtime_settings" {
   command = apply
-
-  variables {
-    showcase_clerk_user_id = "user_showcase"
-  }
 
   assert {
     condition = anytrue([
       for e in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].environment :
-      e.name == "SHOWCASE_CLERK_USER_ID" && e.value == "user_showcase"
+      e.name == "RUNTIME_SETTINGS_PATH" && e.value == "/ai-gaussian-splatter/settings"
     ])
-    error_message = "SHOWCASE_CLERK_USER_ID must carry var.showcase_clerk_user_id, or the landing page shows no examples"
+    error_message = "RUNTIME_SETTINGS_PATH must name local.settings_path, or the web service runs on its fallbacks"
+  }
+
+  # Scoped to the settings path, so the task role can't read any other parameter in the account.
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.task.policy).Statement :
+      s.Sid == "RuntimeSettingsRead" && s.Action == "ssm:GetParametersByPath" && toset(s.Resource) == toset([
+        "arn:aws:ssm:us-west-2:000000000000:parameter/ai-gaussian-splatter/settings",
+        "arn:aws:ssm:us-west-2:000000000000:parameter/ai-gaussian-splatter/settings/*",
+      ])
+    ])
+    error_message = "the task role must read exactly the settings path, or runtimeSettings.ts can't load and processing stays off"
   }
 }
 

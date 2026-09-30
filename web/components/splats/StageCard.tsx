@@ -3,7 +3,8 @@
  *
  * Each stage of a splat (no photos, ready to process, placing the cameras, waiting for the visitor's check, building,
  * failed, cancelled) has its own heading, explanation and buttons, such as starting processing, building the splat, or
- * stopping a run. While the splat builds, it shows a progress bar with a time estimate.
+ * stopping a run. While the splat builds, it shows a progress bar with a time estimate. While processing is paused for
+ * the whole site, every button that starts a run is disabled with a notice saying why.
  */
 
 "use client";
@@ -16,9 +17,11 @@ import { mutate } from "swr";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { apiFetch } from "@/lib/apiFetch";
 import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
+import { useProcessingPaused } from "@/lib/hooks/useProcessingPaused";
 import { requireToken } from "@/lib/requireToken";
 import type { Stage } from "@/lib/splatStage";
 import type { CropBox, Job } from "@/lib/types";
+import { ProcessingPausedNotice } from "./ProcessingPausedNotice";
 import { DeleteSplatButton, StopJobButton } from "./SplatActions";
 import { StageShell } from "./StageShell";
 
@@ -86,6 +89,7 @@ function ProgressBar({ label, percent, startedAt }: { label: string; percent: nu
 export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: StageCardProps) {
   const { getToken } = useAuth();
   const { enqueueSnackbar } = useAppSnackbar();
+  const processingPaused = useProcessingPaused();
   const [pending, setPending] = useState(false);
 
   async function post(path: "process" | "train", failure: string, body?: unknown) {
@@ -96,6 +100,10 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
       await mutate("splats");
     } catch (err) {
       enqueueSnackbar(failure, { variant: "error", detail: err instanceof Error ? err.message : undefined });
+
+      // The failure may be processing having just been paused. Refetching now shows the notice and disables this button
+      // straight away, rather than at the next minute's poll.
+      await mutate("processing");
     } finally {
       setPending(false);
     }
@@ -104,6 +112,16 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
   const startProcessing = () => post("process", "Couldn't start processing");
   const startTraining = () => post("train", "Couldn't start building", cropBox ? { cropBox } : {});
   const discardButton = <DeleteSplatButton splatId={splatId} label="Discard" variant="outlined" />;
+
+  // The start and build buttons are disabled with it, so a paused site is explained rather than just unclickable.
+  let pausedNotice: React.ReactNode = null;
+  if (processingPaused) {
+    pausedNotice = (
+      <ProcessingPausedNotice>
+        Processing is paused for the whole site. This splat can&apos;t go on until processing is turned back on.
+      </ProcessingPausedNotice>
+    );
+  }
 
   switch (stage.kind) {
     case "no_photos":
@@ -122,8 +140,9 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
       return (
         <StageShell title="Ready to start">
           <p>The next step places the cameras: working out where each photo was taken from.</p>
+          {pausedNotice}
           <div className="flex flex-wrap gap-2">
-            <Button variant="contained" onClick={startProcessing} loading={pending}>
+            <Button variant="contained" onClick={startProcessing} loading={pending} disabled={processingPaused}>
               Start
             </Button>
             {discardButton}
@@ -152,8 +171,9 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
             jumble, re-shoot with more overlap between photos.
           </p>
           <p>To leave out the background, turn on Crop in the 3D view and fit the box around your object.</p>
+          {pausedNotice}
           <div className="flex flex-wrap gap-2">
-            <Button variant="contained" onClick={startTraining} loading={pending}>
+            <Button variant="contained" onClick={startTraining} loading={pending} disabled={processingPaused}>
               Looks right, build it
             </Button>
             {discardButton}
@@ -199,8 +219,9 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
         <StageShell title="Something went wrong" tone="error">
           <p>{stage.message ?? "Processing stopped before it finished."}</p>
           {reshootHint}
+          {pausedNotice}
           <div className="flex flex-wrap gap-2">
-            <Button variant="contained" onClick={startProcessing} loading={pending}>
+            <Button variant="contained" onClick={startProcessing} loading={pending} disabled={processingPaused}>
               Try again
             </Button>
             {discardButton}
@@ -212,8 +233,9 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
       return (
         <StageShell title="Cancelled">
           <p>Processing was stopped before it finished.</p>
+          {pausedNotice}
           <div className="flex flex-wrap gap-2">
-            <Button variant="contained" onClick={startProcessing} loading={pending}>
+            <Button variant="contained" onClick={startProcessing} loading={pending} disabled={processingPaused}>
               Start again
             </Button>
             {discardButton}

@@ -16,6 +16,7 @@ Why the system is shaped this way: decisions, alternatives rejected, costs accep
   - [9.2 Networking](#92-networking)
   - [9.3 TLS & DNS](#93-tls--dns)
   - [9.4 Clerk secret](#94-clerk-secret)
+  - [9.5 Runtime settings](#95-runtime-settings)
 - [10. Abuse protection](#10-abuse-protection)
 - [11. CI/CD](#11-cicd)
   - [11.1 Image tags](#111-image-tags)
@@ -60,13 +61,13 @@ The "AI" here is per-object gradient descent through a differentiable rasterizer
 
 ## 3. Compute
 
-- Each stage of a worker job — reconstruct, then train — gets its own EC2 GPU **spot** instance (`web/lib/server/ec2Launcher.ts`). Reconstruct runs on a `g4dn.xlarge` (`WORKER_RECONSTRUCT_INSTANCE_TYPE`) and train on a `g5.xlarge` (`WORKER_TRAIN_INSTANCE_TYPE`). Each instance runs the worker container, then self-terminates on success or failure.
+- Each stage of a worker job — reconstruct, then train — gets its own EC2 GPU **spot** instance (`web/lib/server/ec2Launcher.ts`). Reconstruct runs on a `g4dn.xlarge` and train on a `g5.xlarge` by default. Both are runtime settings ([Runtime settings](#95-runtime-settings)). Each instance runs the worker container, then self-terminates on success or failure.
 - Reconstruct is mostly COLMAP's CPU-bound `mapper`, so it gets little from the A10G GPU. A `g4dn.xlarge` has the same 4 vCPUs at about half the hourly price, and its T4 GPU still runs COLMAP's feature extraction and matching. Neither stage's instance type has been timed against the other (M10).
-- Fallback if a worker dies without reporting: `web/lib/server/ec2Launcher.ts` schedules `shutdown -h +WORKER_MAX_LIFETIME_MINUTES` as the first thing user-data does.
+- Fallback if a worker dies without reporting: `web/lib/server/ec2Launcher.ts` schedules `shutdown -h` at the instance's lifetime ceiling as the first thing user-data does. The ceiling is the `worker-max-lifetime-minutes` runtime setting at launch, and the instance carries it as a `MaxLifetimeMinutes` tag.
   - It runs before the failure-prone steps (ECR login, `docker run`) that could otherwise leave `worker/pipeline/instance.py`'s own self-terminate unreached.
   - `InstanceInitiatedShutdownBehavior = "terminate"` on the launch makes that shutdown terminate the instance rather than stop it.
   - If scheduling the shutdown fails, user-data powers the instance off immediately rather than run the stage without a ceiling. Losing one worker job costs less than a GPU instance billing with no bound.
-- A sweeper Lambda (`infra/worker_sweeper.tf`) enforces the same ceiling from outside the instance. Every 10 minutes it terminates any worker instance older than the ceiling plus 15 minutes, and emails `alert_email` the list through an SNS (Simple Notification Service) topic.
+- A sweeper Lambda (`infra/worker_sweeper.tf`) enforces the same ceiling from outside the instance. Every 10 minutes it terminates any worker instance older than its own tagged ceiling plus 15 minutes, and emails `alert_email` the list through an SNS (Simple Notification Service) topic.
   - It catches an instance whose cloud-init never ran, so the user-data shutdown was never scheduled.
   - It is a Lambda rather than a CloudWatch alarm because EC2 publishes no instance-age metric to alarm on.
 - The splat page's job poll is what moves a dead worker's job to `failed`, since that worker never calls back. Once a job has gone 15 minutes without a callback, `web/lib/server/reconcileJob.ts` looks up its instance.
@@ -182,13 +183,14 @@ flowchart LR
 ```
 
 - Infra: **Terraform**. One configuration (`infra/`) holding one state. The S3 bucket that state lives in is created by hand ([Creating account prerequisites](RUNBOOK.md#22-creating-account-prerequisites)). `terraform init` needs the bucket before any apply. Managing it inside `infra/` would store state in a bucket `infra/` also owns. A second Terraform module with its own local state was rejected.
-- Seven logical areas, one per `.tf` file, rather than one CloudFormation-style stack each. A single state resolves the dependencies between them directly, so there's no cross-stack export/import to keep in sync:
+- Eight logical areas, one per `.tf` file, rather than one CloudFormation-style stack each. A single state resolves the dependencies between them directly, so there's no cross-stack export/import to keep in sync:
   - **network** — VPC, subnets, security groups.
   - **data** — RDS, S3.
   - **registry** — ECR alone, so the image can push before the service exists.
   - **worker_iam** — IAM for the GPU worker instances.
   - **worker_sweeper** — the scheduled Lambda that terminates overdue worker instances, and its alert topic.
   - **web** — ALB + Fargate.
+  - **settings** — the SSM parameters behind the runtime settings ([Runtime settings](#95-runtime-settings)).
   - **budgets** — a second, `us-east-1`-aliased provider, since the Budgets API only operates there.
 - `infra/tests/*.tftest.hcl` (native `terraform test`, `mock_provider "aws" {}`) replaces hand-written assertions against synthesized templates with the same offline, zero-credential guarantee, run by `.github/workflows/ci.yml`'s `infra` job on every PR.
 
@@ -264,11 +266,22 @@ flowchart TB
 - Complete ARN, not just the secret name, because ECS matches a task definition's `valueFrom` on the six-character suffix Secrets Manager assigns.
 - Cost: a second required variable on every `terraform apply`, and a credential whose lifecycle nothing in `infra/` owns.
 
+### 9.5 Runtime settings
+
+- Operational values that should change without a deploy are SSM Parameter Store parameters under `/ai-gaussian-splatter/settings/` (`infra/settings.tf`). They cover the processing switch, the daily cap, the upload limits, the minimum photo count, the worker lifetime ceiling, the instance types, the training iterations, and the showcase account.
+- The web service reads them at request time with a one-minute cache (`web/lib/server/runtimeSettings.ts`). A task env var or `secrets` entry would need a task replacement for every change, because ECS resolves both only at task start.
+- Parameter Store rather than Secrets Manager: none of these values is secret, and standard parameters are free.
+- Terraform creates each parameter with `ignore_changes = [value]`. Terraform owns that the parameter exists, so IAM can name its path and a fresh deploy needs no manual step. `scripts/prod/ssm-set.sh` owns its value.
+- A missing or invalid value falls back to that setting's default rather than failing requests. The processing switch is the exception: missing, invalid or unreadable means off, since launching GPU instances blind is the one failure that costs money. Cost accepted: an SSM outage pauses processing site-wide.
+- Each worker instance carries its lifetime ceiling as a tag, and the sweeper and `web/lib/server/reconcileJob.ts` judge it by that tag rather than by the current setting. Lowering the setting then never kills a stage that launched under a longer one, and the ceiling is written in one place rather than in both `web/` and `infra/`.
+- The GitHub repository variables stay: the account ID, DNS zone, Clerk key ARN, AMI, worker image tag, alert email, and the publishable key. Each is a deploy-time input whose change needs a deploy anyway, and the publishable key is compiled into the browser bundle.
+- The sweeper's 10-minute schedule stays in Terraform. It is an EventBridge rule, so tuning it at runtime would change it behind Terraform's back, and it only sets how late the backstop fires.
+
 ---
 
 ## 10. Abuse protection
 
-Three request-path layers (`web/lib/server/rateLimit.ts`). A per-user quota alone doesn't stop multi-accounting:
+Three request-path layers (`web/lib/server/rateLimit.ts`), each limit a runtime setting ([Runtime settings](#95-runtime-settings)). A per-user quota alone doesn't stop multi-accounting:
 
 1. Per-IP (the real defense against one person using many accounts), on the photo presign route (`web/app/api/v1/splats/[splatId]/photos/presign/route.ts`).
    - **IP is the _last_ `X-Forwarded-For` hop.** ALB appends the address it saw; trusting the first lets clients spoof.
@@ -280,7 +293,7 @@ The daily cap bounds how many worker instances launch, not how long each one run
 
 `MAX_PHOTO_BYTES` (`web/lib/limits.ts`) bounds one photo's storage and worker download cost. `MAX_THUMBNAIL_BYTES` (`web/lib/server/s3.ts`) bounds its thumbnail, which the browser draws and so could send at any size. The presign route signs each declared size into its upload URL, so S3 itself refuses a body of any other size. The `complete` route checks both stored objects' sizes again, so a client that skipped the form still can't get an oversized upload marked uploaded.
 
-Ops fallback: an AWS Budget (`infra/budgets.tf`) for spend the request path never sees.
+Ops fallbacks: the `processing-enabled` runtime setting pauses every GPU launch site-wide, and an AWS Budget (`infra/budgets.tf`) alerts on spend the request path never sees.
 
 ---
 

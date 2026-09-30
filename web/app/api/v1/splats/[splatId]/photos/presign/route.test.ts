@@ -38,6 +38,30 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
     return splat;
   }
 
+  it("takes the per-user upload limit from the runtime settings", async () => {
+    const splat = await seedSplat();
+    const photo = {
+      filename: "a.jpg",
+      contentType: "image/jpeg",
+      size: 4_000_000,
+      thumbnailSize: 100_000,
+      width: 3024,
+      height: 4032,
+      takenAt: "2026-01-01T10:00:00.000Z",
+    };
+    process.env.UPLOADS_PER_USER_PER_DAY = "1";
+    try {
+      expect((await POST(presignRequest([photo]), ctx(splat.id))).status).toBe(200);
+
+      const res = await POST(presignRequest([photo]), ctx(splat.id));
+
+      expect(res.status).toBe(429);
+      expect((await res.json()).detail).toMatch(/all 1 of today's uploads for your account/);
+    } finally {
+      delete process.env.UPLOADS_PER_USER_PER_DAY;
+    }
+  });
+
   it("stores each photo's size, dimensions and capture time", async () => {
     const splat = await seedSplat();
 

@@ -22,6 +22,7 @@ Most procedures below run a script from `scripts/dev/` or `scripts/prod/`, and e
   - [2.7 Building and pushing the worker image](#27-building-and-pushing-the-worker-image)
   - [2.8 Running Terraform locally](#28-running-terraform-locally)
   - [2.9 Choosing the landing page's examples](#29-choosing-the-landing-pages-examples)
+  - [2.10 Tuning runtime settings](#210-tuning-runtime-settings)
 - [3. Troubleshooting](#3-troubleshooting)
   - [3.1 Fixing a bad migration](#31-fixing-a-bad-migration)
   - [3.2 Debugging a failed worker job](#32-debugging-a-failed-worker-job)
@@ -92,7 +93,7 @@ Then shoot a set of photos ([Capture](#15-capture)) and run it through the pipel
 
 ### 1.5 Capture
 
-Walk around the object shooting individual stills: every side, a couple of heights, each shot overlapping its neighbors. Aim for ~50. The API's floor of 20 (`MIN_PHOTOS_PER_SPLAT`, HTTP 400 below it) is a hard minimum, not a quality target, and its ceiling is 100 (`MAX_PHOTOS_PER_SPLAT`). Extra frames only help where they close a coverage gap, and near-duplicates just add COLMAP matching cost.
+Walk around the object shooting individual stills: every side, a couple of heights, each shot overlapping its neighbors. Aim for ~50. The API's floor of 20 (the `min-photos-per-splat` runtime setting, HTTP 400 below it) is a hard minimum, not a quality target, and its ceiling is 100 (`MAX_PHOTOS_PER_SPLAT`). Extra frames only help where they close a coverage gap, and near-duplicates just add COLMAP matching cost.
 
 Object choice matters more than photo count. COLMAP triangulates surface features that hold still, so these kinds of objects can defeat it:
 
@@ -160,7 +161,7 @@ Required one-time manual setup, in this order:
 2. [Configuring continuous deployment](#23-configuring-continuous-deployment)
 3. [Going live](#26-going-live) to turn the `deploy` job on
 
-After that, a human only builds the worker image ([Building and pushing the worker image](#27-building-and-pushing-the-worker-image)), runs Terraform for a `terraform plan` preview or a teardown ([Running Terraform locally](#28-running-terraform-locally)), and picks the landing page's examples ([Choosing the landing page's examples](#29-choosing-the-landing-pages-examples)).
+After that, a human only builds the worker image ([Building and pushing the worker image](#27-building-and-pushing-the-worker-image)), runs Terraform for a `terraform plan` preview or a teardown ([Running Terraform locally](#28-running-terraform-locally)), picks the landing page's examples ([Choosing the landing page's examples](#29-choosing-the-landing-pages-examples)), and tunes the runtime settings ([Tuning runtime settings](#210-tuning-runtime-settings)).
 
 CI's `deploy` job (`.github/workflows/deploy.yml`) does every deploy, including the first one into an empty account ([Going live](#26-going-live)):
 
@@ -215,7 +216,7 @@ scripts/prod/configure-ci-role.sh
 
 ### 2.5 Setting GitHub repository variables
 
-`.github/workflows/deploy.yml` reads its configuration from GitHub repository variables (`vars.*`). `scripts/prod/set-gh-repo-variables.sh` sets each variable the `deploy` job requires, and needs `gh` signed in with write access to the repository plus the Clerk secret from [Creating account prerequisites](#22-creating-account-prerequisites). `DEPLOY_ENABLED` is set under [Going live](#26-going-live), and the optional `SHOWCASE_CLERK_USER_ID` under [Choosing the landing page's examples](#29-choosing-the-landing-pages-examples). Two scripts read the same variables back:
+`.github/workflows/deploy.yml` reads its configuration from GitHub repository variables (`vars.*`). `scripts/prod/set-gh-repo-variables.sh` sets each variable the `deploy` job requires, and needs `gh` signed in with write access to the repository plus the Clerk secret from [Creating account prerequisites](#22-creating-account-prerequisites). `DEPLOY_ENABLED` is set under [Going live](#26-going-live). Two scripts read the same variables back:
 
 - `scripts/prod/terraform-destroy.sh`
 - `scripts/prod/terraform-plan.sh`
@@ -266,6 +267,8 @@ aws sns list-subscriptions --region "$(source scripts/lib/terraform.sh && tf_get
 
 On a first deploy, the service starts before the migration runs, so real routes 500 until the migration finishes. The first deploy also waits on ACM DNS validation, which can take several minutes.
 
+After a first deploy, check that the web service can read its runtime settings. `scripts/prod/ssm-show.sh` should list every setting, and the new-splat page should show no "Processing is paused" notice. The notice with every setting present means the task role can't read them ([Runtime settings](ARCHITECTURE.md#95-runtime-settings)).
+
 `deployment_minimum_healthy_percent = 100` will keep any old task serving until the new one passes health checks. If the new image fails those checks, the circuit breaker rolls back to the previous task definition. To roll back by hand, revert the change and push. A schema change gets a corrective migration instead ([Fixing a bad migration](#31-fixing-a-bad-migration)).
 
 Only the last few releases are kept (`local.releases_kept` in `infra/locals.tf`). That bounds the circuit breaker's automatic rollback and any fresh task placement onto an older task definition, both of which need the image still present. Reverting and pushing by hand reaches further back: an expired tag is free to push again, so that build is simply remade.
@@ -284,7 +287,7 @@ After the push, the script sets the `WORKER_IMAGE_TAG` repository variable ([Set
 
 Rerun the latest `main` run to trigger that deploy (`gh run rerun <run-id>`), because the `deploy` job reads the variable as the run starts. Pushing a commit works too, but not a docs-only one: a push touching only `.md` files or `LICENSE` skips the workflow, so nothing reads the new variable.
 
-Only the last `local.worker_releases_kept` images are kept (`infra/locals.tf`), which makes a stale `WORKER_IMAGE_TAG` the risk. Once that many newer images exist, the lifecycle policy expires the tag it names, and every worker instance then fails its image pull and bills until the `WORKER_MAX_LIFETIME_MINUTES` shutdown.
+Only the last `local.worker_releases_kept` images are kept (`infra/locals.tf`), which makes a stale `WORKER_IMAGE_TAG` the risk. Once that many newer images exist, the lifecycle policy expires the tag it names, and every worker instance then fails its image pull and bills until its lifetime-ceiling shutdown (the `worker-max-lifetime-minutes` runtime setting it launched with).
 
 ### 2.8 Running Terraform locally
 
@@ -300,15 +303,30 @@ scripts/prod/terraform-plan.sh
 
 The landing page shows the newest eight complete, shareable splats of one showcase account. With no showcase account set, or one with no such splats, it shows its point-cloud hero instead. The showcase account is an ordinary user of the live app. Sign in as it to add, remove or unshare examples through the normal UI.
 
-To pick the account, copy its user ID (`user_...`) from the production Clerk instance's Users page and pass it to `scripts/prod/set-showcase-user.sh`, which sets the `SHOWCASE_CLERK_USER_ID` repository variable. `--clear` deletes the variable instead, so the landing page shows no examples.
+To pick the account, copy its user ID (`user_...`) from the production Clerk instance's Users page and set it as the `showcase-clerk-user-id` runtime setting. Setting `none` shows no examples.
 
 ```bash
-scripts/prod/set-showcase-user.sh user_...
+scripts/prod/ssm-set.sh showcase-clerk-user-id user_...
 ```
 
-The variable reaches the app as a task environment variable, so it takes effect on the next deploy. To deploy it without a push, rerun the newest CI run on `main`. The script prints that command rather than running it.
-
 For local dev, set `SHOWCASE_CLERK_USER_ID` in `web/.env` to a user ID from the development Clerk instance.
+
+### 2.10 Tuning runtime settings
+
+The processing switch, the usage limits, the worker's instance types, lifetime ceiling and training iterations, and the showcase account are runtime settings ([Runtime settings](ARCHITECTURE.md#95-runtime-settings)). A change reaches the web service within a minute, with no deploy.
+
+```bash
+scripts/prod/ssm-show.sh
+scripts/prod/ssm-set.sh processing-enabled false
+```
+
+`scripts/prod/ssm-set.sh --help` lists every setting and the values it accepts. It refuses a value the web service would reject, since the web service would otherwise fall back to that setting's default without saying so.
+
+- **Pausing processing** stops new reconstruct and train launches only. Stages already running finish, and the new-splat page and the splat page tell visitors processing is paused.
+- **A new lifetime ceiling** applies to instances launched after the change. Each running instance keeps the ceiling it launched with.
+- **A new train instance type** must be one whose GPU `worker/Dockerfile` compiles gsplat's kernels for, so the script accepts only those.
+
+For local dev, each setting is an env var in `web/.env` named after it, such as `MAX_JOBS_PER_DAY` (`web/.env.example`).
 
 ---
 
@@ -328,7 +346,7 @@ If the `deploy` job's migration step fails for an infra reason rather than a bad
 
 1. Check `jobs.status` and `jobs.error_message` for the splat (`GET /api/v1/splats/{id}/jobs/latest`).
 2. A job whose instance has gone without reporting moves to `failed` on the splat page's next poll, once it has gone 15 minutes without a callback (`web/lib/server/reconcileJob.ts`). A job that stays in progress with no callback still has a running instance. Check the EC2 console for the tagged instance (`Role=worker`, `JobId=<job_id>`) and its system log.
-3. Confirm the instance actually went away. It self-terminates once the worker job reaches a terminal state, and `web/lib/server/ec2Launcher.ts` schedules a hard `shutdown` at `WORKER_MAX_LIFETIME_MINUTES` (30 minutes) as the first thing user-data runs.
+3. Confirm the instance actually went away. It self-terminates once the worker job reaches a terminal state, and `web/lib/server/ec2Launcher.ts` schedules a hard `shutdown` at the instance's lifetime ceiling (its `MaxLifetimeMinutes` tag, 30 minutes by default) as the first thing user-data runs.
    - **Still running past that ceiling means cloud-init, which runs user-data, never started.** That is a boot failure (a bad AMI, or an instance metadata or networking problem), the one case the scheduled shutdown can't catch.
    - The sweeper (`infra/worker_sweeper.tf`) terminates such an instance within 10 minutes of it passing the ceiling plus 15 minutes, and emails `ALERT_EMAIL` its ID.
 4. `docker logs` on the instance (if still running) or CloudWatch Logs (once wired up) for the actual COLMAP/gsplat stack trace.

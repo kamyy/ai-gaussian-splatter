@@ -4,7 +4,8 @@
  * The visitor names the splat and drops photos onto it, previewed in justified rows. A blurry or low-resolution photo is
  * marked in the preview, with an offer to remove every marked photo at once. Submitting creates the splat,
  * uploads the photos straight to S3 (AWS's file storage), and starts processing, then moves to the new splat's page. If
- * an upload fails partway, a retry reuses the splat and sends only the photos that didn't make it.
+ * an upload fails partway, a retry reuses the splat and sends only the photos that didn't make it. While processing is
+ * paused for the whole site, the form says so, and submitting only creates the splat and uploads its photos.
  */
 
 "use client";
@@ -25,13 +26,16 @@ import { cn } from "@/lib/cn";
 import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
 import { useJustifiedPages } from "@/lib/hooks/useJustifiedPages";
 import { type PhotoFlag, usePickedPhotos } from "@/lib/hooks/usePickedPhotos";
+import { useProcessingPaused } from "@/lib/hooks/useProcessingPaused";
 import { MAX_PHOTOS_PER_SPLAT, MIN_SHARP_PHOTO_EDGE } from "@/lib/limits";
 import { fileKey } from "@/lib/measurePhoto";
 import { useAppStore } from "@/lib/store";
 import type { Job, Splat } from "@/lib/types";
 import { uploadPhotos } from "@/lib/uploadPhotos";
+import { ProcessingPausedNotice } from "./ProcessingPausedNotice";
 
-// Guidance, not a limit: the meter fills at this count. The server's own minimum is MIN_PHOTOS_PER_SPLAT.
+// Guidance, not a limit: the meter fills at this count. The server's own minimum is the min-photos-per-splat runtime
+// setting (web/lib/server/runtimeSettings.ts).
 const TARGET_PHOTOS = 50;
 // A page of previews is this many whole rows, so every page but the last ends on a full row. Only that page is
 // rendered, so a large drop never decodes every full-size photo at once.
@@ -87,6 +91,7 @@ export function NewSplatForm() {
   const router = useRouter();
   const { enqueueSnackbar } = useAppSnackbar();
   const resetUploads = useAppStore(state => state.resetUploads);
+  const processingPaused = useProcessingPaused();
 
   const [name, setName] = useState("");
 
@@ -200,15 +205,18 @@ export function NewSplatForm() {
     }
 
     // A failure to start (too few photos, a rate limit) still lands on the splat's page, which offers its own start
-    // button once whatever blocked it is resolved.
-    setPhase("starting");
-    try {
-      await apiFetch<Job>(`/api/v1/splats/${splat.id}/process`, "POST", token);
-    } catch (err) {
-      enqueueSnackbar("Couldn't start processing", {
-        variant: "error",
-        detail: err instanceof Error ? err.message : undefined,
-      });
+    // button once whatever blocked it is resolved. While processing is paused the notice above the form already said
+    // so, and the splat's page offers the same button once processing is turned back on.
+    if (!processingPaused) {
+      setPhase("starting");
+      try {
+        await apiFetch<Job>(`/api/v1/splats/${splat.id}/process`, "POST", token);
+      } catch (err) {
+        enqueueSnackbar("Couldn't start processing", {
+          variant: "error",
+          detail: err instanceof Error ? err.message : undefined,
+        });
+      }
     }
 
     await mutate("splats");
@@ -316,6 +324,18 @@ export function NewSplatForm() {
     );
   }
 
+  let pausedNotice: React.ReactNode = null;
+  let idleHint = "Next, we'll place the cameras and show you a sketch of the shape to check.";
+  if (processingPaused) {
+    pausedNotice = (
+      <ProcessingPausedNotice>
+        Processing is paused for the whole site. You can still create a splat and upload photos, but it can&apos;t be
+        processed until processing is turned back on.
+      </ProcessingPausedNotice>
+    );
+    idleHint = "Your splat will wait on its page until processing is turned back on.";
+  }
+
   let previewPager: React.ReactNode = null;
   if (pageCount > 1) {
     previewPager = (
@@ -330,6 +350,7 @@ export function NewSplatForm() {
 
   return (
     <form onSubmit={handleSubmit} className="flex min-w-0 flex-1 flex-col gap-6">
+      {pausedNotice}
       <Input
         label="What are you capturing?"
         placeholder="e.g. Ceramic vase"
@@ -378,10 +399,10 @@ export function NewSplatForm() {
           loading={submitting || measuring}
           disabled={name.trim().length === 0 || photos.length === 0 || tooManyPhotos}
         >
-          Upload and start
+          {processingPaused ? "Upload" : "Upload and start"}
         </Button>
         <span className="text-sm text-muted-foreground" aria-live="polite">
-          {progressLabel ?? "Next, we'll place the cameras and show you a sketch of the shape to check."}
+          {progressLabel ?? idleHint}
         </span>
       </div>
     </form>

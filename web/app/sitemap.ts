@@ -10,19 +10,21 @@ import type { MetadataRoute } from "next";
 
 import { getExampleSplats } from "@/lib/server/data";
 import { getEnv } from "@/lib/server/env";
+import { getRuntimeSettings } from "@/lib/server/runtimeSettings";
 import type { ExampleSplat } from "@/lib/types";
 
 /** Reads APP_PUBLIC_URL and the database per request. Neither is available during `next build`. */
 export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const { APP_PUBLIC_URL, SHOWCASE_CLERK_USER_ID } = getEnv();
+  const { APP_PUBLIC_URL } = getEnv();
 
   // A failed read still lists the landing page, the same fallback web/app/page.tsx makes.
   let exampleSplats: ExampleSplat[] = [];
   try {
-    if (SHOWCASE_CLERK_USER_ID) {
-      exampleSplats = await getExampleSplats(SHOWCASE_CLERK_USER_ID);
+    const { showcaseClerkUserId } = await getRuntimeSettings();
+    if (showcaseClerkUserId !== null) {
+      exampleSplats = await getExampleSplats(showcaseClerkUserId);
     }
   } catch (err) {
     console.error("Couldn't load the sitemap's examples", err);
