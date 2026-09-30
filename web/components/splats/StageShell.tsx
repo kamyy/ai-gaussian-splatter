@@ -1,8 +1,8 @@
 /**
- * The card frame every stage of a splat's page sits in.
+ * The card frame on a splat's pages: a bordered panel with a heading.
  *
- * It gives each stage the same heading, text and actions layout. web/components/splats/StageCard.tsx and
- * web/components/splats/SharePanel.tsx fill it in.
+ * It gives each stage of the owner's page the same heading, text and actions layout, and frames the pipeline's step
+ * times on the share page.
  */
 
 import { useId } from "react";
