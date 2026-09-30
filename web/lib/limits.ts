@@ -18,3 +18,11 @@ export const MAX_PHOTOS_PER_SPLAT = 100;
  * splat. 30 MB still admits a full-resolution phone JPEG or HEIC.
  */
 export const MAX_PHOTO_BYTES = 30 * 1024 * 1024;
+
+/**
+ * A photo whose long side is shorter than this is flagged as low resolution before upload, and web/lib/measurePhoto.ts
+ * scores every photo's sharpness at this size. It matches
+ * worker/pipeline/train.py's MAX_TRAINING_EDGE, the size training works at, so a smaller photo makes a softer splat.
+ * Advisory only: the server doesn't check it.
+ */
+export const MIN_SHARP_PHOTO_EDGE = 1600;
