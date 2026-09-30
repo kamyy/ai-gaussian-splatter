@@ -90,6 +90,7 @@ jobs:
       WORKER_SUBNET_ID: subnet-0123456789abcdef0
       WORKER_SECURITY_GROUP_ID: sg-0123456789abcdef0
       WORKER_INSTANCE_PROFILE_ARN: arn:aws:iam::123456789012:instance-profile/worker
+      WORKER_LOG_GROUP: /ai-gaussian-splatter/worker
       APP_PUBLIC_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v7

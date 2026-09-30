@@ -1,9 +1,9 @@
 # The permissions a GPU worker instance runs with.
 #
-# The IAM role and instance profile web/lib/server/ec2Launcher.ts attaches to each worker instance. Both bucket grants
-# cover the whole bucket, not just the calling worker job's own objects. The terminate grant matches every worker
-# instance, not only the caller. EC2 has no resource-level condition for "the calling instance" that could narrow either
-# one.
+# The IAM role and instance profile web/lib/server/ec2Launcher.ts attaches to each worker instance, and the CloudWatch
+# log group their container output goes to. Both bucket grants cover the whole bucket, not just the calling worker
+# job's own objects. The terminate grant matches every worker instance, not only the caller. EC2 has no resource-level
+# condition for "the calling instance" that could narrow either one.
 #
 # AWSServiceRoleForEC2Spot is deliberately not managed here. It is one account-wide role shared by every other Spot
 # workload, so creating it fails in an account that already has one, and letting Terraform delete it would break those
@@ -21,6 +21,14 @@ resource "aws_iam_role" "worker" {
       Principal = { Service = "ec2.amazonaws.com" }
     }]
   })
+}
+
+# Where each worker instance's container output goes, so COLMAP and gsplat output outlives the instance that printed it.
+# web/lib/server/ec2Launcher.ts's `docker run` names this group and creates one stream per worker job stage. The group
+# is created here rather than by the Docker log driver, so the instance role needs no logs:CreateLogGroup.
+resource "aws_cloudwatch_log_group" "worker" {
+  name              = "/ai-gaussian-splatter/worker"
+  retention_in_days = 30
 }
 
 resource "aws_iam_role_policy" "worker" {
@@ -59,6 +67,13 @@ resource "aws_iam_role_policy" "worker" {
         Effect   = "Allow"
         Action   = local.s3_read_write_actions
         Resource = [aws_s3_bucket.splats.arn, "${aws_s3_bucket.splats.arn}/*"]
+      },
+      # What lets the `docker run` in web/lib/server/ec2Launcher.ts's user-data write to aws_cloudwatch_log_group.worker.
+      {
+        Sid      = "WriteLogs"
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "${aws_cloudwatch_log_group.worker.arn}:*"
       },
       # What lets worker/run_job.py's finally block terminate its own instance at the end of a stage, scoped by the
       # same worker-tag convention infra/web.tf's RunInstances grant uses (infra/locals.tf holds the shared tag

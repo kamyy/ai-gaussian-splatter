@@ -54,6 +54,18 @@ run "worker_can_pull_its_own_image" {
   }
 }
 
+run "worker_can_write_its_own_log_group" {
+  command = apply
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.worker.policy).Statement :
+      s.Sid == "WriteLogs" && s.Resource == "${aws_cloudwatch_log_group.worker.arn}:*" && !contains(s.Action, "logs:CreateLogGroup")
+    ])
+    error_message = "the worker role must write streams to its own log group only, and leave group creation to Terraform"
+  }
+}
+
 run "worker_instance_profile_wraps_the_role" {
   command = apply
 

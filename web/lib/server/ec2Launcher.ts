@@ -20,7 +20,7 @@ import {
 } from "@aws-sdk/client-ec2";
 
 import type { CropBox } from "@/lib/types";
-import { getEnv } from "./env";
+import { getEnv, getWorkerInstanceEnv } from "./env";
 import type { RuntimeSettings } from "./runtimeSettings";
 
 /**
@@ -42,6 +42,7 @@ interface UserDataParams {
   workerImageUri: string;
   ecrRegistry: string;
   awsRegion: string;
+  logGroup: string;
   maxLifetimeMinutes: number;
   trainingIterations?: number;
   cropBox?: CropBox;
@@ -83,7 +84,18 @@ ${cropBoxVar}
 $(aws ecr get-login --no-include-email --region ${p.awsRegion}) || \\
     aws ecr get-login-password --region ${p.awsRegion} | docker login --username AWS --password-stdin ${p.ecrRegistry}
 
+# Docker refuses to start a container whose awslogs stream it can't create, which would fail the stage with no output
+# and leave this instance idle until the lifetime ceiling. Creating the stream first turns that into a logged error
+# here, and the stage then runs without CloudWatch logs. Non-blocking mode keeps a later CloudWatch outage from
+# stalling the pipeline's own writes to stdout.
+LOG_OPTS=""
+if aws logs create-log-stream --region ${p.awsRegion} --log-group-name ${p.logGroup} --log-stream-name "$JOB_ID-$STAGE"; then
+    LOG_OPTS="--log-driver=awslogs --log-opt mode=non-blocking --log-opt awslogs-region=${p.awsRegion} --log-opt awslogs-group=${p.logGroup} --log-opt awslogs-stream=$JOB_ID-$STAGE"
+fi
+
+# LOG_OPTS is deliberately unquoted, so its words split into separate docker arguments. None of them holds a space.
 docker run --rm --gpus all \\
+    $LOG_OPTS \\
     -e JOB_ID="$JOB_ID" \\
     -e SPLAT_ID="$SPLAT_ID" \\
     -e CALLBACK_TOKEN="$CALLBACK_TOKEN" \\
@@ -147,6 +159,7 @@ export async function launchJob(params: {
   cropBox?: CropBox;
 }): Promise<string> {
   const env = getEnv();
+  const worker = getWorkerInstanceEnv();
   const ec2 = new EC2Client({ region: env.AWS_REGION });
 
   const userData = renderUserData({
@@ -160,6 +173,7 @@ export async function launchJob(params: {
     workerImageUri: params.workerImageUri,
     ecrRegistry: params.ecrRegistry,
     awsRegion: env.AWS_REGION,
+    logGroup: worker.WORKER_LOG_GROUP,
     maxLifetimeMinutes: params.settings.workerMaxLifetimeMinutes,
     trainingIterations: params.stage === "train" ? params.settings.trainingIterations : undefined,
     cropBox: params.cropBox,
@@ -167,15 +181,15 @@ export async function launchJob(params: {
 
   const response = await ec2.send(
     new RunInstancesCommand({
-      ImageId: env.WORKER_AMI_ID,
+      ImageId: worker.WORKER_AMI_ID,
       InstanceType: (params.stage === "reconstruct"
         ? params.settings.reconstructInstanceType
         : params.settings.trainInstanceType) as never,
       MinCount: 1,
       MaxCount: 1,
-      SubnetId: env.WORKER_SUBNET_ID,
-      SecurityGroupIds: [env.WORKER_SECURITY_GROUP_ID],
-      IamInstanceProfile: { Arn: env.WORKER_INSTANCE_PROFILE_ARN },
+      SubnetId: worker.WORKER_SUBNET_ID,
+      SecurityGroupIds: [worker.WORKER_SECURITY_GROUP_ID],
+      IamInstanceProfile: { Arn: worker.WORKER_INSTANCE_PROFILE_ARN },
       // The pipeline runs in a container on default bridge networking, one hop further from IMDS than the host. At
       // EC2's default hop limit of 1, worker/pipeline/instance.py cannot read its own instance ID and silently skips
       // self-termination, and the instance bills until someone notices (AGENTS.md). HttpTokens is only safe paired
