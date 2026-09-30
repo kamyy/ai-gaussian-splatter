@@ -25,16 +25,21 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const splat = await getPublicSplat(id);
   if (splat === null) {
-    return { title: "Not found — AI Gaussian Splatter" };
+    return { title: "Not found" };
   }
 
+  const description = `${splat.title}, a 3D Gaussian Splat trained on a CUDA GPU from photogrammetry of multi-angle photos. Turn it around in your browser.`;
+
+  // openGraph replaces web/app/layout.tsx's openGraph whole rather than merging with it, so it repeats the description.
   return {
-    title: `${splat.title} — AI Gaussian Splatter`,
-    description: "A 3D Gaussian Splat reconstruction, made with AI Gaussian Splatter.",
+    title: splat.title,
+    description,
     openGraph: {
       title: splat.title,
+      description,
       images: [splat.thumbnailUrl],
     },
+    twitter: { card: "summary_large_image" },
   };
 }
 

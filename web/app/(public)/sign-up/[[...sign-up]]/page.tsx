@@ -11,7 +11,7 @@ import { ThemedSignUp } from "@/components/auth/ThemedClerkAuth";
 import { Center } from "@/components/layout/Center";
 
 export const metadata: Metadata = {
-  title: "Sign up — AI Gaussian Splatter",
+  title: "Sign up",
 };
 
 export default function SignUpPage() {

@@ -25,9 +25,21 @@ const displayFont = Instrument_Serif({
 });
 const bodyFont = Manrope({ subsets: ["latin"], variable: "--font-body" });
 
+const DESCRIPTION =
+  "Photograph an object from every side. Photogrammetry places each photo in 3D, then a CUDA GPU trains a Gaussian Splat you can view and share in any browser.";
+
+// A page below this layout sets only its own title, such as "Sign in", and the template appends the site name.
 export const metadata: Metadata = {
-  title: "AI Gaussian Splatter",
-  description: "Convert multi-angle photos of a physical object into a real-time 3D Gaussian Splat.",
+  title: {
+    default: "AI Gaussian Splatter — Turn photos into a 3D Gaussian Splat",
+    template: "%s — AI Gaussian Splatter",
+  },
+  description: DESCRIPTION,
+  openGraph: {
+    title: "AI Gaussian Splatter",
+    description: DESCRIPTION,
+    type: "website",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

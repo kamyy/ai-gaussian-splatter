@@ -11,7 +11,7 @@ import { ThemedSignIn } from "@/components/auth/ThemedClerkAuth";
 import { Center } from "@/components/layout/Center";
 
 export const metadata: Metadata = {
-  title: "Sign in — AI Gaussian Splatter",
+  title: "Sign in",
 };
 
 export default function SignInPage() {
