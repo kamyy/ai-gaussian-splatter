@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { MEASURE_CONCURRENCY, measurePhoto, measurePhotos } from "../measurePhoto";
+import { laplacianVariance, MEASURE_CONCURRENCY, measurePhoto, measurePhotos } from "../measurePhoto";
 
 const { exifParseMock } = vi.hoisted(() => ({ exifParseMock: vi.fn() }));
 vi.mock("exifr", () => ({ default: { parse: exifParseMock } }));
 
-// jsdom has no OffscreenCanvas. This stand-in records the size each thumbnail was drawn at.
+// jsdom has no OffscreenCanvas. This stand-in records the size each canvas was made at: the thumbnail's, then the
+// sharpness score's.
 const canvasSizes: [number, number][] = [];
 class FakeOffscreenCanvas {
   constructor(width: number, height: number) {
@@ -13,7 +14,13 @@ class FakeOffscreenCanvas {
   }
 
   getContext() {
-    return { drawImage: () => {}, imageSmoothingQuality: "low" };
+    return {
+      drawImage: () => {},
+      imageSmoothingQuality: "low",
+      getImageData: (_x: number, _y: number, width: number, height: number) => ({
+        data: new Uint8ClampedArray(width * height * 4),
+      }),
+    };
   }
 
   async convertToBlob(options: { type: string }) {
@@ -47,7 +54,7 @@ describe("measurePhoto", () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
-  it("scales the thumbnail's long side to 640 and never scales a small photo up", async () => {
+  it("scales the thumbnail's long side to 640, the sharpness score's to 1600, and never scales a small photo up", async () => {
     vi.stubGlobal(
       "createImageBitmap",
       vi.fn(async (file: File) =>
@@ -61,6 +68,8 @@ describe("measurePhoto", () => {
     await measurePhoto(new File(["b"], "small.jpg"));
     expect(canvasSizes).toEqual([
       [640, 480],
+      [1600, 1200],
+      [300, 200],
       [300, 200],
     ]);
   });
@@ -119,5 +128,48 @@ describe("measurePhoto", () => {
 
     expect(peak).toBe(MEASURE_CONCURRENCY);
     expect(measured.map(photo => photo?.width ?? null)).toEqual([100, 101, 102, null, 104, 105, 106, 107, 108, 109]);
+  });
+});
+
+// A gray image from per-pixel brightness, in canvas ImageData's RGBA layout.
+function grayImage(width: number, height: number, brightness: (x: number, y: number) => number) {
+  const rgba = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      rgba.fill(brightness(x, y), i, i + 3);
+      rgba[i + 3] = 255;
+    }
+  }
+
+  return rgba;
+}
+
+describe("laplacianVariance", () => {
+  it("scores a flat image zero", () => {
+    expect(
+      laplacianVariance(
+        grayImage(8, 8, () => 128),
+        8,
+        8,
+      ),
+    ).toBe(0);
+  });
+
+  it("scores hard edges above the same edges softened", () => {
+    const sharp = grayImage(16, 16, x => (x % 4 < 2 ? 0 : 255));
+    const soft = grayImage(16, 16, x => [64, 128, 192, 128][x % 4]);
+
+    expect(laplacianVariance(sharp, 16, 16)).toBeGreaterThan(laplacianVariance(soft, 16, 16));
+  });
+
+  it("scores an image too small to have an inner pixel zero", () => {
+    expect(
+      laplacianVariance(
+        grayImage(2, 2, x => x * 255),
+        2,
+        2,
+      ),
+    ).toBe(0);
   });
 });

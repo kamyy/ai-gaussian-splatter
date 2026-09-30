@@ -64,8 +64,37 @@ describe("NewSplatForm", () => {
     uploadPhotosMock.mockResolvedValue(undefined);
     getTokenMock.mockResolvedValue("test-token");
     measurePhotosMock.mockImplementation(async (files: File[]) =>
-      files.map(file => ({ file, width: 4032, height: 3024, thumbnail: new Blob([file.name]), takenAt: 0 })),
+      files.map(file => ({
+        file,
+        width: 4032,
+        height: 3024,
+        thumbnail: new Blob([file.name]),
+        takenAt: 0,
+        sharpness: 100,
+      })),
     );
+  });
+
+  it("marks a low-resolution photo and removes every marked one on request", async () => {
+    measurePhotosMock.mockImplementation(async (files: File[]) =>
+      files.map(file => ({
+        file,
+        width: file.name.startsWith("small") ? 1200 : 4032,
+        height: 900,
+        thumbnail: new Blob([file.name]),
+        takenAt: 0,
+        sharpness: 100,
+      })),
+    );
+    render(<NewSplatForm />);
+    await addPhotos("a.jpg", "small-1.jpg", "small-2.jpg");
+
+    expect(screen.getByRole("img", { name: "small-1.jpg: Low resolution (under 1600px)" })).toBeInTheDocument();
+    expect(screen.getByText(/2 photos look blurry or low resolution/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove them" }));
+    expect(screen.getByText("1 photo added")).toBeInTheDocument();
+    expect(screen.queryByText(/blurry or low resolution/)).not.toBeInTheDocument();
   });
 
   it("needs both a name and at least one photo", async () => {

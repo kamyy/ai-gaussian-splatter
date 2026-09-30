@@ -48,6 +48,7 @@ describe("uploadPhotos", () => {
           height: 4032,
           thumbnail: new Blob(["a"]),
           takenAt: Date.UTC(2026, 0, 1),
+          sharpness: 0,
         },
         {
           file: new File(["bbb"], "b.png", { type: "image/png" }),
@@ -55,6 +56,7 @@ describe("uploadPhotos", () => {
           height: 1080,
           thumbnail: new Blob(["bb"]),
           takenAt: Date.UTC(2026, 0, 2),
+          sharpness: 0,
         },
       ],
       "token",
@@ -94,6 +96,7 @@ describe("uploadPhotos", () => {
           height: 4032,
           thumbnail: small,
           takenAt: 0,
+          sharpness: 0,
         },
       ],
       "token",
@@ -113,8 +116,22 @@ describe("uploadPhotos", () => {
         url.startsWith("https://s3.example.com/2") ? new Response(null, { status: 500 }) : new Response(null),
       ),
     );
-    const a = { file: new File(["a"], "a.jpg"), width: 1, height: 1, thumbnail: new Blob(["a"]), takenAt: 0 };
-    const b = { file: new File(["b"], "b.jpg"), width: 1, height: 1, thumbnail: new Blob(["b"]), takenAt: 0 };
+    const a = {
+      file: new File(["a"], "a.jpg"),
+      width: 1,
+      height: 1,
+      thumbnail: new Blob(["a"]),
+      takenAt: 0,
+      sharpness: 0,
+    };
+    const b = {
+      file: new File(["b"], "b.jpg"),
+      width: 1,
+      height: 1,
+      thumbnail: new Blob(["b"]),
+      takenAt: 0,
+      sharpness: 0,
+    };
     const onUploaded = vi.fn();
 
     await expect(uploadPhotos("splat-1", [a, b], "token", onUploaded)).rejects.toThrow("1 of 2 photo uploads failed");
@@ -144,6 +161,7 @@ describe("uploadPhotos", () => {
             height: 1,
             thumbnail: new Blob(["a"]),
             takenAt: Date.UTC(2026, 0, 1),
+            sharpness: 0,
           },
         ],
         "token",
