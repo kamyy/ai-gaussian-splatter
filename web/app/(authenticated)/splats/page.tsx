@@ -9,10 +9,10 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { LuImage } from "react-icons/lu";
 
 import { SplatCard, splatCardAspect } from "@/components/splats/SplatCard";
 import { buttonClassName } from "@/components/ui/Button";
+import { ThumbnailPlaceholderIcon } from "@/components/ui/icons";
 import { Pager } from "@/components/ui/Pager";
 import { cn } from "@/lib/cn";
 import { useJustifiedPages } from "@/lib/hooks/useJustifiedPages";
@@ -44,7 +44,7 @@ function SplatGridSkeleton() {
           key={i}
           className="flex h-59 animate-pulse items-center justify-center rounded-3xl bg-muted text-muted-foreground"
         >
-          <LuImage strokeWidth={1} className="h-8 w-8" />
+          <ThumbnailPlaceholderIcon strokeWidth={1} className="h-8 w-8" />
         </div>
       ))}
     </div>

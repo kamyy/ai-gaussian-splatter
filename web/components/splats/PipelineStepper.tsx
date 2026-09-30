@@ -7,8 +7,7 @@
 
 "use client";
 
-import { LuCheck } from "react-icons/lu";
-
+import { StepDoneIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 import { useNow } from "@/lib/hooks/useNow";
 import { currentStep, STEPS, type Stage, type StepKey } from "@/lib/splatStage";
@@ -142,7 +141,7 @@ export function PipelineStepper({
                     !done && !isCurrent && "border-divider",
                   )}
                 >
-                  {done ? <LuCheck aria-hidden="true" strokeWidth={3} className="h-3 w-3" /> : null}
+                  {done ? <StepDoneIcon aria-hidden="true" strokeWidth={3} className="h-3 w-3" /> : null}
                   {isCurrent ? (
                     <span className={cn("h-2 w-2 rounded-full", failed ? "bg-error" : "bg-primary")} />
                   ) : null}

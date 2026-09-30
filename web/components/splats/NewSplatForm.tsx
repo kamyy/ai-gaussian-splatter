@@ -13,11 +13,11 @@ import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { LuCheck, LuImage, LuTriangleAlert, LuX } from "react-icons/lu";
 import { mutate } from "swr";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { PhotoFlagIcon, PhotoPlaceholderIcon, PhotoUploadedIcon, RemovePhotoIcon } from "@/components/ui/icons";
 import { Pager } from "@/components/ui/Pager";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { apiFetch } from "@/lib/apiFetch";
@@ -71,7 +71,7 @@ function FlagBadge({ filename, flag }: { filename: string; flag: PhotoFlag }) {
         aria-label={`${filename}: ${FLAG_LABELS[flag]}`}
         className="absolute top-1 left-1 flex h-7 w-7 items-center justify-center rounded-full bg-paper text-error"
       >
-        <LuTriangleAlert aria-hidden="true" className="h-3.5 w-3.5" />
+        <PhotoFlagIcon aria-hidden="true" className="h-3.5 w-3.5" />
       </span>
     </Tooltip>
   );
@@ -254,7 +254,7 @@ export function NewSplatForm() {
                   aria-label={`${photo.file.name} uploaded`}
                   className="absolute top-1 right-1 flex h-7 w-7 items-center justify-center rounded-full bg-paper text-success"
                 >
-                  <LuCheck aria-hidden="true" className="h-3.5 w-3.5" />
+                  <PhotoUploadedIcon aria-hidden="true" className="h-3.5 w-3.5" />
                 </span>
               );
             } else {
@@ -266,7 +266,7 @@ export function NewSplatForm() {
                   disabled={submitting}
                   className="absolute top-1 right-1 flex h-7 w-7 items-center justify-center rounded-full bg-paper text-foreground disabled:hidden"
                 >
-                  <LuX aria-hidden="true" className="h-3.5 w-3.5" />
+                  <RemovePhotoIcon aria-hidden="true" className="h-3.5 w-3.5" />
                 </button>
               );
             }
@@ -287,7 +287,7 @@ export function NewSplatForm() {
                 )}
               >
                 {/* Shows until the photo decodes and covers it. The photo is relative so it paints above this icon. */}
-                <LuImage
+                <PhotoPlaceholderIcon
                   aria-hidden="true"
                   strokeWidth={1}
                   className="absolute inset-0 m-auto h-6 w-6 text-muted-foreground"

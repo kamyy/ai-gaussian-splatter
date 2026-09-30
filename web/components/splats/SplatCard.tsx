@@ -6,9 +6,9 @@
  */
 
 import Link from "next/link";
-import { LuImage } from "react-icons/lu";
 
 import { Chip } from "@/components/ui/Chip";
+import { ThumbnailPlaceholderIcon } from "@/components/ui/icons";
 import { splatBadge } from "@/lib/splatBadge";
 import type { SplatListItem } from "@/lib/types";
 
@@ -42,7 +42,11 @@ export function SplatCard({ splat }: { splat: SplatListItem }) {
       <div style={{ aspectRatio: splatCardAspect(splat) }} className="relative overflow-hidden rounded-3xl bg-muted">
         {/* Shows until the thumbnail loads and covers it, and stays for a splat with no photos. The thumbnail is relative
         so it paints above this absolutely positioned icon. */}
-        <LuImage aria-hidden="true" strokeWidth={1} className="absolute inset-0 m-auto h-8 w-8 text-muted-foreground" />
+        <ThumbnailPlaceholderIcon
+          aria-hidden="true"
+          strokeWidth={1}
+          className="absolute inset-0 m-auto h-8 w-8 text-muted-foreground"
+        />
         {thumbnail}
         <Chip color={badge.color} label={badge.label} className="absolute top-2 left-3.5" />
       </div>

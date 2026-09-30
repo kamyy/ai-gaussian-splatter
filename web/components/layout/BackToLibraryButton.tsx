@@ -5,8 +5,8 @@
  */
 
 import Link from "next/link";
-import { LuArrowLeft } from "react-icons/lu";
 
+import { BackIcon } from "@/components/ui/icons";
 import { Tooltip } from "@/components/ui/Tooltip";
 
 export function BackToLibraryButton() {
@@ -17,7 +17,7 @@ export function BackToLibraryButton() {
         aria-label="Back to Library"
         className="flex h-10 w-10 shrink-0 items-center justify-center pointer-coarse:h-11 pointer-coarse:w-11 rounded-full border border-outline text-foreground transition-colors hover:border-muted-foreground hover:bg-muted"
       >
-        <LuArrowLeft aria-hidden="true" className="h-4.5 w-4.5" />
+        <BackIcon aria-hidden="true" className="h-4.5 w-4.5" />
       </Link>
     </Tooltip>
   );

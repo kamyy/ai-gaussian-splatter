@@ -10,7 +10,8 @@
 
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
-import { LuMoon, LuSun } from "react-icons/lu";
+
+import { DarkThemeIcon, LightThemeIcon } from "@/components/ui/icons";
 
 /**
  * The server can't know the visitor's theme, so the first client render has to match the server's "light" (the :root
@@ -25,7 +26,7 @@ export function ThemeToggle() {
 
   const mode = mounted ? (resolvedTheme ?? "light") : "light";
   const nextMode = mode === "dark" ? "light" : "dark";
-  const Icon = mode === "dark" ? LuSun : LuMoon;
+  const Icon = mode === "dark" ? LightThemeIcon : DarkThemeIcon;
 
   return (
     <button
