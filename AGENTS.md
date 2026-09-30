@@ -137,6 +137,9 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - Export it only when its tests need it. Those tests go in the using file's own test file, as `pageItems` in `web/components/ui/Pager.tsx` is tested in `web/components/ui/Pager.test.tsx`.
   - Once a second file uses it, move it under `web/lib/`.
 - **Every custom hook gets its own file in `web/lib/hooks/`, named after the hook** (`web/lib/hooks/useLatestJob.ts`). This holds even for a hook only one file uses. Its tests go in `web/lib/hooks/tests/`.
+- **Components import icons from `web/components/ui/icons.ts`, never from `react-icons` directly.** A new icon gets an alias there named for what it means on screen (`RemovePhotoIcon`, not `XIcon`), under the commented group for where it appears.
+  - Reusing an icon for a different meaning gets its own alias, as `LuX` is both `CloseIcon` and `RemovePhotoIcon`.
+  - Write each alias as `export const RemovePhotoIcon = LuX;`. Biome's import sorting merges `export { LuX as RemovePhotoIcon }` lists into one block and drops the group comments.
 - **Split a function once it grows too large to take in at once, or does more than one job.**
   - Pull each self-contained piece out into a helper, a sub-component, or a custom hook for stateful logic. `web/lib/hooks/useCameraFlight.ts` is the pattern: press tracking went to `web/lib/hooks/useClickPress.ts`, and the per-frame steps became `stepFlight` and `stepLevel`.
   - Stop where a further split would make the pieces pass shared state back and forth. A flight and levelling out stay in one hook because each cancels the other.
