@@ -23,6 +23,7 @@ const defaults: Record<string, string> = {
   WORKER_SECURITY_GROUP_ID: "sg-0123456789",
   WORKER_INSTANCE_PROFILE_ARN: "arn:aws:iam::123456789012:instance-profile/worker",
   APP_PUBLIC_URL: "https://app.example.com",
+  SHOWCASE_CLERK_USER_ID: "showcase",
 };
 
 for (const [key, value] of Object.entries(defaults)) {

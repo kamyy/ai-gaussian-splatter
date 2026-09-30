@@ -4,7 +4,8 @@
  * This is the link an owner hands out. It shows the splat and COLMAP's point cloud in the 3D viewer, with the cameras
  * each photo was taken from, beside how long each pipeline step took and a grid of the photos' thumbnails. It renders
  * on the server straight from the database (web/lib/server/data.ts), and it 404s unless the splat is complete and its
- * owner has made it shareable. Its metadata gives link previews in chat apps a title and thumbnail.
+ * owner has made it shareable. Its metadata gives link previews in chat apps a title and thumbnail, and keeps the page
+ * out of search results unless it is one of the landing page's showcase examples.
  */
 
 import type { Metadata } from "next";
@@ -40,6 +41,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       images: [splat.thumbnailUrl],
     },
     twitter: { card: "summary_large_image" },
+    // Owners treat a share link as unlisted, so search engines are asked to leave it out of their results. The
+    // showcase examples are already public on the / landing page, and ranking them is the point.
+    robots: { index: splat.isShowcase },
   };
 }
 

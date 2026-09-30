@@ -41,12 +41,18 @@ async function findPublicSplat(
     return null;
   }
 
-  const [splat] = await getDb()
-    .select()
+  const [row] = await getDb()
+    .select({ splat: splats, ownerClerkUserId: users.clerkUserId })
     .from(splats)
+    .innerJoin(users, eq(users.id, splats.userId))
     .where(and(eq(splats.id, splatId), eq(splats.status, "complete"), eq(splats.isShareable, true)))
     .limit(1);
-  if (splat === undefined || splat.thumbnailS3Key === null) {
+  if (row === undefined) {
+    return null;
+  }
+
+  const { splat, ownerClerkUserId } = row;
+  if (splat.thumbnailS3Key === null) {
     return null;
   }
 
@@ -60,11 +66,12 @@ async function findPublicSplat(
     return null;
   }
 
-  const { SPLATS_BUCKET } = getEnv();
+  const { SPLATS_BUCKET, SHOWCASE_CLERK_USER_ID } = getEnv();
 
   return {
     publicSplat: {
       title: splat.name,
+      isShowcase: Boolean(SHOWCASE_CLERK_USER_ID) && ownerClerkUserId === SHOWCASE_CLERK_USER_ID,
       thumbnailUrl: await presignPublic(SPLATS_BUCKET, splat.thumbnailS3Key),
       splatUrl: await presignPublic(SPLATS_BUCKET, latestJob.resultSpzS3Key),
       pointCloudUrl: latestJob.pointCloudS3Key ? await presignPublic(SPLATS_BUCKET, latestJob.pointCloudS3Key) : null,
