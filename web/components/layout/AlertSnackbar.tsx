@@ -2,8 +2,8 @@
  * How one snackbar (toast message) looks.
  *
  * notistack is the library that stacks toast messages in the corner of the screen. This component replaces its default
- * look with the app's own: a raised card with an icon colored for its variant, a title in the display font, an
- * optional line of detail under it, and a close button.
+ * look with the app's own: a card tinted with its variant's color, an icon, a title, an optional line of detail under
+ * it, and a close button.
  */
 
 "use client";
@@ -25,12 +25,13 @@ declare module "notistack" {
   }
 }
 
-const VARIANT_ICON = {
-  default: { Icon: LuInfo, className: "bg-info/15 text-info" },
-  success: { Icon: LuCircleCheck, className: "bg-success/15 text-success" },
-  error: { Icon: LuCircleAlert, className: "bg-error/15 text-error" },
-  warning: { Icon: LuTriangleAlert, className: "bg-primary/15 text-primary" },
-  info: { Icon: LuInfo, className: "bg-info/15 text-info" },
+// --tone is the variant's color, which the card's tint, border and icon all read.
+const VARIANT_TONE = {
+  default: { Icon: LuInfo, tone: "[--tone:var(--color-info)]" },
+  success: { Icon: LuCircleCheck, tone: "[--tone:var(--color-success)]" },
+  error: { Icon: LuCircleAlert, tone: "[--tone:var(--color-error)]" },
+  warning: { Icon: LuTriangleAlert, tone: "[--tone:var(--color-primary)]" },
+  info: { Icon: LuInfo, tone: "[--tone:var(--color-info)]" },
 } as const;
 
 /**
@@ -40,31 +41,34 @@ const VARIANT_ICON = {
  */
 export const AlertSnackbar = forwardRef<HTMLDivElement, CustomContentProps & { detail?: string }>(
   function AlertSnackbar({ message, variant, detail, id }, ref) {
-    const { Icon, className: iconClassName } = VARIANT_ICON[variant];
+    const { Icon, tone } = VARIANT_TONE[variant];
 
     let detailLine: React.ReactNode = null;
     // An error response with an empty body gives an empty message, which would otherwise render as a blank line.
     if (detail) {
-      detailLine = <p className="text-sm leading-snug text-muted-foreground">{detail}</p>;
+      detailLine = <p className="text-sm text-muted-foreground">{detail}</p>;
     }
 
+    // The tint is mixed into the paper color rather than laid over it as a translucent fill. A toast can sit over the 3D
+    // viewer, which would otherwise show through.
     return (
       <div
         ref={ref}
-        className="raised flex w-full max-w-90 items-start gap-3 rounded-2xl bg-paper py-3.5 pr-1 pl-3.5 text-foreground"
+        className={cn(
+          "flex w-full max-w-90 items-center gap-3 rounded-xl border border-(--tone)/30 bg-[color-mix(in_srgb,var(--tone)_10%,var(--color-paper))] py-1 pr-1 pl-3.5 text-foreground shadow-md",
+          tone,
+        )}
       >
-        <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-full", iconClassName)}>
-          <Icon className="h-4.5 w-4.5" aria-hidden />
-        </span>
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5 pt-0.5">
-          <p className="font-display text-xl leading-tight">{message}</p>
+        <Icon className="h-5 w-5 shrink-0 text-(--tone)" aria-hidden />
+        <div className="flex min-w-0 flex-1 flex-col py-2.5">
+          <p className="text-sm font-medium">{message}</p>
           {detailLine}
         </div>
         <button
           type="button"
           aria-label="Close"
           onClick={() => closeSnackbar(id)}
-          className="-mt-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:text-foreground"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:text-foreground"
         >
           <LuX className="h-4 w-4" aria-hidden />
         </button>
