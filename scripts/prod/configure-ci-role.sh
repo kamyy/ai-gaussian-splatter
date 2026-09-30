@@ -95,7 +95,10 @@ aws iam tag-role --role-name "$ROLE" --tags "Key=Project,Value=$PROJECT_TAG"
 # IAM is additive, so a narrower tfstate statement would not cancel DeleteBucket on that bucket.
 # iam:CreateServiceLinkedRole is for the ECS, ELB, RDS, and Application Auto Scaling SLRs a first apply creates.
 # scripts/prod/create-account-prereqs.sh only creates AWSServiceRoleForEC2Spot.
-# logs:DescribeLogGroups and ssm:DescribeParameters are list APIs and ignore a resource ARN.
+# The Lambda, EventBridge and SNS statements cover the worker sweeper (infra/worker_sweeper.tf) by its fixed names. The
+# sns:Subscribe and sns:Unsubscribe grants end in a wildcard because a subscription's ARN carries a generated suffix.
+# iam:PassRole on the sweeper's role is limited to Lambda, so the CI role can't hand that role to another service.
+# cloudwatch:DescribeAlarms, logs:DescribeLogGroups and ssm:DescribeParameters are list APIs and ignore a resource ARN.
 # The SSM grants cover the runtime settings infra/settings.tf creates. PutParameter only runs when Terraform creates a
 # setting, since infra/settings.tf ignores later changes to each value.
 DEPLOY_POLICY=$(
@@ -198,6 +201,63 @@ DEPLOY_POLICY=$(
         "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-gaussian-splatter-migrate-task",
         "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-gaussian-splatter-task"
       ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-gaussian-splatter-worker-sweeper",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "lambda.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "lambda:AddPermission",
+        "lambda:CreateFunction",
+        "lambda:GetFunction",
+        "lambda:GetFunctionCodeSigningConfig",
+        "lambda:GetPolicy",
+        "lambda:ListTags",
+        "lambda:ListVersionsByFunction",
+        "lambda:RemovePermission",
+        "lambda:TagResource",
+        "lambda:UpdateFunctionCode",
+        "lambda:UpdateFunctionConfiguration",
+        "lambda:DeleteFunction"
+      ],
+      "Resource": "arn:aws:lambda:$REGION:$AWS_ACCOUNT_ID:function:ai-gaussian-splatter-worker-sweeper"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "events:DeleteRule",
+        "events:DescribeRule",
+        "events:ListTagsForResource",
+        "events:ListTargetsByRule",
+        "events:PutRule",
+        "events:PutTargets",
+        "events:RemoveTargets",
+        "events:TagResource"
+      ],
+      "Resource": "arn:aws:events:$REGION:$AWS_ACCOUNT_ID:rule/ai-gaussian-splatter-worker-sweeper"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "sns:CreateTopic",
+        "sns:DeleteTopic",
+        "sns:GetSubscriptionAttributes",
+        "sns:GetTopicAttributes",
+        "sns:ListTagsForResource",
+        "sns:SetTopicAttributes",
+        "sns:Subscribe",
+        "sns:TagResource",
+        "sns:Unsubscribe"
+      ],
+      "Resource": "arn:aws:sns:$REGION:$AWS_ACCOUNT_ID:ai-gaussian-splatter-alerts*"
     },
     {
       "Effect": "Allow",
@@ -395,7 +455,26 @@ DEPLOY_POLICY=$(
         "logs:DeleteLogGroup",
         "logs:TagResource"
       ],
-      "Resource": "arn:aws:logs:$REGION:$AWS_ACCOUNT_ID:log-group:/ecs/ai-gaussian-splatter-*"
+      "Resource": [
+        "arn:aws:logs:$REGION:$AWS_ACCOUNT_ID:log-group:/ai-gaussian-splatter/*",
+        "arn:aws:logs:$REGION:$AWS_ACCOUNT_ID:log-group:/aws/lambda/ai-gaussian-splatter-*",
+        "arn:aws:logs:$REGION:$AWS_ACCOUNT_ID:log-group:/ecs/ai-gaussian-splatter-*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": "cloudwatch:DescribeAlarms",
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:ListTagsForResource",
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:TagResource"
+      ],
+      "Resource": "arn:aws:cloudwatch:$REGION:$AWS_ACCOUNT_ID:alarm:ai-gaussian-splatter-*"
     },
     {
       "Effect": "Allow",
