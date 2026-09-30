@@ -148,8 +148,9 @@ describe("NewSplatForm", () => {
 
     await waitFor(() => expect(screen.getByText("1 photo added")).toBeInTheDocument());
     expect(screen.queryByRole("img", { name: "b.heic" })).not.toBeInTheDocument();
-    expect(enqueueSnackbarMock).toHaveBeenCalledWith("Couldn't read b.heic. Try exporting as JPEG.", {
+    expect(enqueueSnackbarMock).toHaveBeenCalledWith("Couldn't read photo", {
       variant: "error",
+      detail: "Try exporting b.heic as JPEG.",
     });
   });
 
@@ -261,7 +262,12 @@ describe("NewSplatForm", () => {
     await addPhotos("a.jpg");
     fireEvent.click(submitButton());
 
-    await waitFor(() => expect(enqueueSnackbarMock).toHaveBeenCalledWith("Name already taken", { variant: "error" }));
+    await waitFor(() =>
+      expect(enqueueSnackbarMock).toHaveBeenCalledWith("Couldn't create the splat", {
+        variant: "error",
+        detail: "Name already taken",
+      }),
+    );
     expect(uploadPhotosMock).not.toHaveBeenCalled();
     expect(pushMock).not.toHaveBeenCalled();
   });
@@ -274,10 +280,10 @@ describe("NewSplatForm", () => {
     fireEvent.click(submitButton());
 
     await waitFor(() =>
-      expect(enqueueSnackbarMock).toHaveBeenCalledWith(
-        expect.stringMatching(/"Coffee mug" was created, but photo upload failed/i),
-        { variant: "error" },
-      ),
+      expect(enqueueSnackbarMock).toHaveBeenCalledWith("Photo upload failed", {
+        variant: "error",
+        detail: '"Coffee mug" was created. S3 upload failed: Forbidden',
+      }),
     );
     expect(pushMock).not.toHaveBeenCalled();
 
@@ -323,6 +329,9 @@ describe("NewSplatForm", () => {
     fireEvent.click(submitButton());
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/splats/new-splat-1"));
-    expect(enqueueSnackbarMock).toHaveBeenCalledWith("Need at least 20 uploaded photos, have 1", { variant: "error" });
+    expect(enqueueSnackbarMock).toHaveBeenCalledWith("Couldn't start processing", {
+      variant: "error",
+      detail: "Need at least 20 uploaded photos, have 1",
+    });
   });
 });

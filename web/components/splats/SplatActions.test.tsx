@@ -50,7 +50,9 @@ describe("DeleteSplatButton", () => {
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
 
-    await waitFor(() => expect(enqueueSnackbarMock).toHaveBeenCalledWith("Server error", { variant: "error" }));
+    await waitFor(() =>
+      expect(enqueueSnackbarMock).toHaveBeenCalledWith("Delete failed", { variant: "error", detail: "Server error" }),
+    );
     expect(pushMock).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });

@@ -41,7 +41,10 @@ function ConfirmButton({ label, variant, title, description, confirmLabel, keepL
       await onConfirm();
       setOpen(false);
     } catch (err) {
-      enqueueSnackbar(err instanceof Error ? err.message : `${confirmLabel} failed`, { variant: "error" });
+      enqueueSnackbar(`${confirmLabel} failed`, {
+        variant: "error",
+        detail: err instanceof Error ? err.message : undefined,
+      });
     } finally {
       setPending(false);
     }

@@ -36,7 +36,7 @@ export function SharePanel({ splatId, children }: { splatId: string; children?: 
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      enqueueSnackbar("Couldn't copy the link. Select it and copy it by hand.", { variant: "error" });
+      enqueueSnackbar("Couldn't copy the link", { variant: "error", detail: "Select it and copy it by hand." });
     }
   }
 
@@ -46,7 +46,7 @@ export function SharePanel({ splatId, children }: { splatId: string; children?: 
       const token = await requireToken(getToken);
       window.location.assign(await apiFetch<string>(`/api/v1/splats/${splatId}/download`, "GET", token));
     } catch (err) {
-      enqueueSnackbar(err instanceof Error ? err.message : "Download failed", { variant: "error" });
+      enqueueSnackbar("Download failed", { variant: "error", detail: err instanceof Error ? err.message : undefined });
     } finally {
       setDownloading(false);
     }

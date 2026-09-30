@@ -64,8 +64,9 @@ export function usePickedPhotos() {
   async function addFiles(dropped: File[]) {
     const tooLarge = dropped.filter(file => file.size > MAX_PHOTO_BYTES).map(file => file.name);
     if (tooLarge.length > 0) {
-      enqueueSnackbar(`${tooLarge.join(", ")} ${tooLarge.length === 1 ? "is" : "are"} over ${MAX_PHOTO_MB} MB.`, {
+      enqueueSnackbar(tooLarge.length === 1 ? "Photo too large" : "Photos too large", {
         variant: "error",
+        detail: `${tooLarge.join(", ")} ${tooLarge.length === 1 ? "is" : "are"} over ${MAX_PHOTO_MB} MB.`,
       });
     }
 
@@ -75,7 +76,10 @@ export function usePickedPhotos() {
       const measured = await measurePhotos(accepted);
       const unreadable = accepted.filter((_, index) => measured[index] === null).map(file => file.name);
       if (unreadable.length > 0) {
-        enqueueSnackbar(`Couldn't read ${unreadable.join(", ")}. Try exporting as JPEG.`, { variant: "error" });
+        enqueueSnackbar(unreadable.length === 1 ? "Couldn't read photo" : "Couldn't read photos", {
+          variant: "error",
+          detail: `Try exporting ${unreadable.join(", ")} as JPEG.`,
+        });
       }
 
       const readable = measured.filter(photo => photo !== null);
