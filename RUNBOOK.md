@@ -215,7 +215,7 @@ scripts/prod/configure-ci-role.sh
 
 ### 2.5 Setting GitHub repository variables
 
-`.github/workflows/deploy.yml` reads its configuration from GitHub repository variables (`vars.*`). `scripts/prod/set-gh-repo-variables.sh` sets all of them, and needs `gh` signed in with write access to the repository plus the Clerk secret from [Creating account prerequisites](#22-creating-account-prerequisites). Two scripts read the same variables back:
+`.github/workflows/deploy.yml` reads its configuration from GitHub repository variables (`vars.*`). `scripts/prod/set-gh-repo-variables.sh` sets each variable the `deploy` job requires, and needs `gh` signed in with write access to the repository plus the Clerk secret from [Creating account prerequisites](#22-creating-account-prerequisites). `DEPLOY_ENABLED` is set under [Going live](#26-going-live), and the optional `SHOWCASE_CLERK_USER_ID` under [Choosing the landing page's examples](#29-choosing-the-landing-pages-examples). Two scripts read the same variables back:
 
 - `scripts/prod/terraform-destroy.sh`
 - `scripts/prod/terraform-plan.sh`

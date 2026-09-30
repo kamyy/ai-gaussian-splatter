@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sets the GitHub repository variables the deploy job reads.
+# Sets the GitHub repository variables the deploy job requires.
 #
 # Works out each value (the AWS account, region, domain, secret ARN and so on), prompts with it, and stores it with gh
 # variable set.
@@ -14,7 +14,8 @@ set -euo pipefail
 usage() {
   echo "Usage: scripts/prod/set-gh-repo-variables.sh"
   echo
-  echo "Resolves every repository variable .github/workflows/deploy.yml reads and sets them with gh variable set."
+  echo "Resolves each repository variable .github/workflows/deploy.yml requires and sets them with gh variable set."
+  echo "DEPLOY_ENABLED and SHOWCASE_CLERK_USER_ID each have their own script."
 }
 
 if [[ ${1-} == -h || ${1-} == --help ]]; then
@@ -99,6 +100,8 @@ WORKER_IMAGE_TAG=$(current_repo_var WORKER_IMAGE_TAG)
 WORKER_IMAGE_TAG=${WORKER_IMAGE_TAG:-$(git rev-parse --short HEAD)}
 
 # DEPLOY_ENABLED is deliberately absent. Going live is scripts/prod/set-deploy-enabled.sh (RUNBOOK.md).
+# SHOWCASE_CLERK_USER_ID is deliberately absent too. It is optional, and the showcase account can only be created once
+# the app is live, so scripts/prod/set-showcase-user.sh sets it afterwards.
 REPO_VARS=(AWS_ACCOUNT_ID DOMAIN_ZONE_NAME HOSTED_ZONE_ID CLERK_SECRET_KEY_ARN ALERT_EMAIL WORKER_AMI_ID
   WORKER_IMAGE_TAG CLERK_PUBLISHABLE_KEY)
 echo "The app will serve from https://$(tf_get_app_hostname "$DOMAIN_ZONE_NAME")."
