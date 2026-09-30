@@ -2,9 +2,9 @@
  * The /preview/splats/[id] page: a shared splat, viewable without signing in.
  *
  * This is the link an owner hands out. It shows the splat and COLMAP's point cloud in the 3D viewer, with the cameras
- * each photo was taken from, beside a grid of the photos' thumbnails. It renders on the server straight from the
- * database (web/lib/server/data.ts), and it 404s unless the splat is complete and its owner has made it shareable. Its
- * metadata gives link previews in chat apps a title and thumbnail.
+ * each photo was taken from, beside how long each pipeline step took and a grid of the photos' thumbnails. It renders
+ * on the server straight from the database (web/lib/server/data.ts), and it 404s unless the splat is complete and its
+ * owner has made it shareable. Its metadata gives link previews in chat apps a title and thumbnail.
  */
 
 import type { Metadata } from "next";
@@ -55,6 +55,7 @@ export default async function PublicSplatViewPage({ params }: Props) {
       pointCloudUrl={splat.pointCloudUrl}
       cameras={cameras}
       photos={splat.photos}
+      timestamps={splat.timestamps}
     />
   );
 }

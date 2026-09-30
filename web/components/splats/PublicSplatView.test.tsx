@@ -1,7 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { CameraPose, PublicPhoto } from "@/lib/types";
+import type { CameraPose, JobTimestamps, PublicPhoto } from "@/lib/types";
 import { PublicSplatView } from "./PublicSplatView";
 
 // jsdom does no layout, so the grid reports a fixed width, as in web/components/splats/PhotoGrid.test.tsx.
@@ -51,6 +51,18 @@ const cameras: CameraPose[] = photos.map(photo => ({
   fy: 3000,
 }));
 
+// Cameras took 7m 52s from launch, the owner checked for 12m, and the build took 10m 15s.
+const timestamps: JobTimestamps = {
+  colmapBootedAt: null,
+  colmapStartedAt: "2026-01-01T10:03:40Z",
+  colmapFinishedAt: "2026-01-01T10:07:52Z",
+  trainingLaunchedAt: "2026-01-01T10:19:52Z",
+  trainingBootedAt: null,
+  trainingStartedAt: "2026-01-01T10:22:57Z",
+  createdAt: "2026-01-01T10:00:00Z",
+  updatedAt: "2026-01-01T10:30:07Z",
+};
+
 function view(pointCloudUrl: string | null) {
   return (
     <PublicSplatView
@@ -59,6 +71,7 @@ function view(pointCloudUrl: string | null) {
       pointCloudUrl={pointCloudUrl}
       cameras={cameras}
       photos={photos}
+      timestamps={timestamps}
     />
   );
 }
@@ -75,6 +88,20 @@ describe("PublicSplatView", () => {
     expect(screen.getByRole("button", { name: "Cameras" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("slider", { name: "Point size" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Crop" })).not.toBeInTheDocument();
+  });
+
+  it("shows how long each step took, without the owner's Share step", () => {
+    render(view("https://example.com/points.ply"));
+
+    expect(screen.getByRole("heading", { name: "How it was made" })).toBeInTheDocument();
+    const steps = within(screen.getByRole("list", { name: "Progress" })).getAllByRole("listitem");
+    expect(steps.map(item => item.textContent)).toEqual([
+      "Upload photos: done2 photos",
+      "Place the cameras: done7m 52sGPU start-up 3m 40s · reconstructing 4m 12s",
+      "Check the shape: done12m 00s",
+      "Build the 3D splat: done10m 15sGPU start-up 3m 05s · training 7m 10s",
+    ]);
+    expect(screen.getByText("18m 07s of GPU time")).toBeInTheDocument();
   });
 
   it("disables the point cloud when the splat has none", () => {
