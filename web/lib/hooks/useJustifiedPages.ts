@@ -20,6 +20,12 @@ interface JustifiedPagesOptions {
   captionRem?: number;
 }
 
+export interface PlacedTile extends LayoutTile {
+  // The tile's top-left corner, measured from the area's.
+  left: number;
+  top: number;
+}
+
 /**
  * Pages of whole justified rows, laid out for the width of the element given setArea as its ref. Every page but the
  * last ends on a full row. The requested page is clamped to the last one, so removing items or narrowing the window
@@ -35,9 +41,9 @@ export function useJustifiedPages(
 
   // The layout works in pixels, so the rem sizes are converted at the root font size. That is only read once the area
   // has been measured, which happens in the browser, never during server rendering.
-  const { pages, areaHeight } = useMemo(() => {
+  const { pages, areaHeight, remPx } = useMemo(() => {
     if (width === 0) {
-      return { pages: [], areaHeight: 0 };
+      return { pages: [], areaHeight: 0, remPx: 0 };
     }
 
     // 16px is the browser default, for an environment that reports no font size.
@@ -55,7 +61,7 @@ export function useJustifiedPages(
       ),
     );
 
-    return { pages: laidOut, areaHeight: height };
+    return { pages: laidOut, areaHeight: height, remPx };
   }, [aspects, width, rowHeightRem, columnGapRem, rowGapRem, rowsPerPage, captionRem]);
 
   // The 1-based page holding the item at index, or 0 before the area has been measured.
@@ -70,12 +76,23 @@ export function useJustifiedPages(
 
   // Each full row's widths add up to the area's width, so a wrapping list breaks exactly where the layout broke the
   // rows. Rounding each width down keeps a row from overflowing by a fraction of a pixel.
-  const tiles: LayoutTile[] = (layout?.rows ?? []).flatMap(row =>
-    row.tiles.map(tile => ({ ...tile, width: Math.floor(tile.width * 100) / 100 })),
-  );
+  let top = 0;
+  const tiles: PlacedTile[] = (layout?.rows ?? []).flatMap(row => {
+    let left = 0;
+    const placed = row.tiles.map(tile => {
+      const placedTile = { ...tile, width: Math.floor(tile.width * 100) / 100, left, top };
+      left += tile.width + columnGapRem * remPx;
+
+      return placedTile;
+    });
+    top += row.height + (captionRem + rowGapRem) * remPx;
+
+    return placed;
+  });
 
   return {
     setArea,
+    areaWidth: width,
     // Give it to the area as its minimum height.
     areaHeight,
     current,
