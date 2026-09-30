@@ -26,4 +26,15 @@ describe("useAppSnackbar", () => {
 
     expect(enqueueSnackbarMock).toHaveBeenCalledWith("Saved", { variant: "success", persist: false });
   });
+
+  it("passes the detail line through", () => {
+    const { result } = renderHook(() => useAppSnackbar());
+    result.current.enqueueSnackbar("Download failed", { variant: "error", detail: "Not found" });
+
+    expect(enqueueSnackbarMock).toHaveBeenCalledWith("Download failed", {
+      variant: "error",
+      detail: "Not found",
+      persist: true,
+    });
+  });
 });
