@@ -19,9 +19,13 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 vi.mock("@/lib/hooks/useAppSnackbar", () => ({ useAppSnackbar: () => ({ enqueueSnackbar: enqueueSnackbarMock }) }));
 
+const { processingPausedMock } = vi.hoisted(() => ({ processingPausedMock: vi.fn(() => false) }));
+vi.mock("@/lib/hooks/useProcessingPaused", () => ({ useProcessingPaused: processingPausedMock }));
+
 describe("StageCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    processingPausedMock.mockReturnValue(false);
     apiFetchMock.mockResolvedValue({});
   });
 
@@ -33,6 +37,33 @@ describe("StageCard", () => {
     await waitFor(() => expect(onJobChanged).toHaveBeenCalled());
     expect(apiFetchMock).toHaveBeenCalledWith("/api/v1/splats/splat-1/process", "POST", "test-token", undefined);
     expect(mutateMock).toHaveBeenCalledWith("splats");
+  });
+
+  it("disables Start and says why while processing is paused", () => {
+    processingPausedMock.mockReturnValue(true);
+    render(<StageCard splatId="splat-1" stage={{ kind: "ready" }} onJobChanged={vi.fn()} />);
+
+    expect(screen.getByRole("button", { name: "Start" })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Processing is paused for the whole site.");
+  });
+
+  it("disables the build button while processing is paused", () => {
+    processingPausedMock.mockReturnValue(true);
+    render(<StageCard splatId="splat-1" stage={{ kind: "check" }} onJobChanged={vi.fn()} />);
+
+    expect(screen.getByRole("button", { name: "Looks right, build it" })).toBeDisabled();
+    expect(screen.getByRole("status")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["Try again", { kind: "failed", step: "cameras", message: null }],
+    ["Start again", { kind: "cancelled", step: "cameras" }],
+  ] as const)("disables %s while processing is paused", (label, stage) => {
+    processingPausedMock.mockReturnValue(true);
+    render(<StageCard splatId="splat-1" stage={stage} onJobChanged={vi.fn()} />);
+
+    expect(screen.getByRole("button", { name: label })).toBeDisabled();
+    expect(screen.getByRole("status")).toBeInTheDocument();
   });
 
   it("starts training from the check stage", async () => {
@@ -67,6 +98,9 @@ describe("StageCard", () => {
       }),
     );
     expect(onJobChanged).not.toHaveBeenCalled();
+
+    // So a pause that caused the failure shows its notice without waiting for the next poll.
+    await waitFor(() => expect(mutateMock).toHaveBeenCalledWith("processing"));
   });
 
   it("shows the worker's error for a failed job and offers a retry", () => {
