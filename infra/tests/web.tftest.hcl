@@ -336,6 +336,22 @@ run "hostnames_follow_the_zone_variable" {
   }
 }
 
+run "showcase_user_reaches_the_web_container" {
+  command = apply
+
+  variables {
+    showcase_clerk_user_id = "user_showcase"
+  }
+
+  assert {
+    condition = anytrue([
+      for e in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].environment :
+      e.name == "SHOWCASE_CLERK_USER_ID" && e.value == "user_showcase"
+    ])
+    error_message = "SHOWCASE_CLERK_USER_ID must carry var.showcase_clerk_user_id, or the landing page shows no examples"
+  }
+}
+
 run "rejects_a_moving_web_image_tag" {
   command = plan
 

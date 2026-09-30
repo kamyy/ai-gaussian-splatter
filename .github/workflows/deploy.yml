@@ -36,6 +36,8 @@ jobs:
       # GPU worker deployment stays manual. This value changes only when someone builds and pushes a new worker image by
       # hand (RUNBOOK.md), not on every push to main like the web and migrate image tags.
       TF_VAR_worker_image_tag: ${{ vars.WORKER_IMAGE_TAG }}
+      # Optional. Unset arrives as "", which shows no examples on the landing page.
+      TF_VAR_showcase_clerk_user_id: ${{ vars.SHOWCASE_CLERK_USER_ID }}
     steps:
       - uses: actions/checkout@v7
 
