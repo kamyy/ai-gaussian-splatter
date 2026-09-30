@@ -13,8 +13,6 @@ import { useEffect, useRef, useState } from "react";
 
 import type { Stage } from "@/lib/splatStage";
 
-type StageKind = Stage["kind"];
-
 // What a running stage finishing into each of these means to the visitor. Moving into any other stage is a cancel,
 // which is the visitor's own doing and needs no notice.
 const FINISHED: Partial<Record<StageKind, string>> = {
@@ -22,6 +20,8 @@ const FINISHED: Partial<Record<StageKind, string>> = {
   complete: "Your 3D splat is ready",
   failed: "Processing failed",
 };
+
+type StageKind = Stage["kind"];
 
 function isRunning(kind: StageKind | undefined) {
   return kind === "placing_cameras" || kind === "building";

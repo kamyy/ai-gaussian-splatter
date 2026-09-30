@@ -132,6 +132,10 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - Where the loader also accepts a named export, use that. `web/proxy.ts` exports `proxy`, and `web/tests/migrate-test-db.ts` exports `setup`.
   - Add a file to the override only after checking the loader's docs rule out a named export.
 - **`if`/`for`/`while`/`do` bodies always use a `{ }` block** — never `if (x) return;`. Biome `style/useBlockStatements` (enabled in `biome.json`; not in `recommended`).
+- **At file scope, constants and variables come first, then types and interfaces, then functions.** A reader meets the values and shapes a file works with before the code that uses them.
+  - Module state such as `let cached` counts as a variable.
+  - A `const` holding a function or component counts as a function. `export const POST = withErrorHandling(…)` and `forwardRef(…)` are examples.
+  - A constant computed by calling a helper in the same file sits directly below that helper, because it can't run before the helper's own inputs exist. `POINTS` below `generatePoints` in `web/components/marketing/HeroPointCloud.tsx` is the pattern.
 - **Define a file's sub-components and helpers above the component that uses them**, so a file reads bottom-up to its main export. A sub-component used by another sub-component goes above that one too, as `Tip` sits above `ShootingTips` in `web/app/(authenticated)/splats/new/page.tsx`.
 - **A helper that only one file uses is defined in that file, not in a module of its own.** Tests don't count as a use.
   - Export it only when its tests need it. Those tests go in the using file's own test file, as `pageItems` in `web/components/ui/Pager.tsx` is tested in `web/components/ui/Pager.test.tsx`.

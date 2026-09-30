@@ -9,22 +9,6 @@ vi.mock("@clerk/nextjs", () => ({
   useAuth: () => ({ getToken: async () => "test-token" }),
 }));
 
-interface JobPollConfig {
-  refreshInterval: (latest: Job | undefined) => number;
-  refreshWhenHidden?: boolean;
-}
-
-// SWR is stubbed so the config it receives can be inspected directly. That config is the contract under test, not
-// anything SWR does with it.
-const { useSWRMock } = vi.hoisted(() => ({
-  useSWRMock: vi.fn<(key: unknown, fetcher: unknown, config: JobPollConfig) => { data: undefined }>(),
-}));
-vi.mock("swr", () => ({ default: useSWRMock }));
-
-function capturedConfig(callIndex = 0) {
-  return useSWRMock.mock.calls[callIndex][2];
-}
-
 const baseJob: Job = {
   id: "job-1",
   splatId: "splat-1",
@@ -43,6 +27,22 @@ const baseJob: Job = {
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
 };
+
+// SWR is stubbed so the config it receives can be inspected directly. That config is the contract under test, not
+// anything SWR does with it.
+const { useSWRMock } = vi.hoisted(() => ({
+  useSWRMock: vi.fn<(key: unknown, fetcher: unknown, config: JobPollConfig) => { data: undefined }>(),
+}));
+vi.mock("swr", () => ({ default: useSWRMock }));
+
+interface JobPollConfig {
+  refreshInterval: (latest: Job | undefined) => number;
+  refreshWhenHidden?: boolean;
+}
+
+function capturedConfig(callIndex = 0) {
+  return useSWRMock.mock.calls[callIndex][2];
+}
 
 describe("useLatestJob", () => {
   beforeEach(() => {

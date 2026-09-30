@@ -9,6 +9,18 @@ import type { ChipColor } from "@/components/ui/Chip";
 import { JobStatus } from "./statuses";
 import type { SplatListItem } from "./types";
 
+const JOB_BADGES: Record<JobStatus, SplatBadge> = {
+  [JobStatus.queued]: { label: "Placing cameras", color: "info", filter: "in_progress" },
+  [JobStatus.launching]: { label: "Placing cameras", color: "info", filter: "in_progress" },
+  [JobStatus.reconstruction_running]: { label: "Placing cameras", color: "info", filter: "in_progress" },
+  [JobStatus.awaiting_training]: { label: "Check the shape", color: "primary", filter: "needs_you" },
+  [JobStatus.training_running]: { label: "Building", color: "info", filter: "in_progress" },
+  [JobStatus.uploading_result]: { label: "Building", color: "info", filter: "in_progress" },
+  [JobStatus.complete]: { label: "Complete", color: "success", filter: "complete" },
+  [JobStatus.failed]: { label: "Failed", color: "error", filter: "needs_you" },
+  [JobStatus.cancelled]: { label: "Cancelled", color: "default", filter: "needs_you" },
+};
+
 export type LibraryFilter = "needs_you" | "in_progress" | "complete";
 
 export interface SplatBadge {
@@ -37,15 +49,3 @@ export function splatBadge({
 
   return JOB_BADGES[latestJobStatus];
 }
-
-const JOB_BADGES: Record<JobStatus, SplatBadge> = {
-  [JobStatus.queued]: { label: "Placing cameras", color: "info", filter: "in_progress" },
-  [JobStatus.launching]: { label: "Placing cameras", color: "info", filter: "in_progress" },
-  [JobStatus.reconstruction_running]: { label: "Placing cameras", color: "info", filter: "in_progress" },
-  [JobStatus.awaiting_training]: { label: "Check the shape", color: "primary", filter: "needs_you" },
-  [JobStatus.training_running]: { label: "Building", color: "info", filter: "in_progress" },
-  [JobStatus.uploading_result]: { label: "Building", color: "info", filter: "in_progress" },
-  [JobStatus.complete]: { label: "Complete", color: "success", filter: "complete" },
-  [JobStatus.failed]: { label: "Failed", color: "error", filter: "needs_you" },
-  [JobStatus.cancelled]: { label: "Cancelled", color: "default", filter: "needs_you" },
-};

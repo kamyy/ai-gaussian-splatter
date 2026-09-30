@@ -11,7 +11,6 @@
  */
 
 export const SPLAT_STATUSES = ["draft", "uploading", "ready_to_process", "processing", "complete", "failed"] as const;
-export type SplatStatus = (typeof SPLAT_STATUSES)[number];
 
 export const PHOTO_UPLOAD_STATUSES = ["pending", "uploaded", "failed"] as const;
 
@@ -34,7 +33,6 @@ export const JobStatus = {
  * `[string, ...string[]]` shape that Object.values()'s inferred `JobStatus[]` doesn't satisfy on its own.
  */
 export const JOB_STATUSES = Object.values(JobStatus) as [JobStatus, ...JobStatus[]];
-export type JobStatus = (typeof JobStatus)[keyof typeof JobStatus];
 
 // The Postgres enum's own label set: every value the type has ever had, in the order each was added, rather than in
 // JOB_STATUSES' order. "colmap_running" is a label nothing writes any more. Postgres has no cheap way to drop an enum
@@ -44,8 +42,6 @@ export type JobStatus = (typeof JobStatus)[keyof typeof JobStatus];
 // plain append and emits a single ALTER TYPE … ADD VALUE. Reordering the existing values makes drizzle-kit drop and
 // recreate the type around the column instead, which .claude/skills/db-migration/SKILL.md flags as unsafe on a live
 // table.
-type JobStatusDbValue = JobStatus | "colmap_running";
-
 export const JOB_STATUS_DB_VALUES = [
   JobStatus.queued,
   JobStatus.launching,
@@ -60,3 +56,9 @@ export const JOB_STATUS_DB_VALUES = [
 ] as [JobStatusDbValue, ...JobStatusDbValue[]];
 
 export const JOB_ENDED_STATUSES: JobStatus[] = [JobStatus.complete, JobStatus.failed, JobStatus.cancelled];
+
+export type SplatStatus = (typeof SPLAT_STATUSES)[number];
+
+export type JobStatus = (typeof JobStatus)[keyof typeof JobStatus];
+
+type JobStatusDbValue = JobStatus | "colmap_running";

@@ -13,10 +13,6 @@ import { closeDb, getDb } from "@/lib/server/db";
 import { jobs, splats, users } from "@/lib/server/db/schema";
 import { GET } from "./route";
 
-function ctx(splatId: string) {
-  return { params: Promise.resolve({ splatId }) } as never;
-}
-
 const POSE = {
   photoId: "p1",
   center: [0, 0, 0],
@@ -30,6 +26,10 @@ const POSE = {
   fx: 3200,
   fy: 3200,
 };
+
+function ctx(splatId: string) {
+  return { params: Promise.resolve({ splatId }) } as never;
+}
 
 // Requires a real Postgres (TEST_DATABASE_URL). The S3 read is mocked so this never touches real AWS.
 describe("GET /api/v1/splats/[splatId]/cameras", () => {

@@ -9,15 +9,6 @@ import { forwardRef } from "react";
 import { Spinner } from "@/components/ui/Spinner";
 import { cn } from "@/lib/cn";
 
-type ButtonVariant = "contained" | "ink" | "outlined" | "text" | "danger";
-type ButtonSize = "small" | "medium" | "large";
-
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: ButtonVariant;
-  size?: ButtonSize;
-  loading?: boolean;
-}
-
 const BASE =
   "inline-flex min-w-10 items-center justify-center gap-2 whitespace-nowrap rounded-full font-body font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50";
 
@@ -37,6 +28,15 @@ const SIZE: Record<ButtonSize, string> = {
   medium: "h-9 px-4 text-sm pointer-coarse:h-11",
   large: "h-10 px-5 text-base pointer-coarse:h-11",
 };
+
+type ButtonVariant = "contained" | "ink" | "outlined" | "text" | "danger";
+type ButtonSize = "small" | "medium" | "large";
+
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  loading?: boolean;
+}
 
 /** For a next/link <Link> that should look like a button: a <button> nested inside an <a> is invalid HTML. */
 export function buttonClassName(variant: ButtonVariant = "text", size: ButtonSize = "medium", className?: string) {

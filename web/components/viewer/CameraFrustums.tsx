@@ -53,6 +53,18 @@ interface Frustum {
   depth: number;
 }
 
+interface CameraFrustumsProps {
+  cameras: Omit<CameraPose, "photoId">[];
+  // An index into cameras.
+  selected: number | null;
+  // Offered only when clicking a camera should select it.
+  onSelect?: (index: number) => void;
+  // The camera to mark as hovered, whether the pointer is over its frustum or over its photo in the grid.
+  hovered: number | null;
+  // Reports the camera under the pointer while cameras can be clicked, or null once the pointer leaves them.
+  onHover?: (index: number | null) => void;
+}
+
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length / 2)] ?? 0;
@@ -135,18 +147,6 @@ function solidTriangles({ center, corners }: Frustum): Float32Array {
 
 function farFace({ corners }: Frustum): Float32Array {
   return new Float32Array([...corners[0], ...corners[1], ...corners[2], ...corners[0], ...corners[2], ...corners[3]]);
-}
-
-interface CameraFrustumsProps {
-  cameras: Omit<CameraPose, "photoId">[];
-  // An index into cameras.
-  selected: number | null;
-  // Offered only when clicking a camera should select it.
-  onSelect?: (index: number) => void;
-  // The camera to mark as hovered, whether the pointer is over its frustum or over its photo in the grid.
-  hovered: number | null;
-  // Reports the camera under the pointer while cameras can be clicked, or null once the pointer leaves them.
-  onHover?: (index: number | null) => void;
 }
 
 // One frustum drawn over the full set at full strength, with its far rectangle filled at fillOpacity. The lines sit in

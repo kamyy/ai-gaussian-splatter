@@ -13,6 +13,11 @@ import type { ConnectionOptions } from "node:tls";
 
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 
+const PASSWORD_CACHE_TTL_MS = 5 * 60 * 1000;
+
+let secretsClient: SecretsManagerClient | undefined;
+let cachedPassword: { secretArn: string; value: string; fetchedAt: number } | undefined;
+
 /**
  * TLS settings for the Postgres connection, or undefined for a plain connection. `DATABASE_SSL_CA` controls this. It is
  * a path to a PEM certificate bundle. In production it points at the bundle `web/Dockerfile` bakes in, and the
@@ -57,11 +62,6 @@ export function resolveDatabaseUrl(env: Record<string, string | undefined> = pro
 
   return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${name}`;
 }
-
-const PASSWORD_CACHE_TTL_MS = 5 * 60 * 1000;
-
-let secretsClient: SecretsManagerClient | undefined;
-let cachedPassword: { secretArn: string; value: string; fetchedAt: number } | undefined;
 
 /**
  * Fetches the RDS master password from Secrets Manager on demand, rather than trusting a value ECS injected once at

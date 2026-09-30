@@ -54,9 +54,9 @@ const envSchema = z
     path: ["DATABASE_PASSWORD"],
   });
 
-export type Env = z.infer<typeof envSchema>;
-
 let cached: Env | null = null;
+
+export type Env = z.infer<typeof envSchema>;
 
 /**
  * Parsed once on first use, not when the module loads. This mirrors worker/pipeline/config.py's lazy `get_settings()`.

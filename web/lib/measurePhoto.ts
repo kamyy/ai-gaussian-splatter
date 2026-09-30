@@ -9,6 +9,16 @@
 
 import { MIN_SHARP_PHOTO_EDGE } from "@/lib/limits";
 
+/** Long enough that a library card, the largest place a thumbnail shows, stays sharp on a high-resolution screen. */
+export const THUMBNAIL_LONG_SIDE = 640;
+const THUMBNAIL_QUALITY = 0.8;
+
+/**
+ * A decoded 12-megapixel photo holds about 48 MB, so decoding a whole drop at once can exhaust the tab's memory. Only
+ * this many are decoded at a time.
+ */
+export const MEASURE_CONCURRENCY = 4;
+
 /**
  * A photo picked for upload, with its size as an <img> displays it, a small JPEG copy, and when it was taken.
  * web/lib/hooks/usePickedPhotos.ts measures each photo as it's added, so every photo that reaches
@@ -30,10 +40,6 @@ export interface PickedPhoto {
 export function fileKey(file: File) {
   return `${file.name}:${file.size}`;
 }
-
-/** Long enough that a library card, the largest place a thumbnail shows, stays sharp on a high-resolution screen. */
-export const THUMBNAIL_LONG_SIDE = 640;
-const THUMBNAIL_QUALITY = 0.8;
 
 async function makeThumbnail(bitmap: ImageBitmap): Promise<Blob> {
   const scale = Math.min(1, THUMBNAIL_LONG_SIDE / Math.max(bitmap.width, bitmap.height));
@@ -139,12 +145,6 @@ export async function measurePhoto(file: File): Promise<PickedPhoto | null> {
     bitmap?.close();
   }
 }
-
-/**
- * A decoded 12-megapixel photo holds about 48 MB, so decoding a whole drop at once can exhaust the tab's memory. Only
- * this many are decoded at a time.
- */
-export const MEASURE_CONCURRENCY = 4;
 
 /** Results line up with files, with null for each photo measurePhoto couldn't decode. */
 export async function measurePhotos(files: File[]): Promise<Array<PickedPhoto | null>> {

@@ -6,14 +6,14 @@ import { closeDb, getDb } from "@/lib/server/db";
 import { jobs, splats, users } from "@/lib/server/db/schema";
 import { PATCH } from "./route";
 
+const EARLIER = new Date("2026-01-01T00:00:00Z");
+
 function req(token: string, body: unknown): NextRequest {
   return {
     headers: new Headers({ Authorization: `Bearer ${token}` }),
     json: async () => body,
   } as unknown as NextRequest;
 }
-
-const EARLIER = new Date("2026-01-01T00:00:00Z");
 
 function ctx(jobId: string) {
   return { params: Promise.resolve({ jobId }) } as never;

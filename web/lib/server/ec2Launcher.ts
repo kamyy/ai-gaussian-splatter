@@ -22,6 +22,17 @@ import {
 import type { CropBox } from "@/lib/types";
 import { getEnv } from "./env";
 
+/**
+ * How long after boot renderUserData's `shutdown -h` terminates a worker, whatever its job is doing. It caps
+ * worst-case billing and is not a tuned SLA. No stage's wall clock has been measured yet, so 30 minutes is a guess, and
+ * a stage that runs longer is killed. Revisit it once real numbers exist.
+ *
+ * infra/locals.tf's worker_max_lifetime_minutes must match it. That is what the sweeper Lambda
+ * (infra/worker_sweeper.tf) measures instance age against, and it lives in a separate Terraform config, so the two are
+ * kept in sync by hand.
+ */
+export const WORKER_MAX_LIFETIME_MINUTES = 30;
+
 type WorkerStage = "reconstruct" | "train";
 
 interface UserDataParams {
@@ -122,17 +133,6 @@ export function localLaunchEnabled(): boolean {
 export function generateCallbackToken(): string {
   return randomBytes(32).toString("base64url");
 }
-
-/**
- * How long after boot renderUserData's `shutdown -h` terminates a worker, whatever its job is doing. It caps
- * worst-case billing and is not a tuned SLA. No stage's wall clock has been measured yet, so 30 minutes is a guess, and
- * a stage that runs longer is killed. Revisit it once real numbers exist.
- *
- * infra/locals.tf's worker_max_lifetime_minutes must match it. That is what the sweeper Lambda
- * (infra/worker_sweeper.tf) measures instance age against, and it lives in a separate Terraform config, so the two are
- * kept in sync by hand.
- */
-export const WORKER_MAX_LIFETIME_MINUTES = 30;
 
 /** Launches the spot worker instance and returns its instance ID. */
 export async function launchJob(params: {

@@ -22,6 +22,9 @@ import type { CropBox, Job } from "@/lib/types";
 import { DeleteSplatButton, StopJobButton } from "./SplatActions";
 import { StageShell } from "./StageShell";
 
+// Below this the elapsed time says too little about the rest of the run to project from.
+const MIN_PERCENT_FOR_ESTIMATE = 5;
+
 interface StageCardProps {
   splatId: string;
   stage: Stage;
@@ -39,9 +42,6 @@ function WorkingBar({ label }: { label: string }) {
     </div>
   );
 }
-
-// Below this the elapsed time says too little about the rest of the run to project from.
-const MIN_PERCENT_FOR_ESTIMATE = 5;
 
 function timeLeft(percent: number, startedAt: string | null): string | null {
   if (startedAt === null || percent < MIN_PERCENT_FOR_ESTIMATE || percent >= 100) {

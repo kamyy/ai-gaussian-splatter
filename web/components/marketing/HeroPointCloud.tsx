@@ -13,6 +13,15 @@ const HEIGHT = 420;
 const GLAZE = ["#cfe0d6", "#8fb3a4", "#5f8a7a", "#3c5e52"];
 const RIM = "#e9dcc4";
 
+interface Point {
+  left: number;
+  top: number;
+  size: number;
+  opacity: number;
+  color: string;
+  depth: number;
+}
+
 function seededRandom(seed: number) {
   let t = seed;
   return () => {
@@ -22,15 +31,6 @@ function seededRandom(seed: number) {
 
     return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
   };
-}
-
-interface Point {
-  left: number;
-  top: number;
-  size: number;
-  opacity: number;
-  color: string;
-  depth: number;
 }
 
 // A vase-shaped shell of soft dots standing in for a real Gaussian Splat render, deterministic (seeded) so the server
