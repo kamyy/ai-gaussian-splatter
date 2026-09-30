@@ -11,8 +11,17 @@ import { StepDoneIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 import { useNow } from "@/lib/hooks/useNow";
 import { currentStep, STEPS, type Stage, type StepKey } from "@/lib/splatStage";
-import { formatClock, formatDuration, type StageTimings, type StepTiming, stageTimings } from "@/lib/stageTimings";
-import type { Job } from "@/lib/types";
+import {
+  formatClock,
+  formatDuration,
+  type StageTimings,
+  type StepTiming,
+  stageTimings,
+  type TimedJob,
+} from "@/lib/stageTimings";
+
+// Who is reading the stepper: the splat's owner on their own page, or a visitor on the share page.
+type Audience = "owner" | "visitor";
 
 // What a step shows beside its label (a duration, or a count) and on a line under it.
 interface StepExtras {
@@ -44,7 +53,7 @@ function timingExtras(timing: StepTiming | null, workLabel: string): StepExtras 
   return { aside: formatDuration(timing.totalMs), running: false, detail };
 }
 
-function stepExtras(key: StepKey, timings: StageTimings | null, photoCount: number): StepExtras {
+function stepExtras(key: StepKey, timings: StageTimings | null, photoCount: number, audience: Audience): StepExtras {
   switch (key) {
     case "upload":
       if (photoCount === 0) {
@@ -57,7 +66,10 @@ function stepExtras(key: StepKey, timings: StageTimings | null, photoCount: numb
       if (timings?.checkMs == null) {
         return NO_EXTRAS;
       }
-      return { ...NO_EXTRAS, aside: `You took ${formatDuration(timings.checkMs)}` };
+      return {
+        ...NO_EXTRAS,
+        aside: audience === "owner" ? `You took ${formatDuration(timings.checkMs)}` : formatDuration(timings.checkMs),
+      };
     case "build":
       return timingExtras(timings?.build ?? null, "training");
     case "share":
@@ -76,24 +88,28 @@ function gpuTotal(timings: StageTimings | null): string | null {
 
 /**
  * Each GPU step shows how long it took, split into the instance's start-up and the work itself. Once the splat is
- * complete, every step shows as done, and the list stays vertical so those times stay visible.
+ * complete, every step shows as done, and the list stays vertical so those times stay visible. A visitor on the share
+ * page gets no Share step, since they are already looking at the shared splat.
  */
 export function PipelineStepper({
   stage,
   job,
   photoCount,
+  audience = "owner",
 }: {
   stage: Stage;
-  job: Job | undefined;
+  job: TimedJob | undefined;
   photoCount: number;
+  audience?: Audience;
 }) {
   const ticking = stage.kind === "placing_cameras" || stage.kind === "building";
   const now = useNow(ticking);
   const timings = job ? stageTimings(job, now) : null;
 
+  const steps = audience === "owner" ? STEPS : STEPS.filter(step => step.key !== "share");
   const current = currentStep(stage);
   const complete = current === null;
-  const currentIndex = complete ? STEPS.length : STEPS.findIndex(step => step.key === current);
+  const currentIndex = complete ? steps.length : steps.findIndex(step => step.key === current);
   const failed = stage.kind === "failed" || stage.kind === "cancelled";
 
   let total: React.ReactNode = null;
@@ -105,12 +121,12 @@ export function PipelineStepper({
   return (
     <div className="flex flex-col gap-1">
       <ol aria-label="Progress" className="flex flex-col">
-        {STEPS.map((step, index) => {
+        {steps.map((step, index) => {
           const done = index < currentIndex;
           const isCurrent = index === currentIndex;
-          const extras = done || isCurrent ? stepExtras(step.key, timings, photoCount) : NO_EXTRAS;
+          const extras = done || isCurrent ? stepExtras(step.key, timings, photoCount, audience) : NO_EXTRAS;
           let connector: React.ReactNode = null;
-          if (index < STEPS.length - 1) {
+          if (index < steps.length - 1) {
             connector = <span className={cn("min-h-2.5 w-0.5 flex-1", done ? "bg-primary" : "bg-divider")} />;
           }
 
