@@ -286,6 +286,19 @@ describe("getExampleSplats", () => {
     ]);
   });
 
+  it("marks only the listed examples as showcase splats on the share page", async () => {
+    const owner = await seedUser("showcase");
+    const splatsByDay = [];
+    for (let day = 1; day <= 10; day++) {
+      splatsByDay.push(
+        await seedExample(owner.id, `day-${day}`, { createdAt: new Date(`2026-01-${String(day).padStart(2, "0")}`) }),
+      );
+    }
+
+    expect((await getPublicSplat(splatsByDay[9].id))?.isShowcase).toBe(true);
+    expect((await getPublicSplat(splatsByDay[0].id))?.isShowcase).toBe(false);
+  });
+
   it("covers each card with the first photo's thumbnail and counts only photos with one", async () => {
     const owner = await seedUser("showcase");
     const splat = await seedExample(owner.id, "mug");
