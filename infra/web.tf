@@ -524,6 +524,7 @@ resource "aws_ecs_task_definition" "web" {
       { name = "WORKER_SUBNET_ID", value = local.worker_subnet.id },
       { name = "WORKER_SECURITY_GROUP_ID", value = aws_security_group.worker.id },
       { name = "WORKER_INSTANCE_PROFILE_ARN", value = aws_iam_instance_profile.worker.arn },
+      { name = "WORKER_LOG_GROUP", value = aws_cloudwatch_log_group.worker.name },
       # Read by web/lib/server/ec2Launcher.ts's workerImageUri()/ecrRegistry(), which otherwise fall back to
       # REPLACE_WITH_* placeholders meant only for local/pre-deploy development.
       { name = "WORKER_RECONSTRUCT_IMAGE_URI", value = local.worker_reconstruct_image_uri },

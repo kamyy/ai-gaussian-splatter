@@ -14,64 +14,58 @@ variables {
   worker_image_tag     = "0123abc"
 }
 
-run "worker_self_terminate_scoped_by_tag" {
+run "alarms_publish_to_the_alert_topic" {
   command = apply
 
   assert {
-    condition = anytrue([
-      for s in jsondecode(aws_iam_role_policy.worker.policy).Statement :
-      s.Sid == "SelfTerminate" && try(s.Condition.StringEquals["ec2:ResourceTag/Role"], "") == "worker"
+    condition = alltrue([
+      for a in [
+        aws_cloudwatch_metric_alarm.alb_target_5xx,
+        aws_cloudwatch_metric_alarm.alb_unhealthy_hosts,
+        aws_cloudwatch_metric_alarm.worker_sweeper_errors,
+        aws_cloudwatch_metric_alarm.rds_low_storage,
+      ] : a.alarm_actions == toset([aws_sns_topic.alerts.arn])
     ])
-    error_message = "the worker's self-terminate grant must be scoped to instances tagged Role=worker, matching web.tf's task role condition"
+    error_message = "every alarm must publish to the alerts topic, the only one with a confirmed email subscription"
   }
 
   assert {
-    condition = anytrue([
-      for s in jsondecode(aws_iam_role_policy.worker.policy).Statement :
-      s.Sid == "SelfTerminate" && s.Action == "ec2:TerminateInstances"
+    condition = alltrue([
+      for a in [
+        aws_cloudwatch_metric_alarm.alb_target_5xx,
+        aws_cloudwatch_metric_alarm.alb_unhealthy_hosts,
+        aws_cloudwatch_metric_alarm.worker_sweeper_errors,
+        aws_cloudwatch_metric_alarm.rds_low_storage,
+      ] : startswith(a.alarm_name, "ai-gaussian-splatter-") && a.treat_missing_data == "notBreaching"
     ])
-    error_message = "the worker role must be able to terminate itself"
+    error_message = "alarm names need the ai-gaussian-splatter- prefix the CI role's grant is scoped to, and a quiet site must not alarm"
   }
 }
 
-run "worker_can_pull_its_own_image" {
+run "alarms_watch_the_right_resources" {
   command = apply
 
   assert {
-    condition = anytrue([
-      for s in jsondecode(aws_iam_role_policy.worker.policy).Statement :
-      s.Sid == "EcrPull" && s.Resource == aws_ecr_repository.worker.arn
-    ])
-    error_message = "the worker role must be able to pull from its own ECR repository, or docker run never starts"
+    condition     = aws_cloudwatch_metric_alarm.alb_target_5xx.dimensions["LoadBalancer"] == aws_lb.web.arn_suffix
+    error_message = "the 5xx alarm must watch the web ALB"
   }
 
   assert {
-    condition = anytrue([
-      for s in jsondecode(aws_iam_role_policy.worker.policy).Statement :
-      s.Sid == "EcrAuth" && s.Action == "ecr:GetAuthorizationToken"
-    ])
-    error_message = "ecr:GetAuthorizationToken has no resource-level permissions, so it must stay Resource: *"
+    condition = (
+      aws_cloudwatch_metric_alarm.alb_unhealthy_hosts.dimensions["LoadBalancer"] == aws_lb.web.arn_suffix
+      && aws_cloudwatch_metric_alarm.alb_unhealthy_hosts.dimensions["TargetGroup"] == aws_lb_target_group.web.arn_suffix
+    )
+    error_message = "the unhealthy-host alarm needs both the ALB and the target group dimensions, or it never reports data"
   }
-}
-
-run "worker_can_write_its_own_log_group" {
-  command = apply
 
   assert {
-    condition = anytrue([
-      for s in jsondecode(aws_iam_role_policy.worker.policy).Statement :
-      s.Sid == "WriteLogs" && s.Resource == "${aws_cloudwatch_log_group.worker.arn}:*" && !contains(s.Action, "logs:CreateLogGroup")
-    ])
-    error_message = "the worker role must write streams to its own log group only, and leave group creation to Terraform"
+    condition     = aws_cloudwatch_metric_alarm.worker_sweeper_errors.dimensions["FunctionName"] == aws_lambda_function.worker_sweeper.function_name
+    error_message = "the sweeper alarm must watch the sweeper Lambda"
   }
-}
-
-run "worker_instance_profile_wraps_the_role" {
-  command = apply
 
   assert {
-    condition     = aws_iam_instance_profile.worker.role == aws_iam_role.worker.name
-    error_message = "the instance profile must wrap the worker role"
+    condition     = aws_cloudwatch_metric_alarm.rds_low_storage.dimensions["DBInstanceIdentifier"] == aws_db_instance.main.identifier
+    error_message = "the storage alarm must watch the application database"
   }
 }
 

@@ -152,6 +152,33 @@ describe("launchJob", () => {
     expect(userData).toContain(params.workerImageUri);
   });
 
+  it("ships the container's output to the worker log group, one stream per worker job stage", async () => {
+    ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
+    await launchJob(params);
+
+    const userData = Buffer.from(runInstancesInput().UserData ?? "", "base64").toString();
+    expect(userData).toContain("--log-driver=awslogs");
+    expect(userData).toContain(`--log-opt awslogs-group=${process.env.WORKER_LOG_GROUP}`);
+    expect(userData).toContain(`--log-opt awslogs-region=${process.env.AWS_REGION}`);
+    expect(userData).toContain("--log-opt awslogs-stream=$JOB_ID-$STAGE");
+    expect(userData).toContain("--log-opt mode=non-blocking");
+  });
+
+  it("creates the log stream before docker run and falls back to no log driver if that fails", async () => {
+    ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
+    await launchJob(params);
+
+    const userData = Buffer.from(runInstancesInput().UserData ?? "", "base64").toString();
+    const createStream = userData.indexOf("aws logs create-log-stream");
+    expect(createStream).toBeGreaterThan(-1);
+    expect(userData).toContain(`--log-group-name ${process.env.WORKER_LOG_GROUP}`);
+    // LOG_OPTS starts empty and is only filled when the stream was created, so the docker run that follows has no log
+    // driver to fail on.
+    expect(userData).toContain('LOG_OPTS=""');
+    expect(userData.indexOf("LOG_OPTS=", createStream)).toBeGreaterThan(createStream);
+    expect(userData.indexOf("docker run")).toBeGreaterThan(createStream);
+  });
+
   it("passes a crop box to the worker container as JSON, only when one is set", async () => {
     ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
     const cropBox: CropBox = { center: [1, 2, 3], size: [4, 5, 6], quaternion: [0, 0, 0, 1] };

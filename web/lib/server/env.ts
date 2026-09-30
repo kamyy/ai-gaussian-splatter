@@ -8,6 +8,14 @@
 
 import { z } from "zod";
 
+const WORKER_INSTANCE_VARS = [
+  "WORKER_AMI_ID",
+  "WORKER_SUBNET_ID",
+  "WORKER_SECURITY_GROUP_ID",
+  "WORKER_INSTANCE_PROFILE_ARN",
+  "WORKER_LOG_GROUP",
+] as const;
+
 const envSchema = z
   .object({
     DATABASE_HOST: z.string().min(1),
@@ -28,10 +36,14 @@ const envSchema = z
     // for a deploy that moved.
     AWS_REGION: z.string().min(1),
 
-    WORKER_AMI_ID: z.string().min(1),
-    WORKER_SUBNET_ID: z.string().min(1),
-    WORKER_SECURITY_GROUP_ID: z.string().min(1),
-    WORKER_INSTANCE_PROFILE_ARN: z.string().min(1),
+    // What launching a real EC2 worker instance needs. Local dev runs the worker under Podman instead
+    // (WORKER_LOCAL_LAUNCH), which reads none of these, so the superRefine below requires them only when that is off.
+    WORKER_LOCAL_LAUNCH: z.string().optional(),
+    WORKER_AMI_ID: z.string().min(1).optional(),
+    WORKER_SUBNET_ID: z.string().min(1).optional(),
+    WORKER_SECURITY_GROUP_ID: z.string().min(1).optional(),
+    WORKER_INSTANCE_PROFILE_ARN: z.string().min(1).optional(),
+    WORKER_LOG_GROUP: z.string().min(1).optional(),
 
     // Where the GPU worker PATCHes its status back to.
     APP_PUBLIC_URL: z.string().url(),
@@ -43,6 +55,17 @@ const envSchema = z
   .refine(v => (v.DATABASE_PASSWORD === undefined) !== (v.DATABASE_SECRET_ARN === undefined), {
     message: "set exactly one of DATABASE_PASSWORD or DATABASE_SECRET_ARN",
     path: ["DATABASE_PASSWORD"],
+  })
+  .superRefine((v, ctx) => {
+    if (v.WORKER_LOCAL_LAUNCH === "true") {
+      return;
+    }
+
+    for (const name of WORKER_INSTANCE_VARS) {
+      if (v[name] === undefined) {
+        ctx.addIssue({ code: "custom", message: "required unless WORKER_LOCAL_LAUNCH is true", path: [name] });
+      }
+    }
   });
 
 let cached: Env | null = null;
@@ -65,4 +88,24 @@ export function getEnv(): Env {
   }
 
   return cached;
+}
+
+/**
+ * The settings for launching a real EC2 worker instance, each one a string. getEnv() has already required them
+ * whenever WORKER_LOCAL_LAUNCH is off, so the throw here only fires for a caller that launches an instance anyway.
+ */
+export function getWorkerInstanceEnv(): Record<(typeof WORKER_INSTANCE_VARS)[number], string> {
+  const env = getEnv();
+  const missing = WORKER_INSTANCE_VARS.filter(name => env[name] === undefined);
+  if (missing.length > 0) {
+    throw new Error(`Cannot launch an EC2 worker instance without ${missing.join(", ")}`);
+  }
+
+  return {
+    WORKER_AMI_ID: env.WORKER_AMI_ID as string,
+    WORKER_SUBNET_ID: env.WORKER_SUBNET_ID as string,
+    WORKER_SECURITY_GROUP_ID: env.WORKER_SECURITY_GROUP_ID as string,
+    WORKER_INSTANCE_PROFILE_ARN: env.WORKER_INSTANCE_PROFILE_ARN as string,
+    WORKER_LOG_GROUP: env.WORKER_LOG_GROUP as string,
+  };
 }

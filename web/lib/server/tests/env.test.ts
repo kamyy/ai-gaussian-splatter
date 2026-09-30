@@ -45,4 +45,30 @@ describe("getEnv", () => {
       /^Invalid server environment: AWS_REGION: Too small: expected string to have >=1 characters$/,
     );
   });
+
+  // Local dev runs the worker under Podman, which reads none of the EC2 launch settings, so web/.env leaves them out.
+  it("accepts a missing EC2 launch setting when the worker launches locally", async () => {
+    vi.stubEnv("WORKER_LOCAL_LAUNCH", "true");
+    vi.stubEnv("WORKER_AMI_ID", undefined);
+    vi.stubEnv("WORKER_LOG_GROUP", undefined);
+    const getEnv = await loadGetEnv();
+
+    expect(getEnv().WORKER_AMI_ID).toBeUndefined();
+  });
+
+  // The ECS task has no WORKER_LOCAL_LAUNCH, so a dropped WORKER_* variable has to fail here rather than at the first
+  // worker launch.
+  it.each([
+    "WORKER_AMI_ID",
+    "WORKER_SUBNET_ID",
+    "WORKER_SECURITY_GROUP_ID",
+    "WORKER_INSTANCE_PROFILE_ARN",
+    "WORKER_LOG_GROUP",
+  ])("rejects an unset %s when the worker launches on EC2", async name => {
+    vi.stubEnv("WORKER_LOCAL_LAUNCH", undefined);
+    vi.stubEnv(name, undefined);
+    const getEnv = await loadGetEnv();
+
+    expect(() => getEnv()).toThrow(`Invalid server environment: ${name}: required unless WORKER_LOCAL_LAUNCH is true`);
+  });
 });
