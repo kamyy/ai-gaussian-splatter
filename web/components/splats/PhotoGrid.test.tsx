@@ -1,9 +1,9 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { PhotoListItem } from "@/lib/types";
 
-import { PhotoGrid } from "./PhotoGrid";
+import { expandedBox, PhotoGrid } from "./PhotoGrid";
 
 // jsdom does no layout, so the grid reports a fixed width. At 392 wide with the default 16px root font, a row holds
 // three 4:3 photos at 95px tall, so a page of three rows holds 9.
@@ -132,7 +132,7 @@ describe("PhotoGrid", () => {
     expect(screen.getAllByRole("img")[0]).toHaveAttribute("src", "https://example.com/thumbnails/1.jpg");
 
     // A placeholder icon sits under each photo until it loads.
-    expect(portraitTile?.querySelector("svg + img")).not.toBeNull();
+    expect(portraitTile?.querySelector("svg + span > img")).not.toBeNull();
   });
 
   it("fills each page with whole rows", () => {
@@ -386,5 +386,76 @@ describe("PhotoGrid", () => {
         undo();
       }
     }
+  });
+
+  it("enlarges the photo the pointer rests on, placed or not, and shrinks it when the pointer leaves", () => {
+    vi.useFakeTimers();
+    try {
+      const photos = makePhotos(2);
+      const onHover = vi.fn();
+      render(
+        <PhotoGrid
+          photos={photos}
+          placedPhotoIds={new Set(["photo-1"])}
+          selection={null}
+          onSelect={() => {}}
+          hoveredPhotoId={null}
+          onHover={onHover}
+        />,
+      );
+      const unplaced = screen.getByRole("img", { name: "IMG_2.jpg (couldn't be placed)" });
+      const tile = unplaced.closest("li") as HTMLElement;
+      expect(tile).toHaveClass("opacity-55");
+
+      fireEvent.pointerEnter(tile);
+      act(() => void vi.advanceTimersByTime(399));
+      expect(unplaced.parentElement).toHaveStyle({ width: "128px", height: "96px" });
+
+      // Two 128 by 96 tiles in a 392 by 96 area. The second photo grows from its center and runs over the top of the
+      // area.
+      act(() => void vi.advanceTimersByTime(1));
+      expect(unplaced.parentElement).toHaveStyle({ left: "-96px", top: "-144px", width: "320px", height: "240px" });
+      expect(tile).not.toHaveClass("opacity-55");
+      expect(onHover).not.toHaveBeenCalled();
+
+      fireEvent.pointerLeave(tile);
+      expect(unplaced.parentElement).toHaveStyle({ left: "0px", top: "0px", width: "128px", height: "96px" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("expandedBox", () => {
+  const area = { width: 400, height: 300 };
+
+  it("grows a photo from its center when there is room", () => {
+    expect(expandedBox({ left: 150, top: 100, width: 100, height: 80 }, area)).toEqual({
+      left: -75,
+      top: -60,
+      width: 250,
+      height: 200,
+    });
+  });
+
+  it("keeps a photo at the area's edge inside the area", () => {
+    expect(expandedBox({ left: 0, top: 0, width: 100, height: 80 }, area)).toMatchObject({ left: 0, top: 0 });
+    expect(expandedBox({ left: 300, top: 220, width: 100, height: 80 }, area)).toMatchObject({ left: -150, top: -120 });
+  });
+
+  it("grows a wide photo only to the area's width", () => {
+    expect(expandedBox({ left: 0, top: 0, width: 200, height: 50 }, area)).toEqual({
+      left: 0,
+      top: 0,
+      width: 400,
+      height: 100,
+    });
+  });
+
+  it("runs a photo taller than the area over the area's top", () => {
+    expect(expandedBox({ left: 0, top: 0, width: 100, height: 80 }, { width: 400, height: 80 })).toMatchObject({
+      top: -120,
+      height: 200,
+    });
   });
 });

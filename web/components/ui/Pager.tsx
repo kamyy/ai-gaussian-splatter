@@ -51,7 +51,7 @@ function MarkPip() {
   return (
     <span
       aria-hidden="true"
-      className="absolute -top-0.75 -right-0.75 h-2.5 w-2.5 rounded-full border-2 border-background bg-primary"
+      className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-background bg-primary"
     />
   );
 }
