@@ -21,6 +21,7 @@ Most procedures below run a script from `scripts/dev/` or `scripts/prod/`, and e
   - [2.6 Going live](#26-going-live)
   - [2.7 Building and pushing the worker image](#27-building-and-pushing-the-worker-image)
   - [2.8 Running Terraform locally](#28-running-terraform-locally)
+  - [2.9 Choosing the landing page's examples](#29-choosing-the-landing-pages-examples)
 - [3. Troubleshooting](#3-troubleshooting)
   - [3.1 Fixing a bad migration](#31-fixing-a-bad-migration)
   - [3.2 Debugging a failed worker job](#32-debugging-a-failed-worker-job)
@@ -159,7 +160,7 @@ Required one-time manual setup, in this order:
 2. [Configuring continuous deployment](#23-configuring-continuous-deployment)
 3. [Going live](#26-going-live) to turn the `deploy` job on
 
-After that, a human only builds the worker image ([Building and pushing the worker image](#27-building-and-pushing-the-worker-image)) and runs Terraform for a `terraform plan` preview or a teardown ([Running Terraform locally](#28-running-terraform-locally)).
+After that, a human only builds the worker image ([Building and pushing the worker image](#27-building-and-pushing-the-worker-image)), runs Terraform for a `terraform plan` preview or a teardown ([Running Terraform locally](#28-running-terraform-locally)), and picks the landing page's examples ([Choosing the landing page's examples](#29-choosing-the-landing-pages-examples)).
 
 CI's `deploy` job (`.github/workflows/deploy.yml`) does every deploy, including the first one into an empty account ([Going live](#26-going-live)):
 
@@ -294,6 +295,20 @@ A `terraform plan` preview and a teardown are the only Terraform a human runs ag
 ```bash
 scripts/prod/terraform-plan.sh
 ```
+
+### 2.9 Choosing the landing page's examples
+
+The landing page shows the newest eight complete, shareable splats of one showcase account. With no showcase account set, or one with no such splats, it shows its point-cloud hero instead. The showcase account is an ordinary user of the live app. Sign in as it to add, remove or unshare examples through the normal UI.
+
+To pick the account, copy its user ID (`user_...`) from the production Clerk instance's Users page and pass it to `scripts/prod/set-showcase-user.sh`, which sets the `SHOWCASE_CLERK_USER_ID` repository variable. `--clear` deletes the variable instead, so the landing page shows no examples.
+
+```bash
+scripts/prod/set-showcase-user.sh user_...
+```
+
+The variable reaches the app as a task environment variable, so it takes effect on the next deploy. To deploy it without a push, rerun the newest CI run on `main`. The script prints that command rather than running it.
+
+For local dev, set `SHOWCASE_CLERK_USER_ID` in `web/.env` to a user ID from the development Clerk instance.
 
 ---
 
