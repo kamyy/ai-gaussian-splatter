@@ -21,8 +21,16 @@ import type { ExampleSplat } from "@/lib/types";
 
 const STEPS = [
   { numeral: "i.", title: "Photograph", body: "A slow lap around the object, with lots of overlap." },
-  { numeral: "ii.", title: "Check", body: "Look over a rough sketch of the shape before the slow part runs." },
-  { numeral: "iii.", title: "Share", body: "One link, viewable in any browser. No app to install." },
+  {
+    numeral: "ii.",
+    title: "Check",
+    body: "Photogrammetry places each photo in 3D. Look over its rough sketch of the shape before the slow part runs.",
+  },
+  {
+    numeral: "iii.",
+    title: "Share",
+    body: "A CUDA GPU trains the splat. One link shows it in any browser, with no app to install.",
+  },
 ];
 
 const PITCH =

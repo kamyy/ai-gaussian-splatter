@@ -49,6 +49,8 @@
       "includes": [
         "web/app/**/layout.tsx",
         "web/app/**/page.tsx",
+        "web/app/robots.ts",
+        "web/app/sitemap.ts",
         "web/drizzle.config.ts",
         "web/next.config.ts",
         "web/playwright.config.ts",

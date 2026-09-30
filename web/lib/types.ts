@@ -103,6 +103,8 @@ export interface CropBox {
 /** pointCloudUrl is null for a splat whose job was reconstructed before the point cloud was kept. */
 export interface PublicSplat {
   title: string;
+  /** True for a splat owned by the showcase account, whose splats the / landing page shows as examples. */
+  isShowcase: boolean;
   thumbnailUrl: string;
   splatUrl: string;
   pointCloudUrl: string | null;

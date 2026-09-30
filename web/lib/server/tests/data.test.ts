@@ -38,8 +38,16 @@ describe("getPublicSplat", () => {
     const result = await getPublicSplat(splat.id);
 
     expect(result?.title).toBe("Mug");
+    expect(result?.isShowcase).toBe(false);
     expect(result?.thumbnailUrl).toContain("splats/x/thumbnail.jpg");
     expect(result?.splatUrl).toContain("splats/x/result.spz");
+  });
+
+  it("marks a splat owned by the showcase account", async () => {
+    const { splat } = await seedShared();
+    await getDb().update(users).set({ clerkUserId: "showcase" }).where(eq(users.id, splat.userId));
+
+    expect((await getPublicSplat(splat.id))?.isShowcase).toBe(true);
   });
 
   it("hides a splat its owner hasn't made shareable", async () => {

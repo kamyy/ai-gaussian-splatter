@@ -10,7 +10,7 @@ import { BackToLibraryButton } from "@/components/layout/BackToLibraryButton";
 import { NewSplatForm } from "@/components/splats/NewSplatForm";
 
 export const metadata: Metadata = {
-  title: "New splat — AI Gaussian Splatter",
+  title: "New splat",
 };
 
 function Tip({ title, body, children }: { title: string; body: string; children: React.ReactNode }) {
