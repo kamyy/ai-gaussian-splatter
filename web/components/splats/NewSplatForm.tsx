@@ -1,7 +1,8 @@
 /**
  * The form on /splats/new that creates a splat from a name and a set of photos.
  *
- * The visitor names the splat and drops photos onto it, previewed in justified rows. Submitting creates the splat,
+ * The visitor names the splat and drops photos onto it, previewed in justified rows. A blurry or low-resolution photo is
+ * marked in the preview, with an offer to remove every marked photo at once. Submitting creates the splat,
  * uploads the photos straight to S3 (AWS's file storage), and starts processing, then moves to the new splat's page. If
  * an upload fails partway, a retry reuses the splat and sends only the photos that didn't make it.
  */
@@ -12,18 +13,19 @@ import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { LuCheck, LuImage, LuX } from "react-icons/lu";
+import { LuCheck, LuImage, LuTriangleAlert, LuX } from "react-icons/lu";
 import { mutate } from "swr";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Pager } from "@/components/ui/Pager";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { apiFetch } from "@/lib/apiFetch";
 import { cn } from "@/lib/cn";
 import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
 import { useJustifiedPages } from "@/lib/hooks/useJustifiedPages";
-import { usePickedPhotos } from "@/lib/hooks/usePickedPhotos";
-import { MAX_PHOTOS_PER_SPLAT } from "@/lib/limits";
+import { type PhotoFlag, usePickedPhotos } from "@/lib/hooks/usePickedPhotos";
+import { MAX_PHOTOS_PER_SPLAT, MIN_SHARP_PHOTO_EDGE } from "@/lib/limits";
 import { fileKey } from "@/lib/measurePhoto";
 import { useAppStore } from "@/lib/store";
 import type { Job, Splat } from "@/lib/types";
@@ -55,6 +57,26 @@ function PhotoMeter({ count }: { count: number }) {
   );
 }
 
+const FLAG_LABELS: Record<PhotoFlag, string> = {
+  blurry: "Looks blurry",
+  low_res: `Low resolution (under ${MIN_SHARP_PHOTO_EDGE}px)`,
+};
+
+// Marks a photo that will likely make the splat worse. The photo can still be uploaded.
+function FlagBadge({ filename, flag }: { filename: string; flag: PhotoFlag }) {
+  return (
+    <Tooltip label={FLAG_LABELS[flag]}>
+      <span
+        role="img"
+        aria-label={`${filename}: ${FLAG_LABELS[flag]}`}
+        className="absolute top-1 left-1 flex h-7 w-7 items-center justify-center rounded-full bg-paper text-error"
+      >
+        <LuTriangleAlert aria-hidden="true" className="h-3.5 w-3.5" />
+      </span>
+    </Tooltip>
+  );
+}
+
 /**
  * Name plus photos in one step. This is the only place photos can be added to a splat, so it uploads them itself and
  * then starts processing, before navigating to the new splat's page. A failure at any step is reported through the
@@ -68,7 +90,7 @@ export function NewSplatForm() {
 
   const [name, setName] = useState("");
 
-  const { photos, measuring, addFiles, removeFile } = usePickedPhotos();
+  const { photos, flagged, measuring, addFiles, removeFiles } = usePickedPhotos();
   const aspects = useMemo(() => photos.map(photo => photo.width / photo.height), [photos]);
   const {
     setArea: setPreviewArea,
@@ -97,6 +119,9 @@ export function NewSplatForm() {
   const [uploadedKeys, setUploadedKeys] = useState<ReadonlySet<string>>(new Set());
   const submitting = phase !== "idle";
   const tooManyPhotos = photos.length > MAX_PHOTOS_PER_SPLAT;
+
+  // An uploaded photo is already on the server, so it can no longer be removed here, and flagging it would only nag.
+  const removableFlagged = [...flagged.keys()].filter(key => !uploadedKeys.has(key));
 
   const { getRootProps, getInputProps, open, isDragAccept, isDragReject } = useDropzone({
     onDrop: accepted => void addFiles(accepted).then(() => setPage(1)),
@@ -233,7 +258,7 @@ export function NewSplatForm() {
                 <button
                   type="button"
                   aria-label={`Remove ${photo.file.name}`}
-                  onClick={() => removeFile(key)}
+                  onClick={() => removeFiles([key])}
                   disabled={submitting}
                   className="absolute top-1 right-1 flex h-7 w-7 items-center justify-center rounded-full bg-paper text-foreground disabled:hidden"
                 >
@@ -242,11 +267,20 @@ export function NewSplatForm() {
               );
             }
 
+            const flag = uploadedKeys.has(key) ? undefined : flagged.get(key);
+            let flagBadge: React.ReactNode = null;
+            if (flag !== undefined) {
+              flagBadge = <FlagBadge filename={photo.file.name} flag={flag} />;
+            }
+
             return (
               <li
                 key={key}
                 style={{ width: tile.width, height: tile.height }}
-                className="relative shrink-0 overflow-hidden rounded-xl bg-muted"
+                className={cn(
+                  "relative shrink-0 overflow-hidden rounded-xl bg-muted",
+                  flag && "outline-2 outline-error outline-dashed -outline-offset-2",
+                )}
               >
                 {/* Shows until the photo decodes and covers it. The photo is relative so it paints above this icon. */}
                 <LuImage
@@ -256,12 +290,25 @@ export function NewSplatForm() {
                 />
                 {/* biome-ignore lint/performance/noImgElement: a local object URL, not something next/image can optimize. */}
                 <img src={url} alt={photo.file.name} className="relative h-full w-full object-cover" />
+                {flagBadge}
                 {corner}
               </li>
             );
           })}
         </ul>
       </div>
+    );
+  }
+
+  let flaggedNote: React.ReactNode = null;
+  if (removableFlagged.length > 0 && !submitting) {
+    flaggedNote = (
+      <span className="text-sm text-error">
+        {removableFlagged.length} photo{removableFlagged.length === 1 ? " looks" : "s look"} blurry or low resolution.{" "}
+        <button type="button" onClick={() => removeFiles(removableFlagged)} className="font-semibold underline">
+          Remove {removableFlagged.length === 1 ? "it" : "them"}
+        </button>
+      </span>
     );
   }
 
@@ -306,6 +353,7 @@ export function NewSplatForm() {
                 : `${photos.length} photo${photos.length === 1 ? "" : "s"} added`}
             </span>
             <span className={cn("text-sm", tooManyPhotos ? "text-error" : "text-muted-foreground")}>{dropHint}</span>
+            {flaggedNote}
           </div>
           <div className="flex items-center gap-3">
             <PhotoMeter count={photos.length} />
