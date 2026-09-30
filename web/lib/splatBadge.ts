@@ -11,7 +11,7 @@ import type { SplatListItem } from "./types";
 
 export type LibraryFilter = "needs_you" | "in_progress" | "complete";
 
-interface SplatBadge {
+export interface SplatBadge {
   label: string;
   color: ChipColor;
   // Which library filter tab lists this splat besides "All". null means only "All" does.
