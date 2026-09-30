@@ -2,23 +2,58 @@
  * Photo picking for the new-splat form.
  *
  * Holds the photos a visitor drops onto web/components/splats/NewSplatForm.tsx before they are uploaded. Each photo is
- * measured as it's added (pixel size, a small JPEG thumbnail, and when it was taken), because the server stores that
- * size so web/components/splats/PhotoGrid.tsx can lay out its rows before any image loads. A file over the server's
- * size limit, or one this browser can't decode, is turned away with a snackbar (a toast message) instead of failing
- * halfway through an upload.
+ * measured as it's added (pixel size, a small JPEG thumbnail, when it was taken, and how sharp it is), because the
+ * server stores that size so web/components/splats/PhotoGrid.tsx can lay out its rows before any image loads. A file
+ * over the server's size limit, or one this browser can't decode, is turned away with a snackbar (a toast message)
+ * instead of failing halfway through an upload. A blurry or low-resolution photo is only flagged, since the visitor may
+ * have no better shot of that angle.
  */
 
 import { useState } from "react";
 
 import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
-import { MAX_PHOTO_BYTES } from "@/lib/limits";
+import { MAX_PHOTO_BYTES, MIN_SHARP_PHOTO_EDGE } from "@/lib/limits";
 import { fileKey, measurePhotos, type PickedPhoto } from "@/lib/measurePhoto";
 
 const MAX_PHOTO_MB = MAX_PHOTO_BYTES / (1024 * 1024);
 
+export type PhotoFlag = "blurry" | "low_res";
+
+// A photo scoring under this fraction of the batch's median sharpness is flagged as blurry. The score is compared
+// within the batch because its absolute value depends mostly on how much texture the object has.
+const BLURRY_FRACTION_OF_MEDIAN = 0.35;
+// Below this many photos the median says too little about how sharp this capture's photos normally are.
+const MIN_PHOTOS_TO_JUDGE_BLUR = 8;
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+/** Keyed by fileKey. A photo that is both low resolution and blurry is flagged as low resolution. */
+export function findFlagged(photos: PickedPhoto[]): Map<string, PhotoFlag> {
+  const flagged = new Map<string, PhotoFlag>();
+  const blurLimit =
+    photos.length >= MIN_PHOTOS_TO_JUDGE_BLUR
+      ? median(photos.map(photo => photo.sharpness)) * BLURRY_FRACTION_OF_MEDIAN
+      : null;
+
+  for (const photo of photos) {
+    if (Math.max(photo.width, photo.height) < MIN_SHARP_PHOTO_EDGE) {
+      flagged.set(fileKey(photo.file), "low_res");
+    } else if (blurLimit !== null && photo.sharpness < blurLimit) {
+      flagged.set(fileKey(photo.file), "blurry");
+    }
+  }
+
+  return flagged;
+}
+
 /**
  * The photos come back oldest taken first, with each file at most once. measuring is set while any added batch is still
- * being measured. Submitting waits for it, or those photos would be left out of the upload.
+ * being measured. Submitting waits for it, or those photos would be left out of the upload. flagged marks each blurry or
+ * low-resolution photo.
  */
 export function usePickedPhotos() {
   const { enqueueSnackbar } = useAppSnackbar();
@@ -58,9 +93,9 @@ export function usePickedPhotos() {
     }
   }
 
-  function removeFile(key: string) {
-    setPhotos(current => current.filter(photo => fileKey(photo.file) !== key));
+  function removeFiles(keys: string[]) {
+    setPhotos(current => current.filter(photo => !keys.includes(fileKey(photo.file))));
   }
 
-  return { photos, measuring: measuringCount > 0, addFiles, removeFile };
+  return { photos, flagged: findFlagged(photos), measuring: measuringCount > 0, addFiles, removeFiles };
 }
