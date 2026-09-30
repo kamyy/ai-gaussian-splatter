@@ -93,7 +93,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 ## 3. Auth (Clerk)
 
-`web/proxy.ts` default exports `clerkMiddleware()`. It reads the Clerk cookie so later code can tell who is signed in, if anyone. Sign-in checks happen later using `auth.protect()` on pages and `requireUser()` / `requireClerkUserId()` on API routes.
+`web/proxy.ts` exports `clerkMiddleware()` as `proxy`. It reads the Clerk cookie so later code can tell who is signed in, if anyone. Sign-in checks happen later using `auth.protect()` on pages and `requireUser()` / `requireClerkUserId()` on API routes.
 
 `config.matcher` in `web/proxy.ts` is the list of URL patterns that decide whether `clerkMiddleware()` is run. Keep it covering pages and `/api/*` — if not run the Clerk cookie isn't read and any later `auth()` calls will throw instead of sending the visitor to sign-in.
 
@@ -127,6 +127,10 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 - **Don't overengineer.** Solve the problem in front of you, not the general case it might become. Add no abstraction, config option, or extensibility hook for a second use case that doesn't exist yet. Add it when that use case actually shows up.
 - **Prefer `function` declarations over arrow functions**, except closures assigned to a local (`const handleClick = () => {...}`) or inline arguments (`.map(x => ...)`, `useEffect(() => {...})`). Top-level: `export function foo() {}`, not `export const foo = () => {}`.
+- **Use named exports. A file default exports only when the framework or tool that loads it accepts nothing else.** Biome `style/noDefaultExport` enforces this, and an override in `biome.json` exempts each file that needs one.
+  - Next.js reads a page or layout only through its default export. So do Drizzle Kit, Next, Playwright, PostCSS and Vitest for their config files.
+  - Where the loader also accepts a named export, use that. `web/proxy.ts` exports `proxy`, and `web/tests/migrate-test-db.ts` exports `setup`.
+  - Add a file to the override only after checking the loader's docs rule out a named export.
 - **`if`/`for`/`while`/`do` bodies always use a `{ }` block** — never `if (x) return;`. Biome `style/useBlockStatements` (enabled in `biome.json`; not in `recommended`).
 - **Define a file's sub-components and helpers above the component that uses them**, so a file reads bottom-up to its main export. A sub-component used by another sub-component goes above that one too, as `Tip` sits above `ShootingTips` in `web/app/(authenticated)/splats/new/page.tsx`.
 - **A helper that only one file uses is defined in that file, not in a module of its own.** Tests don't count as a use.
