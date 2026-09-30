@@ -2,10 +2,25 @@
  * The browser's typed client for the app's own REST API.
  *
  * Every call from the browser to the Route Handlers in web/app/api/v1/ goes through apiFetch(). It sends JSON, attaches
- * the Clerk session token for authenticated endpoints, and turns an error response into a thrown Error carrying the
- * response body as its message. Callers get the token with Clerk's useAuth().getToken() and pass it in, as the SWR
- * hooks in web/lib/hooks/ do.
+ * the Clerk session token for authenticated endpoints, and turns an error response into a thrown Error whose message is
+ * the server's explanation, ready to show a user. Callers get the token with Clerk's useAuth().getToken() and pass it
+ * in, as the SWR hooks in web/lib/hooks/ do.
  */
+
+// The API's error body is `{"detail": "..."}` (web/lib/server/httpError.ts), and only the sentence is fit to show a
+// user. A body in any other shape, such as a proxy's HTML error page, is passed through as it is.
+function errorDetail(body: string): string {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (typeof parsed === "object" && parsed !== null && "detail" in parsed && typeof parsed.detail === "string") {
+      return parsed.detail;
+    }
+  } catch {
+    // Not JSON.
+  }
+
+  return body;
+}
 
 export async function apiFetch<T>(
   path: string,
@@ -33,5 +48,5 @@ export async function apiFetch<T>(
   }
 
   const txt = await resp.text().catch(() => "");
-  throw new Error(txt || resp.statusText);
+  throw new Error(errorDetail(txt) || resp.statusText);
 }
