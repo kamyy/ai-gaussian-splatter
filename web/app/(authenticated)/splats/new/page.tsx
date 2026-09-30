@@ -39,7 +39,7 @@ function ShootingTips() {
   return (
     <aside
       aria-labelledby="tips-heading"
-      className="flex flex-col gap-6 self-start rounded-3xl border border-divider bg-paper p-7 lg:w-90 lg:shrink-0"
+      className="flex flex-col gap-6 self-start rounded-3xl border border-divider bg-paper p-7 lg:w-130 lg:shrink-0"
     >
       <h2 id="tips-heading" className="font-display text-3xl">
         Shooting tips
