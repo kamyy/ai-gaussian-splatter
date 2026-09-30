@@ -114,8 +114,23 @@ export interface PublicSplat {
  */
 export type PublicPhoto = Omit<PhotoListItem, "url">;
 
+/** A worker job's stage timestamps, which web/lib/stageTimings.ts turns into durations. */
+export type JobTimestamps = Pick<
+  Job,
+  | "colmapBootedAt"
+  | "colmapStartedAt"
+  | "colmapFinishedAt"
+  | "trainingLaunchedAt"
+  | "trainingBootedAt"
+  | "trainingStartedAt"
+  | "createdAt"
+  | "updatedAt"
+>;
+
+/** timestamps belong to the complete worker job that produced the splat. */
 export interface PublicSplatView extends PublicSplat {
   photos: PublicPhoto[];
+  timestamps: JobTimestamps;
 }
 
 /**

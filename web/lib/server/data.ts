@@ -33,11 +33,10 @@ async function presignPublic(bucket: string, key: string): Promise<string> {
   });
 }
 
-/**
- * Returns only complete, shareable splats. Anything else is null, which callers turn into a 404, the same as a splat
- * that doesn't exist.
- */
-export async function getPublicSplat(splatId: string): Promise<PublicSplat | null> {
+// A public splat with the worker job that produced it. Null for anything but a complete, shareable splat.
+async function findPublicSplat(
+  splatId: string,
+): Promise<{ publicSplat: PublicSplat; job: typeof jobs.$inferSelect } | null> {
   if (!isUuid(splatId)) {
     return null;
   }
@@ -64,23 +63,39 @@ export async function getPublicSplat(splatId: string): Promise<PublicSplat | nul
   const { SPLATS_BUCKET } = getEnv();
 
   return {
-    title: splat.name,
-    thumbnailUrl: await presignPublic(SPLATS_BUCKET, splat.thumbnailS3Key),
-    splatUrl: await presignPublic(SPLATS_BUCKET, latestJob.resultSpzS3Key),
-    pointCloudUrl: latestJob.pointCloudS3Key ? await presignPublic(SPLATS_BUCKET, latestJob.pointCloudS3Key) : null,
+    publicSplat: {
+      title: splat.name,
+      thumbnailUrl: await presignPublic(SPLATS_BUCKET, splat.thumbnailS3Key),
+      splatUrl: await presignPublic(SPLATS_BUCKET, latestJob.resultSpzS3Key),
+      pointCloudUrl: latestJob.pointCloudS3Key ? await presignPublic(SPLATS_BUCKET, latestJob.pointCloudS3Key) : null,
+    },
+    job: latestJob,
   };
 }
 
 /**
- * Everything the share page shows: the public splat plus its photos. Null exactly when getPublicSplat is.
+ * Returns only complete, shareable splats. Anything else is null, which callers turn into a 404, the same as a splat
+ * that doesn't exist.
+ */
+export async function getPublicSplat(splatId: string): Promise<PublicSplat | null> {
+  const found = await findPublicSplat(splatId);
+
+  return found === null ? null : found.publicSplat;
+}
+
+/**
+ * Everything the share page shows: the public splat, its photos, and its worker job's stage timestamps. Null exactly
+ * when getPublicSplat is.
  *
  * Only photos with a thumbnail are included, because the original file can carry EXIF data such as GPS position.
  */
 export async function getPublicSplatView(splatId: string): Promise<PublicSplatView | null> {
-  const splat = await getPublicSplat(splatId);
-  if (splat === null) {
+  const found = await findPublicSplat(splatId);
+  if (found === null) {
     return null;
   }
+
+  const { publicSplat, job } = found;
 
   // The same order as web/app/api/v1/splats/[splatId]/photos/route.ts, so "Photo 3" is the third photo the owner sees.
   const rows = await getDb()
@@ -108,7 +123,20 @@ export async function getPublicSplatView(splatId: string): Promise<PublicSplatVi
     })),
   );
 
-  return { ...splat, photos: publicPhotos };
+  return {
+    ...publicSplat,
+    photos: publicPhotos,
+    timestamps: {
+      colmapBootedAt: job.colmapBootedAt?.toISOString() ?? null,
+      colmapStartedAt: job.colmapStartedAt?.toISOString() ?? null,
+      colmapFinishedAt: job.colmapFinishedAt?.toISOString() ?? null,
+      trainingLaunchedAt: job.trainingLaunchedAt?.toISOString() ?? null,
+      trainingBootedAt: job.trainingBootedAt?.toISOString() ?? null,
+      trainingStartedAt: job.trainingStartedAt?.toISOString() ?? null,
+      createdAt: job.createdAt.toISOString(),
+      updatedAt: job.updatedAt.toISOString(),
+    },
+  };
 }
 
 /**

@@ -166,6 +166,17 @@ describe("getPublicSplatView", () => {
     expect(view?.photos[1].thumbnailUrl).toContain("photo-thumbnails/late.jpg");
   });
 
+  it("returns the complete job's stage timestamps", async () => {
+    const splat = await seedSplat(true);
+    const colmapFinishedAt = new Date("2026-01-01T10:07:52Z");
+    await getDb().update(jobs).set({ colmapFinishedAt }).where(eq(jobs.splatId, splat.id));
+
+    const view = await getPublicSplatView(splat.id);
+
+    expect(view?.timestamps.colmapFinishedAt).toBe(colmapFinishedAt.toISOString());
+    expect(view?.timestamps.colmapBootedAt).toBeNull();
+  });
+
   it("never links an original photo", async () => {
     const splat = await seedSplat(true);
     await getDb()

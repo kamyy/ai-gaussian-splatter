@@ -7,9 +7,10 @@
  */
 
 import { JobStatus } from "./statuses";
-import type { Job } from "./types";
+import type { Job, JobTimestamps } from "./types";
 
-// How long each GPU stage of a worker job took, for web/components/splats/PipelineStepper.tsx.
+// The fields of a worker job that stageTimings reads. The share page has these without the rest of the job.
+export type TimedJob = JobTimestamps & Pick<Job, "status" | "pointCloudS3Key">;
 
 export interface StepTiming {
   // From the instance's launch to the stage's end, or to now while it runs.
@@ -65,7 +66,7 @@ function stepTiming(
  * A stage that ended without finishing (failed or cancelled) gets no timing, since neither timestamp marks when it
  * stopped. The build stage's end is updatedAt, because nothing writes to a job once it is complete.
  */
-export function stageTimings(job: Job, now: number): StageTimings {
+export function stageTimings(job: TimedJob, now: number): StageTimings {
   const placingCameras =
     job.status === JobStatus.queued ||
     job.status === JobStatus.reconstruction_running ||
