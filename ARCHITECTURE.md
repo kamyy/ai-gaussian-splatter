@@ -85,7 +85,7 @@ A worker job's wall clock splits into three parts:
 - **COLMAP**: a few minutes, CPU-bound by `mapper`'s incremental bundle adjustment.
 - **Training**: the majority of wall clock.
 
-A baked AMI would attack the smaller half — fixed overhead, not training. Training cost is set by the resolution the photos are rasterized at (`MAX_TRAINING_EDGE` in `worker/pipeline/train.py`), not by boot latency. Shrinking the image and precompiling the kernels took most of what an AMI was worth here, so M10 measures the fixed overhead before anyone builds an AMI. Only the image size is measured. The split between the three parts is still read off the code, and no stage has been timed on AWS.
+A baked AMI would attack the smaller half — fixed overhead, not training. Training cost is set by the resolution the photos are rasterized at (`MAX_TRAINING_EDGE` in `worker/pipeline/train.py`), not by boot latency. Shrinking the image and precompiling the kernels took most of what an AMI was worth here, so M10 measures the fixed overhead before anyone builds an AMI. Each stage on the splat's page shows its instance's boot, its image pull and its work separately, so the first stage run on AWS gives the split. No stage has run on AWS yet.
 
 - Not Lambda or Fargate: neither offers GPU.
 - Not hand-rolled ECS orchestration: bin-packing shared instances doesn't fit a one-stage-one-instance model.

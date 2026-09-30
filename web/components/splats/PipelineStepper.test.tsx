@@ -19,9 +19,11 @@ const reconstructed: Job = {
   resultS3Key: null,
   thumbnailS3Key: null,
   pointCloudS3Key: "splats/splat-1/points.ply",
+  colmapBootedAt: null,
   colmapStartedAt: at(220),
   colmapFinishedAt: at(472),
   trainingLaunchedAt: at(1192),
+  trainingBootedAt: null,
   trainingStartedAt: at(1377),
   trainingProgress: 20,
   createdAt: at(0),
@@ -72,5 +74,18 @@ describe("PipelineStepper", () => {
     expect(steps[3]).toContain("Build the 3D splat: done10m 15sGPU start-up 3m 05s · training 7m 10s");
     expect(steps[4]).toContain("Share: done");
     expect(screen.getByText("18m 07s of GPU time")).toBeTruthy();
+  });
+
+  it("splits start-up into boot and image pull when the worker reported its boot time", () => {
+    vi.useFakeTimers({ now: T0 + 1463_000 });
+    render(
+      <PipelineStepper
+        stage={{ kind: "building", progress: 20, startedAt: reconstructed.trainingStartedAt }}
+        job={{ ...reconstructed, colmapBootedAt: at(70) }}
+        photoCount={38}
+      />,
+    );
+
+    expect(screen.getByText("Boot 1m 10s · image pull 2m 30s · reconstructing 4m 12s")).toBeTruthy();
   });
 });

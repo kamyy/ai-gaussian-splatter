@@ -30,6 +30,8 @@ const workerStatusSchema = z.object({
   thumbnail_s3_key: z.string().nullish(),
   point_cloud_s3_key: z.string().nullish(),
   training_progress: z.number().int().min(0).max(100).nullish(),
+  // Epoch milliseconds, sent with each stage's first callback. Absent on a local run.
+  booted_at: z.number().int().positive().nullish(),
 });
 
 export const PATCH = withErrorHandling(
@@ -93,13 +95,16 @@ export const PATCH = withErrorHandling(
     // callback: worker/pipeline/status.py swallows a failed PATCH, so that callback can simply go missing. Without
     // the fallback, colmapFinishedAt would stay null for the life of the job.
     const now = new Date();
+    const bootedAt = body.booted_at == null ? null : new Date(body.booted_at);
     if (status === JobStatus.reconstruction_running && job.colmapStartedAt === null) {
       jobData.colmapStartedAt = now;
+      jobData.colmapBootedAt = job.colmapBootedAt ?? bootedAt;
     } else if (status === JobStatus.awaiting_training) {
       jobData.colmapFinishedAt = job.colmapFinishedAt ?? now;
     } else if (status === JobStatus.training_running) {
       jobData.colmapFinishedAt = job.colmapFinishedAt ?? now;
       jobData.trainingStartedAt = job.trainingStartedAt ?? now;
+      jobData.trainingBootedAt = job.trainingBootedAt ?? bootedAt;
     } else if (status === JobStatus.uploading_result) {
       jobData.trainingFinishedAt = job.trainingFinishedAt ?? now;
     }

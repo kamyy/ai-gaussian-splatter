@@ -30,7 +30,9 @@ function timingExtras(timing: StepTiming | null, workLabel: string): StepExtras 
   }
 
   let detail: string | null = null;
-  if (timing.startupMs !== null && timing.workMs !== null) {
+  if (timing.bootMs !== null && timing.pullMs !== null && timing.workMs !== null) {
+    detail = `Boot ${formatDuration(timing.bootMs)} · image pull ${formatDuration(timing.pullMs)} · ${workLabel} ${formatDuration(timing.workMs)}`;
+  } else if (timing.startupMs !== null && timing.workMs !== null) {
     detail = `GPU start-up ${formatDuration(timing.startupMs)} · ${workLabel} ${formatDuration(timing.workMs)}`;
   } else if (timing.running) {
     detail = "Starting a GPU";

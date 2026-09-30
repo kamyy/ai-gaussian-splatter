@@ -23,6 +23,7 @@ def report_status(
     thumbnail_s3_key: str | None = None,
     point_cloud_s3_key: str | None = None,
     training_progress: int | None = None,
+    booted_at: int | None = None,
 ) -> None:
     """PATCH the job's status back to the web app. Best effort: network errors are logged and swallowed rather than
     raised, because a failed status update must never stop the pipeline from continuing, or from reaching the finally
@@ -41,6 +42,8 @@ def report_status(
         payload["point_cloud_s3_key"] = point_cloud_s3_key
     if training_progress is not None:
         payload["training_progress"] = training_progress
+    if booted_at is not None:
+        payload["booted_at"] = booted_at
 
     url = f"{settings.app_public_url}/api/v1/internal/jobs/{settings.job_id}/status"
     try:

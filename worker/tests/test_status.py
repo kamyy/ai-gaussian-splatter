@@ -34,6 +34,7 @@ def test_report_status_sends_expected_payload_and_auth(settings):
         ),
         ("awaiting_training", {"point_cloud_s3_key": "splats/x/point_cloud.ply"}),
         ("training_running", {"training_progress": 45}),
+        ("reconstruction_running", {"booted_at": 1_767_225_660_000}),
         ("failed", {"error_message": "boom"}),
     ],
 )

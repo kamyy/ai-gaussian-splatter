@@ -161,6 +161,17 @@ describe("launchJob", () => {
     expect(userData).toContain(`shutdown -h +${WORKER_MAX_LIFETIME_MINUTES} || poweroff -f`);
   });
 
+  it("stamps the boot time once user-data starts and passes it to the worker", async () => {
+    ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
+    await launchJob(params);
+
+    // Stamped before docker login, so the gap from it to the worker's first callback is the image pull alone.
+    const userData = Buffer.from(runInstancesInput().UserData ?? "", "base64").toString();
+    expect(userData).toContain('BOOTED_AT="$(date +%s%3N)"');
+    expect(userData.indexOf("BOOTED_AT=")).toBeLessThan(userData.indexOf("docker login --username"));
+    expect(userData).toContain('-e BOOTED_AT="$BOOTED_AT" \\\n');
+  });
+
   it("throws if EC2 returns no instance", async () => {
     ec2Mock.on(RunInstancesCommand).resolves({ Instances: [] });
     await expect(launchJob(params)).rejects.toThrow("no instance ID");

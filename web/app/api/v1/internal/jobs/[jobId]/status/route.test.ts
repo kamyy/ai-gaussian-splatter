@@ -84,6 +84,27 @@ describe("worker status callback", () => {
     expect(updated.colmapStartedAt).toEqual(EARLIER);
   });
 
+  it("records each stage's boot time from its first callback, and never overwrites it", async () => {
+    const { job } = await seed();
+    const booted = Date.parse("2026-01-01T00:01:00Z");
+
+    await PATCH(req("tok", { status: "reconstruction_running", booted_at: booted }), ctx(job.id));
+    await PATCH(req("tok", { status: "reconstruction_running", booted_at: booted + 5000 }), ctx(job.id));
+    await PATCH(req("tok", { status: "training_running", booted_at: booted + 60_000 }), ctx(job.id));
+
+    const [updated] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
+    expect(updated.colmapBootedAt).toEqual(new Date(booted));
+    expect(updated.trainingBootedAt).toEqual(new Date(booted + 60_000));
+  });
+
+  it("leaves the boot time null for a local run that reports none", async () => {
+    const { job } = await seed();
+    await PATCH(req("tok", { status: "reconstruction_running" }), ctx(job.id));
+
+    const [updated] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
+    expect(updated.colmapBootedAt).toBeNull();
+  });
+
   it("stamps colmapFinishedAt on awaiting_training, not on the later training_running callback", async () => {
     // awaiting_training can sit for hours while the user decides whether to train. Stamping colmapFinishedAt on
     // training_running instead would fold that think-time into COLMAP's own wall clock.

@@ -110,11 +110,15 @@ export const jobs = pgTable(
     thumbnailS3Key: text("thumbnail_s3_key"),
     pointCloudS3Key: text("point_cloud_s3_key"),
 
+    // When each stage's instance finished booting and its user-data started, as the worker reports it. The gap from
+    // there to that stage's *StartedAt is the image pull. Null for a local run, which has no instance to boot.
+    colmapBootedAt: timestamp("colmap_booted_at", { withTimezone: true, precision: 6 }),
     colmapStartedAt: timestamp("colmap_started_at", { withTimezone: true, precision: 6 }),
     colmapFinishedAt: timestamp("colmap_finished_at", { withTimezone: true, precision: 6 }),
     // When web/app/api/v1/splats/[splatId]/train/route.ts launched the train stage's instance. trainingStartedAt, set
     // by the worker once it is running, comes after it by the instance's boot and image pull.
     trainingLaunchedAt: timestamp("training_launched_at", { withTimezone: true, precision: 6 }),
+    trainingBootedAt: timestamp("training_booted_at", { withTimezone: true, precision: 6 }),
     trainingStartedAt: timestamp("training_started_at", { withTimezone: true, precision: 6 }),
     trainingFinishedAt: timestamp("training_finished_at", { withTimezone: true, precision: 6 }),
     // Percent of gsplat's iterations done, 0-100, reported by the train stage's worker as it goes. Null before
