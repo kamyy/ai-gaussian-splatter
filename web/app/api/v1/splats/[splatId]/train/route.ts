@@ -14,19 +14,11 @@ import { z } from "zod";
 import { requireOwnedSplat, requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { jobs } from "@/lib/server/db/schema";
-import {
-  ecrRegistry,
-  launchJob,
-  launchJobLocal,
-  localLaunchEnabled,
-  stopLocalWorker,
-  terminateWorker,
-  workerImageUri,
-} from "@/lib/server/ec2Launcher";
 import { HttpError, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
 import { requireProcessingEnabled } from "@/lib/server/runtimeSettings";
 import { jobColumns } from "@/lib/server/selects";
+import { launchWorker, stopWorker } from "@/lib/server/worker";
 import { JOB_ENDED_STATUSES } from "@/lib/statuses";
 
 // Nothing but numbers survives the parse, which is what lets web/lib/server/ec2Launcher.ts single-quote the box's JSON
@@ -97,29 +89,14 @@ export const POST = withErrorHandling(
     let instanceId: string | null;
     try {
       await checkAndIncrementGlobalDaily(settings.maxJobsPerDay);
-
-      if (localLaunchEnabled()) {
-        launchJobLocal({
-          jobId: flipped.id,
-          splatId,
-          callbackToken: flipped.callbackToken,
-          stage: "train",
-          trainingIterations: settings.trainingIterations,
-          cropBox,
-        });
-        instanceId = null;
-      } else {
-        instanceId = await launchJob({
-          jobId: flipped.id,
-          splatId,
-          callbackToken: flipped.callbackToken,
-          stage: "train",
-          workerImageUri: workerImageUri("train"),
-          ecrRegistry: ecrRegistry(),
-          settings,
-          cropBox,
-        });
-      }
+      instanceId = await launchWorker({
+        jobId: flipped.id,
+        splatId,
+        callbackToken: flipped.callbackToken,
+        stage: "train",
+        settings,
+        cropBox,
+      });
     } catch (err) {
       await getDb()
         .update(jobs)
@@ -136,12 +113,7 @@ export const POST = withErrorHandling(
       .where(and(eq(jobs.id, flipped.id), notInArray(jobs.status, JOB_ENDED_STATUSES)))
       .returning(jobColumns);
     if (job === undefined) {
-      if (instanceId === null) {
-        stopLocalWorker(flipped.id);
-      } else {
-        await terminateWorker(instanceId);
-      }
-
+      await stopWorker(flipped.id, instanceId);
       throw new HttpError(409, "Cancelled before the worker started");
     }
 

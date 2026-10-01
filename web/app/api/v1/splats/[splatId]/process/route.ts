@@ -12,20 +12,12 @@ import { MAX_PHOTOS_PER_SPLAT } from "@/lib/limits";
 import { requireOwnedSplat, requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { jobs, photos, splats } from "@/lib/server/db/schema";
-import {
-  ecrRegistry,
-  generateCallbackToken,
-  launchJob,
-  launchJobLocal,
-  localLaunchEnabled,
-  stopLocalWorker,
-  terminateWorker,
-  workerImageUri,
-} from "@/lib/server/ec2Launcher";
+import { generateCallbackToken } from "@/lib/server/ec2Launcher";
 import { HttpError, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
 import { requireProcessingEnabled } from "@/lib/server/runtimeSettings";
 import { jobColumns } from "@/lib/server/selects";
+import { launchWorker, stopWorker } from "@/lib/server/worker";
 import { JOB_ENDED_STATUSES } from "@/lib/statuses";
 
 // How long a job may sit in a non-terminal status without its worker reporting anything before this route treats it
@@ -126,20 +118,7 @@ export const POST = withErrorHandling(
 
     let instanceId: string | null;
     try {
-      if (localLaunchEnabled()) {
-        launchJobLocal({ jobId: created.id, splatId, callbackToken, stage: "reconstruct" });
-        instanceId = null;
-      } else {
-        instanceId = await launchJob({
-          jobId: created.id,
-          splatId,
-          callbackToken,
-          stage: "reconstruct",
-          workerImageUri: workerImageUri("reconstruct"),
-          ecrRegistry: ecrRegistry(),
-          settings,
-        });
-      }
+      instanceId = await launchWorker({ jobId: created.id, splatId, callbackToken, stage: "reconstruct", settings });
     } catch (err) {
       // Marked failed rather than left at "queued": "queued" is active under uq_jobs_splat_id_active, so a stuck job
       // there would block every future POST /process for this splat with no way to clear it. Conditional on the job
@@ -166,12 +145,7 @@ export const POST = withErrorHandling(
       .where(and(eq(jobs.id, created.id), eq(jobs.status, "queued")))
       .returning(jobColumns);
     if (job === undefined) {
-      if (instanceId === null) {
-        stopLocalWorker(created.id);
-      } else {
-        await terminateWorker(instanceId);
-      }
-
+      await stopWorker(created.id, instanceId);
       throw new HttpError(409, "Cancelled before the worker started");
     }
 
