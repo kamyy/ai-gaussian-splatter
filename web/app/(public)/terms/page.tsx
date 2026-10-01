@@ -77,8 +77,7 @@ export default function TermsPage() {
       <LegalSection title="Removing content and accounts">
         <p>
           We can remove any upload or close any account that breaks these terms, or that we reasonably believe puts the
-          site or other people at risk. You can delete your splats at any time, and ask us to delete your account by
-          emailing <LegalContact />.
+          site or other people at risk. You can delete your splats, or your whole account, at any time.
         </p>
       </LegalSection>
 

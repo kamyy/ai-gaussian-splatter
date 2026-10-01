@@ -2,7 +2,10 @@ import { eq } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@clerk/nextjs/server", () => ({ auth: vi.fn(async () => ({ userId: "clerk-user-1" })) }));
+vi.mock("@clerk/nextjs/server", () => ({
+  auth: vi.fn(async () => ({ userId: "clerk-user-1" })),
+  clerkClient: async () => ({ users: { getUser: async () => ({}) } }),
+}));
 
 const { reconcileJobMock } = vi.hoisted(() => ({ reconcileJobMock: vi.fn(async (_job: unknown) => false) }));
 vi.mock("@/lib/server/reconcileJob", () => ({ reconcileJob: reconcileJobMock }));

@@ -1,7 +1,10 @@
 import { NextRequest } from "next/server";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@clerk/nextjs/server", () => ({ auth: vi.fn(async () => ({ userId: "clerk-user-1" })) }));
+vi.mock("@clerk/nextjs/server", () => ({
+  auth: vi.fn(async () => ({ userId: "clerk-user-1" })),
+  clerkClient: async () => ({ users: { getUser: async () => ({}) } }),
+}));
 
 // Each test sets the stored size of the photo and its thumbnail by key. A key with no entry has no object.
 const { objectSizes, deleteUploadedObjectMock } = vi.hoisted(() => ({

@@ -97,7 +97,10 @@ export default function PrivacyPage() {
       <LegalSection title="How long we keep it">
         <ul>
           <li>Photos and splats stay until you delete the splat. Deleting a splat removes its photos and files too.</li>
-          <li>Your account stays until you ask us to delete it.</li>
+          <li>
+            Your account stays until you delete it from the account menu. Deleting it removes every splat, photo and
+            file in it too.
+          </li>
           <li>IP addresses kept to prevent abuse are deleted within two days.</li>
           <li>Server logs are deleted within 90 days.</li>
           <li>Google Analytics keeps its data for the retention period set in our Google Analytics account.</li>
@@ -107,9 +110,9 @@ export default function PrivacyPage() {
       <LegalSection title="Your rights">
         <p>
           You can ask for a copy of your data, ask us to correct or delete it, object to how we use it, or ask us to
-          stop using it. To delete your account and everything in it, email <LegalContact /> from the address you signed
-          up with. We will reply within one month. If you are in the EU or UK, you can also complain to your local data
-          protection authority.
+          stop using it. Email <LegalContact /> from the address you signed up with, and we will reply within one month.
+          You can delete your account and everything in it yourself, from the account menu. If you are in the EU or UK,
+          you can also complain to your local data protection authority.
         </p>
       </LegalSection>
 

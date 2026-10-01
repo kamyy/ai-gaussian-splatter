@@ -2,13 +2,17 @@ import { count } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getClientIp, getJobForCallbackToken, getOrCreateUser } from "../auth";
+import { getClientIp, getJobForCallbackToken, getOrCreateUser, requireUser } from "../auth";
 import { closeDb, getDb } from "../db";
 import { jobs, splats, users } from "../db/schema";
 
 // @clerk/nextjs verifies JWTs, and testing Clerk's own code isn't this suite's job. What's worth testing is the
 // app-specific logic: the lazy shadow-row upsert and the worker's per-job token check.
-vi.mock("@clerk/nextjs/server", () => ({ auth: vi.fn() }));
+const { getUserMock } = vi.hoisted(() => ({ getUserMock: vi.fn(async (_clerkUserId: string) => ({})) }));
+vi.mock("@clerk/nextjs/server", () => ({
+  auth: vi.fn(async () => ({ userId: "user_clerk_1" })),
+  clerkClient: async () => ({ users: { getUser: getUserMock } }),
+}));
 
 function fakeRequest(headers: Record<string, string>): NextRequest {
   return { headers: new Headers(headers) } as unknown as NextRequest;
@@ -77,6 +81,32 @@ describe("database-backed auth helpers", () => {
       const ids = new Set(racers.map(u => u.id));
       expect(ids.size).toBe(1);
       expect(await userCount()).toBe(1);
+    });
+  });
+
+  describe("requireUser", () => {
+    beforeEach(() => {
+      getUserMock.mockClear();
+    });
+
+    it("creates the row on a first request once Clerk confirms the user", async () => {
+      const user = await requireUser();
+      expect(user.clerkUserId).toBe("user_clerk_1");
+      expect(getUserMock).toHaveBeenCalledWith("user_clerk_1");
+    });
+
+    it("finds an existing row without asking Clerk", async () => {
+      const existing = await getOrCreateUser("user_clerk_1");
+
+      expect((await requireUser()).id).toBe(existing.id);
+      expect(getUserMock).not.toHaveBeenCalled();
+    });
+
+    it("401s without creating a row when Clerk has deleted the user", async () => {
+      getUserMock.mockRejectedValueOnce(Object.assign(new Error("Not Found"), { status: 404 }));
+
+      await expect(requireUser()).rejects.toMatchObject({ status: 401 });
+      expect(await userCount()).toBe(0);
     });
   });
 

@@ -2,12 +2,12 @@
  * Who is calling an API route, and whether they're allowed to.
  *
  * requireUser() and requireClerkUserId() are how each authenticated Route Handler checks for a Clerk session.
- * requireUser() also creates the user's own database row on their first request. getJobForCallbackToken() checks the
+ * requireUser() also creates the user's own database row on their first request, once Clerk confirms the user exists. getJobForCallbackToken() checks the
  * worker's per-job bearer token instead, for the status callback. getClientIp() reads the caller's IP address for rate
  * limiting.
  */
 
-import { auth } from "@clerk/nextjs/server";
+import { auth, clerkClient } from "@clerk/nextjs/server";
 import { eq } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 
@@ -41,9 +41,38 @@ export async function getOrCreateUser(clerkUserId: string): Promise<User> {
   return user;
 }
 
-/** The authenticated caller's local User row, or 401. */
+/** Whether an error from Clerk's Backend API means the user it names doesn't exist. */
+export function isClerkNotFound(err: unknown): boolean {
+  return typeof err === "object" && err !== null && "status" in err && err.status === 404;
+}
+
+/**
+ * The authenticated caller's local User row, or 401.
+ *
+ * A row is only created once Clerk confirms the user still exists. A session token stays valid for up to a minute
+ * after DELETE /api/v1/account deletes the Clerk user, because it is checked without asking Clerk. Without this check,
+ * a request from another open tab in that minute would create an empty row for the deleted account. The check costs a
+ * Clerk API call on a user's first request only. Every later request finds the row with one select.
+ */
 export async function requireUser(): Promise<User> {
-  return getOrCreateUser(await requireClerkUserId());
+  const clerkUserId = await requireClerkUserId();
+
+  const [user] = await getDb().select().from(users).where(eq(users.clerkUserId, clerkUserId)).limit(1);
+  if (user !== undefined) {
+    return user;
+  }
+
+  try {
+    await (await clerkClient()).users.getUser(clerkUserId);
+  } catch (err) {
+    if (isClerkNotFound(err)) {
+      throw new HttpError(401, "This account has been deleted");
+    }
+
+    throw err;
+  }
+
+  return getOrCreateUser(clerkUserId);
 }
 
 /**

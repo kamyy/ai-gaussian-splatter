@@ -43,12 +43,17 @@ export async function checkAndIncrementIp(ip: string, limitPerHour: number): Pro
   );
 }
 
+/** The counter scope for one user's daily upload limit. Deleting an account deletes that user's counter by it. */
+export function userRateLimitScope(userId: string): string {
+  return `user:${userId}`;
+}
+
 export async function checkAndIncrementUser(userId: string, limitPerDay: number): Promise<void> {
   const day = truncateToDay(new Date());
   const wait = formatWaitUntil(new Date(day.getTime() + DAY_MS));
 
   await checkAndIncrement(
-    `user:${userId}`,
+    userRateLimitScope(userId),
     day,
     limitPerDay,
     `You've used all ${limitPerDay} of today's uploads for your account. Try again in ${wait}, after midnight UTC.`,
