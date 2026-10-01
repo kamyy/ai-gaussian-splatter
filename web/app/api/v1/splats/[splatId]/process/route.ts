@@ -18,7 +18,7 @@ import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
 import { requireProcessingEnabled } from "@/lib/server/runtimeSettings";
 import { jobColumns } from "@/lib/server/selects";
 import { launchWorker, stopWorker } from "@/lib/server/worker";
-import { JOB_ENDED_STATUSES } from "@/lib/statuses";
+import { JOB_ENDED_STATUSES, JobStatus } from "@/lib/statuses";
 
 // How long a job may sit in a non-terminal status without its worker reporting anything before this route treats it
 // as dead and cancels it. The window has to clear the longest gap a healthy job can go between callbacks, which is a
@@ -71,7 +71,10 @@ export const POST = withErrorHandling(
     // wakes up late can't bring the cancelled row back.
     await getDb()
       .update(jobs)
-      .set({ status: "cancelled", errorMessage: "Worker stopped reporting; cancelled so processing could restart." })
+      .set({
+        status: JobStatus.cancelled,
+        errorMessage: "Worker stopped reporting; cancelled so processing could restart.",
+      })
       .where(
         and(
           eq(jobs.splatId, splatId),
@@ -91,7 +94,7 @@ export const POST = withErrorHandling(
     const callbackToken = generateCallbackToken();
     let created: { id: string };
     try {
-      [created] = await getDb().insert(jobs).values({ splatId, status: "queued", callbackToken }).returning({
+      [created] = await getDb().insert(jobs).values({ splatId, status: JobStatus.queued, callbackToken }).returning({
         id: jobs.id,
       });
     } catch (err) {
@@ -127,8 +130,8 @@ export const POST = withErrorHandling(
       await getDb().transaction(async tx => {
         const [failed] = await tx
           .update(jobs)
-          .set({ status: "failed", errorMessage: message })
-          .where(and(eq(jobs.id, created.id), eq(jobs.status, "queued")))
+          .set({ status: JobStatus.failed, errorMessage: message })
+          .where(and(eq(jobs.id, created.id), eq(jobs.status, JobStatus.queued)))
           .returning({ id: jobs.id });
         if (failed !== undefined) {
           await tx.update(splats).set({ status: "failed" }).where(eq(splats.id, splatId));
@@ -141,8 +144,8 @@ export const POST = withErrorHandling(
     // above is in flight, before there is an instance ID for it to terminate. That worker is stopped here instead.
     const [job] = await getDb()
       .update(jobs)
-      .set({ status: "launching", ec2InstanceId: instanceId })
-      .where(and(eq(jobs.id, created.id), eq(jobs.status, "queued")))
+      .set({ status: JobStatus.launching, ec2InstanceId: instanceId })
+      .where(and(eq(jobs.id, created.id), eq(jobs.status, JobStatus.queued)))
       .returning(jobColumns);
     if (job === undefined) {
       await stopWorker(created.id, instanceId);

@@ -13,6 +13,7 @@ import { getDb } from "@/lib/server/db";
 import { jobs, splats } from "@/lib/server/db/schema";
 import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
 import { presignSplatDownload } from "@/lib/server/s3";
+import { JobStatus } from "@/lib/statuses";
 
 export const GET = withErrorHandling(
   async (_request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/viewer-splat">) => {
@@ -30,7 +31,7 @@ export const GET = withErrorHandling(
       .where(
         and(
           eq(jobs.splatId, splatId),
-          eq(jobs.status, "complete"),
+          eq(jobs.status, JobStatus.complete),
           eq(splats.userId, user.id),
           eq(splats.status, "complete"),
         ),

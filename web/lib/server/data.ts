@@ -8,7 +8,7 @@
  */
 
 import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
-
+import { JobStatus } from "@/lib/statuses";
 import type { ExampleSplat, PublicSplat, PublicSplatView } from "../types";
 import { getDb } from "./db";
 import { jobs, photos, splats, users } from "./db/schema";
@@ -48,7 +48,7 @@ async function findExampleSplatRows(ownerClerkUserId: string): Promise<{ id: str
           sql`(${getDb()
             .select({ resultSpzS3Key: jobs.resultSpzS3Key })
             .from(jobs)
-            .where(and(eq(jobs.splatId, splats.id), eq(jobs.status, "complete")))
+            .where(and(eq(jobs.splatId, splats.id), eq(jobs.status, JobStatus.complete)))
             .orderBy(desc(jobs.createdAt))
             .limit(1)})`,
         ),
@@ -96,7 +96,7 @@ async function findPublicSplat(
   const [latestJob] = await getDb()
     .select()
     .from(jobs)
-    .where(and(eq(jobs.splatId, splatId), eq(jobs.status, "complete")))
+    .where(and(eq(jobs.splatId, splatId), eq(jobs.status, JobStatus.complete)))
     .orderBy(desc(jobs.createdAt))
     .limit(1);
   if (latestJob === undefined || latestJob.resultSpzS3Key === null) {

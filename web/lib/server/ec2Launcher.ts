@@ -121,6 +121,10 @@ ${iterationsArg}${cropBoxArg}    ${p.workerImageUri}
 `;
 }
 
+function ec2Client(): EC2Client {
+  return new EC2Client({ region: getEnv().AWS_REGION });
+}
+
 /**
  * infra/web.tf sets these from its ECR repository once infra/ is deployed. The placeholders are for local development
  * before a deploy. The stages run different images. worker/Dockerfile's reconstruct target carries COLMAP and no torch,
@@ -160,7 +164,6 @@ export function generateCallbackToken(): string {
 export async function launchJob(params: WorkerLaunch): Promise<string> {
   const env = getEnv();
   const worker = getWorkerInstanceEnv();
-  const ec2 = new EC2Client({ region: env.AWS_REGION });
 
   const userData = renderUserData({
     callbackToken: params.callbackToken,
@@ -179,7 +182,7 @@ export async function launchJob(params: WorkerLaunch): Promise<string> {
     cropBox: params.cropBox,
   });
 
-  const response = await ec2.send(
+  const response = await ec2Client().send(
     new RunInstancesCommand({
       ImageId: worker.WORKER_AMI_ID,
       InstanceType: (params.stage === "reconstruct"
@@ -241,9 +244,8 @@ export async function launchJob(params: WorkerLaunch): Promise<string> {
 export async function describeWorker(
   instanceId: string,
 ): Promise<{ state: string; launchTime: Date; maxLifetimeMinutes: number | null } | null> {
-  const ec2 = new EC2Client({ region: getEnv().AWS_REGION });
   try {
-    const response = await ec2.send(new DescribeInstancesCommand({ InstanceIds: [instanceId] }));
+    const response = await ec2Client().send(new DescribeInstancesCommand({ InstanceIds: [instanceId] }));
     const instance = response.Reservations?.[0]?.Instances?.[0];
     if (instance?.State?.Name === undefined || instance.LaunchTime === undefined) {
       return null;
@@ -268,9 +270,8 @@ export async function describeWorker(
  * instances carrying the worker tag launchJob() applies.
  */
 export async function terminateWorker(instanceId: string): Promise<void> {
-  const ec2 = new EC2Client({ region: getEnv().AWS_REGION });
   try {
-    await ec2.send(new TerminateInstancesCommand({ InstanceIds: [instanceId] }));
+    await ec2Client().send(new TerminateInstancesCommand({ InstanceIds: [instanceId] }));
   } catch (err) {
     if (err instanceof Error && err.name === "InvalidInstanceID.NotFound") {
       return;

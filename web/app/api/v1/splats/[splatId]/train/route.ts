@@ -19,7 +19,7 @@ import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
 import { requireProcessingEnabled } from "@/lib/server/runtimeSettings";
 import { jobColumns } from "@/lib/server/selects";
 import { launchWorker, stopWorker } from "@/lib/server/worker";
-import { JOB_ENDED_STATUSES } from "@/lib/statuses";
+import { JOB_ENDED_STATUSES, JobStatus } from "@/lib/statuses";
 
 // Nothing but numbers survives the parse, which is what lets web/lib/server/ec2Launcher.ts single-quote the box's JSON
 // inside the user-data script.
@@ -48,7 +48,7 @@ export const POST = withErrorHandling(
     const settings = await requireProcessingEnabled();
 
     const [latestJob] = await getDb()
-      .select()
+      .select({ id: jobs.id })
       .from(jobs)
       .where(eq(jobs.splatId, splatId))
       .orderBy(desc(jobs.createdAt))
@@ -66,8 +66,8 @@ export const POST = withErrorHandling(
     // launching an instance.
     const [flipped] = await getDb()
       .update(jobs)
-      .set({ status: "launching", trainingLaunchedAt: new Date() })
-      .where(and(eq(jobs.id, latestJob.id), eq(jobs.status, "awaiting_training")))
+      .set({ status: JobStatus.launching, trainingLaunchedAt: new Date() })
+      .where(and(eq(jobs.id, latestJob.id), eq(jobs.status, JobStatus.awaiting_training)))
       .returning();
     if (flipped === undefined) {
       throw new HttpError(409, "No job awaiting training for this splat");
@@ -95,8 +95,8 @@ export const POST = withErrorHandling(
     } catch (err) {
       await getDb()
         .update(jobs)
-        .set({ status: "awaiting_training", trainingLaunchedAt: null })
-        .where(and(eq(jobs.id, flipped.id), eq(jobs.status, "launching")));
+        .set({ status: JobStatus.awaiting_training, trainingLaunchedAt: null })
+        .where(and(eq(jobs.id, flipped.id), eq(jobs.status, JobStatus.launching)));
       throw err;
     }
 
