@@ -8,10 +8,10 @@
 import { and, asc, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 
-import { requireUser } from "@/lib/server/auth";
+import { requireOwnedSplat, requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
-import { photos, splats } from "@/lib/server/db/schema";
-import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
+import { photos } from "@/lib/server/db/schema";
+import { withErrorHandling } from "@/lib/server/httpError";
 import { presignPhotoDownload } from "@/lib/server/s3";
 import { photoColumns } from "@/lib/server/selects";
 import type { PhotoListItem } from "@/lib/types";
@@ -20,17 +20,7 @@ export const GET = withErrorHandling(
   async (_request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/photos">) => {
     const user = await requireUser();
     const { splatId } = await ctx.params;
-    requireUuid(splatId, 404, "Splat not found");
-
-    // Ownership is enforced through the parent splat.
-    const [splat] = await getDb()
-      .select({ id: splats.id })
-      .from(splats)
-      .where(and(eq(splats.id, splatId), eq(splats.userId, user.id)))
-      .limit(1);
-    if (splat === undefined) {
-      throw new HttpError(404, "Splat not found");
-    }
+    await requireOwnedSplat(splatId, user.id);
 
     const rows = await getDb()
       .select(photoColumns)

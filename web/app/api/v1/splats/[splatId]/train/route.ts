@@ -11,9 +11,9 @@ import { and, desc, eq, notInArray } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-import { requireUser } from "@/lib/server/auth";
+import { requireOwnedSplat, requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
-import { jobs, splats } from "@/lib/server/db/schema";
+import { jobs } from "@/lib/server/db/schema";
 import {
   ecrRegistry,
   launchJob,
@@ -23,7 +23,7 @@ import {
   terminateWorker,
   workerImageUri,
 } from "@/lib/server/ec2Launcher";
-import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
+import { HttpError, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
 import { requireProcessingEnabled } from "@/lib/server/runtimeSettings";
 import { jobColumns } from "@/lib/server/selects";
@@ -47,16 +47,7 @@ export const POST = withErrorHandling(
   async (request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/train">) => {
     const user = await requireUser();
     const { splatId } = await ctx.params;
-    requireUuid(splatId, 404, "Splat not found");
-
-    const [splat] = await getDb()
-      .select({ id: splats.id })
-      .from(splats)
-      .where(and(eq(splats.id, splatId), eq(splats.userId, user.id)))
-      .limit(1);
-    if (splat === undefined) {
-      throw new HttpError(404, "Splat not found");
-    }
+    await requireOwnedSplat(splatId, user.id);
 
     // Parsed before the flip below, so a malformed box never moves the job or charges the daily cap.
     const parsed = trainSchema.safeParse(await request.json().catch(() => null));

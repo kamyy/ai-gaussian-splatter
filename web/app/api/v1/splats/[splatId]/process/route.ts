@@ -9,7 +9,7 @@
 import { and, count, eq, lt, notInArray } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { MAX_PHOTOS_PER_SPLAT } from "@/lib/limits";
-import { requireUser } from "@/lib/server/auth";
+import { requireOwnedSplat, requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { jobs, photos, splats } from "@/lib/server/db/schema";
 import {
@@ -22,7 +22,7 @@ import {
   terminateWorker,
   workerImageUri,
 } from "@/lib/server/ec2Launcher";
-import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
+import { HttpError, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
 import { requireProcessingEnabled } from "@/lib/server/runtimeSettings";
 import { jobColumns } from "@/lib/server/selects";
@@ -52,16 +52,7 @@ export const POST = withErrorHandling(
   async (_request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/process">) => {
     const user = await requireUser();
     const { splatId } = await ctx.params;
-    requireUuid(splatId, 404, "Splat not found");
-
-    const [splat] = await getDb()
-      .select()
-      .from(splats)
-      .where(and(eq(splats.id, splatId), eq(splats.userId, user.id)))
-      .limit(1);
-    if (splat === undefined) {
-      throw new HttpError(404, "Splat not found");
-    }
+    await requireOwnedSplat(splatId, user.id);
 
     // Checked before anything else about the splat, so a paused site says so rather than naming some other problem.
     const settings = await requireProcessingEnabled();

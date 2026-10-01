@@ -23,19 +23,18 @@ export const GET = withErrorHandling(
     // This is the compressed .spz the 3D viewer loads. The Download button's lossless .ply comes from
     // web/app/api/v1/splats/[splatId]/download/route.ts. Both deliberately collapse "not ready" and "not yours" into
     // the same 404.
-    const [splat] = await getDb()
-      .select()
-      .from(splats)
-      .where(and(eq(splats.id, splatId), eq(splats.userId, user.id), eq(splats.status, "complete")))
-      .limit(1);
-    if (splat === undefined) {
-      throw new HttpError(404, "Splat not ready");
-    }
-
     const [latestJob] = await getDb()
-      .select()
+      .select({ resultSpzS3Key: jobs.resultSpzS3Key })
       .from(jobs)
-      .where(and(eq(jobs.splatId, splatId), eq(jobs.status, "complete")))
+      .innerJoin(splats, eq(splats.id, jobs.splatId))
+      .where(
+        and(
+          eq(jobs.splatId, splatId),
+          eq(jobs.status, "complete"),
+          eq(splats.userId, user.id),
+          eq(splats.status, "complete"),
+        ),
+      )
       .orderBy(desc(jobs.createdAt))
       .limit(1);
     if (latestJob === undefined || latestJob.resultSpzS3Key === null) {

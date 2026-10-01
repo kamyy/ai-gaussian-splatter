@@ -13,10 +13,10 @@ import { and, count, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { MAX_PHOTO_BYTES, MAX_PHOTOS_PER_SPLAT } from "@/lib/limits";
-import { getClientIp, requireUser } from "@/lib/server/auth";
+import { getClientIp, requireOwnedSplat, requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
-import { type NewPhoto, photos, splats } from "@/lib/server/db/schema";
-import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
+import { type NewPhoto, photos } from "@/lib/server/db/schema";
+import { HttpError, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementIp, checkAndIncrementUser } from "@/lib/server/rateLimit";
 import { getRuntimeSettings } from "@/lib/server/runtimeSettings";
 import { MAX_THUMBNAIL_BYTES, presignPhotoThumbnailUpload, presignPhotoUpload } from "@/lib/server/s3";
@@ -42,16 +42,7 @@ export const POST = withErrorHandling(
   async (request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/photos/presign">) => {
     const user = await requireUser();
     const { splatId } = await ctx.params;
-    requireUuid(splatId, 404, "Splat not found");
-
-    const [splat] = await getDb()
-      .select({ id: splats.id })
-      .from(splats)
-      .where(and(eq(splats.id, splatId), eq(splats.userId, user.id)))
-      .limit(1);
-    if (splat === undefined) {
-      throw new HttpError(404, "Splat not found");
-    }
+    await requireOwnedSplat(splatId, user.id);
 
     const parsed = presignSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
