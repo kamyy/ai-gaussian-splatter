@@ -61,4 +61,4 @@ export type SplatStatus = (typeof SPLAT_STATUSES)[number];
 
 export type JobStatus = (typeof JobStatus)[keyof typeof JobStatus];
 
-type JobStatusDbValue = JobStatus | "colmap_running";
+export type JobStatusDbValue = JobStatus | "colmap_running";
