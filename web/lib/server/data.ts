@@ -7,8 +7,6 @@
  * than the server making an HTTP request to itself.
  */
 
-import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 
 import type { ExampleSplat, PublicSplat, PublicSplatView } from "../types";
@@ -17,6 +15,7 @@ import { jobs, photos, splats, users } from "./db/schema";
 import { getEnv } from "./env";
 import { isUuid } from "./httpError";
 import { getRuntimeSettings } from "./runtimeSettings";
+import { presignDownload } from "./s3";
 import { photoOrder } from "./selects";
 
 // The landing page has no pager, so this is every example it shows.
@@ -28,11 +27,7 @@ const EXAMPLE_LIMIT = 8;
 const PUBLIC_URL_EXPIRY_SECONDS = 3600;
 
 async function presignPublic(bucket: string, key: string): Promise<string> {
-  const client = new S3Client({ region: getEnv().AWS_REGION });
-
-  return getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: key }), {
-    expiresIn: PUBLIC_URL_EXPIRY_SECONDS,
-  });
+  return presignDownload(bucket, key, PUBLIC_URL_EXPIRY_SECONDS);
 }
 
 // The ids and names of the splats the landing page shows as examples, newest first.
