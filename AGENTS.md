@@ -106,6 +106,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - The API is protected by `requireUser()` / `requireClerkUserId()` in each handler, not by this layout.
   - Next reuses a layout when navigating between the routes under it, so `auth.protect()` does not re-run on every navigation.
   - If a page starts rendering protected data on the server, that page needs its own `auth.protect()`.
+- **A signed-in page's data hooks must not run before Clerk has a session in the browser.** Clerk clears its session while it navigates away from the sign-in page, so `useAuth().getToken()` returns `null` for a moment after every sign-in. `web/app/(authenticated)/splats/layout.tsx` wraps its pages in `SignedInGate` (`web/components/layout/SignedInGate.tsx`) for this. A page outside that layout needs the same wrapper.
 - **This Clerk SDK has no `<SignedIn>` / `<SignedOut>`.** Use `<Show when="signed-in">` (`web/components/layout/SiteHeader.tsx`).
   - Pass `fallback` for the signed-out UI.
   - While Clerk is still loading the session, `<Show>` renders nothing — not the fallback.

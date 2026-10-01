@@ -2,9 +2,11 @@
  * Page frame for the splat workspace: the library, the new-splat form and each splat's page.
  *
  * Renders the site header above a content area pinned to the viewport height, so a splat page's 3D viewer can fill
- * exactly the space the header leaves while the library and the form still scroll normally.
+ * exactly the space the header leaves while the library and the form still scroll normally. Each page waits behind a
+ * spinner until Clerk has a session in the browser, so its first data fetch has a token.
  */
 
+import { SignedInGate } from "@/components/layout/SignedInGate";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 
 /**
@@ -16,7 +18,9 @@ export default function SplatsLayout({ children }: { children: React.ReactNode }
   return (
     <div className="flex h-dvh flex-col">
       <SiteHeader />
-      <main className="relative min-h-0 flex-1 overflow-y-auto scrollbar-gutter-stable">{children}</main>
+      <main className="relative min-h-0 flex-1 overflow-y-auto scrollbar-gutter-stable">
+        <SignedInGate>{children}</SignedInGate>
+      </main>
     </div>
   );
 }
