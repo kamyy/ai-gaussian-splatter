@@ -7,6 +7,7 @@
 
 "use client";
 
+import { buttonClassName } from "@/components/ui/Button";
 import { PrivacySettingsIcon } from "@/components/ui/icons";
 import { useAnalyticsConsent } from "@/lib/hooks/useAnalyticsConsent";
 
@@ -18,7 +19,7 @@ export function PrivacySettingsButton() {
       type="button"
       aria-label="Privacy settings"
       onClick={() => setConsent(null)}
-      className="inline-flex h-10 w-10 items-center justify-center pointer-coarse:h-11 pointer-coarse:w-11 rounded-full border border-outline transition-colors hover:border-muted-foreground hover:bg-muted"
+      className={buttonClassName("outlined", "icon")}
     >
       <PrivacySettingsIcon aria-hidden="true" className="h-4 w-4" />
     </button>

@@ -7,6 +7,7 @@
 
 import Link from "next/link";
 
+import { buttonClassName } from "@/components/ui/Button";
 import { BackIcon } from "@/components/ui/icons";
 import { Tooltip } from "@/components/ui/Tooltip";
 
@@ -18,11 +19,7 @@ interface BackButtonProps {
 export function BackButton({ href, label }: BackButtonProps) {
   return (
     <Tooltip label={label}>
-      <Link
-        href={href}
-        aria-label={label}
-        className="flex h-10 w-10 shrink-0 items-center justify-center pointer-coarse:h-11 pointer-coarse:w-11 rounded-full border border-outline text-foreground transition-colors hover:border-muted-foreground hover:bg-muted"
-      >
+      <Link href={href} aria-label={label} className={buttonClassName("outlined", "icon")}>
         <BackIcon aria-hidden="true" className="h-4.5 w-4.5" />
       </Link>
     </Tooltip>
