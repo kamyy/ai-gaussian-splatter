@@ -53,7 +53,7 @@ export const splats = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id")
       .notNull()
-      .references(() => users.id),
+      .references(() => users.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     status: splatStatus("status").notNull().default("draft"),
     thumbnailS3Key: text("thumbnail_s3_key"),
