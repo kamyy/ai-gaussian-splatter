@@ -16,7 +16,7 @@ import { MAX_PHOTO_BYTES, MAX_PHOTOS_PER_SPLAT } from "@/lib/limits";
 import { getClientIp, requireOwnedSplat, requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { type NewPhoto, photos } from "@/lib/server/db/schema";
-import { HttpError, withErrorHandling } from "@/lib/server/httpError";
+import { HttpError, parseJsonBody, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementIp, checkAndIncrementUser } from "@/lib/server/rateLimit";
 import { getRuntimeSettings } from "@/lib/server/runtimeSettings";
 import { MAX_THUMBNAIL_BYTES, presignPhotoThumbnailUpload, presignPhotoUpload } from "@/lib/server/s3";
@@ -44,10 +44,7 @@ export const POST = withErrorHandling(
     const { splatId } = await ctx.params;
     await requireOwnedSplat(splatId, user.id);
 
-    const parsed = presignSchema.safeParse(await request.json().catch(() => null));
-    if (!parsed.success) {
-      throw new HttpError(422, "Invalid request body");
-    }
+    const batch = await parseJsonBody(request, presignSchema);
 
     // Checked before the rate limits below, so a batch this rejects doesn't spend the caller's quota. Only uploaded
     // photos count, because a failed batch's pending rows are never uploaded and so never reach the worker.
@@ -55,7 +52,7 @@ export const POST = withErrorHandling(
       .select({ n: count() })
       .from(photos)
       .where(and(eq(photos.splatId, splatId), eq(photos.uploadStatus, "uploaded")));
-    if (uploaded.n + parsed.data.length > MAX_PHOTOS_PER_SPLAT) {
+    if (uploaded.n + batch.length > MAX_PHOTOS_PER_SPLAT) {
       throw new HttpError(400, `A splat can have at most ${MAX_PHOTOS_PER_SPLAT} photos`);
     }
 
@@ -67,7 +64,7 @@ export const POST = withErrorHandling(
 
     const items: PhotoPresignItem[] = [];
     const rows: NewPhoto[] = [];
-    for (const item of parsed.data) {
+    for (const item of batch) {
       const photoId = randomUUID();
       const extension = path.extname(item.filename) || ".jpg";
       const { key, url } = await presignPhotoUpload(splatId, photoId, extension, item.contentType, item.size);

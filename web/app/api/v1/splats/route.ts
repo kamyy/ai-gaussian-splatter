@@ -13,7 +13,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { jobs, photos, splats } from "@/lib/server/db/schema";
-import { HttpError, withErrorHandling } from "@/lib/server/httpError";
+import { parseJsonBody, withErrorHandling } from "@/lib/server/httpError";
 import { presignPhotoDownload } from "@/lib/server/s3";
 import { jobColumns, photoColumns, splatColumns } from "@/lib/server/selects";
 
@@ -24,10 +24,7 @@ const schema = z.object({
 export const POST = withErrorHandling(async (req: Request) => {
   const user = await requireUser();
 
-  const { success, data } = schema.safeParse(await req.json().catch(() => null));
-  if (!success) {
-    throw new HttpError(422, "Invalid request body");
-  }
+  const data = await parseJsonBody(req, schema);
 
   const [splat] = await getDb()
     .insert(splats)

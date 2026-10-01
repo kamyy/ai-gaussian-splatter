@@ -19,7 +19,7 @@ import { z } from "zod";
 import { getJobForCallbackToken } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { jobs, splats } from "@/lib/server/db/schema";
-import { HttpError, withErrorHandling } from "@/lib/server/httpError";
+import { parseJsonBody, withErrorHandling } from "@/lib/server/httpError";
 import { JOB_ENDED_STATUSES, JOB_STATUSES, JobStatus, type SplatStatus } from "@/lib/statuses";
 
 const workerStatusSchema = z.object({
@@ -51,12 +51,7 @@ export const PATCH = withErrorHandling(
       return new NextResponse(null, { status: 204 });
     }
 
-    const parsed = workerStatusSchema.safeParse(await request.json().catch(() => null));
-    if (!parsed.success) {
-      throw new HttpError(422, "Invalid request body");
-    }
-
-    const body = parsed.data;
+    const body = await parseJsonBody(request, workerStatusSchema);
     const { status } = body;
 
     const jobData: Partial<typeof jobs.$inferInsert> = { status };

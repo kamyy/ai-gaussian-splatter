@@ -14,7 +14,7 @@ import { z } from "zod";
 import { requireOwnedSplat, requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { jobs } from "@/lib/server/db/schema";
-import { HttpError, withErrorHandling } from "@/lib/server/httpError";
+import { HttpError, parseJsonBody, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
 import { requireProcessingEnabled } from "@/lib/server/runtimeSettings";
 import { jobColumns } from "@/lib/server/selects";
@@ -42,12 +42,7 @@ export const POST = withErrorHandling(
     await requireOwnedSplat(splatId, user.id);
 
     // Parsed before the flip below, so a malformed box never moves the job or charges the daily cap.
-    const parsed = trainSchema.safeParse(await request.json().catch(() => null));
-    if (!parsed.success) {
-      throw new HttpError(422, "Invalid request body");
-    }
-
-    const { cropBox } = parsed.data;
+    const { cropBox } = await parseJsonBody(request, trainSchema);
 
     // Checked before the flip below, so a paused site leaves the job waiting at "awaiting_training".
     const settings = await requireProcessingEnabled();
