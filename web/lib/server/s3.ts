@@ -43,7 +43,7 @@ export function photoS3Key(splatId: string, photoId: string, extension: string):
  * A photo's thumbnail sits beside, not under, photos/. The worker downloads everything under splats/<splatId>/photos/
  * (worker/pipeline/fetch.py) and hands it to COLMAP, which would treat a thumbnail as another photo.
  */
-export function photoThumbnailS3Key(splatId: string, photoId: string): string {
+function photoThumbnailS3Key(splatId: string, photoId: string): string {
   return `splats/${splatId}/photo-thumbnails/${photoId}.jpg`;
 }
 

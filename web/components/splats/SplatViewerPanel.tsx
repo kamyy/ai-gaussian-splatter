@@ -33,7 +33,7 @@ import type { PhotoSelection } from "./photoSelection";
  * One 3D file the panel can show. available says the file exists. url is undefined while its link is still being
  * fetched, and error is set when fetching it failed.
  */
-export interface ViewerAsset {
+interface ViewerAsset {
   available: boolean;
   url: string | undefined;
   error?: unknown;
