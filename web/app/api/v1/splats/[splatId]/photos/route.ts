@@ -5,7 +5,7 @@
  * its thumbnail, plus its pixel size so the photo grid can lay out rows before any image loads.
  */
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 
 import { requireOwnedSplat, requireUser } from "@/lib/server/auth";
@@ -13,7 +13,7 @@ import { getDb } from "@/lib/server/db";
 import { photos } from "@/lib/server/db/schema";
 import { withErrorHandling } from "@/lib/server/httpError";
 import { presignPhotoDownload } from "@/lib/server/s3";
-import { photoColumns } from "@/lib/server/selects";
+import { photoColumns, photoOrder } from "@/lib/server/selects";
 import type { PhotoListItem } from "@/lib/types";
 
 export const GET = withErrorHandling(
@@ -26,9 +26,7 @@ export const GET = withErrorHandling(
       .select(photoColumns)
       .from(photos)
       .where(and(eq(photos.splatId, splatId), eq(photos.uploadStatus, "uploaded")))
-      // Oldest taken first. Postgres sorts a null taken_at last, and upload time then id break ties so the order never
-      // shifts between requests.
-      .orderBy(asc(photos.takenAt), asc(photos.createdAt), asc(photos.id));
+      .orderBy(...photoOrder);
 
     const items: PhotoListItem[] = await Promise.all(
       rows.map(async row => ({

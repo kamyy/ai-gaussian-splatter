@@ -9,7 +9,7 @@
 
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { and, asc, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 
 import type { ExampleSplat, PublicSplat, PublicSplatView } from "../types";
 import { getDb } from "./db";
@@ -17,6 +17,7 @@ import { jobs, photos, splats, users } from "./db/schema";
 import { getEnv } from "./env";
 import { isUuid } from "./httpError";
 import { getRuntimeSettings } from "./runtimeSettings";
+import { photoOrder } from "./selects";
 
 // The landing page has no pager, so this is every example it shows.
 const EXAMPLE_LIMIT = 8;
@@ -145,7 +146,6 @@ export async function getPublicSplatView(splatId: string): Promise<PublicSplatVi
 
   const { publicSplat, job } = found;
 
-  // The same order as web/app/api/v1/splats/[splatId]/photos/route.ts, so "Photo 3" is the third photo the owner sees.
   const rows = await getDb()
     .select({
       id: photos.id,
@@ -155,7 +155,7 @@ export async function getPublicSplatView(splatId: string): Promise<PublicSplatVi
     })
     .from(photos)
     .where(and(eq(photos.splatId, splatId), eq(photos.uploadStatus, "uploaded")))
-    .orderBy(asc(photos.takenAt), asc(photos.createdAt), asc(photos.id));
+    .orderBy(...photoOrder);
   const withThumbnails = rows.flatMap(({ thumbnailS3Key, ...photo }) =>
     thumbnailS3Key === null ? [] : [{ ...photo, thumbnailS3Key }],
   );
@@ -198,7 +198,7 @@ export async function getExampleSplats(ownerClerkUserId: string): Promise<Exampl
     return [];
   }
 
-  // Oldest taken first per splat, as the share page orders them, so the cover is the share page's "Photo 1".
+  // Ordered per splat, so the cover is the share page's "Photo 1".
   const photoRows = await getDb()
     .select({
       splatId: photos.splatId,
@@ -217,7 +217,7 @@ export async function getExampleSplats(ownerClerkUserId: string): Promise<Exampl
         isNotNull(photos.thumbnailS3Key),
       ),
     )
-    .orderBy(photos.splatId, asc(photos.takenAt), asc(photos.createdAt), asc(photos.id));
+    .orderBy(photos.splatId, ...photoOrder);
 
   const coverBySplat = new Map<string, (typeof photoRows)[number]>();
   const photoCountBySplat = new Map<string, number>();
