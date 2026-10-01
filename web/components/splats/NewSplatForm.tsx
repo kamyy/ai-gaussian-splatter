@@ -18,12 +18,14 @@ import { mutate } from "swr";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { PhotoFlagIcon, PhotoPlaceholderIcon, PhotoUploadedIcon, RemovePhotoIcon } from "@/components/ui/icons";
+import { PhotoPlaceholderIcon, PhotoUploadedIcon, RemovePhotoIcon } from "@/components/ui/icons";
 import { Pager } from "@/components/ui/Pager";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { apiFetch } from "@/lib/apiFetch";
 import { cn } from "@/lib/cn";
+import { expandedBox } from "@/lib/expandedBox";
 import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
+import { useEnlargedTile } from "@/lib/hooks/useEnlargedTile";
 import { useJustifiedPages } from "@/lib/hooks/useJustifiedPages";
 import { type PhotoFlag, usePickedPhotos } from "@/lib/hooks/usePickedPhotos";
 import { useProcessingPaused } from "@/lib/hooks/useProcessingPaused";
@@ -32,6 +34,7 @@ import { fileKey } from "@/lib/measurePhoto";
 import { useAppStore } from "@/lib/store";
 import type { Job, Splat } from "@/lib/types";
 import { uploadPhotos } from "@/lib/uploadPhotos";
+import { EnlargingPhotoBox } from "./EnlargingPhotoBox";
 import { ProcessingPausedNotice } from "./ProcessingPausedNotice";
 
 // Guidance, not a limit: the meter fills at this count. The server's own minimum is the min-photos-per-splat runtime
@@ -43,6 +46,13 @@ const PREVIEW_ROWS_PER_PAGE = 4;
 const PREVIEW_ROW_HEIGHT_REM = 7.5;
 // Matches the preview list's gap-2.
 const PREVIEW_GAP_REM = 0.5;
+
+// The strip on a flagged preview is narrow, so it gets a short label. The tooltip and the screen-reader label carry
+// FLAG_LABELS in full.
+const FLAG_STRIP_LABELS: Record<PhotoFlag, string> = {
+  blurry: "Blurry",
+  low_res: "Low res",
+};
 
 const FLAG_LABELS: Record<PhotoFlag, string> = {
   blurry: "Looks blurry",
@@ -66,16 +76,26 @@ function PhotoMeter({ count }: { count: number }) {
   );
 }
 
-// Marks a photo that will likely make the splat worse. The photo can still be uploaded.
-function FlagBadge({ filename, flag }: { filename: string; flag: PhotoFlag }) {
+// Marks a photo that will likely make the splat worse. The photo can still be uploaded. holdStill keeps the photo from
+// enlarging under the pointer while its tooltip is being read.
+function FlagBadge({
+  filename,
+  flag,
+  holdStill,
+}: {
+  filename: string;
+  flag: PhotoFlag;
+  holdStill: React.HTMLAttributes<HTMLElement>;
+}) {
   return (
     <Tooltip label={FLAG_LABELS[flag]}>
       <span
+        {...holdStill}
         role="img"
         aria-label={`${filename}: ${FLAG_LABELS[flag]}`}
-        className="absolute top-1 left-1 flex h-6 w-6 items-center justify-center rounded-full bg-paper text-error"
+        className="pointer-events-auto absolute inset-x-0 bottom-0 bg-error py-0.5 text-center text-xs font-bold text-background"
       >
-        <PhotoFlagIcon aria-hidden="true" className="h-3 w-3" />
+        {FLAG_STRIP_LABELS[flag]}
       </span>
     </Tooltip>
   );
@@ -99,10 +119,12 @@ export function NewSplatForm() {
   const aspects = useMemo(() => photos.map(photo => photo.width / photo.height), [photos]);
   const {
     setArea: setPreviewArea,
+    areaWidth: previewAreaWidth,
     areaHeight: previewAreaHeight,
     current: currentPage,
     pageCount,
     setPage,
+    countByPage,
     start,
     end,
     tiles,
@@ -151,6 +173,12 @@ export function NewSplatForm() {
     },
     [previews],
   );
+
+  const {
+    enlargedId: enlargedKey,
+    enter: enterEnlarge,
+    leave: leaveEnlarge,
+  } = useEnlargedTile(previews.map(preview => fileKey(preview.photo.file)));
 
   // Clears the previous batch's per-file progress, which lives in a store shared with every other upload.
   useEffect(() => resetUploads, [resetUploads]);
@@ -251,6 +279,24 @@ export function NewSplatForm() {
           {tiles.map(tile => {
             const { photo, url } = previews[tile.index - start];
             const key = fileKey(photo.file);
+            const enlargedBox =
+              key === enlargedKey ? expandedBox(tile, { width: previewAreaWidth, height: previewAreaHeight }) : null;
+
+            // The remove button and the flag strip grow and move with the photo. Pausing on one before the photo has
+            // enlarged would otherwise enlarge it and carry the control out from under the pointer, so resting on one
+            // holds the photo at its size. Moving back onto the photo starts the wait again.
+            const holdStill = {
+              onPointerEnter: () => {
+                if (enlargedBox === null) {
+                  leaveEnlarge();
+                }
+              },
+              onPointerLeave: (event: React.PointerEvent) => {
+                if (enlargedBox === null) {
+                  enterEnlarge(key, event);
+                }
+              },
+            };
 
             // An uploaded photo is already on the server, and removing it here wouldn't take it off, so it can't be
             // removed. Discarding the splat is the way to drop it.
@@ -268,11 +314,12 @@ export function NewSplatForm() {
             } else {
               corner = (
                 <button
+                  {...holdStill}
                   type="button"
                   aria-label={`Remove ${photo.file.name}`}
                   onClick={() => removeFiles([key])}
                   disabled={submitting}
-                  className="absolute top-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-paper text-foreground disabled:hidden"
+                  className="pointer-events-auto absolute top-1 right-1 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-xs transition-colors hover:bg-error hover:text-background disabled:hidden"
                 >
                   <RemovePhotoIcon aria-hidden="true" className="h-3 w-3" />
                 </button>
@@ -282,28 +329,42 @@ export function NewSplatForm() {
             const flag = uploadedKeys.has(key) ? undefined : flagged.get(key);
             let flagBadge: React.ReactNode = null;
             if (flag !== undefined) {
-              flagBadge = <FlagBadge filename={photo.file.name} flag={flag} />;
+              flagBadge = <FlagBadge filename={photo.file.name} flag={flag} holdStill={holdStill} />;
             }
 
             return (
               <li
                 key={key}
                 style={{ width: tile.width, height: tile.height }}
+                onPointerEnter={event => enterEnlarge(key, event)}
+                onPointerLeave={leaveEnlarge}
+                // Not overflow-hidden, so the enlarged photo can leave the tile. The photo rounds its own corners.
                 className={cn(
-                  "relative shrink-0 overflow-hidden rounded-xl bg-muted",
-                  flag && "outline-2 outline-error outline-dashed -outline-offset-2",
+                  "relative z-0 shrink-0 rounded-xl bg-muted transition-[z-index] duration-0",
+                  // Drawn over every other tile. The tile drops back only once its photo has finished shrinking, or
+                  // the tiles after it would cut into the photo on its way down.
+                  enlargedBox ? "z-2" : "delay-150",
                 )}
               >
-                {/* Shows until the photo decodes and covers it. The photo is relative so it paints above this icon. */}
+                {/* Shows until the photo decodes and covers it. The photo's box is positioned, so it paints above this
+                icon. */}
                 <PhotoPlaceholderIcon
                   aria-hidden="true"
                   strokeWidth={1}
                   className="absolute inset-0 m-auto h-6 w-6 text-muted-foreground"
                 />
-                {/* biome-ignore lint/performance/noImgElement: a local object URL, not something next/image can optimize. */}
-                <img src={url} alt={photo.file.name} className="relative h-full w-full object-cover" />
-                {flagBadge}
-                {corner}
+                {/* The remove button and the flag strip stay clickable while the photo is small. */}
+                <EnlargingPhotoBox
+                  enlargedBox={enlargedBox}
+                  width={tile.width}
+                  height={tile.height}
+                  className="overflow-hidden rounded-xl"
+                >
+                  {/* biome-ignore lint/performance/noImgElement: a local object URL, not something next/image can optimize. */}
+                  <img src={url} alt={photo.file.name} className="h-full w-full object-cover" />
+                  {flagBadge}
+                  {corner}
+                </EnlargingPhotoBox>
               </li>
             );
           })}
@@ -317,7 +378,11 @@ export function NewSplatForm() {
     flaggedNote = (
       <span className="text-sm text-error">
         {removableFlagged.length} photo{removableFlagged.length === 1 ? " looks" : "s look"} blurry or low resolution.{" "}
-        <button type="button" onClick={() => removeFiles(removableFlagged)} className="font-semibold underline">
+        <button
+          type="button"
+          onClick={() => removeFiles(removableFlagged)}
+          className="cursor-pointer font-semibold underline hover:no-underline"
+        >
           Remove {removableFlagged.length === 1 ? "it" : "them"}
         </button>
       </span>
@@ -336,6 +401,9 @@ export function NewSplatForm() {
     idleHint = "Your splat will wait on its page until processing is turned back on.";
   }
 
+  const removableFlaggedKeys = new Set(removableFlagged);
+  const flaggedByPage = countByPage(index => removableFlaggedKeys.has(fileKey(photos[index].file)));
+
   let previewPager: React.ReactNode = null;
   if (pageCount > 1) {
     previewPager = (
@@ -343,7 +411,14 @@ export function NewSplatForm() {
         <span className="text-sm text-muted-foreground">
           {start + 1}–{end} of {photos.length}
         </span>
-        <Pager label="Photo pages" current={currentPage} count={pageCount} onChange={setPage} />
+        <Pager
+          label="Photo pages"
+          current={currentPage}
+          count={pageCount}
+          onChange={setPage}
+          flaggedByPage={flaggedByPage}
+          flagDescription="flagged as blurry or low resolution"
+        />
       </div>
     );
   }
