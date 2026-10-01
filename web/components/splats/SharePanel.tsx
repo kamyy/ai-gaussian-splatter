@@ -61,7 +61,7 @@ export function SharePanel({ splatId, children }: { splatId: string; children?: 
             readOnly
             value={shareUrl}
             onFocus={event => event.currentTarget.select()}
-            className="h-11 min-w-0 flex-1 rounded-full border border-divider bg-paper px-4 text-sm text-foreground"
+            className="h-11 min-w-0 flex-1 rounded-full border border-outline bg-paper px-4 text-sm text-foreground"
           />
           <Button variant="contained" onClick={copy} aria-live="polite">
             {copied ? "Copied" : "Copy"}

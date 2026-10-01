@@ -10,7 +10,7 @@
 
 import { use, useEffect, useState } from "react";
 
-import { BackToLibraryButton } from "@/components/layout/BackToLibraryButton";
+import { BackButton } from "@/components/layout/BackButton";
 import { PhotoGrid } from "@/components/splats/PhotoGrid";
 import { PipelineStepper } from "@/components/splats/PipelineStepper";
 import type { PhotoSelection } from "@/components/splats/photoSelection";
@@ -99,7 +99,7 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
       photo grid lays itself out for the width it measures. */}
       <div className="flex flex-col gap-6 px-4 pt-7 sm:px-12 lg:w-120 lg:shrink-0 lg:overflow-y-auto lg:pr-10 lg:pb-7 lg:scrollbar-gutter-stable">
         <div className="flex items-center gap-3.5">
-          <BackToLibraryButton />
+          <BackButton href="/splats" label="Back to Library" />
           <h1 className="min-w-0 font-display text-5xl leading-none tracking-tight">{splat.name}</h1>
         </div>
         <PipelineStepper stage={stage} job={job} photoCount={photos?.length ?? 0} />

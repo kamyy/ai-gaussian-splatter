@@ -17,11 +17,13 @@ import {
   LuInfo,
   LuMoon,
   LuSun,
+  LuTrash2,
   LuTriangleAlert,
   LuX,
 } from "react-icons/lu";
 import {
   PiCameraDuotone,
+  PiCameraFill,
   PiCameraSlashDuotone,
   PiCircleDuotone,
   PiDotOutlineDuotone,
@@ -47,11 +49,11 @@ export const WarningIcon = LuTriangleAlert;
 export const ErrorIcon = LuCircleAlert;
 export const CloseIcon = LuX;
 
-// Photo tiles on the new-splat form and a splat's photo grid.
+// Photo tiles on the new-splat form and a splat's photo grid, and the pager page that holds the selected photo.
 export const PhotoPlaceholderIcon = LuImage;
 export const PhotoUploadedIcon = LuCheck;
-export const PhotoFlagIcon = LuTriangleAlert;
-export const RemovePhotoIcon = LuX;
+export const RemovePhotoIcon = LuTrash2;
+export const SelectedPhotoIcon = PiCameraFill;
 
 // The splat library and a splat's progress through the pipeline.
 export const ThumbnailPlaceholderIcon = LuImage;

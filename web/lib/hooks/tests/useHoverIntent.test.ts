@@ -48,4 +48,16 @@ describe("useHoverIntent", () => {
     act(() => result.current.end());
     expect(result.current.settled).toBeNull();
   });
+
+  it("ends a settled value when Escape is pressed, and ignores other keys", () => {
+    const { result } = renderHook(() => useHoverIntent<string>(120));
+    act(() => result.current.begin("a"));
+    act(() => void vi.advanceTimersByTime(120));
+
+    act(() => void document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" })));
+    expect(result.current.settled).toBe("a");
+
+    act(() => void document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+    expect(result.current.settled).toBeNull();
+  });
 });

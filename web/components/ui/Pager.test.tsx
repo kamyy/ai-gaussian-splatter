@@ -64,7 +64,41 @@ describe("Pager", () => {
 
     // The pages run 1 to 5, then an ellipsis for 6 to 8, then 9.
     const gap = [...container.querySelectorAll("span")].find(span => span.textContent === "…");
-    expect(gap?.querySelector("span")).not.toBeNull();
+    expect(gap?.querySelector("svg")).not.toBeNull();
+  });
+
+  it("tints pages holding unplaced photos and counts them, or the ellipsis hiding them", () => {
+    const { container, rerender } = render(
+      <Pager
+        label="Photo pages"
+        current={3}
+        count={9}
+        onChange={() => {}}
+        flaggedByPage={new Map([[2, 2]])}
+        flagDescription="couldn't be placed"
+      />,
+    );
+    const flagged = screen.getByRole("button", { name: "Page 2, 2 photos couldn't be placed" });
+    expect(flagged).toHaveTextContent("22");
+    expect(screen.getByRole("button", { name: "Page 3" })).toHaveTextContent(/^3$/);
+
+    // The pages run 1 to 5, then an ellipsis for 6 to 8, then 9.
+    rerender(
+      <Pager
+        label="Photo pages"
+        current={3}
+        count={9}
+        onChange={() => {}}
+        flaggedByPage={
+          new Map([
+            [6, 1],
+            [8, 3],
+          ])
+        }
+      />,
+    );
+    const gap = [...container.querySelectorAll("span")].find(span => span.textContent?.startsWith("…"));
+    expect(gap).toHaveTextContent("…4");
   });
 
   it("steps pages with the arrow keys and jumps with Home and End, focusing the new page", () => {

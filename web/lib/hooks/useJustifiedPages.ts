@@ -70,6 +70,19 @@ export function useJustifiedPages(
     [pages],
   );
 
+  // How many of the items isCounted picks out fall on each page, keyed by 1-based page. Pages with none are left out.
+  function countByPage(isCounted: (index: number) => boolean) {
+    const counts = new Map<number, number>();
+    for (let index = 0; index < aspects.length; index++) {
+      if (isCounted(index)) {
+        const itemPage = pageOf(index);
+        counts.set(itemPage, (counts.get(itemPage) ?? 0) + 1);
+      }
+    }
+
+    return counts;
+  }
+
   const pageCount = Math.max(1, pages.length);
   const current = Math.min(page, pageCount);
   const layout = pages.at(current - 1);
@@ -99,6 +112,7 @@ export function useJustifiedPages(
     pageCount,
     setPage,
     pageOf,
+    countByPage,
     start: layout?.start ?? 0,
     end: layout?.end ?? 0,
     tiles,

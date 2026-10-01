@@ -4,7 +4,7 @@
  * Shows the photos in justified rows (each row stretched to fill the width, keeping every photo's shape), a few rows
  * per page. Picking a photo selects its camera in the 3D viewer, and hovering one highlights it there. A photo the
  * pointer rests on is enlarged over its neighbours, so its detail can be made out. A photo COLMAP (the
- * structure-from-motion tool in worker/) couldn't place in 3D is faded with a dashed outline and can't be picked. Arrow
+ * structure-from-motion tool in worker/) couldn't place in 3D is faded, labelled "Not placed" and can't be picked. Arrow
  * keys move between photos.
  */
 
@@ -14,10 +14,13 @@ import { useEffect, useMemo, useRef } from "react";
 
 import { PhotoPlaceholderIcon } from "@/components/ui/icons";
 import { Pager } from "@/components/ui/Pager";
+import { SelectedPhotoMark } from "@/components/ui/SelectedPhotoMark";
 import { cn } from "@/lib/cn";
-import { useHoverIntent } from "@/lib/hooks/useHoverIntent";
+import { type Box, expandedBox } from "@/lib/expandedBox";
+import { useEnlargedTile } from "@/lib/hooks/useEnlargedTile";
 import { useJustifiedPages } from "@/lib/hooks/useJustifiedPages";
 import type { PublicPhoto } from "@/lib/types";
+import { EnlargingPhotoBox } from "./EnlargingPhotoBox";
 import type { PhotoSelection } from "./photoSelection";
 
 // A page is this many whole rows, so every page but the last ends on a full row.
@@ -25,11 +28,6 @@ const ROWS_PER_PAGE = 3;
 const ROW_HEIGHT_REM = 6;
 // Matches the list's gap-1.5.
 const GAP_REM = 0.375;
-// How much larger a photo is drawn while the pointer rests on it. A thumbnail's long side is THUMBNAIL_LONG_SIDE pixels
-// (web/lib/measurePhoto.ts), which stays sharp at this size on a high-density screen.
-const EXPAND_SCALE = 2.5;
-// How long the pointer rests on a photo before it enlarges.
-const EXPAND_DELAY_MS = 400;
 
 interface PhotoGridProps {
   // The grid shows only thumbnails, so both the owner's photos and the share page's public ones fit.
@@ -46,31 +44,6 @@ interface PhotoGridProps {
   hoveredPhotoId: string | null;
   // Reports the placed photo under the pointer, or null once the pointer leaves it.
   onHover: (photoId: string | null) => void;
-}
-
-interface Box {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
-
-/**
- * The box an enlarged photo is drawn in, measured from its tile's top-left corner. tile is measured from the area's.
- *
- * The photo grows from its tile's center, then is moved to stay inside the area, because the column the grid sits in
- * clips whatever leaves it. A photo taller than the area is lined up with the area's bottom edge and runs over the
- * top, where there is always other content for it to cover. It grows by less than EXPAND_SCALE when it would
- * otherwise be wider than the area.
- */
-export function expandedBox(tile: Box, area: { width: number; height: number }): Box {
-  const scale = Math.min(EXPAND_SCALE, area.width / tile.width);
-  const width = tile.width * scale;
-  const height = tile.height * scale;
-  const left = Math.min(Math.max(tile.left + (tile.width - width) / 2, 0), area.width - width);
-  const top = Math.min(Math.max(tile.top + (tile.height - height) / 2, 0), area.height - height);
-
-  return { left: left - tile.left, top: top - tile.top, width, height };
 }
 
 // A tile's box in the list's layout. offsetTop and offsetLeft ignore transforms, so a hovered tile's lift doesn't
@@ -102,17 +75,6 @@ function tileInNextRow(list: HTMLElement, from: HTMLElement, direction: 1 | -1):
   const distance = (box: ReturnType<typeof layoutBox>) => Math.abs(box.center - origin.center);
 
   return row.reduce((best, tile) => (distance(tile.box) < distance(best.box) ? tile : best)).id;
-}
-
-// The same pip the pager puts on the page holding the selection, straddling the photo's corner. It hangs over the tile
-// by the width of the gap between tiles, which is as far as it can go before the next tile covers it.
-function SelectedMark() {
-  return (
-    <span
-      aria-hidden="true"
-      className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full border-2 border-background bg-primary"
-    />
-  );
 }
 
 function PhotoTile({
@@ -149,22 +111,21 @@ function PhotoTile({
 
   let unplacedMark: React.ReactNode = null;
   if (unplaced) {
-    // Drawn over the photo, which would cover a border on the tile itself, and so that it grows with the photo.
+    // Drawn over the photo so that it grows with the photo. A photo narrower than the label, such as a tall portrait,
+    // shows the shorter "Unplaced" instead, so the label stays on one line. Anything still too wide is clipped.
     unplacedMark = (
-      <span aria-hidden="true" className="absolute inset-0 rounded-md border-2 border-error border-dashed" />
+      <span
+        aria-hidden="true"
+        className="absolute inset-x-0 bottom-0 flex h-5 items-center justify-center overflow-hidden rounded-b-md bg-error text-xs font-bold whitespace-nowrap text-background"
+      >
+        <span className="hidden @min-[4.5rem]:inline">Not placed</span>
+        <span className="@min-[4.5rem]:hidden">Unplaced</span>
+      </span>
     );
   }
 
-  // The photo sits in a box of its own, which grows over the neighbouring tiles while the tile keeps its place in the
-  // row. The box ignores the pointer, so the pointer moves on to a neighbour the enlarged photo is covering.
   const image = (
-    <span
-      style={enlargedBox ?? { left: 0, top: 0, width, height }}
-      className={cn(
-        "pointer-events-none absolute rounded-md transition-[left,top,width,height,box-shadow] ease-out motion-reduce:transition-none",
-        enlarged && "shadow-[0_0.75rem_1.75rem_var(--raised-shade)]",
-      )}
-    >
+    <EnlargingPhotoBox enlargedBox={enlargedBox} width={width} height={height} className="@container rounded-md">
       {/* biome-ignore lint/performance/noImgElement: presigned S3 URL has no fixed domain for next/image. */}
       <img
         src={photo.thumbnailUrl}
@@ -174,8 +135,8 @@ function PhotoTile({
         className="h-full w-full rounded-md object-cover"
       />
       {unplacedMark}
-      {selected ? <SelectedMark /> : null}
-    </span>
+      {selected ? <SelectedPhotoMark tone="photo" className="top-1 left-1" label="Selected" /> : null}
+    </EnlargingPhotoBox>
   );
 
   // Only a placed photo is a button, since only it has a camera to show.
@@ -201,8 +162,7 @@ function PhotoTile({
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
       className={cn(
-        // Not overflow-hidden, so the enlarged photo and the selection pip can leave the tile. The photo rounds its own
-        // corners instead.
+        // Not overflow-hidden, so the enlarged photo can leave the tile. The photo rounds its own corners instead.
         "relative z-0 shrink-0 rounded-md bg-muted transition-[translate,box-shadow,opacity,z-index] [transition-duration:150ms,150ms,150ms,0s]",
         unplaced && !enlarged && "opacity-55",
         // Lifted off the grid. z-1 draws its shadow over the tiles after it, which would otherwise cover it.
@@ -234,18 +194,17 @@ export function PhotoGrid({ photos, placedPhotoIds, selection, onSelect, hovered
     () => photos.map(photo => (photo.width !== null && photo.height !== null ? photo.width / photo.height : 1)),
     [photos],
   );
-  const { setArea, areaWidth, areaHeight, current, pageCount, setPage, pageOf, start, end, tiles } = useJustifiedPages(
-    aspects,
-    {
+  const { setArea, areaWidth, areaHeight, current, pageCount, setPage, pageOf, countByPage, start, end, tiles } =
+    useJustifiedPages(aspects, {
       rowHeightRem: ROW_HEIGHT_REM,
       columnGapRem: GAP_REM,
       rowGapRem: GAP_REM,
       rowsPerPage: ROWS_PER_PAGE,
-    },
-  );
+    });
 
   const shownPhotos = tiles.map(tile => photos[tile.index]);
   const unplacedCount = photos.filter(isUnplaced).length;
+  const unplacedByPage = countByPage(index => isUnplaced(photos[index]));
 
   const selectedIndex = photos.findIndex(photo => photo.id === selectedPhotoId);
   const selectedPage = selectedIndex === -1 ? 0 : pageOf(selectedIndex);
@@ -274,14 +233,11 @@ export function PhotoGrid({ photos, placedPhotoIds, selection, onSelect, hovered
     }
   });
 
-  // The photo the pointer has rested on, which is drawn enlarged. Cleared like the hover above when a page turn takes
-  // its tile away.
-  const { settled: enlargedPhotoId, begin: beginEnlarge, end: endEnlarge } = useHoverIntent<string>(EXPAND_DELAY_MS);
-  useEffect(() => {
-    if (enlargedPhotoId !== null && !shownPhotos.some(photo => photo.id === enlargedPhotoId)) {
-      endEnlarge();
-    }
-  });
+  const {
+    enlargedId: enlargedPhotoId,
+    enter: enterEnlarge,
+    leave: leaveEnlarge,
+  } = useEnlargedTile(shownPhotos.map(photo => photo.id));
 
   // Keyboard support. The arrow keys and Home/End select a neighbouring placed photo, turning the page when they cross
   // one. Only one tile is in the tab order, so Tab moves past the grid in one step rather than through every photo.
@@ -359,6 +315,8 @@ export function PhotoGrid({ photos, placedPhotoIds, selection, onSelect, hovered
         count={pageCount}
         onChange={setPage}
         markedPage={selectedPage > 0 ? selectedPage : null}
+        flaggedByPage={unplacedByPage}
+        flagDescription="couldn't be placed"
       />
     );
   }
@@ -402,10 +360,7 @@ export function PhotoGrid({ photos, placedPhotoIds, selection, onSelect, hovered
                     onHover(photo.id);
                   }
 
-                  // A touch has no resting pointer, and its tap is a pick.
-                  if (event.pointerType !== "touch") {
-                    beginEnlarge(photo.id);
-                  }
+                  enterEnlarge(photo.id, event);
                 }}
                 onPointerLeave={() => {
                   if (isPlaced(photo)) {
@@ -413,7 +368,7 @@ export function PhotoGrid({ photos, placedPhotoIds, selection, onSelect, hovered
                     onHover(null);
                   }
 
-                  endEnlarge();
+                  leaveEnlarge();
                 }}
               />
             );

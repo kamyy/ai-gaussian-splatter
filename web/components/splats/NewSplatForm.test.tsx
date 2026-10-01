@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NewSplatForm } from "./NewSplatForm";
@@ -93,7 +93,9 @@ describe("NewSplatForm", () => {
     render(<NewSplatForm />);
     await addPhotos("a.jpg", "small-1.jpg", "small-2.jpg");
 
-    expect(screen.getByRole("img", { name: "small-1.jpg: Low resolution (under 1600px)" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "small-1.jpg: Low resolution (under 1600px)" })).toHaveTextContent(
+      "Low res",
+    );
     expect(screen.getByText(/2 photos look blurry or low resolution/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Remove them" }));
@@ -212,7 +214,56 @@ describe("NewSplatForm", () => {
     expect(createObjectURL.mock.calls.every(([source]) => !(source instanceof File))).toBe(true);
 
     // A placeholder icon sits under each preview until it decodes.
-    expect(tile?.querySelector("svg + img")).not.toBeNull();
+    expect(tile?.querySelector("svg + span img")).not.toBeNull();
+  });
+
+  it("enlarges the preview the pointer rests on and shrinks it when the pointer leaves", async () => {
+    render(<NewSplatForm />);
+    // A full page of four rows, so the area is tall enough for the enlarged photo.
+    await addPhotos("a.jpg", ...Array.from({ length: 19 }, (_, i) => `${i + 2}.jpg`));
+    const photo = screen.getByRole("img", { name: "a.jpg" }).parentElement as HTMLElement;
+    const tile = photo.closest("li") as HTMLElement;
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.pointerEnter(tile);
+      act(() => void vi.advanceTimersByTime(399));
+      expect(photo).toHaveStyle({ width: "153.6px", height: "115.2px" });
+
+      act(() => void vi.advanceTimersByTime(1));
+      expect(photo).toHaveStyle({ width: "384px", height: "288px" });
+
+      fireEvent.pointerLeave(tile);
+      expect(photo).toHaveStyle({ left: "0px", top: "0px", width: "153.6px", height: "115.2px" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("holds a preview at its size while the pointer rests on its remove button", async () => {
+    render(<NewSplatForm />);
+    await addPhotos("a.jpg", ...Array.from({ length: 19 }, (_, i) => `${i + 2}.jpg`));
+    const photo = screen.getByRole("img", { name: "a.jpg" }).parentElement as HTMLElement;
+    const tile = photo.closest("li") as HTMLElement;
+    const remove = screen.getByRole("button", { name: "Remove a.jpg" });
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.pointerEnter(tile);
+      act(() => void vi.advanceTimersByTime(200));
+      // React derives enter and leave from the out event of the element being left, with relatedTarget as the one
+      // entered.
+      fireEvent.pointerOut(photo, { relatedTarget: remove });
+      act(() => void vi.advanceTimersByTime(1000));
+      expect(photo).toHaveStyle({ width: "153.6px", height: "115.2px" });
+
+      // Back on the photo, the wait starts again.
+      fireEvent.pointerOut(remove, { relatedTarget: photo });
+      act(() => void vi.advanceTimersByTime(400));
+      expect(photo).toHaveStyle({ width: "384px", height: "288px" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("pages the previews by whole rows, starting on page 1 after each drop", async () => {

@@ -1,7 +1,7 @@
 /**
  * The / landing page for signed-out visitors.
  *
- * Explains what the app does and links to sign-up and sign-in. When the showcase account (a runtime setting) has
+ * Explains what the app does and links to sign-up. When the showcase account (a runtime setting) has
  * examples, the page is laid out around them, so a visitor can open a finished splat without an account. Otherwise the
  * hero shows a decorative point cloud beside the text instead. A signed-in visitor is sent straight to their library at
  * /splats.
@@ -51,9 +51,6 @@ function CallsToAction() {
     <div className="flex flex-wrap gap-4">
       <Link href="/sign-up" className={buttonClassName("contained", "large")}>
         Make your first splat
-      </Link>
-      <Link href="/sign-in" className={buttonClassName("outlined", "large")}>
-        Sign in
       </Link>
     </div>
   );

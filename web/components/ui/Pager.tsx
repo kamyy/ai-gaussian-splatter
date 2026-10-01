@@ -10,10 +10,11 @@
 import { useEffect, useRef } from "react";
 
 import { NextPageIcon, PreviousPageIcon } from "@/components/ui/icons";
+import { PILL_TONES, SelectedPhotoMark } from "@/components/ui/SelectedPhotoMark";
 import { cn } from "@/lib/cn";
 
 const PAGER_BUTTON =
-  "flex h-9 min-w-9 items-center justify-center rounded-full border border-divider bg-paper px-2 text-sm font-semibold transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50";
+  "flex h-9 min-w-9 cursor-pointer items-center justify-center rounded-full border border-divider bg-paper px-2 text-sm font-semibold transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50";
 
 // A pager's buttons, as 1-based page numbers with "gap" where a run of pages is collapsed into an ellipsis. Past seven
 // pages the list is always seven items long, so the pager keeps one width as the visitor pages through.
@@ -25,9 +26,14 @@ interface PagerProps {
   current: number;
   count: number;
   onChange: (page: number) => void;
-  // A page to flag with a pip, such as the one holding the selected photo. When the pager collapses it into an
-  // ellipsis, that ellipsis carries the pip instead.
+  // A page to flag with a camera, such as the one holding the selected photo. When the pager collapses it into an
+  // ellipsis, that ellipsis carries the camera instead.
   markedPage?: number | null;
+  // Pages to give a count badge, mapped to how many photos on each have a problem. When the pager collapses some into
+  // an ellipsis, that ellipsis carries their total instead.
+  flaggedByPage?: Map<number, number>;
+  // Finishes "2 photos …" in a flagged page's label, such as "couldn't be placed".
+  flagDescription?: string;
 }
 
 export function pageItems(current: number, count: number): Array<number | "gap"> {
@@ -46,13 +52,19 @@ export function pageItems(current: number, count: number): Array<number | "gap">
   return [1, "gap", current - 1, current, current + 1, "gap", count];
 }
 
-// Its border is the page's background color, which sets it apart from a filled current-page button too.
-function MarkPip() {
+// How many photos on a page are flagged, centered on the button's bottom edge. It takes the colors of the button it
+// sits over.
+function CountBadge({ count, onFilled }: { count: number; onFilled: boolean }) {
   return (
     <span
       aria-hidden="true"
-      className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-background bg-primary"
-    />
+      className={cn(
+        "absolute -bottom-3 left-1/2 flex h-3.5 min-w-3.5 -translate-x-1/2 items-center justify-center rounded-full px-0.5 text-xs leading-none font-bold box-content",
+        onFilled ? PILL_TONES.currentPage : PILL_TONES.page,
+      )}
+    >
+      {count}
+    </span>
   );
 }
 
@@ -60,7 +72,15 @@ function MarkPip() {
  * Previous and next plus numbered pages, 1-based. web/lib/hooks/useJustifiedPages.ts supplies current and count. With
  * focus anywhere in the pager, the left and right arrow keys step a page and Home and End jump to the first and last.
  */
-export function Pager({ label, current, count, onChange, markedPage = null }: PagerProps) {
+export function Pager({
+  label,
+  current,
+  count,
+  onChange,
+  markedPage = null,
+  flaggedByPage = new Map(),
+  flagDescription = "flagged",
+}: PagerProps) {
   const items = pageItems(current, count);
   const navRef = useRef<HTMLElement>(null);
 
@@ -122,6 +142,9 @@ export function Pager({ label, current, count, onChange, markedPage = null }: Pa
           // A gap always sits between two numbered pages and stands for every page between them.
           const hidesMarked =
             markedPage !== null && markedPage > Number(items[i - 1]) && markedPage < Number(items[i + 1]);
+          const hiddenFlagged = [...flaggedByPage]
+            .filter(([page]) => page > Number(items[i - 1]) && page < Number(items[i + 1]))
+            .reduce((total, [, flagged]) => total + flagged, 0);
           return (
             // Two gaps can appear in one list, so each is named by the page before it.
             <span
@@ -129,19 +152,29 @@ export function Pager({ label, current, count, onChange, markedPage = null }: Pa
               aria-hidden="true"
               className="relative w-6 text-center text-sm text-muted-foreground"
             >
-              …{hidesMarked ? <MarkPip /> : null}
+              …{hiddenFlagged > 0 ? <CountBadge count={hiddenFlagged} onFilled={false} /> : null}
+              {hidesMarked ? <SelectedPhotoMark tone="page" className="-top-3 -left-2" /> : null}
             </span>
           );
         }
 
         const active = item === current;
         const marked = item === markedPage;
+        const flaggedCount = flaggedByPage.get(item) ?? 0;
+
+        let pageLabel = `Page ${item}`;
+        if (marked) {
+          pageLabel += ", has the selected photo";
+        }
+        if (flaggedCount > 0) {
+          pageLabel += `, ${flaggedCount} ${flaggedCount === 1 ? "photo" : "photos"} ${flagDescription}`;
+        }
 
         return (
           <button
             key={item}
             type="button"
-            aria-label={marked ? `Page ${item}, has the selected photo` : `Page ${item}`}
+            aria-label={pageLabel}
             aria-current={active ? "page" : undefined}
             onClick={() => onChange(item)}
             className={cn(
@@ -151,7 +184,8 @@ export function Pager({ label, current, count, onChange, markedPage = null }: Pa
             )}
           >
             {item}
-            {marked ? <MarkPip /> : null}
+            {flaggedCount > 0 ? <CountBadge count={flaggedCount} onFilled={active} /> : null}
+            {marked ? <SelectedPhotoMark tone={active ? "currentPage" : "page"} className="-top-3 -left-2" /> : null}
           </button>
         );
       })}

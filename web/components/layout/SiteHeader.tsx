@@ -1,7 +1,7 @@
 /**
  * The header bar at the top of every page.
  *
- * Shows the app's name, the light and dark mode toggle, and either a sign-up link or, for a signed-in user, a link to
+ * Shows the app's name, the light and dark mode toggle, and either sign-in and sign-up links or, for a signed-in user, a link to
  * their library, a new-splat button and Clerk's account menu.
  */
 
@@ -45,6 +45,9 @@ export function SiteHeader() {
       <div className="flex-1" />
       <div className="flex items-center gap-4">
         <Show when="signed-out">
+          <Link href="/sign-in" className={buttonClassName("outlined")}>
+            Sign in
+          </Link>
           <Link href="/sign-up" className={buttonClassName("ink")}>
             Sign up free
           </Link>
