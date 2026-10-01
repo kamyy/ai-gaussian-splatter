@@ -108,6 +108,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - If a page starts rendering protected data on the server, that page needs its own `auth.protect()`.
 - **A signed-in page's data hooks must not run before Clerk has a session in the browser.** Clerk clears its session while it navigates away from the sign-in page, so `useAuth().getToken()` returns `null` for a moment after every sign-in. `web/app/(authenticated)/splats/layout.tsx` wraps its pages in `SignedInGate` (`web/components/layout/SignedInGate.tsx`) for this. A page outside that layout needs the same wrapper.
 - **Inside a signed-in page, call `mutate` from `useSWRConfig()`, never the `mutate` exported by `swr`.** `SignedInGate` (`web/components/layout/SignedInGate.tsx`) gives each Clerk user their own SWR cache, so switching accounts in one tab never shows the previous account's data. The exported `mutate` only reaches SWR's global cache, which those pages don't read, so calling it silently refreshes nothing.
+  - Biome's `noRestrictedImports` in `biome.json` only allows `swr`'s default export, `SWRConfig` and `useSWRConfig`, which also rules out `import * as swr`. Allow another name there only after checking it doesn't touch the global cache.
 - **This Clerk SDK has no `<SignedIn>` / `<SignedOut>`.** Use `<Show when="signed-in">` (`web/components/layout/SiteHeader.tsx`).
   - Pass `fallback` for the signed-out UI.
   - While Clerk is still loading the session, `<Show>` renders nothing — not the fallback.
