@@ -14,7 +14,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { mutate } from "swr";
+import { useSWRConfig } from "swr";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -108,6 +108,7 @@ function FlagBadge({
  */
 export function NewSplatForm() {
   const { getToken } = useAuth();
+  const { mutate } = useSWRConfig();
   const router = useRouter();
   const { enqueueSnackbar } = useAppSnackbar();
   const resetUploads = useAppStore(state => state.resetUploads);
