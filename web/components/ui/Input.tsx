@@ -28,7 +28,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input({ l
         ref={ref}
         id={inputId}
         className={cn(
-          "h-12 rounded-full border border-divider bg-paper px-4.5 text-base focus:border-primary focus:outline-none",
+          "h-12 rounded-full border border-outline bg-paper px-4.5 text-base focus:border-primary focus:outline-none",
           className,
         )}
         {...props}
