@@ -153,7 +153,7 @@ export function Pager({
               className="relative w-6 text-center text-sm text-muted-foreground"
             >
               …{hiddenFlagged > 0 ? <CountBadge count={hiddenFlagged} onFilled={false} /> : null}
-              {hidesMarked ? <SelectedPhotoMark tone="page" className="-top-3 -left-2" /> : null}
+              {hidesMarked ? <SelectedPhotoMark tone="page" className="-top-2.5 -left-1.5" /> : null}
             </span>
           );
         }
@@ -185,7 +185,9 @@ export function Pager({
           >
             {item}
             {flaggedCount > 0 ? <CountBadge count={flaggedCount} onFilled={active} /> : null}
-            {marked ? <SelectedPhotoMark tone={active ? "currentPage" : "page"} className="-top-3 -left-2" /> : null}
+            {marked ? (
+              <SelectedPhotoMark tone={active ? "currentPage" : "page"} className="-top-2.5 -left-1.5" />
+            ) : null}
           </button>
         );
       })}

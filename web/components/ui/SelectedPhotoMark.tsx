@@ -39,12 +39,12 @@ export function SelectedPhotoMark({ tone, className, label }: SelectedPhotoMarkP
     <span
       aria-hidden="true"
       className={cn(
-        "pointer-events-none absolute flex h-5.5 items-center justify-center gap-1 rounded-full px-1.5 text-xs font-bold",
+        "pointer-events-none absolute flex h-4.5 items-center justify-center gap-0.5 rounded-full px-1 text-xs leading-none font-bold",
         PILL_TONES[tone],
         className,
       )}
     >
-      <SelectedPhotoIcon className="h-3 w-3" />
+      <SelectedPhotoIcon className="h-2.5 w-2.5" />
       {labelText}
     </span>
   );
