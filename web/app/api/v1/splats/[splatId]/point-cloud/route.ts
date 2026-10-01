@@ -22,9 +22,7 @@ export const GET = withErrorHandling(
     requireUuid(splatId, 404, "Point cloud not ready");
 
     // "Not ready" and "not yours" deliberately collapse to the same 404, matching
-    // web/app/api/v1/splats/[splatId]/download/route.ts. Gated on pointCloudS3Key rather than jobs.status: the
-    // reconstruct phase sets this key once and never clears it, so the COLMAP point cloud stays viewable through
-    // training and after the splat completes.
+    // web/app/api/v1/splats/[splatId]/download/route.ts.
     const [splat] = await getDb()
       .select({ id: splats.id })
       .from(splats)
@@ -34,6 +32,8 @@ export const GET = withErrorHandling(
       throw new HttpError(404, "Point cloud not ready");
     }
 
+    // Gated on pointCloudS3Key rather than jobs.status. The reconstruct stage sets this key once and never clears it,
+    // so the COLMAP point cloud stays viewable through training and after the splat completes.
     const [latestJob] = await getDb()
       .select()
       .from(jobs)

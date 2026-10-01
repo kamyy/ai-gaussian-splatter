@@ -22,8 +22,7 @@ export const GET = withErrorHandling(
     const { splatId } = await ctx.params;
     requireUuid(splatId, 404, "Splat not found");
 
-    // Ownership enforced through the parent splat, same join pattern as
-    // web/app/api/v1/splats/[splatId]/jobs/latest/route.ts.
+    // Ownership is enforced through the parent splat.
     const [splat] = await getDb()
       .select({ id: splats.id })
       .from(splats)
