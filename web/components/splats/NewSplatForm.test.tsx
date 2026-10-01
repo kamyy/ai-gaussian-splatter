@@ -30,7 +30,7 @@ vi.mock("@/lib/measurePhoto", async importOriginal => ({
 vi.mock("@/lib/hooks/useElementWidth", () => ({ useElementWidth: () => [() => {}, 800] }));
 
 const { mutateMock } = vi.hoisted(() => ({ mutateMock: vi.fn() }));
-vi.mock("swr", () => ({ mutate: mutateMock }));
+vi.mock("swr", () => ({ useSWRConfig: () => ({ mutate: mutateMock }) }));
 
 const { enqueueSnackbarMock } = vi.hoisted(() => ({ enqueueSnackbarMock: vi.fn() }));
 vi.mock("@/lib/hooks/useAppSnackbar", () => ({ useAppSnackbar: () => ({ enqueueSnackbar: enqueueSnackbarMock }) }));

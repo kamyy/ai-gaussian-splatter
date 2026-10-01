@@ -23,7 +23,18 @@
       "preset": "recommended",
       "style": {
         "useBlockStatements": "error",
-        "noDefaultExport": "error"
+        "noDefaultExport": "error",
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "paths": {
+              "swr": {
+                "allowImportNames": ["default", "SWRConfig", "useSWRConfig"],
+                "message": "SWR's mutate, preload and namespace imports reach its global cache, which signed-in pages don't read. Use useSWRConfig() instead (web/components/layout/SignedInGate.tsx). Add a name here only if it doesn't touch the global cache."
+              }
+            }
+          }
+        }
       }
     }
   },

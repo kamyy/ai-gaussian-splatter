@@ -12,7 +12,7 @@
 import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { useState } from "react";
-import { mutate } from "swr";
+import { useSWRConfig } from "swr";
 
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { apiFetch } from "@/lib/apiFetch";
@@ -88,6 +88,7 @@ function ProgressBar({ label, percent, startedAt }: { label: string; percent: nu
  */
 export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: StageCardProps) {
   const { getToken } = useAuth();
+  const { mutate } = useSWRConfig();
   const { enqueueSnackbar } = useAppSnackbar();
   const processingPaused = useProcessingPaused();
   const [pending, setPending] = useState(false);

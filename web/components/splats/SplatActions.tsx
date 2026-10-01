@@ -10,7 +10,7 @@
 import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { mutate } from "swr";
+import { useSWRConfig } from "swr";
 
 import { Button } from "@/components/ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/Dialog";
@@ -83,6 +83,7 @@ export function DeleteSplatButton({
   variant: "contained" | "outlined";
 }) {
   const { getToken } = useAuth();
+  const { mutate } = useSWRConfig();
   const router = useRouter();
 
   return (
@@ -104,6 +105,7 @@ export function DeleteSplatButton({
 
 export function StopJobButton({ splatId, onJobChanged }: { splatId: string; onJobChanged: () => void }) {
   const { getToken } = useAuth();
+  const { mutate } = useSWRConfig();
 
   return (
     <ConfirmButton

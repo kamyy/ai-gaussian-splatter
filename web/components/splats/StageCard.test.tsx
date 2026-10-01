@@ -12,7 +12,7 @@ const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }));
 vi.mock("@/lib/apiFetch", () => ({ apiFetch: apiFetchMock }));
 
 const { mutateMock } = vi.hoisted(() => ({ mutateMock: vi.fn() }));
-vi.mock("swr", () => ({ mutate: mutateMock }));
+vi.mock("swr", () => ({ useSWRConfig: () => ({ mutate: mutateMock }) }));
 
 const { enqueueSnackbarMock } = vi.hoisted(() => ({ enqueueSnackbarMock: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
