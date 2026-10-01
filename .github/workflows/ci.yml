@@ -105,8 +105,14 @@ jobs:
           podman run -d --name ci-postgres --network ci-net -p 5432:5432 \
             -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=test \
             postgres:18
-          for _ in $(seq 1 30); do
-            podman exec ci-postgres pg_isready -U postgres && break
+          # Checked over TCP, because the image's temporary init server listens only on the Unix socket and a socket check
+          # can report ready before the real server starts.
+          deadline=$((SECONDS + 30))
+          until podman exec ci-postgres pg_isready -h 127.0.0.1 -U postgres; do
+            if ((SECONDS >= deadline)); then
+              echo "ci-postgres did not become ready within 30s" >&2
+              exit 1
+            fi
             sleep 1
           done
       - uses: pnpm/action-setup@v6

@@ -151,11 +151,18 @@ export const POST = withErrorHandling(
       }
     } catch (err) {
       // Marked failed rather than left at "queued": "queued" is active under uq_jobs_splat_id_active, so a stuck job
-      // there would block every future POST /process for this splat with no way to clear it.
+      // there would block every future POST /process for this splat with no way to clear it. Conditional on the job
+      // still being "queued", so a cancel that landed during the launch stays cancelled and doesn't fail the splat.
       const message = err instanceof Error ? err.message : "Failed to launch worker instance";
       await getDb().transaction(async tx => {
-        await tx.update(jobs).set({ status: "failed", errorMessage: message }).where(eq(jobs.id, created.id));
-        await tx.update(splats).set({ status: "failed" }).where(eq(splats.id, splatId));
+        const [failed] = await tx
+          .update(jobs)
+          .set({ status: "failed", errorMessage: message })
+          .where(and(eq(jobs.id, created.id), eq(jobs.status, "queued")))
+          .returning({ id: jobs.id });
+        if (failed !== undefined) {
+          await tx.update(splats).set({ status: "failed" }).where(eq(splats.id, splatId));
+        }
       });
       throw err;
     }

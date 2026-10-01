@@ -136,6 +136,19 @@ describe("POST /api/v1/splats/[splatId]/train", () => {
     expect(launchJobMock).not.toHaveBeenCalled();
   });
 
+  it("keeps a cancel that lands while the launch is failing", async () => {
+    const { splat, job } = await seed();
+    launchJobMock.mockImplementationOnce(async ({ jobId }) => {
+      await getDb().update(jobs).set({ status: "cancelled" }).where(eq(jobs.id, jobId));
+      throw new Error("InsufficientInstanceCapacity");
+    });
+
+    await expect(POST(trainRequest(), ctx(splat.id))).rejects.toThrow("InsufficientInstanceCapacity");
+
+    const [row] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
+    expect(row.status).toBe("cancelled");
+  });
+
   it("terminates the worker it just launched when the job was cancelled during the launch", async () => {
     const { splat, job } = await seed();
     launchJobMock.mockImplementationOnce(async ({ jobId }) => {
