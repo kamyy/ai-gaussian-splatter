@@ -86,7 +86,7 @@ The app is public, and every splat costs real GPU time, so spending is bounded a
 
 | Area | Choices |
 | --- | --- |
-| Frontend | Next.js (App Router) · Tailwind CSS · Radix UI · SWR · Zustand · React Three Fiber · Spark (splat rendering) |
+| Frontend | Next.js (App Router) · Tailwind CSS · Radix UI · SWR · React Three Fiber · Spark (splat rendering) |
 | Backend | Next.js Route Handlers · Drizzle ORM · Postgres (RDS) · Clerk (auth) |
 | Worker | Python · COLMAP · gsplat · CUDA, in Podman/Docker containers |
 | Infra | Terraform · ECS Fargate (Spot) behind an ALB · EC2 GPU spot · S3 · ECR · Lambda · Route 53 / ACM |

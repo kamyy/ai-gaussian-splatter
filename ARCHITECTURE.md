@@ -116,7 +116,7 @@ A baked AMI would attack the smaller half — fixed overhead, not training. Trai
   - A shareable splat is meant for anyone who has its link, not for a public list. So the examples can't simply be every shareable splat.
   - A per-splat "featured" flag was rejected because nothing in the repo reaches the production database to set one. The showcase account is curated through the app's own UI instead.
 - SWR for server-derived data (worker-job polling via `refreshInterval`).
-- Zustand, not Redux, for pure client UI (upload progress). Zustand needs less boilerplate.
+- No global client-state library. Client-only state, such as which photos have uploaded, stays in the component that uses it.
 - Splats render with **Spark** (`@sparkjsdev/spark`), whose `SplatMesh` and `SparkRenderer` are plain Three.js objects added to the r3f scene via `<primitive>`.
   - Spark renders the trained splat the way gsplat does during training. `@mkkellogg/gaussian-splats-3d` smeared dense results into haze in front of the camera, and the haze grew with the Gaussian count.
 
