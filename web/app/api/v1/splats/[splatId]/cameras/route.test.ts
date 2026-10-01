@@ -1,6 +1,9 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@clerk/nextjs/server", () => ({ auth: vi.fn(async () => ({ userId: "clerk-user-1" })) }));
+vi.mock("@clerk/nextjs/server", () => ({
+  auth: vi.fn(async () => ({ userId: "clerk-user-1" })),
+  clerkClient: async () => ({ users: { getUser: async () => ({}) } }),
+}));
 
 const { readSplatCamerasMock } = vi.hoisted(() => ({ readSplatCamerasMock: vi.fn() }));
 vi.mock("@/lib/server/s3", async importOriginal => {
