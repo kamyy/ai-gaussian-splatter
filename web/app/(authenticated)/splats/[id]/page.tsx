@@ -94,7 +94,7 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
   }
 
   return (
-    <div className="mx-auto flex max-w-(--breakpoint-2xl) flex-col gap-6 lg:h-full lg:flex-row lg:gap-0">
+    <div className="page-width flex flex-col gap-6 lg:h-full lg:flex-row lg:gap-0">
       {/* The scrollbar's space is reserved for the same reason as in web/app/(authenticated)/splats/layout.tsx: the
       photo grid lays itself out for the width it measures. */}
       <div className="flex flex-col gap-6 px-4 pt-7 sm:px-12 lg:w-120 lg:shrink-0 lg:overflow-y-auto lg:pr-10 lg:pb-7 lg:scrollbar-gutter-stable">

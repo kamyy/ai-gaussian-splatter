@@ -53,7 +53,7 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-1100 h-18 flex-none bg-background">
-      <div className="mx-auto flex h-full max-w-(--breakpoint-2xl) items-center gap-2 border-divider border-b px-4 sm:gap-8 sm:px-12">
+      <div className="page-width flex h-full items-center gap-2 border-divider border-b px-4 sm:gap-8 sm:px-12">
         <Link href="/" className="font-display text-xl whitespace-nowrap sm:text-3xl">
           AI Gaussian Splatter
         </Link>
