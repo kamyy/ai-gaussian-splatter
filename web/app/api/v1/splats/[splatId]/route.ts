@@ -8,7 +8,7 @@
 import { and, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 
-import { requireUser } from "@/lib/server/auth";
+import { requireOwnedSplat, requireUser } from "@/lib/server/auth";
 import { cancelActiveJob } from "@/lib/server/cancelJob";
 import { getDb } from "@/lib/server/db";
 import { splats } from "@/lib/server/db/schema";
@@ -46,16 +46,7 @@ export const DELETE = withErrorHandling(
   async (_request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]">) => {
     const user = await requireUser();
     const { splatId } = await ctx.params;
-    requireUuid(splatId, 404, "Splat not found");
-
-    const [splat] = await getDb()
-      .select({ id: splats.id })
-      .from(splats)
-      .where(and(eq(splats.id, splatId), eq(splats.userId, user.id)))
-      .limit(1);
-    if (splat === undefined) {
-      throw new HttpError(404, "Splat not found");
-    }
+    await requireOwnedSplat(splatId, user.id);
 
     await cancelActiveJob(splatId);
     await getDb().delete(splats).where(eq(splats.id, splatId));

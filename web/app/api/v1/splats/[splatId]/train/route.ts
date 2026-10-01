@@ -11,23 +11,15 @@ import { and, desc, eq, notInArray } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-import { requireUser } from "@/lib/server/auth";
+import { requireOwnedSplat, requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
-import { jobs, splats } from "@/lib/server/db/schema";
-import {
-  ecrRegistry,
-  launchJob,
-  launchJobLocal,
-  localLaunchEnabled,
-  stopLocalWorker,
-  terminateWorker,
-  workerImageUri,
-} from "@/lib/server/ec2Launcher";
-import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
+import { jobs } from "@/lib/server/db/schema";
+import { HttpError, parseJsonBody, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
 import { requireProcessingEnabled } from "@/lib/server/runtimeSettings";
 import { jobColumns } from "@/lib/server/selects";
-import { JOB_ENDED_STATUSES } from "@/lib/statuses";
+import { launchWorker, stopWorker } from "@/lib/server/worker";
+import { JOB_ENDED_STATUSES, JobStatus } from "@/lib/statuses";
 
 // Nothing but numbers survives the parse, which is what lets web/lib/server/ec2Launcher.ts single-quote the box's JSON
 // inside the user-data script.
@@ -47,30 +39,16 @@ export const POST = withErrorHandling(
   async (request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/train">) => {
     const user = await requireUser();
     const { splatId } = await ctx.params;
-    requireUuid(splatId, 404, "Splat not found");
-
-    const [splat] = await getDb()
-      .select({ id: splats.id })
-      .from(splats)
-      .where(and(eq(splats.id, splatId), eq(splats.userId, user.id)))
-      .limit(1);
-    if (splat === undefined) {
-      throw new HttpError(404, "Splat not found");
-    }
+    await requireOwnedSplat(splatId, user.id);
 
     // Parsed before the flip below, so a malformed box never moves the job or charges the daily cap.
-    const parsed = trainSchema.safeParse(await request.json().catch(() => null));
-    if (!parsed.success) {
-      throw new HttpError(422, "Invalid request body");
-    }
-
-    const { cropBox } = parsed.data;
+    const { cropBox } = await parseJsonBody(request, trainSchema);
 
     // Checked before the flip below, so a paused site leaves the job waiting at "awaiting_training".
     const settings = await requireProcessingEnabled();
 
     const [latestJob] = await getDb()
-      .select()
+      .select({ id: jobs.id })
       .from(jobs)
       .where(eq(jobs.splatId, splatId))
       .orderBy(desc(jobs.createdAt))
@@ -88,8 +66,8 @@ export const POST = withErrorHandling(
     // launching an instance.
     const [flipped] = await getDb()
       .update(jobs)
-      .set({ status: "launching", trainingLaunchedAt: new Date() })
-      .where(and(eq(jobs.id, latestJob.id), eq(jobs.status, "awaiting_training")))
+      .set({ status: JobStatus.launching, trainingLaunchedAt: new Date() })
+      .where(and(eq(jobs.id, latestJob.id), eq(jobs.status, JobStatus.awaiting_training)))
       .returning();
     if (flipped === undefined) {
       throw new HttpError(409, "No job awaiting training for this splat");
@@ -106,34 +84,19 @@ export const POST = withErrorHandling(
     let instanceId: string | null;
     try {
       await checkAndIncrementGlobalDaily(settings.maxJobsPerDay);
-
-      if (localLaunchEnabled()) {
-        launchJobLocal({
-          jobId: flipped.id,
-          splatId,
-          callbackToken: flipped.callbackToken,
-          stage: "train",
-          trainingIterations: settings.trainingIterations,
-          cropBox,
-        });
-        instanceId = null;
-      } else {
-        instanceId = await launchJob({
-          jobId: flipped.id,
-          splatId,
-          callbackToken: flipped.callbackToken,
-          stage: "train",
-          workerImageUri: workerImageUri("train"),
-          ecrRegistry: ecrRegistry(),
-          settings,
-          cropBox,
-        });
-      }
+      instanceId = await launchWorker({
+        jobId: flipped.id,
+        splatId,
+        callbackToken: flipped.callbackToken,
+        stage: "train",
+        settings,
+        cropBox,
+      });
     } catch (err) {
       await getDb()
         .update(jobs)
-        .set({ status: "awaiting_training", trainingLaunchedAt: null })
-        .where(and(eq(jobs.id, flipped.id), eq(jobs.status, "launching")));
+        .set({ status: JobStatus.awaiting_training, trainingLaunchedAt: null })
+        .where(and(eq(jobs.id, flipped.id), eq(jobs.status, JobStatus.launching)));
       throw err;
     }
 
@@ -145,12 +108,7 @@ export const POST = withErrorHandling(
       .where(and(eq(jobs.id, flipped.id), notInArray(jobs.status, JOB_ENDED_STATUSES)))
       .returning(jobColumns);
     if (job === undefined) {
-      if (instanceId === null) {
-        stopLocalWorker(flipped.id);
-      } else {
-        await terminateWorker(instanceId);
-      }
-
+      await stopWorker(flipped.id, instanceId);
       throw new HttpError(409, "Cancelled before the worker started");
     }
 

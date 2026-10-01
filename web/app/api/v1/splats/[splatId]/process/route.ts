@@ -9,24 +9,16 @@
 import { and, count, eq, lt, notInArray } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { MAX_PHOTOS_PER_SPLAT } from "@/lib/limits";
-import { requireUser } from "@/lib/server/auth";
+import { requireOwnedSplat, requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { jobs, photos, splats } from "@/lib/server/db/schema";
-import {
-  ecrRegistry,
-  generateCallbackToken,
-  launchJob,
-  launchJobLocal,
-  localLaunchEnabled,
-  stopLocalWorker,
-  terminateWorker,
-  workerImageUri,
-} from "@/lib/server/ec2Launcher";
-import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
+import { generateCallbackToken } from "@/lib/server/ec2Launcher";
+import { HttpError, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
 import { requireProcessingEnabled } from "@/lib/server/runtimeSettings";
 import { jobColumns } from "@/lib/server/selects";
-import { JOB_ENDED_STATUSES } from "@/lib/statuses";
+import { launchWorker, stopWorker } from "@/lib/server/worker";
+import { JOB_ENDED_STATUSES, JobStatus } from "@/lib/statuses";
 
 // How long a job may sit in a non-terminal status without its worker reporting anything before this route treats it
 // as dead and cancels it. The window has to clear the longest gap a healthy job can go between callbacks, which is a
@@ -52,16 +44,7 @@ export const POST = withErrorHandling(
   async (_request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/process">) => {
     const user = await requireUser();
     const { splatId } = await ctx.params;
-    requireUuid(splatId, 404, "Splat not found");
-
-    const [splat] = await getDb()
-      .select()
-      .from(splats)
-      .where(and(eq(splats.id, splatId), eq(splats.userId, user.id)))
-      .limit(1);
-    if (splat === undefined) {
-      throw new HttpError(404, "Splat not found");
-    }
+    await requireOwnedSplat(splatId, user.id);
 
     // Checked before anything else about the splat, so a paused site says so rather than naming some other problem.
     const settings = await requireProcessingEnabled();
@@ -88,7 +71,10 @@ export const POST = withErrorHandling(
     // wakes up late can't bring the cancelled row back.
     await getDb()
       .update(jobs)
-      .set({ status: "cancelled", errorMessage: "Worker stopped reporting; cancelled so processing could restart." })
+      .set({
+        status: JobStatus.cancelled,
+        errorMessage: "Worker stopped reporting; cancelled so processing could restart.",
+      })
       .where(
         and(
           eq(jobs.splatId, splatId),
@@ -108,7 +94,7 @@ export const POST = withErrorHandling(
     const callbackToken = generateCallbackToken();
     let created: { id: string };
     try {
-      [created] = await getDb().insert(jobs).values({ splatId, status: "queued", callbackToken }).returning({
+      [created] = await getDb().insert(jobs).values({ splatId, status: JobStatus.queued, callbackToken }).returning({
         id: jobs.id,
       });
     } catch (err) {
@@ -135,20 +121,7 @@ export const POST = withErrorHandling(
 
     let instanceId: string | null;
     try {
-      if (localLaunchEnabled()) {
-        launchJobLocal({ jobId: created.id, splatId, callbackToken, stage: "reconstruct" });
-        instanceId = null;
-      } else {
-        instanceId = await launchJob({
-          jobId: created.id,
-          splatId,
-          callbackToken,
-          stage: "reconstruct",
-          workerImageUri: workerImageUri("reconstruct"),
-          ecrRegistry: ecrRegistry(),
-          settings,
-        });
-      }
+      instanceId = await launchWorker({ jobId: created.id, splatId, callbackToken, stage: "reconstruct", settings });
     } catch (err) {
       // Marked failed rather than left at "queued": "queued" is active under uq_jobs_splat_id_active, so a stuck job
       // there would block every future POST /process for this splat with no way to clear it. Conditional on the job
@@ -157,8 +130,8 @@ export const POST = withErrorHandling(
       await getDb().transaction(async tx => {
         const [failed] = await tx
           .update(jobs)
-          .set({ status: "failed", errorMessage: message })
-          .where(and(eq(jobs.id, created.id), eq(jobs.status, "queued")))
+          .set({ status: JobStatus.failed, errorMessage: message })
+          .where(and(eq(jobs.id, created.id), eq(jobs.status, JobStatus.queued)))
           .returning({ id: jobs.id });
         if (failed !== undefined) {
           await tx.update(splats).set({ status: "failed" }).where(eq(splats.id, splatId));
@@ -171,16 +144,11 @@ export const POST = withErrorHandling(
     // above is in flight, before there is an instance ID for it to terminate. That worker is stopped here instead.
     const [job] = await getDb()
       .update(jobs)
-      .set({ status: "launching", ec2InstanceId: instanceId })
-      .where(and(eq(jobs.id, created.id), eq(jobs.status, "queued")))
+      .set({ status: JobStatus.launching, ec2InstanceId: instanceId })
+      .where(and(eq(jobs.id, created.id), eq(jobs.status, JobStatus.queued)))
       .returning(jobColumns);
     if (job === undefined) {
-      if (instanceId === null) {
-        stopLocalWorker(created.id);
-      } else {
-        await terminateWorker(instanceId);
-      }
-
+      await stopWorker(created.id, instanceId);
       throw new HttpError(409, "Cancelled before the worker started");
     }
 

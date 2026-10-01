@@ -4,7 +4,11 @@
  * Column maps are passed to Drizzle's `.select()` rather than deleting keys from the result, so the SQL itself enforces
  * what's left out. Excluded columns are never fetched at all. This matters most for jobs: `callbackToken` is the
  * worker's bearer credential and `ec2InstanceId` is internal, and neither may reach a client.
+ *
+ * It also holds the order every list of a splat's photos uses, so "Photo 3" names the same photo on every page.
  */
+
+import { asc } from "drizzle-orm";
 
 import { jobs, photos, splats } from "./db/schema";
 
@@ -46,3 +50,9 @@ export const photoColumns = {
   thumbnailS3Key: photos.thumbnailS3Key,
   createdAt: photos.createdAt,
 };
+
+/**
+ * Oldest taken first, for `.orderBy(...photoOrder)`. Postgres sorts a null taken_at last, and upload time then id break
+ * ties, so the order never shifts between requests.
+ */
+export const photoOrder = [asc(photos.takenAt), asc(photos.createdAt), asc(photos.id)];

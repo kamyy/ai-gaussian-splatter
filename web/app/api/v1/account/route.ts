@@ -14,26 +14,10 @@ import { isClerkNotFound, requireClerkUserId } from "@/lib/server/auth";
 import { WORKER_RUNNING_STATUSES } from "@/lib/server/cancelJob";
 import { getDb } from "@/lib/server/db";
 import { jobs, rateLimitCounters, splats, users } from "@/lib/server/db/schema";
-import { localLaunchEnabled, stopLocalWorker, terminateWorker } from "@/lib/server/ec2Launcher";
 import { withErrorHandling } from "@/lib/server/httpError";
 import { userRateLimitScope } from "@/lib/server/rateLimit";
 import { deleteSplatObjects } from "@/lib/server/s3";
-
-/**
- * Stops every worker still running for the user's splats. It runs before any row is deleted, so a worker that can't be
- * stopped fails the request while the account is still whole and can be retried.
- */
-async function stopWorkers(running: { jobId: string; ec2InstanceId: string | null }[]): Promise<void> {
-  if (localLaunchEnabled()) {
-    for (const { jobId } of running) {
-      stopLocalWorker(jobId);
-    }
-
-    return;
-  }
-
-  await Promise.all(running.flatMap(({ ec2InstanceId }) => (ec2InstanceId ? [terminateWorker(ec2InstanceId)] : [])));
-}
+import { stopWorker } from "@/lib/server/worker";
 
 /**
  * Deletes the user's Clerk account. Clerk's 404 means an earlier attempt already deleted it, so a retry still
@@ -79,7 +63,9 @@ export const DELETE = withErrorHandling(async () => {
     const splatIds = rows.flatMap(row => (row.splatId ? [row.splatId] : []));
     const running = rows.flatMap(row => (row.jobId ? [{ jobId: row.jobId, ec2InstanceId: row.ec2InstanceId }] : []));
 
-    await stopWorkers(running);
+    // Stopped before any row is deleted, so a worker that can't be stopped fails the request while the account is
+    // still whole and can be retried.
+    await Promise.all(running.map(({ jobId, ec2InstanceId }) => stopWorker(jobId, ec2InstanceId)));
 
     await getDb().execute(sql`
       with deleted_counters as (

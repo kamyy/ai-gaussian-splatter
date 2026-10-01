@@ -19,8 +19,8 @@ import { z } from "zod";
 import { getJobForCallbackToken } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { jobs, splats } from "@/lib/server/db/schema";
-import { HttpError, withErrorHandling } from "@/lib/server/httpError";
-import { JOB_ENDED_STATUSES, JOB_STATUSES, JobStatus, type SplatStatus } from "@/lib/statuses";
+import { parseJsonBody, withErrorHandling } from "@/lib/server/httpError";
+import { JOB_ENDED_STATUSES, JOB_STATUSES, JobStatus } from "@/lib/statuses";
 
 const workerStatusSchema = z.object({
   status: z.enum(JOB_STATUSES),
@@ -51,12 +51,7 @@ export const PATCH = withErrorHandling(
       return new NextResponse(null, { status: 204 });
     }
 
-    const parsed = workerStatusSchema.safeParse(await request.json().catch(() => null));
-    if (!parsed.success) {
-      throw new HttpError(422, "Invalid request body");
-    }
-
-    const body = parsed.data;
+    const body = await parseJsonBody(request, workerStatusSchema);
     const { status } = body;
 
     const jobData: Partial<typeof jobs.$inferInsert> = { status };
@@ -110,18 +105,13 @@ export const PATCH = withErrorHandling(
     }
 
     const splatData: Partial<typeof splats.$inferInsert> = {};
-    let splatStatus: SplatStatus | null = null;
     if (status === JobStatus.complete) {
-      splatStatus = "complete";
+      splatData.status = "complete";
       if (body.thumbnail_s3_key != null) {
         splatData.thumbnailS3Key = body.thumbnail_s3_key;
       }
     } else if (status === JobStatus.failed) {
-      splatStatus = "failed";
-    }
-
-    if (splatStatus !== null) {
-      splatData.status = splatStatus;
+      splatData.status = "failed";
     }
 
     // Both rows move together or not at all. The job write is conditional on it still not having ended, so a cancel

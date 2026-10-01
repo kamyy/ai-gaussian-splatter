@@ -6,16 +6,16 @@
  * cards on the library page (web/app/(authenticated)/splats/page.tsx) show.
  */
 
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { jobs, photos, splats } from "@/lib/server/db/schema";
-import { HttpError, withErrorHandling } from "@/lib/server/httpError";
+import { parseJsonBody, withErrorHandling } from "@/lib/server/httpError";
 import { presignPhotoDownload } from "@/lib/server/s3";
-import { jobColumns, photoColumns, splatColumns } from "@/lib/server/selects";
+import { jobColumns, photoColumns, photoOrder, splatColumns } from "@/lib/server/selects";
 
 const schema = z.object({
   name: z.string().min(1),
@@ -24,10 +24,7 @@ const schema = z.object({
 export const POST = withErrorHandling(async (req: Request) => {
   const user = await requireUser();
 
-  const { success, data } = schema.safeParse(await req.json().catch(() => null));
-  if (!success) {
-    throw new HttpError(422, "Invalid request body");
-  }
+  const data = await parseJsonBody(req, schema);
 
   const [splat] = await getDb()
     .insert(splats)
@@ -65,13 +62,13 @@ export const GET = withErrorHandling(async () => {
 
   // Neither query depends on the other's result, so they run in parallel rather than as two sequential round trips.
   const [photoRows, jobRows] = await Promise.all([
-    // Ordered per splat the way web/app/api/v1/splats/[splatId]/photos/route.ts orders them, oldest taken first, and
-    // the loop below keeps only the first row it sees per id. So the card shows the first photo taken.
+    // Ordered per splat, and the loop below keeps only the first row it sees per id. So the card shows the first photo
+    // taken.
     getDb()
       .select(photoColumns)
       .from(photos)
       .where(and(inArray(photos.splatId, ids), eq(photos.uploadStatus, "uploaded")))
-      .orderBy(photos.splatId, asc(photos.takenAt), asc(photos.createdAt), asc(photos.id)),
+      .orderBy(photos.splatId, ...photoOrder),
     // Ordered newest-first per splat so the loop's "keep the first seen" reduction picks the latest job, matching
     // web/app/api/v1/splats/[splatId]/jobs/latest/route.ts's single-splat query.
     getDb().select(jobColumns).from(jobs).where(inArray(jobs.splatId, ids)).orderBy(jobs.splatId, desc(jobs.createdAt)),

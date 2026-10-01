@@ -111,19 +111,22 @@ export async function deleteUploadedObject(uploadsBucketKey: string): Promise<vo
   await s3Client().send(new DeleteObjectCommand({ Bucket: getEnv().UPLOADS_BUCKET, Key: uploadsBucketKey }));
 }
 
-export async function presignSplatDownload(splatsBucketKey: string): Promise<string> {
-  const env = getEnv();
-  const command = new GetObjectCommand({ Bucket: env.SPLATS_BUCKET, Key: splatsBucketKey });
+/** A presigned GET URL for an object in either bucket. */
+export async function presignDownload(
+  bucket: string,
+  key: string,
+  expiresIn: number = PRESIGN_EXPIRY_SECONDS,
+): Promise<string> {
+  return getSignedUrl(s3Client(), new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn });
+}
 
-  return getSignedUrl(s3Client(), command, { expiresIn: PRESIGN_EXPIRY_SECONDS });
+export async function presignSplatDownload(splatsBucketKey: string): Promise<string> {
+  return presignDownload(getEnv().SPLATS_BUCKET, splatsBucketKey);
 }
 
 /** Uploaded photos live in UPLOADS_BUCKET (see presignPhotoUpload above), not SPLATS_BUCKET. */
 export async function presignPhotoDownload(uploadsBucketKey: string): Promise<string> {
-  const env = getEnv();
-  const command = new GetObjectCommand({ Bucket: env.UPLOADS_BUCKET, Key: uploadsBucketKey });
-
-  return getSignedUrl(s3Client(), command, { expiresIn: PRESIGN_EXPIRY_SECONDS });
+  return presignDownload(getEnv().UPLOADS_BUCKET, uploadsBucketKey);
 }
 
 /**

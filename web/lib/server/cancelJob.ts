@@ -10,8 +10,8 @@ import { and, desc, eq, notInArray } from "drizzle-orm";
 import { JOB_ENDED_STATUSES, JobStatus, type JobStatusDbValue } from "@/lib/statuses";
 import { getDb } from "./db";
 import { jobs } from "./db/schema";
-import { localLaunchEnabled, stopLocalWorker, terminateWorker } from "./ec2Launcher";
 import { jobColumns } from "./selects";
+import { stopWorker } from "./worker";
 
 /**
  * Statuses where a worker instance may be running for the job. awaiting_training is absent: the reconstruct instance
@@ -45,11 +45,7 @@ export async function cancelActiveJob(splatId: string) {
   }
 
   if (WORKER_RUNNING_STATUSES.includes(job.status)) {
-    if (localLaunchEnabled()) {
-      stopLocalWorker(job.id);
-    } else if (job.ec2InstanceId !== null) {
-      await terminateWorker(job.ec2InstanceId);
-    }
+    await stopWorker(job.id, job.ec2InstanceId);
   }
 
   const [cancelled] = await getDb()

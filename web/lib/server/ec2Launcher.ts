@@ -31,6 +31,19 @@ const LIFETIME_TAG_KEY = "MaxLifetimeMinutes";
 
 type WorkerStage = "reconstruct" | "train";
 
+/**
+ * What both launchJob() and launchJobLocal() take. The instance type, the lifetime ceiling and the training iterations
+ * come from the runtime settings the caller read.
+ */
+export interface WorkerLaunch {
+  jobId: string;
+  splatId: string;
+  callbackToken: string;
+  stage: WorkerStage;
+  settings: RuntimeSettings;
+  cropBox?: CropBox;
+}
+
 interface UserDataParams {
   callbackToken: string;
   jobId: string;
@@ -108,13 +121,16 @@ ${iterationsArg}${cropBoxArg}    ${p.workerImageUri}
 `;
 }
 
+function ec2Client(): EC2Client {
+  return new EC2Client({ region: getEnv().AWS_REGION });
+}
+
 /**
  * infra/web.tf sets these from its ECR repository once infra/ is deployed. The placeholders are for local development
  * before a deploy. The stages run different images. worker/Dockerfile's reconstruct target carries COLMAP and no torch,
- * and its train target carries torch and gsplat and no COLMAP, so each stage pulls only what it runs. Called by
- * web/app/api/v1/splats/[splatId]/process/route.ts and web/app/api/v1/splats/[splatId]/train/route.ts.
+ * and its train target carries torch and gsplat and no COLMAP, so each stage pulls only what it runs.
  */
-export function workerImageUri(stage: WorkerStage): string {
+function workerImageUri(stage: WorkerStage): string {
   if (stage === "reconstruct") {
     return process.env.WORKER_RECONSTRUCT_IMAGE_URI ?? "REPLACE_WITH_ECR_IMAGE_URI";
   }
@@ -122,7 +138,7 @@ export function workerImageUri(stage: WorkerStage): string {
   return process.env.WORKER_TRAIN_IMAGE_URI ?? "REPLACE_WITH_ECR_IMAGE_URI";
 }
 
-export function ecrRegistry(): string {
+function ecrRegistry(): string {
   return process.env.ECR_REGISTRY ?? "REPLACE_WITH_ECR_REGISTRY";
 }
 
@@ -144,23 +160,10 @@ export function generateCallbackToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
-/**
- * Launches the spot worker instance and returns its instance ID. The instance type, the lifetime ceiling and the
- * training iterations come from the runtime settings the caller read.
- */
-export async function launchJob(params: {
-  jobId: string;
-  splatId: string;
-  callbackToken: string;
-  stage: WorkerStage;
-  workerImageUri: string;
-  ecrRegistry: string;
-  settings: RuntimeSettings;
-  cropBox?: CropBox;
-}): Promise<string> {
+/** Launches the spot worker instance and returns its instance ID. */
+export async function launchJob(params: WorkerLaunch): Promise<string> {
   const env = getEnv();
   const worker = getWorkerInstanceEnv();
-  const ec2 = new EC2Client({ region: env.AWS_REGION });
 
   const userData = renderUserData({
     callbackToken: params.callbackToken,
@@ -170,8 +173,8 @@ export async function launchJob(params: {
     uploadsBucket: env.UPLOADS_BUCKET,
     splatsBucket: env.SPLATS_BUCKET,
     stage: params.stage,
-    workerImageUri: params.workerImageUri,
-    ecrRegistry: params.ecrRegistry,
+    workerImageUri: workerImageUri(params.stage),
+    ecrRegistry: ecrRegistry(),
     awsRegion: env.AWS_REGION,
     logGroup: worker.WORKER_LOG_GROUP,
     maxLifetimeMinutes: params.settings.workerMaxLifetimeMinutes,
@@ -179,7 +182,7 @@ export async function launchJob(params: {
     cropBox: params.cropBox,
   });
 
-  const response = await ec2.send(
+  const response = await ec2Client().send(
     new RunInstancesCommand({
       ImageId: worker.WORKER_AMI_ID,
       InstanceType: (params.stage === "reconstruct"
@@ -241,9 +244,8 @@ export async function launchJob(params: {
 export async function describeWorker(
   instanceId: string,
 ): Promise<{ state: string; launchTime: Date; maxLifetimeMinutes: number | null } | null> {
-  const ec2 = new EC2Client({ region: getEnv().AWS_REGION });
   try {
-    const response = await ec2.send(new DescribeInstancesCommand({ InstanceIds: [instanceId] }));
+    const response = await ec2Client().send(new DescribeInstancesCommand({ InstanceIds: [instanceId] }));
     const instance = response.Reservations?.[0]?.Instances?.[0];
     if (instance?.State?.Name === undefined || instance.LaunchTime === undefined) {
       return null;
@@ -268,9 +270,8 @@ export async function describeWorker(
  * instances carrying the worker tag launchJob() applies.
  */
 export async function terminateWorker(instanceId: string): Promise<void> {
-  const ec2 = new EC2Client({ region: getEnv().AWS_REGION });
   try {
-    await ec2.send(new TerminateInstancesCommand({ InstanceIds: [instanceId] }));
+    await ec2Client().send(new TerminateInstancesCommand({ InstanceIds: [instanceId] }));
   } catch (err) {
     if (err instanceof Error && err.name === "InvalidInstanceID.NotFound") {
       return;
@@ -294,21 +295,13 @@ export function stopLocalWorker(jobId: string): void {
 
 /**
  * Local-dev replacement for launchJob(). It runs the worker image on the caller's own GPU with Podman instead of
- * launching a real EC2 spot instance. Both launch routes only call it when WORKER_LOCAL_LAUNCH is set
- * (web/app/api/v1/splats/[splatId]/process/route.ts and web/app/api/v1/splats/[splatId]/train/route.ts). Production
- * can't reach it, because the ECS task has neither a podman binary nor a GPU.
+ * launching a real EC2 spot instance. web/lib/server/worker.ts only calls it when WORKER_LOCAL_LAUNCH is set.
+ * Production can't reach it, because the ECS task has neither a podman binary nor a GPU.
  *
  * Like the EC2 launch it replaces, it doesn't wait for the container. The worker reports its own progress back through
  * APP_PUBLIC_URL and CALLBACK_TOKEN (worker/pipeline/status.py).
  */
-export function launchJobLocal(params: {
-  jobId: string;
-  splatId: string;
-  callbackToken: string;
-  stage: WorkerStage;
-  trainingIterations?: number;
-  cropBox?: CropBox;
-}): void {
+export function launchJobLocal(params: WorkerLaunch): void {
   const env = getEnv();
   const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
   const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
@@ -356,7 +349,7 @@ export function launchJobLocal(params: {
       `AWS_SECRET_ACCESS_KEY=${secretAccessKey}`,
       "-e",
       `AWS_DEFAULT_REGION=${env.AWS_REGION}`,
-      ...(params.trainingIterations ? ["-e", `TRAINING_ITERATIONS=${params.trainingIterations}`] : []),
+      ...(params.stage === "train" ? ["-e", `TRAINING_ITERATIONS=${params.settings.trainingIterations}`] : []),
       ...(params.cropBox ? ["-e", `CROP_BOX=${JSON.stringify(params.cropBox)}`] : []),
       "-v",
       `${jobDir}:/tmp/job`,

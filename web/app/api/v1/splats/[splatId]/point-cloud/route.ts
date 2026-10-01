@@ -22,22 +22,14 @@ export const GET = withErrorHandling(
     requireUuid(splatId, 404, "Point cloud not ready");
 
     // "Not ready" and "not yours" deliberately collapse to the same 404, matching
-    // web/app/api/v1/splats/[splatId]/download/route.ts.
-    const [splat] = await getDb()
-      .select({ id: splats.id })
-      .from(splats)
-      .where(and(eq(splats.id, splatId), eq(splats.userId, user.id)))
-      .limit(1);
-    if (splat === undefined) {
-      throw new HttpError(404, "Point cloud not ready");
-    }
-
-    // Gated on pointCloudS3Key rather than jobs.status. The reconstruct stage sets this key once and never clears it,
-    // so the COLMAP point cloud stays viewable through training and after the splat completes.
+    // web/app/api/v1/splats/[splatId]/download/route.ts. Gated on pointCloudS3Key rather than jobs.status. The
+    // reconstruct stage sets this key once and never clears it, so the COLMAP point cloud stays viewable through
+    // training and after the splat completes.
     const [latestJob] = await getDb()
-      .select()
+      .select({ pointCloudS3Key: jobs.pointCloudS3Key })
       .from(jobs)
-      .where(and(eq(jobs.splatId, splatId), isNotNull(jobs.pointCloudS3Key)))
+      .innerJoin(splats, eq(splats.id, jobs.splatId))
+      .where(and(eq(jobs.splatId, splatId), eq(splats.userId, user.id), isNotNull(jobs.pointCloudS3Key)))
       .orderBy(desc(jobs.createdAt))
       .limit(1);
     if (latestJob === undefined || latestJob.pointCloudS3Key === null) {

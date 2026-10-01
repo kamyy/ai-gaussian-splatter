@@ -13,6 +13,7 @@ import { getDb } from "@/lib/server/db";
 import { jobs, splats } from "@/lib/server/db/schema";
 import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
 import { presignSplatDownload } from "@/lib/server/s3";
+import { JobStatus } from "@/lib/statuses";
 
 export const GET = withErrorHandling(
   async (_request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/download">) => {
@@ -21,19 +22,18 @@ export const GET = withErrorHandling(
     requireUuid(splatId, 404, "Splat not ready");
 
     // "Not ready" and "not yours" deliberately collapse to the same 404.
-    const [splat] = await getDb()
-      .select()
-      .from(splats)
-      .where(and(eq(splats.id, splatId), eq(splats.userId, user.id), eq(splats.status, "complete")))
-      .limit(1);
-    if (splat === undefined) {
-      throw new HttpError(404, "Splat not ready");
-    }
-
     const [latestJob] = await getDb()
-      .select()
+      .select({ resultS3Key: jobs.resultS3Key })
       .from(jobs)
-      .where(and(eq(jobs.splatId, splatId), eq(jobs.status, "complete")))
+      .innerJoin(splats, eq(splats.id, jobs.splatId))
+      .where(
+        and(
+          eq(jobs.splatId, splatId),
+          eq(jobs.status, JobStatus.complete),
+          eq(splats.userId, user.id),
+          eq(splats.status, "complete"),
+        ),
+      )
       .orderBy(desc(jobs.createdAt))
       .limit(1);
     if (latestJob === undefined || latestJob.resultS3Key === null) {

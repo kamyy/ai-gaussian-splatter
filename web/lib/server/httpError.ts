@@ -3,10 +3,11 @@
  *
  * Code anywhere in a handler's call stack throws an HttpError with a status code, and withErrorHandling() wraps each
  * handler to turn it into a JSON error response. Anything else is rethrown, so Next.js logs it and answers with a 500.
- * requireUuid() checks an id from the URL before it reaches the database.
+ * requireUuid() checks an id from the URL before it reaches the database, and parseJsonBody() checks a request's body.
  */
 
 import { NextResponse } from "next/server";
+import type { ZodType } from "zod";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -41,6 +42,16 @@ export function requireUuid(value: string, status: number, message: string): voi
   if (!isUuid(value)) {
     throw new HttpError(status, message);
   }
+}
+
+/** The request's JSON body, checked against schema. A body that fails the schema or isn't JSON at all is a 422. */
+export async function parseJsonBody<T>(request: Request, schema: ZodType<T>): Promise<T> {
+  const parsed = schema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    throw new HttpError(422, "Invalid request body");
+  }
+
+  return parsed.data;
 }
 
 /** Error body shape: `{"detail": "..."}`. */

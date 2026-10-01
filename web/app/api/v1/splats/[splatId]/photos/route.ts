@@ -5,40 +5,28 @@
  * its thumbnail, plus its pixel size so the photo grid can lay out rows before any image loads.
  */
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 
-import { requireUser } from "@/lib/server/auth";
+import { requireOwnedSplat, requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
-import { photos, splats } from "@/lib/server/db/schema";
-import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
+import { photos } from "@/lib/server/db/schema";
+import { withErrorHandling } from "@/lib/server/httpError";
 import { presignPhotoDownload } from "@/lib/server/s3";
-import { photoColumns } from "@/lib/server/selects";
+import { photoColumns, photoOrder } from "@/lib/server/selects";
 import type { PhotoListItem } from "@/lib/types";
 
 export const GET = withErrorHandling(
   async (_request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/photos">) => {
     const user = await requireUser();
     const { splatId } = await ctx.params;
-    requireUuid(splatId, 404, "Splat not found");
-
-    // Ownership is enforced through the parent splat.
-    const [splat] = await getDb()
-      .select({ id: splats.id })
-      .from(splats)
-      .where(and(eq(splats.id, splatId), eq(splats.userId, user.id)))
-      .limit(1);
-    if (splat === undefined) {
-      throw new HttpError(404, "Splat not found");
-    }
+    await requireOwnedSplat(splatId, user.id);
 
     const rows = await getDb()
       .select(photoColumns)
       .from(photos)
       .where(and(eq(photos.splatId, splatId), eq(photos.uploadStatus, "uploaded")))
-      // Oldest taken first. Postgres sorts a null taken_at last, and upload time then id break ties so the order never
-      // shifts between requests.
-      .orderBy(asc(photos.takenAt), asc(photos.createdAt), asc(photos.id));
+      .orderBy(...photoOrder);
 
     const items: PhotoListItem[] = await Promise.all(
       rows.map(async row => ({

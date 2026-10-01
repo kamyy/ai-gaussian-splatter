@@ -7,16 +7,16 @@
  * than the server making an HTTP request to itself.
  */
 
-import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { and, asc, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
-
+import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { JobStatus } from "@/lib/statuses";
 import type { ExampleSplat, PublicSplat, PublicSplatView } from "../types";
 import { getDb } from "./db";
 import { jobs, photos, splats, users } from "./db/schema";
 import { getEnv } from "./env";
 import { isUuid } from "./httpError";
 import { getRuntimeSettings } from "./runtimeSettings";
+import { presignDownload } from "./s3";
+import { photoOrder } from "./selects";
 
 // The landing page has no pager, so this is every example it shows.
 const EXAMPLE_LIMIT = 8;
@@ -27,11 +27,7 @@ const EXAMPLE_LIMIT = 8;
 const PUBLIC_URL_EXPIRY_SECONDS = 3600;
 
 async function presignPublic(bucket: string, key: string): Promise<string> {
-  const client = new S3Client({ region: getEnv().AWS_REGION });
-
-  return getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: key }), {
-    expiresIn: PUBLIC_URL_EXPIRY_SECONDS,
-  });
+  return presignDownload(bucket, key, PUBLIC_URL_EXPIRY_SECONDS);
 }
 
 // The ids and names of the splats the landing page shows as examples, newest first.
@@ -52,7 +48,7 @@ async function findExampleSplatRows(ownerClerkUserId: string): Promise<{ id: str
           sql`(${getDb()
             .select({ resultSpzS3Key: jobs.resultSpzS3Key })
             .from(jobs)
-            .where(and(eq(jobs.splatId, splats.id), eq(jobs.status, "complete")))
+            .where(and(eq(jobs.splatId, splats.id), eq(jobs.status, JobStatus.complete)))
             .orderBy(desc(jobs.createdAt))
             .limit(1)})`,
         ),
@@ -100,7 +96,7 @@ async function findPublicSplat(
   const [latestJob] = await getDb()
     .select()
     .from(jobs)
-    .where(and(eq(jobs.splatId, splatId), eq(jobs.status, "complete")))
+    .where(and(eq(jobs.splatId, splatId), eq(jobs.status, JobStatus.complete)))
     .orderBy(desc(jobs.createdAt))
     .limit(1);
   if (latestJob === undefined || latestJob.resultSpzS3Key === null) {
@@ -145,7 +141,6 @@ export async function getPublicSplatView(splatId: string): Promise<PublicSplatVi
 
   const { publicSplat, job } = found;
 
-  // The same order as web/app/api/v1/splats/[splatId]/photos/route.ts, so "Photo 3" is the third photo the owner sees.
   const rows = await getDb()
     .select({
       id: photos.id,
@@ -155,7 +150,7 @@ export async function getPublicSplatView(splatId: string): Promise<PublicSplatVi
     })
     .from(photos)
     .where(and(eq(photos.splatId, splatId), eq(photos.uploadStatus, "uploaded")))
-    .orderBy(asc(photos.takenAt), asc(photos.createdAt), asc(photos.id));
+    .orderBy(...photoOrder);
   const withThumbnails = rows.flatMap(({ thumbnailS3Key, ...photo }) =>
     thumbnailS3Key === null ? [] : [{ ...photo, thumbnailS3Key }],
   );
@@ -198,7 +193,7 @@ export async function getExampleSplats(ownerClerkUserId: string): Promise<Exampl
     return [];
   }
 
-  // Oldest taken first per splat, as the share page orders them, so the cover is the share page's "Photo 1".
+  // Ordered per splat, so the cover is the share page's "Photo 1".
   const photoRows = await getDb()
     .select({
       splatId: photos.splatId,
@@ -217,7 +212,7 @@ export async function getExampleSplats(ownerClerkUserId: string): Promise<Exampl
         isNotNull(photos.thumbnailS3Key),
       ),
     )
-    .orderBy(photos.splatId, asc(photos.takenAt), asc(photos.createdAt), asc(photos.id));
+    .orderBy(photos.splatId, ...photoOrder);
 
   const coverBySplat = new Map<string, (typeof photoRows)[number]>();
   const photoCountBySplat = new Map<string, number>();

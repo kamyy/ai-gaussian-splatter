@@ -2,17 +2,18 @@
  * Who is calling an API route, and whether they're allowed to.
  *
  * requireUser() and requireClerkUserId() are how each authenticated Route Handler checks for a Clerk session.
- * requireUser() also creates the user's own database row on their first request, once Clerk confirms the user exists. getJobForCallbackToken() checks the
- * worker's per-job bearer token instead, for the status callback. getClientIp() reads the caller's IP address for rate
- * limiting.
+ * requireUser() also creates the user's own database row on their first request, once Clerk confirms the user exists.
+ * getJobForCallbackToken() checks the worker's per-job bearer token instead, for the status callback.
+ * requireOwnedSplat() checks that a splat in the URL belongs to the caller. getClientIp() reads the caller's IP address
+ * for rate limiting.
  */
 
 import { auth, clerkClient } from "@clerk/nextjs/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 
 import { getDb } from "./db";
-import { type Job, jobs, type User, users } from "./db/schema";
+import { type Job, jobs, splats, type User, users } from "./db/schema";
 import { HttpError, requireUuid } from "./httpError";
 
 /** Throws 401 unless the request carries a valid Clerk session. */
@@ -73,6 +74,23 @@ export async function requireUser(): Promise<User> {
   }
 
   return getOrCreateUser(clerkUserId);
+}
+
+/**
+ * Throws 404 unless the id is a valid UUID naming a splat the user owns. Someone else's splat gets the same 404 as one
+ * that doesn't exist, so the API never confirms that an id is in use.
+ */
+export async function requireOwnedSplat(splatId: string, userId: string): Promise<void> {
+  requireUuid(splatId, 404, "Splat not found");
+
+  const [splat] = await getDb()
+    .select({ id: splats.id })
+    .from(splats)
+    .where(and(eq(splats.id, splatId), eq(splats.userId, userId)))
+    .limit(1);
+  if (splat === undefined) {
+    throw new HttpError(404, "Splat not found");
+  }
 }
 
 /**

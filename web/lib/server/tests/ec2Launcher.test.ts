@@ -23,6 +23,7 @@ const ec2Mock = mockClient(EC2Client);
 
 afterEach(() => {
   ec2Mock.reset();
+  vi.unstubAllEnvs();
 });
 
 function runInstancesInput() {
@@ -48,27 +49,27 @@ describe("generateCallbackToken", () => {
   });
 });
 
+// Values unlike the settings' defaults, so a test fails if a launcher ignores them for its own.
+const settings = {
+  processingEnabled: true,
+  maxJobsPerDay: 20,
+  uploadsPerIpPerHour: 5,
+  uploadsPerUserPerDay: 3,
+  minPhotosPerSplat: 20,
+  workerMaxLifetimeMinutes: 45,
+  reconstructInstanceType: "g6.xlarge",
+  trainInstanceType: "g6e.xlarge",
+  trainingIterations: 7000,
+  showcaseClerkUserId: null,
+} satisfies RuntimeSettings;
+
 describe("launchJob", () => {
   const params = {
     jobId: "job-123",
     splatId: "splat-456",
     callbackToken: "tok-abc",
     stage: "reconstruct" as const,
-    workerImageUri: "123456789012.dkr.ecr.us-east-1.amazonaws.com/worker:latest",
-    ecrRegistry: "123456789012.dkr.ecr.us-east-1.amazonaws.com",
-    // Values unlike the settings' defaults, so a test fails if the launcher ignores them for its own.
-    settings: {
-      processingEnabled: true,
-      maxJobsPerDay: 20,
-      uploadsPerIpPerHour: 5,
-      uploadsPerUserPerDay: 3,
-      minPhotosPerSplat: 20,
-      workerMaxLifetimeMinutes: 45,
-      reconstructInstanceType: "g6.xlarge",
-      trainInstanceType: "g6e.xlarge",
-      trainingIterations: 7000,
-      showcaseClerkUserId: null,
-    } satisfies RuntimeSettings,
+    settings,
   };
 
   it("returns the launched instance ID", async () => {
@@ -140,6 +141,7 @@ describe("launchJob", () => {
   });
 
   it("passes the job's config to the worker through base64 user-data", async () => {
+    vi.stubEnv("WORKER_RECONSTRUCT_IMAGE_URI", "123456789012.dkr.ecr.us-east-1.amazonaws.com/worker:abc-reconstruct");
     ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
     await launchJob(params);
 
@@ -149,7 +151,7 @@ describe("launchJob", () => {
     expect(userData).toContain('SPLAT_ID="splat-456"');
     expect(userData).toContain(`APP_PUBLIC_URL="${process.env.APP_PUBLIC_URL}"`);
     expect(userData).toContain('STAGE="reconstruct"');
-    expect(userData).toContain(params.workerImageUri);
+    expect(userData).toContain("123456789012.dkr.ecr.us-east-1.amazonaws.com/worker:abc-reconstruct");
   });
 
   it("ships the container's output to the worker log group, one stream per worker job stage", async () => {
@@ -228,7 +230,13 @@ describe("launchJob", () => {
 });
 
 describe("launchJobLocal", () => {
-  const params = { jobId: "job-123", splatId: "splat-456", callbackToken: "tok-abc", stage: "train" as const };
+  const params = {
+    jobId: "job-123",
+    splatId: "splat-456",
+    callbackToken: "tok-abc",
+    stage: "train" as const,
+    settings,
+  };
 
   afterEach(() => {
     spawnMock.mockClear();
@@ -260,11 +268,13 @@ describe("launchJobLocal", () => {
     expect(args).toEqual(expect.arrayContaining(["-e", "STAGE=reconstruct"]));
   });
 
-  it("passes the training iterations when given", () => {
-    launchJobLocal({ ...params, trainingIterations: 7000 });
+  it("passes the training iterations to a train stage only", () => {
+    launchJobLocal(params);
+    launchJobLocal({ ...params, stage: "reconstruct" });
 
-    const [, args] = spawnMock.mock.calls[0];
-    expect(args).toEqual(expect.arrayContaining(["-e", "TRAINING_ITERATIONS=7000"]));
+    const [[, train], [, reconstruct]] = spawnMock.mock.calls;
+    expect(train).toEqual(expect.arrayContaining(["-e", "TRAINING_ITERATIONS=7000"]));
+    expect(reconstruct.some(arg => arg.startsWith("TRAINING_ITERATIONS="))).toBe(false);
   });
 
   it("passes a crop box to the worker container as JSON, only when one is set", () => {
