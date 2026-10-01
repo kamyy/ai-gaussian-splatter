@@ -20,6 +20,7 @@ import {
   LuSun,
   LuTrash2,
   LuTriangleAlert,
+  LuUserX,
   LuX,
 } from "react-icons/lu";
 import {
@@ -45,6 +46,9 @@ export const DarkThemeIcon = LuMoon;
 
 // The site header's button that reopens the privacy banner.
 export const PrivacySettingsIcon = LuShieldCheck;
+
+// The account menu's Delete account item.
+export const DeleteAccountIcon = LuUserX;
 
 // Toast messages: one icon per variant, plus the close button.
 export const InfoIcon = LuInfo;

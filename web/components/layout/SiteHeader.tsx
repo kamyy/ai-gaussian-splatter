@@ -3,7 +3,7 @@
  *
  * Shows the app's name, the light and dark mode toggle, a way back to the privacy banner on builds with analytics, and
  * either sign-in and sign-up links or, for a signed-in user, a link to their library, a new-splat button and Clerk's
- * account menu.
+ * account menu with a Delete account item.
  */
 
 "use client";
@@ -11,11 +11,13 @@
 import { Show, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 
+import { DeleteAccountDialog } from "@/components/layout/DeleteAccountDialog";
 import { PrivacySettingsButton } from "@/components/layout/PrivacySettingsButton";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { buttonClassName } from "@/components/ui/Button";
-import { PrivacySettingsIcon } from "@/components/ui/icons";
+import { DeleteAccountIcon, PrivacySettingsIcon } from "@/components/ui/icons";
 import { GA_MEASUREMENT_ID } from "@/lib/analytics";
 import { cn } from "@/lib/cn";
 import { useAnalyticsConsent } from "@/lib/hooks/useAnalyticsConsent";
@@ -34,18 +36,18 @@ export function SiteHeader() {
 
   const { setConsent } = useAnalyticsConsent();
 
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+
   let privacySettingsButton: React.ReactNode = null;
   let privacySettingsMenuItem: React.ReactNode = null;
   if (GA_MEASUREMENT_ID) {
     privacySettingsButton = <PrivacySettingsButton />;
     privacySettingsMenuItem = (
-      <UserButton.MenuItems>
-        <UserButton.Action
-          label="Privacy settings"
-          labelIcon={<PrivacySettingsIcon aria-hidden="true" />}
-          onClick={() => setConsent(null)}
-        />
-      </UserButton.MenuItems>
+      <UserButton.Action
+        label="Privacy settings"
+        labelIcon={<PrivacySettingsIcon aria-hidden="true" />}
+        onClick={() => setConsent(null)}
+      />
     );
   }
 
@@ -86,7 +88,17 @@ export function SiteHeader() {
         <Show when="signed-out">{privacySettingsButton}</Show>
         <ThemeToggle />
         <Show when="signed-in">
-          <UserButton>{privacySettingsMenuItem}</UserButton>
+          <UserButton>
+            <UserButton.MenuItems>
+              {privacySettingsMenuItem}
+              <UserButton.Action
+                label="Delete account"
+                labelIcon={<DeleteAccountIcon aria-hidden="true" />}
+                onClick={() => setDeleteAccountOpen(true)}
+              />
+            </UserButton.MenuItems>
+          </UserButton>
+          <DeleteAccountDialog open={deleteAccountOpen} onOpenChange={setDeleteAccountOpen} />
         </Show>
       </div>
     </header>
