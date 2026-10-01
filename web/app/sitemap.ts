@@ -1,9 +1,9 @@
 /**
  * Serves /sitemap.xml, the list of pages search engines should crawl.
  *
- * It lists the / landing page and the share page of each showcase example, the only share pages that allow indexing
- * (web/app/(public)/preview/splats/[id]/page.tsx). Search engines could find the examples by following the landing
- * page's links, but a sitemap gets a new one crawled sooner.
+ * It lists the / landing page, the /privacy and /terms pages, and the share page of each showcase example, the only
+ * share pages that allow indexing (web/app/(public)/preview/splats/[id]/page.tsx). Search engines could find the
+ * examples by following the landing page's links, but a sitemap gets a new one crawled sooner.
  */
 
 import type { MetadataRoute } from "next";
@@ -32,6 +32,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   return [
     { url: new URL("/", APP_PUBLIC_URL).toString() },
+    { url: new URL("/privacy", APP_PUBLIC_URL).toString() },
+    { url: new URL("/terms", APP_PUBLIC_URL).toString() },
     ...exampleSplats.map(splat => ({ url: new URL(`/preview/splats/${splat.id}`, APP_PUBLIC_URL).toString() })),
   ];
 }
