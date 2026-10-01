@@ -269,6 +269,8 @@ aws sns list-subscriptions --region "$(source scripts/lib/terraform.sh && tf_get
 
 In the production Clerk instance's dashboard, open the Legal page, turn on **Require express consent to legal documents**, and set the terms of service and privacy policy URLs to the app's `/terms` and `/privacy` pages. Clerk's sign-up form then requires a checkbox, and that acceptance is what makes `web/app/(public)/terms/page.tsx` binding on users.
 
+On the same dashboard's **User & authentication** page, in the **User model** section, turn off **Allow users to delete their accounts**. Users delete their accounts through the app's own account menu item, which deletes their splats too. Deleting through Clerk's profile page would remove only the Clerk account.
+
 On a first deploy, the service starts before the migration runs, so real routes 500 until the migration finishes. The first deploy also waits on ACM DNS validation, which can take several minutes.
 
 After a first deploy, check that the web service can read its runtime settings. `scripts/prod/ssm-show.sh` should list every setting, and the new-splat page should show no "Processing is paused" notice. The notice with every setting present means the task role can't read them ([Runtime settings](ARCHITECTURE.md#95-runtime-settings)).
