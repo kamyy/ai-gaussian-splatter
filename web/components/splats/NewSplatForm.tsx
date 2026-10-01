@@ -31,7 +31,6 @@ import { type PhotoFlag, usePickedPhotos } from "@/lib/hooks/usePickedPhotos";
 import { useProcessingPaused } from "@/lib/hooks/useProcessingPaused";
 import { MAX_PHOTOS_PER_SPLAT, MIN_SHARP_PHOTO_EDGE } from "@/lib/limits";
 import { fileKey } from "@/lib/measurePhoto";
-import { useAppStore } from "@/lib/store";
 import type { Job, Splat } from "@/lib/types";
 import { uploadPhotos } from "@/lib/uploadPhotos";
 import { EnlargingPhotoBox } from "./EnlargingPhotoBox";
@@ -111,7 +110,6 @@ export function NewSplatForm() {
   const { mutate } = useSWRConfig();
   const router = useRouter();
   const { enqueueSnackbar } = useAppSnackbar();
-  const resetUploads = useAppStore(state => state.resetUploads);
   const processingPaused = useProcessingPaused();
 
   const [name, setName] = useState("");
@@ -181,9 +179,6 @@ export function NewSplatForm() {
     leave: leaveEnlarge,
   } = useEnlargedTile(previews.map(preview => fileKey(preview.photo.file)));
 
-  // Clears the previous batch's per-file progress, which lives in a store shared with every other upload.
-  useEffect(() => resetUploads, [resetUploads]);
-
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     const trimmedName = name.trim();
@@ -218,7 +213,6 @@ export function NewSplatForm() {
     }
 
     setPhase("uploading");
-    resetUploads();
     const remaining = photos.filter(photo => !uploadedKeys.has(fileKey(photo.file)));
     try {
       await uploadPhotos(splat.id, remaining, token, photo => {

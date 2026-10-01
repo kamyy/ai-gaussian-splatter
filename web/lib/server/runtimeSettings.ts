@@ -161,8 +161,7 @@ function parseSetting<T>(setting: Setting<T>, values: Map<string, string>, fromP
   return value;
 }
 
-/** Exported for its tests. */
-export function parseSettings(values: Map<string, string>, fromParameters: boolean): RuntimeSettings {
+function parseSettings(values: Map<string, string>, fromParameters: boolean): RuntimeSettings {
   return {
     processingEnabled: parseSetting(SETTINGS.processingEnabled, values, fromParameters),
     maxJobsPerDay: parseSetting(SETTINGS.maxJobsPerDay, values, fromParameters),

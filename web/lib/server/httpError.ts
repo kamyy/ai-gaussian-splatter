@@ -37,16 +37,14 @@ export function isUuid(value: string): boolean {
  * than 422 because these are all lookup-by-id routes that already collapse "not yours" into "not found." An
  * unparseable id can't name a row, so it gets the same answer.
  */
-export function requireUuid(value: string, status = 404, message = "Not found"): string {
-  if (!UUID_PATTERN.test(value)) {
+export function requireUuid(value: string, status: number, message: string): void {
+  if (!isUuid(value)) {
     throw new HttpError(status, message);
   }
-
-  return value;
 }
 
 /** Error body shape: `{"detail": "..."}`. */
-export function errorResponse(status: number, detail: string): NextResponse {
+function errorResponse(status: number, detail: string): NextResponse {
   return NextResponse.json({ detail }, { status });
 }
 

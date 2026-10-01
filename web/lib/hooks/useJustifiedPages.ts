@@ -20,7 +20,7 @@ interface JustifiedPagesOptions {
   captionRem?: number;
 }
 
-export interface PlacedTile extends LayoutTile {
+interface PlacedTile extends LayoutTile {
   // The tile's top-left corner, measured from the area's.
   left: number;
   top: number;

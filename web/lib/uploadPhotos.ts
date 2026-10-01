@@ -1,16 +1,14 @@
 /**
- * Uploads a new splat's photos, with per-photo progress.
+ * Uploads a new splat's photos.
  *
  * For each batch it asks the API for presigned URLs (time-limited links that let the browser upload straight to S3,
  * AWS's file storage), uploads each photo and its thumbnail to them, and then tells the API each photo is complete.
  * web/components/splats/NewSplatForm.tsx calls it right after creating a splat, which is the only place photos can be
- * added. Progress goes through Zustand's plain store API (web/lib/store.ts), so this ordinary async function can report
- * it from an event handler without a hook of its own.
+ * added.
  */
 
 import { apiFetch } from "./apiFetch";
 import type { PickedPhoto } from "./measurePhoto";
-import { useAppStore } from "./store";
 import type { PhotoPresignItem } from "./types";
 
 /** onUploaded fires once per photo the server has marked uploaded, so the caller can leave it out of a retry. */
@@ -25,8 +23,6 @@ export async function uploadPhotos(
   if (photos.length === 0) {
     return;
   }
-
-  const { setUploadStatus, setUploadProgress } = useAppStore.getState();
 
   const presigned = await apiFetch<PhotoPresignItem[]>(
     `/api/v1/splats/${splatId}/photos/presign`,
@@ -47,7 +43,6 @@ export async function uploadPhotos(
     photos.map(async (photo, index) => {
       const { file, thumbnail } = photo;
       const item = presigned[index];
-      setUploadStatus(file.name, "uploading");
       try {
         // Both land before the photo is marked uploaded, so an uploaded photo always has its thumbnail.
         const responses = await Promise.all([
@@ -59,19 +54,16 @@ export async function uploadPhotos(
           throw new Error(`S3 upload failed: ${failed.statusText}`);
         }
 
-        setUploadProgress(file.name, 100);
         await apiFetch<void>(`/api/v1/splats/${splatId}/photos/${item.photoId}/complete`, "POST", token);
-        setUploadStatus(file.name, "uploaded");
         onUploaded(photo);
         return true;
-      } catch (err) {
-        setUploadStatus(file.name, "failed", err instanceof Error ? err.message : "Upload failed");
+      } catch {
         return false;
       }
     }),
   );
 
-  // Each failure is already recorded per file through setUploadStatus above. This throw is what tells
+  // A failed photo never reaches onUploaded, so the caller's retry sends it again. This throw is what tells
   // web/components/splats/NewSplatForm.tsx that at least one upload failed, so it doesn't treat a failed batch as a
   // success.
   const failedCount = results.filter(ok => !ok).length;

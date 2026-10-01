@@ -10,7 +10,7 @@
 import { MIN_SHARP_PHOTO_EDGE } from "@/lib/limits";
 
 /** Long enough that a library card, the largest place a thumbnail shows, stays sharp on a high-resolution screen. */
-export const THUMBNAIL_LONG_SIDE = 640;
+const THUMBNAIL_LONG_SIDE = 640;
 const THUMBNAIL_QUALITY = 0.8;
 
 /**

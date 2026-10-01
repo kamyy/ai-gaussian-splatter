@@ -83,7 +83,7 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
 
 Monorepo, three independent packages:
 
-- `web/` — Next.js 16 (App Router) + Tailwind CSS + SWR + Zustand + React Three Fiber, **and** the REST API as Route Handlers under `app/api/v1/` backed by Drizzle.
+- `web/` — Next.js 16 (App Router) + Tailwind CSS + SWR + React Three Fiber, **and** the REST API as Route Handlers under `app/api/v1/` backed by Drizzle.
 - `worker/` — COLMAP + gsplat pipeline, runs on an EC2 GPU spot instance per worker-job stage.
 - `infra/` — Terraform. Network, registry, data, worker IAM, worker sweeper, web, settings, alarms, and budgets in separate `.tf` files, one state.
 
@@ -428,7 +428,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 
 ### 10.2 Query patterns
 
-- **UUID-check path params before the DB** — `uuid` columns turn `/api/v1/splats/abc` into Postgres `22P02` → 500. Use `requireUuid()` (routes) or `isUuid()` (`web/lib/server/data.ts`, null → `notFound()`).
+- **UUID-check path params before the DB** — `uuid` columns turn `/api/v1/splats/abc` into Postgres `22P02` → 500. Use `requireUuid()` (routes) or `isUuid()` (`web/lib/server/httpError.ts`; on a miss, `web/lib/server/data.ts` returns null and the page calls `notFound()`).
 - **A write that moves a job forward is conditional on the job not having ended** (`notInArray(jobs.status, JOB_ENDED_STATUSES)`). A cancel (`web/lib/server/cancelJob.ts`) can land between any read and write. An unconditional write resurrects the cancelled job after its worker has already been stopped.
 - **Missing row is `undefined`, not `null`.** Idiom: `const [row] = await getDb().select()…limit(1)` then `if (row === undefined)`.
 - **`onConflictDoNothing()` returns zero rows from `.returning()`.** `getOrCreateUser` uses `onConflictDoUpdate` with no-op `set: { clerkUserId }` so Postgres returns the existing row.

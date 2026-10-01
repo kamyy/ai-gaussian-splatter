@@ -305,11 +305,3 @@ export function SplatViewer({
     </div>
   );
 }
-
-export function SplatViewerLoading() {
-  return (
-    <Center className="h-[70vh] w-full">
-      <Spinner size="large" className="text-primary" />
-    </Center>
-  );
-}
