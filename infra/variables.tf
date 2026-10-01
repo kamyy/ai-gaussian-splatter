@@ -25,9 +25,13 @@ variable "worker_ami_id" {
   }
 }
 
-# Where the AWS Budget emails spend alerts directly (no SNS topic in between).
+# Where every alert goes. These reach it through an SNS email subscription, which delivers nothing until the address
+# confirms it:
+# - infra/alarms.tf (the CloudWatch alarms)
+# - infra/worker_sweeper.tf (the worker sweeper)
+# The AWS Budget (infra/budgets.tf) emails it directly.
 variable "alert_email" {
-  description = "Email address the AWS Budget notifies."
+  description = "Email address the CloudWatch alarms, the worker sweeper and the AWS Budget notify."
   type        = string
 
   # Catches a string that isn't an email at all (a blank value, a stray flag, a copy-paste mistake). It can't catch a

@@ -191,7 +191,7 @@ flowchart LR
   - **worker_sweeper** — the scheduled Lambda that terminates overdue worker instances, and its alert topic.
   - **web** — ALB + Fargate.
   - **settings** — the SSM parameters behind the runtime settings ([Runtime settings](#95-runtime-settings)).
-  - **alarms** — the CloudWatch alarms that email the sweeper's alert topic when the site degrades.
+  - **alarms** — the CloudWatch alarms that publish to the sweeper's alert topic, which emails `alert_email`, when the site degrades.
   - **budgets** — a second, `us-east-1`-aliased provider, since the Budgets API only operates there.
 - `infra/tests/*.tftest.hcl` (native `terraform test`, `mock_provider "aws" {}`) replaces hand-written assertions against synthesized templates with the same offline, zero-credential guarantee, run by `.github/workflows/ci.yml`'s `infra` job on every PR.
 

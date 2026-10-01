@@ -85,7 +85,7 @@ Monorepo, three independent packages:
 
 - `web/` — Next.js 16 (App Router) + Tailwind CSS + SWR + Zustand + React Three Fiber, **and** the REST API as Route Handlers under `app/api/v1/` backed by Drizzle.
 - `worker/` — COLMAP + gsplat pipeline, runs on an EC2 GPU spot instance per worker-job stage.
-- `infra/` — Terraform. Network, registry, data, worker IAM, worker sweeper, web, settings, and budgets in separate `.tf` files, one state.
+- `infra/` — Terraform. Network, registry, data, worker IAM, worker sweeper, web, settings, alarms, and budgets in separate `.tf` files, one state.
 
 Server-only code lives in `web/lib/server/` — never import it from a `"use client"` file. Modules directly under `web/lib/` are client-safe and shared with the server. `web/lib/statuses.ts` holds the status-value tuples that `web/lib/server/db/schema.ts` hands to Drizzle `pgEnum`s, so import runs statuses → schema, never the reverse.
 
@@ -142,7 +142,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - Once a second file uses it, move it under `web/lib/`.
 - **Every custom hook gets its own file in `web/lib/hooks/`, named after the hook** (`web/lib/hooks/useLatestJob.ts`). This holds even for a hook only one file uses. Its tests go in `web/lib/hooks/tests/`.
 - **Components import icons from `web/components/ui/icons.ts`, never from `react-icons` directly.** A new icon gets an alias there named for what it means on screen (`RemovePhotoIcon`, not `XIcon`), under the commented group for where it appears.
-  - Reusing an icon for a different meaning gets its own alias, as `LuX` is both `CloseIcon` and `RemovePhotoIcon`.
+  - Reusing an icon for a different meaning gets its own alias, as `LuImage` is both `PhotoPlaceholderIcon` and `ThumbnailPlaceholderIcon`.
   - Write each alias as `export const RemovePhotoIcon = LuX;`. Biome's import sorting merges `export { LuX as RemovePhotoIcon }` lists into one block and drops the group comments.
 - **Split a function once it grows too large to take in at once, or does more than one job.**
   - Pull each self-contained piece out into a helper, a sub-component, or a custom hook for stateful logic. `web/lib/hooks/useCameraFlight.ts` is the pattern: press tracking went to `web/lib/hooks/useClickPress.ts`, and the per-frame steps became `stepFlight` and `stepLevel`.
@@ -160,7 +160,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - A guard stays attached to the value it checks (`const [row] = …;` then `if (row === undefined) {`). The statements inside one `case` of a `switch` stay together.
 - **Decide which element renders before the `return`, not inside the JSX.** Branch with `if`/`else`/`switch` or a ternary into a `React.ReactNode` variable, then place `{variable}` in the JSX where the element belongs.
   - Write `let hint: React.ReactNode = null; if (failed) { hint = <p>…</p>; }` and then `{hint}`. Never render an element through `&&`, `||`, or `??` in the JSX body.
-  - `web/components/splats/SplatStageViewer.tsx`'s `body` and `web/components/viewer/SplatViewer.tsx`'s `overlay` are the pattern.
+  - `web/components/splats/SplatViewerPanel.tsx`'s `body` and `web/components/viewer/SplatViewer.tsx`'s `overlay` are the pattern.
   - A branch that Biome keeps on one line can stay inline as a ternary: `{loading ? <Spinner className="h-4 w-4" /> : null}`. Once Biome wraps it over several lines, it moves out to a variable.
   - A ternary that picks a string or a prop value (`className`, label text) is not a render branch and stays inline. So does `&&` inside `cn()`.
 
