@@ -73,7 +73,7 @@ function StepList({ className }: { className: string }) {
 /** The text and the steps beside the point cloud, for when there are no examples to show. */
 function PointCloudLanding() {
   return (
-    <main className="grid flex-1 gap-8 px-4 py-8 sm:px-12 lg:grid-cols-2">
+    <main className="mx-auto grid w-full max-w-(--breakpoint-2xl) flex-1 gap-8 px-4 py-8 sm:px-12 lg:grid-cols-2">
       <div className="flex flex-col justify-between gap-12 lg:py-10">
         <div className="flex flex-col gap-7">
           <Headline />
@@ -92,10 +92,10 @@ function PointCloudLanding() {
 /** A full-width hero, the examples straight below it, then the steps. */
 function ExamplesLanding({ splats }: { splats: ExampleSplat[] }) {
   return (
-    <main className="flex flex-1 flex-col">
+    <main className="mx-auto flex w-full max-w-(--breakpoint-2xl) flex-1 flex-col">
       <section className="grid gap-8 px-4 pt-10 pb-10 sm:px-12 sm:pt-16 lg:grid-cols-2 lg:items-end lg:gap-12">
         <Headline />
-        <div className="flex flex-col gap-6 lg:pb-2">
+        <div className="flex flex-col gap-6 lg:justify-self-end lg:pb-2">
           <p className="max-w-130 text-lg text-muted-foreground">
             {PITCH} Try one of the examples below, no account needed.
           </p>

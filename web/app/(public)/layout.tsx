@@ -11,7 +11,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
   return (
     <>
       <SiteHeader />
-      <main className="flex-1 px-4 py-8 sm:px-12">{children}</main>
+      <main className="mx-auto w-full max-w-(--breakpoint-2xl) flex-1 px-4 py-8 sm:px-12">{children}</main>
     </>
   );
 }

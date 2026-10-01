@@ -137,7 +137,7 @@ export default function LibraryPage() {
   }
 
   return (
-    <div className="flex flex-col gap-8 px-4 py-10 sm:px-12">
+    <div className="mx-auto flex max-w-(--breakpoint-2xl) flex-col gap-8 px-4 py-10 sm:px-12">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <h1 className="font-display text-5xl tracking-tight sm:text-6xl">
           Your splats{" "}
