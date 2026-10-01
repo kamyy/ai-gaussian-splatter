@@ -52,54 +52,56 @@ export function SiteHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-1100 flex h-18 flex-none items-center gap-2 border-divider border-b bg-background px-4 sm:gap-8 sm:px-12">
-      <Link href="/" className="font-display text-xl whitespace-nowrap sm:text-3xl">
-        AI Gaussian Splatter
-      </Link>
-      <Show when="signed-in">
-        <nav aria-label="Main" className="hidden text-sm font-medium sm:block">
-          <Link
-            href="/splats"
-            aria-current={inLibrary ? "page" : undefined}
-            className={cn(
-              "border-b-2 pb-0.5",
-              inLibrary ? "border-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            Library
-          </Link>
-        </nav>
-      </Show>
-      <div className="ml-auto flex items-center gap-2 sm:gap-4">
-        <Show when="signed-out">
-          <Link href="/sign-in" className={buttonClassName("outlined")}>
-            Sign in
-          </Link>
-          <Link href="/sign-up" className={buttonClassName("ink", "medium", "max-sm:hidden")}>
-            Sign up free
-          </Link>
-        </Show>
+    <header className="sticky top-0 z-1100 h-18 flex-none bg-background">
+      <div className="mx-auto flex h-full max-w-(--breakpoint-2xl) items-center gap-2 border-divider border-b px-4 sm:gap-8 sm:px-12">
+        <Link href="/" className="font-display text-xl whitespace-nowrap sm:text-3xl">
+          AI Gaussian Splatter
+        </Link>
         <Show when="signed-in">
-          <Link href="/splats/new" className={buttonClassName("ink")}>
-            <span className="sm:hidden">New</span>
-            <span className="hidden sm:inline">New splat</span>
-          </Link>
+          <nav aria-label="Main" className="hidden text-sm font-medium sm:block">
+            <Link
+              href="/splats"
+              aria-current={inLibrary ? "page" : undefined}
+              className={cn(
+                "border-b-2 pb-0.5",
+                inLibrary ? "border-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Library
+            </Link>
+          </nav>
         </Show>
-        <Show when="signed-out">{privacySettingsButton}</Show>
-        <ThemeToggle />
-        <Show when="signed-in">
-          <UserButton>
-            <UserButton.MenuItems>
-              {privacySettingsMenuItem}
-              <UserButton.Action
-                label="Delete account"
-                labelIcon={<DeleteAccountIcon aria-hidden="true" />}
-                onClick={() => setDeleteAccountOpen(true)}
-              />
-            </UserButton.MenuItems>
-          </UserButton>
-          <DeleteAccountDialog open={deleteAccountOpen} onOpenChange={setDeleteAccountOpen} />
-        </Show>
+        <div className="ml-auto flex items-center gap-2 sm:gap-4">
+          <Show when="signed-out">
+            <Link href="/sign-in" className={buttonClassName("outlined")}>
+              Sign in
+            </Link>
+            <Link href="/sign-up" className={buttonClassName("ink", "medium", "max-sm:hidden")}>
+              Sign up free
+            </Link>
+          </Show>
+          <Show when="signed-in">
+            <Link href="/splats/new" className={buttonClassName("ink")}>
+              <span className="sm:hidden">New</span>
+              <span className="hidden sm:inline">New splat</span>
+            </Link>
+          </Show>
+          <Show when="signed-out">{privacySettingsButton}</Show>
+          <ThemeToggle />
+          <Show when="signed-in">
+            <UserButton>
+              <UserButton.MenuItems>
+                {privacySettingsMenuItem}
+                <UserButton.Action
+                  label="Delete account"
+                  labelIcon={<DeleteAccountIcon aria-hidden="true" />}
+                  onClick={() => setDeleteAccountOpen(true)}
+                />
+              </UserButton.MenuItems>
+            </UserButton>
+            <DeleteAccountDialog open={deleteAccountOpen} onOpenChange={setDeleteAccountOpen} />
+          </Show>
+        </div>
       </div>
     </header>
   );
