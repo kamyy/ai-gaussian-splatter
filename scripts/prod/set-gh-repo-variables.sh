@@ -83,6 +83,17 @@ if [[ $CLERK_PUBLISHABLE_KEY != pk_live_* ]]; then
   exit 1
 fi
 
+# Optional, so it skips ask(), which refuses an empty answer. An empty answer keeps the current value. Clear it with
+# gh variable delete GA_MEASUREMENT_ID.
+CURRENT_GA_MEASUREMENT_ID=$(current_repo_var GA_MEASUREMENT_ID)
+read -rp "Google Analytics 4 measurement ID (G-..., empty for none)${CURRENT_GA_MEASUREMENT_ID:+ [$CURRENT_GA_MEASUREMENT_ID]}: " \
+  GA_MEASUREMENT_ID
+GA_MEASUREMENT_ID=${GA_MEASUREMENT_ID:-$CURRENT_GA_MEASUREMENT_ID}
+if [[ -n $GA_MEASUREMENT_ID && $GA_MEASUREMENT_ID != G-* ]]; then
+  echo "That isn't a GA4 measurement ID. It starts with G-." >&2
+  exit 1
+fi
+
 echo "Newest Deep Learning Base GPU AMIs:"
 AMIS=$(aws ec2 describe-images --region "$REGION" --owners amazon \
   --filters "Name=name,Values=Deep Learning Base*GPU AMI*Ubuntu*" \
@@ -102,6 +113,10 @@ WORKER_IMAGE_TAG=${WORKER_IMAGE_TAG:-$(git rev-parse --short HEAD)}
 # DEPLOY_ENABLED is deliberately absent. Going live is scripts/prod/set-deploy-enabled.sh (RUNBOOK.md).
 REPO_VARS=(AWS_ACCOUNT_ID DOMAIN_ZONE_NAME HOSTED_ZONE_ID CLERK_SECRET_KEY_ARN ALERT_EMAIL WORKER_AMI_ID
   WORKER_IMAGE_TAG CLERK_PUBLISHABLE_KEY)
+# GitHub refuses an empty variable, so GA_MEASUREMENT_ID joins the list only when it has a value.
+if [[ -n $GA_MEASUREMENT_ID ]]; then
+  REPO_VARS+=(GA_MEASUREMENT_ID)
+fi
 echo "The app will serve from https://$(tf_get_app_hostname "$DOMAIN_ZONE_NAME")."
 echo
 for repo_var in "${REPO_VARS[@]}"; do

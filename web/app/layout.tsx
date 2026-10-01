@@ -2,7 +2,8 @@
  * The root layout that wraps every page on the site.
  *
  * Sets up the <html> and <body> elements, the two web fonts, the page metadata, and the providers every page shares:
- * Clerk (sign-in), next-themes (light and dark mode) and the snackbar stack for toast messages.
+ * Clerk (sign-in), next-themes (light and dark mode) and the snackbar stack for toast messages. On builds with a Google
+ * Analytics measurement ID, which only the production image has, it also adds the privacy banner and analytics.
  */
 
 import "./globals.css";
@@ -12,7 +13,9 @@ import type { Metadata } from "next";
 import { Instrument_Serif, Manrope } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 
+import { Analytics } from "@/components/layout/Analytics";
 import { AppSnackbarProvider } from "@/components/layout/AppSnackbarProvider";
+import { GA_MEASUREMENT_ID } from "@/lib/analytics";
 
 // Named for their role (display/body), not the specific family, so a type change is a one-line swap here rather than a
 // rename sweep across every file that references the CSS variable. Instrument Serif ships a single weight, so display
@@ -43,6 +46,11 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  let analytics: React.ReactNode = null;
+  if (GA_MEASUREMENT_ID) {
+    analytics = <Analytics gaId={GA_MEASUREMENT_ID} />;
+  }
+
   return (
     // suppressHydrationWarning: next-themes sets [data-theme] on this element before React hydrates. The attribute
     // React finds during hydration therefore doesn't match what the server rendered, on purpose. This is the standard
@@ -66,6 +74,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               }}
             >
               {children}
+              {analytics}
             </ClerkProvider>
           </AppSnackbarProvider>
         </ThemeProvider>

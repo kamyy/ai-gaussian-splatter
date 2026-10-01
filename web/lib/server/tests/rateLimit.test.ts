@@ -8,6 +8,7 @@ import {
   checkAndIncrementIp,
   checkAndIncrementUser,
   formatWaitUntil,
+  pruneRateLimitCounters,
 } from "../rateLimit";
 
 // Requires a real Postgres (TEST_DATABASE_URL). These tests exercise the `INSERT ... ON CONFLICT` upsert, which is the
@@ -45,6 +46,21 @@ describe("rate limiting", () => {
 
     // A different IP has its own counter and is unaffected.
     await expect(checkAndIncrementIp("203.0.113.9", 3)).resolves.toBeUndefined();
+  });
+
+  // The counters hold IP addresses, and the privacy policy promises they are deleted within two days.
+  it("prunes counters whose window has finished, and keeps the current ones", async () => {
+    await getDb().execute(
+      sql`INSERT INTO rate_limit_counters (scope, window_start, count) VALUES
+        ('ip:203.0.113.1', now() - interval '25 hours', 1),
+        ('user:user-a', now() - interval '23 hours', 1)`,
+    );
+    await checkAndIncrementIp("203.0.113.5", 3);
+
+    await pruneRateLimitCounters();
+
+    const rows = await getDb().execute<{ scope: string }>(sql`SELECT scope FROM rate_limit_counters ORDER BY scope`);
+    expect(rows.rows.map(row => row.scope)).toEqual(["ip:203.0.113.5", "user:user-a"]);
   });
 
   it("counts each user independently", async () => {

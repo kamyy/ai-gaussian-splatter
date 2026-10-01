@@ -53,6 +53,18 @@ jobs:
             *) echo "::error::repository variable CLERK_PUBLISHABLE_KEY must be set to a pk_* key (RUNBOOK.md)"; exit 1 ;;
           esac
 
+      # GA_MEASUREMENT_ID is optional, and unset leaves Google Analytics off. A set value is compiled into the browser
+      # bundle, so a Universal Analytics (UA-) or Tag Manager (GTM-) ID pasted by mistake is caught here instead of
+      # silently reporting nothing.
+      - name: Check GA_MEASUREMENT_ID is empty or a GA4 measurement ID
+        env:
+          GA_MEASUREMENT_ID: ${{ vars.GA_MEASUREMENT_ID }}
+        run: |
+          case "$GA_MEASUREMENT_ID" in
+            "" | G-*) ;;
+            *) echo "::error::repository variable GA_MEASUREMENT_ID must be unset or a G-* measurement ID (RUNBOOK.md)"; exit 1 ;;
+          esac
+
       # AWS_ACCOUNT_ID is interpolated into the next step's role ARN and into the state bucket name `terraform init`
       # uses below. An undefined repository variable renders as "", which fails the assume-role on a malformed ARN
       # that names nothing. Checked here so the error names the variable.
@@ -178,6 +190,7 @@ jobs:
         working-directory: web
         env:
           CLERK_PUBLISHABLE_KEY: ${{ vars.CLERK_PUBLISHABLE_KEY }}
+          GA_MEASUREMENT_ID: ${{ vars.GA_MEASUREMENT_ID }}
         run: |
           aws ecr get-login-password --region "$AWS_REGION" | podman login --username AWS --password-stdin "$REGISTRY"
           # Only a clear "found" skips the build. An error or an empty reply falls through and builds, so a wrong answer
@@ -195,7 +208,8 @@ jobs:
               podman push "$REGISTRY/$ECR_REPO:${NEW_TAG}-${tag_suffix}"
             fi
           }
-          build_and_push web web --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="$CLERK_PUBLISHABLE_KEY"
+          build_and_push web web --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="$CLERK_PUBLISHABLE_KEY" \
+            --build-arg NEXT_PUBLIC_GA_MEASUREMENT_ID="$GA_MEASUREMENT_ID"
           build_and_push migrator migrate
 
       # The two builds above are separate podman invocations, so one can be skipped or fail to push without the other

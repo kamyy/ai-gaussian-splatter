@@ -241,6 +241,7 @@ It asks for these, defaulting to each one's current value:
   - The origin `.github/workflows/deploy.yml` smoke-checks after a rollout.
 - `ALERT_EMAIL` is where the AWS Budget (`infra/budgets.tf`) sends spend alerts, and where the worker sweeper (`infra/worker_sweeper.tf`) sends overdue-instance alerts. A typo'd but well-formed address deploys green. The sweeper's subscription confirmation is the only way to catch it ([Going live](#26-going-live)).
 - `CLERK_PUBLISHABLE_KEY` is the `pk_live_...` key, not the secret one. `web/Dockerfile` compiles it into the browser bundle, so a later change to it reaches users on the next deploy that changes `web/` ([Image tags](ARCHITECTURE.md#111-image-tags)).
+- `GA_MEASUREMENT_ID` is the Google Analytics 4 measurement ID (`G-...`) and is optional. Leaving it empty builds the app without Google Analytics or its privacy banner. An empty answer keeps the current value, so turning analytics off is `gh variable delete GA_MEASUREMENT_ID`. Like `CLERK_PUBLISHABLE_KEY`, it is compiled into the browser bundle and reaches users on the next deploy that changes `web/`.
 - `WORKER_AMI_ID` is the AMI every worker instance boots. User data does no provisioning of its own, so the image must already carry Docker, the NVIDIA driver and container toolkit, and the AWS CLI. AWS's Deep Learning Base GPU AMIs do, and the script lists the newest five before asking.
 
 `WORKER_IMAGE_TAG` is set to the current commit only while it's unset. After that it changes only through [Building and pushing the worker image](#27-building-and-pushing-the-worker-image).
@@ -265,6 +266,8 @@ A first deploy also sends a subscription confirmation email to `ALERT_EMAIL`. Cl
 aws sns list-subscriptions --region "$(source scripts/lib/terraform.sh && tf_get_aws_region)" \
   --query "Subscriptions[?ends_with(TopicArn, ':ai-gaussian-splatter-alerts')].SubscriptionArn"
 ```
+
+In the production Clerk instance's dashboard, open the Legal page, turn on **Require express consent to legal documents**, and set the terms of service and privacy policy URLs to the app's `/terms` and `/privacy` pages. Clerk's sign-up form then requires a checkbox, and that acceptance is what makes `web/app/(public)/terms/page.tsx` binding on users.
 
 On a first deploy, the service starts before the migration runs, so real routes 500 until the migration finishes. The first deploy also waits on ACM DNS validation, which can take several minutes.
 

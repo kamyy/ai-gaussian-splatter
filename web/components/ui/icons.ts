@@ -16,6 +16,7 @@ import {
   LuImage,
   LuInfo,
   LuMoon,
+  LuShieldCheck,
   LuSun,
   LuTrash2,
   LuTriangleAlert,
@@ -41,6 +42,9 @@ export const NextPageIcon = LuChevronRight;
 // The theme toggle in the site header. Each icon names the theme a click switches to.
 export const LightThemeIcon = LuSun;
 export const DarkThemeIcon = LuMoon;
+
+// The site header's button that reopens the privacy banner.
+export const PrivacySettingsIcon = LuShieldCheck;
 
 // Toast messages: one icon per variant, plus the close button.
 export const InfoIcon = LuInfo;
