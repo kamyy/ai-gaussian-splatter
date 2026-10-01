@@ -96,20 +96,17 @@ export const POST = withErrorHandling(
     }
 
     // This is a second real GPU spot instance for the same splat, so it counts against the daily cap just like the
-    // reconstruct-phase launch did. The flip is reverted when the cap rejects, so hitting it leaves the job back at
-    // "awaiting_training" for the user to retry once the cap resets rather than stranding it at "launching".
-    try {
-      await checkAndIncrementGlobalDaily(settings.maxJobsPerDay);
-    } catch (err) {
-      await getDb()
-        .update(jobs)
-        .set({ status: "awaiting_training", trainingLaunchedAt: null })
-        .where(eq(jobs.id, flipped.id));
-      throw err;
-    }
-
+    // reconstruct-phase launch did.
+    //
+    // A rejection by the cap or a failed launch reverts the flip rather than leaving the job at "launching". The
+    // reconstruct phase's own output (sparse model, point cloud) is untouched, so the user can just click the check
+    // stage's build button again. Left at "launching" the job blocks on POST /process's JOB_STALE_AFTER_MS sweep
+    // instead, which is hours away and cancels the job outright. The revert is conditional on the job still being
+    // "launching", so a cancel that landed in the meantime stays cancelled.
     let instanceId: string | null;
     try {
+      await checkAndIncrementGlobalDaily(settings.maxJobsPerDay);
+
       if (localLaunchEnabled()) {
         launchJobLocal({
           jobId: flipped.id,
@@ -133,13 +130,10 @@ export const POST = withErrorHandling(
         });
       }
     } catch (err) {
-      // Reverted rather than left at "launching": the reconstruct phase's own output (sparse model, point cloud) is
-      // untouched, so the user can just click the check stage's build button again. Left at "launching" the job blocks
-      // on POST /process's JOB_STALE_AFTER_MS sweep instead, which is hours away and cancels the job outright.
       await getDb()
         .update(jobs)
         .set({ status: "awaiting_training", trainingLaunchedAt: null })
-        .where(eq(jobs.id, flipped.id));
+        .where(and(eq(jobs.id, flipped.id), eq(jobs.status, "launching")));
       throw err;
     }
 

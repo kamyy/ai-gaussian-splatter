@@ -146,6 +146,21 @@ describe("POST /api/v1/splats/[splatId]/process", () => {
     expect(row.status).toBe("cancelled");
   });
 
+  it("keeps a cancel that lands while the launch is failing, without failing the splat", async () => {
+    const { splat } = await seed();
+    launchJobMock.mockImplementationOnce(async ({ jobId }) => {
+      await getDb().update(jobs).set({ status: "cancelled" }).where(eq(jobs.id, jobId));
+      throw new Error("RunInstances denied");
+    });
+
+    await expect(POST({} as never, ctx(splat.id))).rejects.toThrow("RunInstances denied");
+
+    const [job] = await getDb().select().from(jobs).where(eq(jobs.splatId, splat.id));
+    expect(job.status).toBe("cancelled");
+    const [updatedSplat] = await getDb().select().from(splats).where(eq(splats.id, splat.id));
+    expect(updatedSplat.status).not.toBe("failed");
+  });
+
   it("409s on a concurrent double-click — the unique index lets only one job through", async () => {
     const { splat } = await seed();
 
