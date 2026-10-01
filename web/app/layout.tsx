@@ -59,20 +59,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body className={`${displayFont.variable} ${bodyFont.variable}`}>
         <ThemeProvider attribute="data-theme" defaultTheme="system" enableSystem disableTransitionOnChange>
           <AppSnackbarProvider>
-            <ClerkProvider
-              localization={{
-                // Clerk's default sign-in header ("Sign in to ai-gaussian-splatter") uses the instance's raw
-                // kebab-case application name from the Clerk dashboard, not a human-readable one. title/titleCombined
-                // cover both the separate sign-in/sign-up pages and Clerk's combined sign-in/sign-up variant, in case
-                // that's ever enabled.
-                signIn: {
-                  start: {
-                    title: "Sign in to AI Gaussian Splatter",
-                    titleCombined: "Sign in to AI Gaussian Splatter",
-                  },
-                },
-              }}
-            >
+            <ClerkProvider>
               {children}
               {analytics}
             </ClerkProvider>
