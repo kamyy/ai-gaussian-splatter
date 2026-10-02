@@ -8,7 +8,6 @@ the web viewer loads. The thumbnail reuses the renderer training already uses, s
 from dataclasses import dataclass
 from pathlib import Path
 
-import boto3
 import numpy as np
 import torch
 from PIL import Image as PILImage
@@ -17,6 +16,7 @@ from plyfile import PlyData, PlyElement
 from .config import CropBox, Settings
 from .crop import inside_crop_box
 from .spz import write_spz
+from .storage import s3_client
 from .train import GaussianModel, TrainedScene, render_view
 
 
@@ -53,7 +53,7 @@ def export_scene(scene: TrainedScene, settings: Settings) -> ExportedFiles:
 
 def upload_result(files: ExportedFiles, settings: Settings) -> UploadedKeys:
     """Uploads to s3://{splats_bucket}/splats/{splat_id}/ under each file's own name and returns their keys."""
-    s3 = boto3.client("s3")
+    s3 = s3_client(settings)
     prefix = f"splats/{settings.splat_id}"
     keys = UploadedKeys(ply=f"{prefix}/result.ply", spz=f"{prefix}/result.spz", thumbnail=f"{prefix}/thumbnail.png")
 

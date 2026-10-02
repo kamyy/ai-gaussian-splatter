@@ -7,13 +7,12 @@ point-cloud .ply and the camera poses for the browser, so the user can look over
 import json
 from pathlib import Path
 
-import boto3
 import numpy as np
-from botocore.exceptions import ClientError
 from plyfile import PlyData, PlyElement
 
 from .colmap_model import qvec_to_rotmat, read_sparse_model
 from .config import Settings
+from .storage import s3_client
 
 _SPARSE_MODEL_FILES = ("cameras.bin", "images.bin", "points3D.bin")
 
@@ -28,7 +27,7 @@ def upload_sparse_model(sparse_dir: Path, settings: Settings) -> None:
     """Uploads cameras.bin/images.bin/points3D.bin so a later train-phase instance can download them back instead of
     re-running COLMAP.
     """
-    s3 = boto3.client("s3")
+    s3 = s3_client(settings)
     prefix = _sparse_model_prefix(settings)
     for filename in _SPARSE_MODEL_FILES:
         s3.upload_file(str(sparse_dir / filename), settings.splats_bucket, f"{prefix}{filename}")
@@ -38,26 +37,21 @@ def download_sparse_model(settings: Settings, dest_dir: Path) -> Path:
     """Downloads cameras.bin/images.bin/points3D.bin into dest_dir and returns it.
 
     Raises RuntimeError naming any missing file rather than letting colmap_model.read_sparse_model fail later with an
-    opaque FileNotFoundError/struct error.
+    opaque FileNotFoundError/struct error. Missing files are found by listing the prefix first, because a download of a
+    missing key under the app's scoped credentials can fail as 403, the same as a real permission problem.
     """
-    s3 = boto3.client("s3")
+    s3 = s3_client(settings)
     prefix = _sparse_model_prefix(settings)
     dest_dir.mkdir(parents=True, exist_ok=True)
 
-    missing: list[str] = []
-    for filename in _SPARSE_MODEL_FILES:
-        key = f"{prefix}{filename}"
-        try:
-            s3.download_file(settings.splats_bucket, key, str(dest_dir / filename))
-        except ClientError as exc:
-            code = exc.response.get("Error", {}).get("Code")
-            if code in ("404", "NoSuchKey"):
-                missing.append(key)
-            else:
-                raise
-
+    listed = s3.list_objects_v2(Bucket=settings.splats_bucket, Prefix=prefix).get("Contents", [])
+    present = {obj["Key"] for obj in listed}
+    missing = [f"{prefix}{filename}" for filename in _SPARSE_MODEL_FILES if f"{prefix}{filename}" not in present]
     if missing:
         raise RuntimeError(f"Missing COLMAP sparse model file(s) in s3://{settings.splats_bucket}: {missing}")
+
+    for filename in _SPARSE_MODEL_FILES:
+        s3.download_file(settings.splats_bucket, f"{prefix}{filename}", str(dest_dir / filename))
 
     return dest_dir
 
@@ -83,7 +77,7 @@ def export_and_upload_point_cloud(sfm_sparse_dir: Path, settings: Settings) -> s
     ply_path = Path(settings.local_workdir) / "point_cloud.ply"
     PlyData([PlyElement.describe(vertex, "vertex")], text=False).write(str(ply_path))
 
-    s3 = boto3.client("s3")
+    s3 = s3_client(settings)
     key = f"splats/{settings.splat_id}/point_cloud.ply"
     s3.upload_file(str(ply_path), settings.splats_bucket, key)
     return key
@@ -121,7 +115,7 @@ def export_and_upload_cameras(sfm_sparse_dir: Path, settings: Settings) -> None:
             }
         )
 
-    s3 = boto3.client("s3")
+    s3 = s3_client(settings)
     s3.put_object(
         Bucket=settings.splats_bucket,
         Key=_cameras_key(settings),

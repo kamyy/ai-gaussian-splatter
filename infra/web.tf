@@ -136,7 +136,8 @@ resource "aws_iam_role" "task" {
 }
 
 # The application code's own permissions: read/write S3 access on both buckets, launching and terminating the GPU worker
-# (split across several statements, each explained below), and `aws ecs execute-command` access.
+# (split across several statements, each explained below), minting a worker's S3 credentials, and `aws ecs
+# execute-command` access.
 resource "aws_iam_role_policy" "task" {
   role = aws_iam_role.task.id
 
@@ -242,6 +243,13 @@ resource "aws_iam_role_policy" "task" {
         Effect   = "Allow"
         Action   = "ec2:DescribeInstances"
         Resource = "*"
+      },
+      # Lets web/app/api/v1/internal/jobs/[jobId]/s3-credentials/route.ts mint a worker instance's S3 credentials.
+      {
+        Sid      = "AssumeWorkerDataRole"
+        Effect   = "Allow"
+        Action   = "sts:AssumeRole"
+        Resource = aws_iam_role.worker_data.arn
       },
       # PassRole is authorized against the role being passed, not the instance profile ARN that wraps it.
       # RunInstances with IamInstanceProfile evaluates iam:PassRole against the underlying role's ARN.
@@ -533,6 +541,7 @@ resource "aws_ecs_task_definition" "web" {
       { name = "WORKER_SECURITY_GROUP_ID", value = aws_security_group.worker.id },
       { name = "WORKER_INSTANCE_PROFILE_ARN", value = aws_iam_instance_profile.worker.arn },
       { name = "WORKER_LOG_GROUP", value = aws_cloudwatch_log_group.worker.name },
+      { name = "WORKER_DATA_ROLE_ARN", value = aws_iam_role.worker_data.arn },
       # Read by web/lib/server/ec2Launcher.ts's workerImageUri()/ecrRegistry(), which otherwise fall back to
       # REPLACE_WITH_* placeholders meant only for local/pre-deploy development.
       { name = "WORKER_RECONSTRUCT_IMAGE_URI", value = local.worker_reconstruct_image_uri },

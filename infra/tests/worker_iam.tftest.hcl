@@ -66,6 +66,40 @@ run "worker_can_write_its_own_log_group" {
   }
 }
 
+# A worker instance processes photos anyone can upload. Its own role reaching S3 would let one compromised instance read
+# every user's photos, rather than only the splat its credentials are scoped to.
+run "worker_role_has_no_s3_access" {
+  command = apply
+
+  assert {
+    condition = alltrue([
+      for s in jsondecode(aws_iam_role_policy.worker.policy).Statement :
+      !anytrue([for a in flatten([s.Action]) : startswith(a, "s3:")])
+    ])
+    error_message = "the worker instance role must not grant S3 access; its credentials come from aws_iam_role.worker_data"
+  }
+}
+
+run "worker_data_role_is_assumable_by_the_web_task_only" {
+  command = apply
+
+  assert {
+    condition = (
+      length(jsondecode(aws_iam_role.worker_data.assume_role_policy).Statement) == 1 &&
+      jsondecode(aws_iam_role.worker_data.assume_role_policy).Statement[0].Principal.AWS == aws_iam_role.task.arn
+    )
+    error_message = "only the web task role may assume the worker data role"
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.task.policy).Statement :
+      s.Sid == "AssumeWorkerDataRole" && s.Action == "sts:AssumeRole" && s.Resource == aws_iam_role.worker_data.arn
+    ])
+    error_message = "the web task role must be able to assume the worker data role, and only that role"
+  }
+}
+
 run "worker_instance_profile_wraps_the_role" {
   command = apply
 
@@ -136,6 +170,13 @@ override_resource {
   target = aws_iam_role.worker
   values = {
     arn = "arn:aws:iam::000000000000:role/ai-gaussian-splatter-worker"
+  }
+}
+
+override_resource {
+  target = aws_iam_role.worker_data
+  values = {
+    arn = "arn:aws:iam::000000000000:role/ai-gaussian-splatter-worker-data"
   }
 }
 
