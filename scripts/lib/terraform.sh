@@ -147,7 +147,7 @@ tf_export_vars() {
 }
 
 # Points infra/ at the state bucket. -reconfigure because the bucket name follows the signed-in account. A leftover
-# .terraform from infra:check (no backend) or from a plan against a different account would otherwise make init try to
+# .terraform from infra:lint (no backend) or from a plan against a different account would otherwise make init try to
 # migrate state.
 tf_init() {
   local terraform

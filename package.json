@@ -6,14 +6,21 @@
   "scripts": {
     "prepare": "husky",
     "format-staged": "node scripts/format-staged.js",
-    "biome:ci": "biome ci .",
-    "scripts:check": "biome lint scripts && scripts/dev/shellcheck.sh && scripts/dev/terraform-test-lib.sh",
-    "web:check": "pnpm --dir web exec biome lint . && pnpm --dir web exec next typegen && pnpm --dir web exec tsc --noEmit",
-    "worker:check": "uv --directory worker run ruff check . && uv --directory worker run ruff format --check . && uv --directory worker run mypy pipeline",
-    "infra:check": "scripts/dev/terraform-check.sh",
-    "infra:test": "bash -c 'source scripts/lib/terraform.sh && \"$(tf_get_bin)\" -chdir=infra test' && python3 -B -m unittest discover -s infra/lambda",
     "dev": "pnpm --dir web dev",
-    "test": "pnpm biome:ci && pnpm run scripts:check && pnpm run web:check && pnpm run worker:check && pnpm run infra:check && pnpm --dir web test && pnpm --dir web test:e2e && uv --directory worker run pytest -v && pnpm run infra:test"
+    "lint": "pnpm run biome:lint && pnpm run scripts:lint && pnpm run web:lint && pnpm run worker:lint && pnpm run infra:lint",
+    "format": "pnpm run biome:format && pnpm run worker:format && pnpm run infra:format",
+    "test": "pnpm run web:test && pnpm run worker:test && pnpm run infra:test",
+    "biome:lint": "biome ci .",
+    "biome:format": "biome check --write --linter-enabled=false .",
+    "scripts:lint": "scripts/dev/shellcheck.sh",
+    "web:lint": "pnpm --dir web exec next typegen && pnpm --dir web exec tsc --noEmit",
+    "web:test": "pnpm --dir web test && pnpm --dir web test:e2e",
+    "worker:lint": "uv --directory worker run ruff check . && uv --directory worker run ruff format --check . && uv --directory worker run mypy pipeline",
+    "worker:format": "uv --directory worker run ruff check --select I --fix . && uv --directory worker run ruff format .",
+    "worker:test": "uv --directory worker run pytest -v",
+    "infra:lint": "scripts/dev/terraform-check.sh",
+    "infra:format": "bash -c 'source scripts/lib/terraform.sh && \"$(tf_get_bin)\" -chdir=infra fmt -recursive'",
+    "infra:test": "bash -c 'source scripts/lib/terraform.sh && \"$(tf_get_bin)\" -chdir=infra test' && python3 -B -m unittest discover -s infra/lambda && scripts/dev/terraform-test-lib.sh"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.10",

@@ -1,6 +1,2 @@
 pnpm run format-staged
-pnpm biome:ci
-pnpm run scripts:check
-pnpm run web:check
-pnpm run worker:check
-pnpm run infra:check
+pnpm run lint

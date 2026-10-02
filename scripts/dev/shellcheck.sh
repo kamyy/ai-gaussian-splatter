@@ -4,7 +4,7 @@
 # The shellcheck linter catches common shell mistakes, such as unquoted variables. It runs from a pinned container
 # image, so every machine and CI get the same result.
 
-# The root package.json's scripts:check calls it, from the pre-commit hook and CI's lint-format job.
+# The root package.json's scripts:lint calls it, from the pre-commit hook and CI's lint-format job.
 
 set -euo pipefail
 

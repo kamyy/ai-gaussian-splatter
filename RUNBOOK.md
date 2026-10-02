@@ -100,7 +100,9 @@ Leaving `WORKER_LOCAL_LAUNCH` unset (or `false`) launches a real spot instance, 
 ### 1.6 Full test suite
 
 ```bash
-pnpm test       # from the repo root: every lint, typecheck and test suite CI runs
+pnpm format     # from the repo root: apply every formatter and sort imports
+pnpm lint       # from the repo root: every format check, lint rule and typecheck CI runs
+pnpm test       # from the repo root: every test suite CI runs
 ```
 
 Several of the web tests need Postgres. They use `TEST_DATABASE_URL` from `web/.env` (`ai_gaussian_splatter_test` on `splat-pg`), and fail if that container is down or the variable is missing. `web/tests/migrate-test-db.ts` migrates that database before those tests run.

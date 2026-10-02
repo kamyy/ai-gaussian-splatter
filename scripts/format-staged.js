@@ -4,7 +4,7 @@
  *
  * Formats and lints the staged files, then stages the result again, for both JS/TS (Biome) and Python (ruff format), so
  * nobody has to remember to run either by hand before committing. CI enforces the same thing as a hard check
- * (`biome:ci` and `worker:check`'s `ruff format --check`), since CI can't fix files and carry on.
+ * (`biome:lint` and `worker:lint`'s `ruff format --check`), since CI can't fix files and carry on.
  *
  * Only files the formatters actually changed are staged again, found by comparing file hashes before and after. Running
  * `git add` on every originally staged file would also stage any other unstaged edit in that file, such as the rest of
