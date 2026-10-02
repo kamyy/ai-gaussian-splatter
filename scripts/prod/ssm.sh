@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Changes one runtime setting in the deployed account, such as switching processing off or raising a limit.
+# Shows or changes the runtime settings the deployed web service reads, such as the processing switch and usage limits.
 #
 # Each setting is an SSM Parameter Store parameter that infra/settings.tf creates. The web service reads it with a
 # one-minute cache (web/lib/server/runtimeSettings.ts), so a change takes effect within a minute and needs no deploy.
@@ -9,9 +9,10 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: scripts/prod/ssm-set.sh NAME VALUE"
+  echo "Usage: scripts/prod/ssm.sh             Prints every runtime setting and its current value."
+  echo "       scripts/prod/ssm.sh NAME VALUE  Sets one runtime setting, after asking. Does nothing if it's VALUE."
   echo
-  echo "Sets one runtime setting. NAME and its accepted VALUEs:"
+  echo "NAME and its accepted VALUEs:"
   echo "  processing-enabled           true or false. false pauses reconstruct and train site-wide."
   echo "  max-jobs-per-day             GPU instances the whole site may launch per UTC day, 0 or more"
   echo "  uploads-per-ip-per-hour      upload batches per IP address per hour, 1 or more"
@@ -23,12 +24,16 @@ usage() {
   echo "  training-iterations          1000 to 30000"
   echo "  showcase-clerk-user-id       a production Clerk user ID (user_...), or none"
   echo
-  echo "scripts/prod/ssm-show.sh prints the current values."
+  echo "Needs aws login as an admin of the deployed account, and gh login."
 }
 
 if [[ ${1-} == -h || ${1-} == --help ]]; then
   usage
   exit 0
+fi
+if [[ $# -ne 0 && $# -ne 2 ]]; then
+  usage >&2
+  exit 1
 fi
 
 ROOT=$(git rev-parse --show-toplevel)
@@ -39,6 +44,7 @@ source "$ROOT/scripts/lib/terraform.sh"
 
 # The same path as local.settings_path in infra/locals.tf. It never changes, so it isn't scraped from there.
 SETTINGS_PATH=/ai-gaussian-splatter/settings
+REGION=$(tf_get_aws_region)
 
 # Succeeds when value is a whole number from min to max.
 integer_in() {
@@ -46,8 +52,8 @@ integer_in() {
   [[ $value =~ ^[0-9]+$ ]] && ((10#$value >= min && 10#$value <= max))
 }
 
-# Prints what a setting accepts, and succeeds only when the value is one of those. Prints nothing for a name that isn't a
-# setting.
+# Prints what a setting accepts, and succeeds only when the value is one of those. Prints nothing for a name that isn't
+# a setting.
 check_value() {
   local name=$1 value=$2
   case $name in
@@ -94,42 +100,63 @@ check_value() {
   esac
 }
 
-if [[ $# -ne 2 ]]; then
-  usage >&2
-  exit 1
-fi
-
-name=$1
-value=$2
-
-if ! valid_values=$(check_value "$name" "$value"); then
-  if [[ -z $valid_values ]]; then
-    echo "$name is not a runtime setting." >&2
-  else
-    echo "$name must be $valid_values, not $value." >&2
+show_settings() {
+  local settings name value
+  settings=$(aws ssm get-parameters-by-path --region "$REGION" --path "$SETTINGS_PATH" \
+    --query 'Parameters[].[Name, Value]' --output text)
+  if [[ -z $settings ]]; then
+    echo "No runtime settings under $SETTINGS_PATH. The deploy job creates them on its first run." >&2
+    exit 1
   fi
-  exit 1
+
+  echo
+  while IFS=$'\t' read -r name value; do
+    printf '  %-28s %s\n' "${name#"$SETTINGS_PATH"/}" "$value"
+  done <<<"$settings"
+}
+
+set_setting() {
+  local name=$1 value=$2 valid_values parameter current
+
+  if ! valid_values=$(check_value "$name" "$value"); then
+    if [[ -z $valid_values ]]; then
+      echo "$name is not a runtime setting." >&2
+    else
+      echo "$name must be $valid_values, not $value." >&2
+    fi
+    exit 1
+  fi
+
+  aws_require_login
+  gh_require_login
+  gh_require_aws_deploy_account
+
+  parameter=$SETTINGS_PATH/$name
+  # Terraform creates every setting, so a missing one means the stack isn't deployed. put-parameter would otherwise
+  # create a parameter Terraform doesn't know about.
+  if ! current=$(aws ssm get-parameter --region "$REGION" --name "$parameter" \
+    --query Parameter.Value --output text); then
+    echo "Could not read $parameter. The deploy job creates it on its first run." >&2
+    exit 1
+  fi
+
+  if [[ $current == "$value" ]]; then
+    echo "$name is already $value."
+    return
+  fi
+
+  confirm "Change $name from $current to $value?"
+  aws ssm put-parameter --region "$REGION" --name "$parameter" --value "$value" --overwrite >/dev/null
+  echo "$name is now $value. The web service picks it up within a minute."
+}
+
+if [[ $# -eq 0 ]]; then
+  aws_require_login
+  gh_require_login
+  gh_require_aws_deploy_account
+  show_settings
+else
+  name=$1
+  value=$2
+  set_setting "$name" "$value"
 fi
-
-aws_require_login
-gh_require_login
-gh_require_aws_deploy_account
-
-REGION=$(tf_get_aws_region)
-PARAMETER=$SETTINGS_PATH/$name
-
-# Terraform creates every setting, so a missing one means the stack isn't deployed. put-parameter would otherwise create
-# a parameter Terraform doesn't know about.
-if ! current=$(aws ssm get-parameter --region "$REGION" --name "$PARAMETER" --query Parameter.Value --output text); then
-  echo "Could not read $PARAMETER. The deploy job creates it on its first run." >&2
-  exit 1
-fi
-
-if [[ $current == "$value" ]]; then
-  echo "$name is already $value."
-  exit 0
-fi
-
-confirm "Change $name from $current to $value?"
-aws ssm put-parameter --region "$REGION" --name "$PARAMETER" --value "$value" --overwrite >/dev/null
-echo "$name is now $value. The web service picks it up within a minute."

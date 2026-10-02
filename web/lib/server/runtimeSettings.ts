@@ -3,7 +3,7 @@
  * worker instance types.
  *
  * In production each setting is an SSM Parameter Store parameter under RUNTIME_SETTINGS_PATH (infra/settings.tf), read
- * in one call and cached for a minute, so a change made with scripts/prod/ssm-set.sh takes effect within a minute.
+ * in one call and cached for a minute, so a change made with scripts/prod/ssm.sh takes effect within a minute.
  * Local dev and tests leave RUNTIME_SETTINGS_PATH unset and read the same settings from env vars named after them
  * (max-jobs-per-day is MAX_JOBS_PER_DAY).
  *

@@ -30,7 +30,7 @@ Built with the help of [Claude Code](https://claude.com/product/claude-code) and
 
 A 3D Gaussian Splat represents an object as millions of small, semi-transparent, colored blobs (Gaussians). Unlike a mesh, it captures fine detail and view-dependent shine, and it renders in real time in a browser.
 
-1. **Upload.** Sign in and drop in 20–100 photos taken while walking around one object. About 50 well-spaced shots work best: every side, a couple of heights, each overlapping its neighbors. Coverage matters more than count ([Capture](RUNBOOK.md#15-capture)).
+1. **Upload.** Sign in and drop in 20–100 photos taken while walking around one object. About 50 well-spaced shots work best: every side, a couple of heights, each overlapping its neighbors. Coverage matters more than count ([Capture](RUNBOOK.md#14-capture)).
 2. **Reconstruct.** COLMAP's photogrammetry (structure-from-motion) works out where each photo was taken and builds a sparse point cloud of the object.
 3. **Review.** Check the point cloud and camera positions, and optionally draw a crop box around the object to drop the background from the result.
 4. **Train.** gsplat trains a Gaussian Splat on the photos with its CUDA kernels on an NVIDIA GPU.
@@ -117,22 +117,14 @@ You'll need:
 - Node.js at the version in `.nvmrc` (run `nvm use`), and pnpm.
 - [uv](https://docs.astral.sh/uv/) for the Python worker.
 - Podman, for the local Postgres container.
-- An NVIDIA GPU with its driver and `nvidia-container-toolkit`, only to run the pipeline itself ([Worker (local pipeline run)](RUNBOOK.md#14-worker-local-pipeline-run)).
+- An NVIDIA GPU with its driver, only to run the pipeline itself ([Local worker runs](RUNBOOK.md#15-local-worker-runs)).
 
-Postgres runs in a container, so it needs no install on the host. Before `pnpm dev`, do the one-time setup in [Web (frontend + REST API)](RUNBOOK.md#12-web-frontend--rest-api), which starts that container and fills in the web app's `.env`.
+Postgres runs in a container, so it needs no install on the host. `scripts/dev/setup.sh` does the one-time setup ([First-time setup](RUNBOOK.md#11-first-time-setup)). Then, from the repo root:
 
 ```bash
-# Web (frontend + API)
-cd web && pnpm install && pnpm test && pnpm dev
-
-# Worker
-cd worker && uv sync --group dev && uv run pytest
-
-# Infra
-pnpm run infra:check && terraform -chdir=infra test
+pnpm dev    # starts Postgres, applies migrations, and serves the app on localhost:3000
+pnpm test   # every lint, typecheck and test suite CI runs
 ```
-
-`scripts/dev/run-tests.sh` runs every lint, typecheck and test suite at once ([Full test suite](RUNBOOK.md#19-full-test-suite)).
 
 ---
 

@@ -21,7 +21,8 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: "pnpm dev",
+    // Not `pnpm dev`, which also starts the splat-pg container. CI runs its own Postgres on the same port.
+    command: "pnpm exec next dev",
     url: "http://localhost:3000",
     reuseExistingServer: !process.env.CI,
   },

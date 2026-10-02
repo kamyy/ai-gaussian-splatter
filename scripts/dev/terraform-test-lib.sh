@@ -34,12 +34,12 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 source "$REPO_ROOT/scripts/lib/terraform.sh"
 
 FIXTURE=$(mktemp -d)
-# A second fixture, a repository holding a commit but no web/ directory, for the missing-path check below.
-NO_WEB=$(mktemp -d)
-trap 'rm -rf "$FIXTURE" "$NO_WEB"' EXIT
+# A second fixture, a repository holding a commit but no web/ or worker/ directory, for the missing-path checks below.
+EMPTY_REPO=$(mktemp -d)
+trap 'rm -rf "$FIXTURE" "$EMPTY_REPO"' EXIT
 mkdir "$FIXTURE/infra"
-git -C "$NO_WEB" -c init.defaultBranch=main init -q
-git -C "$NO_WEB" -c user.email=test@example.com -c user.name=test commit -q --allow-empty -m "no web/"
+git -C "$EMPTY_REPO" -c init.defaultBranch=main init -q
+git -C "$EMPTY_REPO" -c user.email=test@example.com -c user.name=test commit -q --allow-empty -m "no web/ or worker/"
 
 failures=0
 
@@ -101,8 +101,19 @@ web_image_tag_without_pipefail() {
   set +o pipefail
   tf_get_web_image_tag
 }
-ROOT=$NO_WEB
+ROOT=$EMPTY_REPO
 check_fails "tf_get_web_image_tag fails when web/ is missing" web_image_tag_without_pipefail
+point_root_at_repo
+
+check_matches "tf_get_worker_image_tag is 12 hex characters" '^[0-9a-f]{12}$' "$(tf_get_worker_image_tag HEAD)"
+check_equals "tf_get_worker_image_tag is worker/'s tree id at the ref" \
+  "$(git -C "$REPO_ROOT" rev-parse HEAD:worker | cut -c1-12)" "$(tf_get_worker_image_tag HEAD)"
+worker_image_tag_without_pipefail() {
+  set +o pipefail
+  tf_get_worker_image_tag HEAD
+}
+ROOT=$EMPTY_REPO
+check_fails "tf_get_worker_image_tag fails when worker/ is missing" worker_image_tag_without_pipefail
 point_root_at_repo
 
 point_root_at_fixture

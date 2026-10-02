@@ -1,6 +1,6 @@
 # An allowlist. Everything stays out of the build context except what the Dockerfile copies, so .env (real AWS
-# credentials), the 5 GB .venv, and the photos/ and jobdir/ that scripts/dev/worker-reconstruct.sh leaves here can't
-# reach an image, even through a future broad COPY. A file the Dockerfile needs but this list leaves out fails its COPY
+# credentials), the 5 GB .venv, and the jobdir/ that local worker runs leave here can't reach an image, even through a
+# future broad COPY. A file the Dockerfile needs but this list leaves out fails its COPY
 # line outright, so a gap can't pass silently.
 *
 !pyproject.toml

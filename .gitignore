@@ -26,7 +26,7 @@ infra/**/override.tf*
 infra/**/*.tfvars
 !infra/**/*.tfvars.example
 
-# Env / secrets. web/.env.example is the committed template scripts/dev/create-resources.sh copies to web/.env.
+# Env / secrets. web/.env.example is the committed template `scripts/dev/setup.sh aws` copies to web/.env.
 .env
 .env.*
 !.env.example
@@ -47,11 +47,9 @@ next-env.d.ts
 worker/local_data/
 worker/*.ply
 worker/*.splat
-# The bind mount and default photo source of scripts/dev/worker-reconstruct.sh, both in worker/. Path-anchored, so
-# web/app/api/v1/splats/[splatId]/photos/ stays tracked. worker/.dockerignore repeats them to keep them out of the build
-# context.
+# Where web/lib/server/ec2Launcher.ts mounts each local worker job's files. worker/.dockerignore repeats it to keep it
+# out of the build context.
 worker/jobdir/
-worker/photos/
 
 # Logs
 *.log

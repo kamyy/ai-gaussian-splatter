@@ -10,7 +10,10 @@
     "scripts:check": "biome lint scripts && scripts/dev/shellcheck.sh && scripts/dev/terraform-test-lib.sh",
     "web:check": "pnpm --dir web exec biome lint . && pnpm --dir web exec next typegen && pnpm --dir web exec tsc --noEmit",
     "worker:check": "uv --directory worker run ruff check . && uv --directory worker run ruff format --check . && uv --directory worker run mypy pipeline",
-    "infra:check": "scripts/dev/terraform-check.sh"
+    "infra:check": "scripts/dev/terraform-check.sh",
+    "infra:test": "bash -c 'source scripts/lib/terraform.sh && \"$(tf_get_bin)\" -chdir=infra test' && python3 -B -m unittest discover -s infra/lambda",
+    "dev": "pnpm --dir web dev",
+    "test": "pnpm biome:ci && pnpm run scripts:check && pnpm run web:check && pnpm run worker:check && pnpm run infra:check && pnpm --dir web test && pnpm --dir web test:e2e && uv --directory worker run pytest -v && pnpm run infra:test"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.10",

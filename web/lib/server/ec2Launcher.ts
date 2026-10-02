@@ -9,7 +9,7 @@
 
 import { execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdirSync, openSync } from "node:fs";
+import { mkdirSync, openSync, writeSync } from "node:fs";
 import path from "node:path";
 
 import {
@@ -28,6 +28,15 @@ import type { RuntimeSettings } from "./runtimeSettings";
  * so the two must match.
  */
 const LIFETIME_TAG_KEY = "MaxLifetimeMinutes";
+
+/** The port `next dev` serves on, which a locally launched worker calls back to. */
+const LOCAL_APP_PORT = 3000;
+
+/**
+ * Local worker jobs stopped while their image was still building. stopLocalWorker() has no container to remove yet, so
+ * launchJobLocal() checks this before it starts one.
+ */
+const stoppedLocalJobs = new Set<string>();
 
 type WorkerStage = "reconstruct" | "train";
 
@@ -146,7 +155,7 @@ function ecrRegistry(): string {
 
 /**
  * Runs the worker against the caller's own GPU via Podman instead of launching a real EC2 spot instance. See
- * launchJobLocal() below and "Triggering the worker from pnpm dev" in RUNBOOK.md.
+ * launchJobLocal() below and "Local worker runs" in RUNBOOK.md.
  */
 export function localLaunchEnabled(): boolean {
   return process.env.WORKER_LOCAL_LAUNCH === "true";
@@ -292,13 +301,29 @@ function localContainerName(jobId: string): string {
  * it) makes podman fail, which is the outcome wanted.
  */
 export function stopLocalWorker(jobId: string): void {
+  stoppedLocalJobs.add(jobId);
   execFile("podman", ["rm", "--force", localContainerName(jobId)], () => {});
 }
 
 /**
- * Local-dev replacement for launchJob(). It runs the worker image on the caller's own GPU with Podman instead of
- * launching a real EC2 spot instance. web/lib/server/worker.ts only calls it when WORKER_LOCAL_LAUNCH is set.
- * Production can't reach it, because the ECS task has neither a podman binary nor a GPU.
+ * Fails a local worker job whose image didn't build, through the same status callback the worker itself would have
+ * called. Without it the job would sit in progress until web/lib/server/reconcileJob.ts gave up on it.
+ */
+function reportLocalBuildFailure(params: WorkerLaunch): void {
+  fetch(`http://localhost:${LOCAL_APP_PORT}/api/v1/internal/jobs/${params.jobId}/status`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${params.callbackToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      status: "failed",
+      error_message: `The splat-worker-${params.stage}:dev image didn't build. See worker/jobdir/${params.jobId}/worker.log.`,
+    }),
+  }).catch(() => {});
+}
+
+/**
+ * Local-dev replacement for launchJob(). It builds the stage's worker image from worker/ and runs it on the caller's
+ * own GPU with Podman, instead of launching a real EC2 spot instance. web/lib/server/worker.ts only calls it when
+ * WORKER_LOCAL_LAUNCH is set. Production can't reach it, because the ECS task has neither a podman binary nor a GPU.
  *
  * Like the EC2 launch it replaces, it doesn't wait for the container. The worker reports its own progress back through
  * APP_PUBLIC_URL and CALLBACK_TOKEN (worker/pipeline/status.py).
@@ -311,56 +336,77 @@ export function launchJobLocal(params: WorkerLaunch): void {
     throw new Error("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set to launch the worker locally");
   }
 
-  // repo-root/worker/jobdir/<jobId>, next to the worker/jobdir scripts/dev/worker-reconstruct.sh uses, so a local
-  // automated run is still debuggable the same way: colmap/database.db, result.ply, and this container's own
-  // stdout/stderr all land here.
-  const jobDir = path.resolve(process.cwd(), "..", "worker", "jobdir", params.jobId);
+  // repo-root/worker/jobdir/<jobId>, so a local run is debuggable from its files: colmap/database.db, result.ply, and
+  // the build's and the container's own stdout/stderr all land here.
+  const workerDir = path.resolve(process.cwd(), "..", "worker");
+  const jobDir = path.join(workerDir, "jobdir", params.jobId);
   mkdirSync(jobDir, { recursive: true });
   const log = openSync(path.join(jobDir, "worker.log"), "a");
+  // The train stage reuses its job's ID, so a stop recorded against an earlier stage mustn't block this one.
+  stoppedLocalJobs.delete(params.jobId);
 
-  const child = spawn(
-    "podman",
-    [
-      "run",
-      "--rm",
-      "--name",
-      localContainerName(params.jobId),
-      "--security-opt=label=disable",
-      "--device",
-      "nvidia.com/gpu=all",
-      "-e",
-      `JOB_ID=${params.jobId}`,
-      "-e",
-      `SPLAT_ID=${params.splatId}`,
-      "-e",
-      `CALLBACK_TOKEN=${params.callbackToken}`,
-      "-e",
-      `STAGE=${params.stage}`,
-      // Inside the container, "localhost" is the container itself, not the host running `next dev`.
-      // host.containers.internal is Podman's alias for the host, the same APP_PUBLIC_URL scripts/lib/worker.sh passes
-      // for its local runs.
-      "-e",
-      "APP_PUBLIC_URL=http://host.containers.internal:3000",
-      "-e",
-      `UPLOADS_BUCKET=${env.UPLOADS_BUCKET}`,
-      "-e",
-      `SPLATS_BUCKET=${env.SPLATS_BUCKET}`,
-      "-e",
-      `AWS_ACCESS_KEY_ID=${accessKeyId}`,
-      "-e",
-      `AWS_SECRET_ACCESS_KEY=${secretAccessKey}`,
-      "-e",
-      `AWS_DEFAULT_REGION=${env.AWS_REGION}`,
-      ...(params.stage === "train" ? ["-e", `TRAINING_ITERATIONS=${params.settings.trainingIterations}`] : []),
-      ...(params.cropBox ? ["-e", `CROP_BOX=${JSON.stringify(params.cropBox)}`] : []),
-      "-v",
-      `${jobDir}:/tmp/job`,
-      // worker/Dockerfile builds one image per stage, so this picks the same one scripts/lib/worker.sh's
-      // worker_build_image tags. Running the wrong stage's image fails inside the container, where only worker.log
-      // shows it.
-      `splat-worker-${params.stage}:dev`,
-    ],
-    { detached: true, stdio: ["ignore", log, log] },
-  );
-  child.unref();
+  // worker/Dockerfile builds one image per stage. It is rebuilt on every launch, so an edit to worker/ never runs a
+  // stale image. An unchanged worker/ is all layer-cache hits and takes seconds.
+  const image = `splat-worker-${params.stage}:dev`;
+  const runArgs = [
+    "run",
+    "--rm",
+    "--name",
+    localContainerName(params.jobId),
+    "--security-opt=label=disable",
+    "--device",
+    "nvidia.com/gpu=all",
+    "-e",
+    `JOB_ID=${params.jobId}`,
+    "-e",
+    `SPLAT_ID=${params.splatId}`,
+    "-e",
+    `CALLBACK_TOKEN=${params.callbackToken}`,
+    "-e",
+    `STAGE=${params.stage}`,
+    // Inside the container, "localhost" is the container itself, not the host running `next dev`.
+    // host.containers.internal is Podman's alias for the host.
+    "-e",
+    `APP_PUBLIC_URL=http://host.containers.internal:${LOCAL_APP_PORT}`,
+    "-e",
+    `UPLOADS_BUCKET=${env.UPLOADS_BUCKET}`,
+    "-e",
+    `SPLATS_BUCKET=${env.SPLATS_BUCKET}`,
+    "-e",
+    `AWS_ACCESS_KEY_ID=${accessKeyId}`,
+    "-e",
+    `AWS_SECRET_ACCESS_KEY=${secretAccessKey}`,
+    "-e",
+    `AWS_DEFAULT_REGION=${env.AWS_REGION}`,
+    ...(params.stage === "train" ? ["-e", `TRAINING_ITERATIONS=${params.settings.trainingIterations}`] : []),
+    // The train stage's local-only switches from web/.env (worker/pipeline/config.py). FAST_TEST_MODE cuts training to
+    // 20 iterations, and EVAL_HOLDOUT scores the result against held-back photos.
+    ...(params.stage === "train" && process.env.FAST_TEST_MODE === "true" ? ["-e", "FAST_TEST_MODE=true"] : []),
+    ...(params.stage === "train" && process.env.EVAL_HOLDOUT === "true" ? ["-e", "EVAL_HOLDOUT=true"] : []),
+    ...(params.cropBox ? ["-e", `CROP_BOX=${JSON.stringify(params.cropBox)}`] : []),
+    "-v",
+    `${jobDir}:/tmp/job`,
+    image,
+  ];
+
+  const build = spawn("podman", ["build", "--target", params.stage, "-t", image, workerDir], {
+    stdio: ["ignore", log, log],
+  });
+  build.on("error", err => {
+    writeSync(log, `\nCould not start podman build: ${err.message}\n`);
+    reportLocalBuildFailure(params);
+  });
+  build.on("exit", code => {
+    if (stoppedLocalJobs.delete(params.jobId)) {
+      return;
+    }
+    if (code !== 0) {
+      writeSync(log, `\npodman build exited with ${code}, so the worker didn't run.\n`);
+      reportLocalBuildFailure(params);
+      return;
+    }
+
+    const child = spawn("podman", runArgs, { detached: true, stdio: ["ignore", log, log] });
+    child.unref();
+  });
 }

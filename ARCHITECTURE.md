@@ -41,7 +41,7 @@ Why the system is shaped this way: decisions, alternatives rejected, costs accep
 1. User uploads discrete multi-angle photos of one object — not a panorama, individual stills taken while walking around it.
    - Quality tracks angular coverage and overlap between neighboring views, not raw photo count.
    - Gaps in coverage surface as a low COLMAP registered ratio (step 2, below).
-   - [Capture](RUNBOOK.md#15-capture) procedure.
+   - [Capture](RUNBOOK.md#14-capture) procedure.
 2. **COLMAP** (`worker/pipeline/sfm.py`): exhaustive matching → camera poses + sparse cloud.
    - Accuracy over speed, since the object-centric photo sets are small.
    - `worker/run_job.py` fails below 50% registered images. That reflects capture quality, not a pipeline bug.
@@ -182,7 +182,7 @@ flowchart LR
   sp -->|"8 · presigned GET .spz"| browser
 ```
 
-- Infra: **Terraform**. One configuration (`infra/`) holding one state. The S3 bucket that state lives in is created by hand ([Creating account prerequisites](RUNBOOK.md#22-creating-account-prerequisites)). `terraform init` needs the bucket before any apply. Managing it inside `infra/` would store state in a bucket `infra/` also owns. A second Terraform module with its own local state was rejected.
+- Infra: **Terraform**. One configuration (`infra/`) holding one state. The S3 bucket that state lives in is created by hand ([Going live](RUNBOOK.md#22-going-live)). `terraform init` needs the bucket before any apply. Managing it inside `infra/` would store state in a bucket `infra/` also owns. A second Terraform module with its own local state was rejected.
 - Nine logical areas, one per `.tf` file, rather than one CloudFormation-style stack each. A single state resolves the dependencies between them directly, so there's no cross-stack export/import to keep in sync:
   - **network** — VPC, subnets, security groups.
   - **data** — RDS, S3.
@@ -272,7 +272,7 @@ flowchart TB
 - Operational values that should change without a deploy are SSM Parameter Store parameters under `/ai-gaussian-splatter/settings/` (`infra/settings.tf`). They cover the processing switch, the daily cap, the upload limits, the minimum photo count, the worker lifetime ceiling, the instance types, the training iterations, and the showcase account.
 - The web service reads them at request time with a one-minute cache (`web/lib/server/runtimeSettings.ts`). A task env var or `secrets` entry would need a task replacement for every change, because ECS resolves both only at task start.
 - Parameter Store rather than Secrets Manager: none of these values is secret, and standard parameters are free.
-- Terraform creates each parameter with `ignore_changes = [value]`. Terraform owns that the parameter exists, so IAM can name its path and a fresh deploy needs no manual step. `scripts/prod/ssm-set.sh` owns its value.
+- Terraform creates each parameter with `ignore_changes = [value]`. Terraform owns that the parameter exists, so IAM can name its path and a fresh deploy needs no manual step. `scripts/prod/ssm.sh` owns its value.
 - A missing or invalid value falls back to that setting's default rather than failing requests. The processing switch is the exception: missing, invalid or unreadable means off, since launching GPU instances blind is the one failure that costs money. Cost accepted: an SSM outage pauses processing site-wide.
 - Each worker instance carries its lifetime ceiling as a tag, and the sweeper and `web/lib/server/reconcileJob.ts` judge it by that tag rather than by the current setting. Lowering the setting then never kills a stage that launched under a longer one, and the ceiling is written in one place rather than in both `web/` and `infra/`.
 - The GitHub repository variables stay: the account ID, DNS zone, Clerk key ARN, AMI, worker image tag, alert email, and the publishable key. Each is a deploy-time input whose change needs a deploy anyway, and the publishable key is compiled into the browser bundle.
@@ -302,14 +302,16 @@ Ops fallbacks: the `processing-enabled` runtime setting pauses every GPU launch 
 
 ## 11. CI/CD
 
-- CI (`.github/workflows/deploy.yml`) applies `infra/` and migrates on every push to `main`, and builds a new web image only when `web/` changed, the first deploy into an empty account included ([Image tags](#111-image-tags)). It still rolls the service out whenever an apply changes the web task definition, which carries far more than the image. A human never applies `infra/` itself.
-- Whether the `deploy` job runs is a repository variable (`DEPLOY_ENABLED` on `.github/workflows/ci.yml`'s `deploy` job), not a committed `if:` in the workflow file. A committed flag makes going live and tearing down a workflow edit. The file would then differ between "the account exists" and "the account is gone" for a one-bit operational state. An unset variable is `""`. A fork or a torn-down account deploys nothing until someone sets it to `true` ([Going live](RUNBOOK.md#26-going-live)).
+- CI (`.github/workflows/deploy.yml`) applies `infra/` and migrates on every push to `main` and every run started by hand on `main`, and builds a new web image only when `web/` changed, the first deploy into an empty account included ([Image tags](#111-image-tags)). It still rolls the service out whenever an apply changes the web task definition, which carries far more than the image. A human never applies `infra/` itself.
+- Whether the `deploy` job runs is a repository variable (`DEPLOY_ENABLED` on `.github/workflows/ci.yml`'s `deploy` job), not a committed `if:` in the workflow file. A committed flag makes going live and tearing down a workflow edit. The file would then differ between "the account exists" and "the account is gone" for a one-bit operational state. An unset variable is `""`. A fork or a torn-down account deploys nothing until someone sets it to `true` ([Going live](RUNBOOK.md#22-going-live)).
 - `.github/workflows/ci.yml` records that variable in `capture-deploy-enabled`, a trivial job at the start of each run on `main`. The `deploy` job's `if:` reads that copy, not live `vars` when the `deploy` job starts. A flip that lands after the recording cannot change what the run does, which narrows the window from the whole check suite to that one job's dispatch. Two scripts refuse to run while a run on `main` is unfinished, because a flip inside that remaining window still reaches it:
-  - `scripts/prod/set-deploy-enabled.sh`
-  - `scripts/prod/terraform-destroy.sh`
+  - `scripts/prod/bootstrap.sh`
+  - `scripts/prod/teardown.sh`
 - Creating the state bucket and tearing down are done locally. CI can't `terraform init` against a bucket that doesn't exist yet. A teardown is too rare and too destructive to put behind a push.
 - No manual approval gate: there's no live traffic yet to protect.
-- GPU worker deployment stays manual: nothing builds or pushes the worker image on a schedule or a push, and its tag is a commit SHA someone sets by hand ([Building and pushing the worker image](RUNBOOK.md#27-building-and-pushing-the-worker-image)).
+- The worker images are built on a workstation, not in CI. `scripts/prod/worker-push-image.sh` builds `worker/` as `origin/main` holds it, pushes the images tagged with `worker/`'s tree id, sets `WORKER_IMAGE_TAG`, then starts a run of `.github/workflows/ci.yml` on `main` by hand (`workflow_dispatch`) and waits for its deploy ([Releasing a worker change](RUNBOOK.md#23-releasing-a-worker-change)).
+  - Rejected alternative: **building the worker images in the `deploy` job**, the way the web images are. The ~8 GB train image doesn't fit in the ~14 GB a standard GitHub runner has free without first deleting its preinstalled toolchains. The images are too large for the Actions cache, so every `worker/` change would be a full rebuild, estimated at 20–40 minutes added to that deploy and to every first deploy. Later pushes would queue behind it.
+  - A run started by hand rather than `gh run rerun`, because a rerun repeats an older commit's run, and the last push to `main` may have been docs-only, which starts no run at all.
 
 ### 11.1 Image tags
 
@@ -326,7 +328,7 @@ Ops fallbacks: the `processing-enabled` runtime setting pauses every GPU launch 
   - The tag names no commit. Map it back with `git log --format='%h' -- web`, then `git rev-parse <commit>:web | cut -c1-12` for each.
   - A build input outside `web/` reaches production only through a change under `web/`. That covers the `CLERK_PUBLISHABLE_KEY` repository variable, which `web/Dockerfile` bakes into the browser bundle, and a patched `node:24-alpine` base.
   - The rollback window is bounded by `local.releases_kept` (`infra/locals.tf`), not unlimited.
-- Rejected alternative: **a path filter on `.github/workflows/ci.yml`'s `deploy` job**, skipping the deploy outright unless the push touched `web/` or `infra/`. It saves nothing on the common case, since `infra/` changes more often than `web/` here and an `infra/` change still has to deploy. Worse, any filter that skips a push also stops `infra/` converging. Converging `infra/` is how a new `WORKER_IMAGE_TAG` reaches the web task definition ([Building and pushing the worker image](RUNBOOK.md#27-building-and-pushing-the-worker-image)), and it does so on a `worker/`-only push, which is exactly the push that carries a new worker image.
+- Rejected alternative: **a path filter on `.github/workflows/ci.yml`'s `deploy` job**, skipping the deploy outright unless the push touched `web/` or `infra/`. It saves nothing on the common case, since `infra/` changes more often than `web/` here and an `infra/` change still has to deploy. Worse, any filter that skips a push also stops `infra/` converging. Converging `infra/` is how a new `WORKER_IMAGE_TAG` reaches the web task definition ([Releasing a worker change](RUNBOOK.md#23-releasing-a-worker-change)).
 
 ### 11.2 Migrator image
 
@@ -366,8 +368,8 @@ A rolled-back *service* deployment does not undo an already-applied migration. R
 
 - CI authenticates to AWS through **GitHub OIDC** (OpenID Connect), not static IAM access keys, so there is no long-lived credential to leak or rotate.
 - The identity token's `sub` claim scopes it specifically to `repo:<owner>@<ownerId>/<repo>@<repoId>:ref:refs/heads/main`, so PRs and forks can't assume the role.
-- That role, `ai-gaussian-splatter-ci-deploy`, is created by hand once ([Creating the OIDC provider and CI role](RUNBOOK.md#24-creating-the-oidc-provider-and-ci-role)), not by `infra/`, because it's chicken-and-egg: CI can't apply the config that grants CI its own apply permission.
-- Unlike a design that delegates through a separate bootstrap role, this role directly holds the AWS permissions `terraform apply` needs (ec2, ecr, rds, s3, iam, ecs, elasticloadbalancing, route53, acm, budgets, logs, secretsmanager), scoped by resource-name prefix where a service supports it. The same reasoning keeps the Clerk secret, the state bucket, and `AWSServiceRoleForEC2Spot` as hand-run one-time setup rather than Terraform-managed resources ([Creating account prerequisites](RUNBOOK.md#22-creating-account-prerequisites)). Granting broad infrastructure permissions to a CI role is a step this repo keeps out of any automated apply.
+- That role, `ai-gaussian-splatter-ci-deploy`, is created by `scripts/prod/bootstrap.sh` from a workstation ([Going live](RUNBOOK.md#22-going-live)), not by `infra/`, because it's chicken-and-egg: CI can't apply the config that grants CI its own apply permission.
+- Unlike a design that delegates through a separate bootstrap role, this role directly holds the AWS permissions `terraform apply` needs (ec2, ecr, rds, s3, iam, ecs, elasticloadbalancing, route53, acm, budgets, logs, secretsmanager), scoped by resource-name prefix where a service supports it. The same reasoning keeps the Clerk secret, the state bucket, and `AWSServiceRoleForEC2Spot` as setup run from a workstation rather than Terraform-managed resources ([Going live](RUNBOOK.md#22-going-live)). Granting broad infrastructure permissions to a CI role is a step this repo keeps out of any automated apply.
 
 ---
 
@@ -387,7 +389,7 @@ Three tiers (`.github/workflows/ci.yml`):
 
 Milestones (`M0`…`M10`) name phases, not a schedule, and they are not built in order. A struck-through milestone is complete. Open gaps are in [State / what's next](AGENTS.md#11-state--whats-next).
 
-- ~~**M0** — shoot one real object per [Capture](RUNBOOK.md#15-capture); hand-run COLMAP → gsplat → export; view in a standalone page.~~
+- ~~**M0** — shoot one real object per [Capture](RUNBOOK.md#14-capture); hand-run COLMAP → gsplat → export; view in a standalone page.~~
 - ~~**M1** — Same run via scripted `worker/pipeline/` modules.~~
 - ~~**M2** — Schema + CRUD endpoints.~~
 - ~~**M3** — S3 presign/complete against a real bucket.~~

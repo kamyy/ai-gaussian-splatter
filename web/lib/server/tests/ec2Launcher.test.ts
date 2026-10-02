@@ -7,14 +7,31 @@ import {
 import { mockClient } from "aws-sdk-client-mock";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+// Every spawned process "exits" as soon as launchJobLocal() listens for it, with buildExit.code, so the podman build
+// it starts first finishes synchronously.
+const buildExit = vi.hoisted(() => ({ code: 0 }));
 const spawnMock = vi.hoisted(() =>
-  vi.fn((_command: string, _args: string[], _options: Record<string, unknown>) => ({ unref: vi.fn() })),
+  vi.fn((_command: string, _args: string[], _options: Record<string, unknown>) => ({
+    unref: vi.fn(),
+    on: vi.fn((event: string, listener: (code: number) => void) => {
+      if (event === "exit") {
+        listener(buildExit.code);
+      }
+    }),
+  })),
 );
-vi.mock("node:child_process", () => ({ spawn: spawnMock }));
-vi.mock("node:fs", () => ({ mkdirSync: vi.fn(), openSync: vi.fn(() => 0) }));
+vi.mock("node:child_process", () => ({ execFile: vi.fn(), spawn: spawnMock }));
+vi.mock("node:fs", () => ({ mkdirSync: vi.fn(), openSync: vi.fn(() => 0), writeSync: vi.fn() }));
 
 import type { CropBox } from "@/lib/types";
-import { describeWorker, generateCallbackToken, launchJob, launchJobLocal, terminateWorker } from "../ec2Launcher";
+import {
+  describeWorker,
+  generateCallbackToken,
+  launchJob,
+  launchJobLocal,
+  stopLocalWorker,
+  terminateWorker,
+} from "../ec2Launcher";
 import type { RuntimeSettings } from "../runtimeSettings";
 
 // aws-sdk-client-mock is a call stub with no simulated EC2 state, so these assert on the arguments RunInstances
@@ -248,15 +265,34 @@ describe("launchJobLocal", () => {
     settings,
   };
 
+  // The podman calls launchJobLocal() made, split into image builds and container runs.
+  function podmanCalls(subcommand: "build" | "run") {
+    return spawnMock.mock.calls.filter(([, args]) => args[0] === subcommand);
+  }
+
+  function runArgs(index = 0) {
+    return podmanCalls("run")[index][1];
+  }
+
   afterEach(() => {
     spawnMock.mockClear();
+    buildExit.code = 0;
+  });
+
+  it("builds the stage's image from worker/ before running it", () => {
+    launchJobLocal(params);
+
+    expect(spawnMock.mock.calls.map(([, args]) => args[0])).toEqual(["build", "run"]);
+    const [command, args] = podmanCalls("build")[0];
+    expect(command).toBe("podman");
+    expect(args.slice(0, 5)).toEqual(["build", "--target", "train", "-t", "splat-worker-train:dev"]);
+    expect(args[5]).toMatch(/\/worker$/);
   });
 
   it("runs the local worker image via podman, detached", () => {
     launchJobLocal(params);
 
-    expect(spawnMock).toHaveBeenCalledTimes(1);
-    const [command, args, options] = spawnMock.mock.calls[0];
+    const [command, args, options] = podmanCalls("run")[0];
     expect(command).toBe("podman");
     expect(args).toContain("splat-worker-train:dev");
     expect(args).toEqual(expect.arrayContaining(["-e", "JOB_ID=job-123"]));
@@ -272,30 +308,76 @@ describe("launchJobLocal", () => {
   it("runs the reconstruct image for a reconstruct stage", () => {
     launchJobLocal({ ...params, stage: "reconstruct" });
 
-    const [, args] = spawnMock.mock.calls[0];
-    expect(args).toContain("splat-worker-reconstruct:dev");
-    expect(args).not.toContain("splat-worker-train:dev");
-    expect(args).toEqual(expect.arrayContaining(["-e", "STAGE=reconstruct"]));
+    expect(podmanCalls("build")[0][1]).toEqual(expect.arrayContaining(["--target", "reconstruct"]));
+    expect(runArgs()).toContain("splat-worker-reconstruct:dev");
+    expect(runArgs()).not.toContain("splat-worker-train:dev");
+    expect(runArgs()).toEqual(expect.arrayContaining(["-e", "STAGE=reconstruct"]));
   });
 
   it("passes the training iterations to a train stage only", () => {
     launchJobLocal(params);
     launchJobLocal({ ...params, stage: "reconstruct" });
 
-    const [[, train], [, reconstruct]] = spawnMock.mock.calls;
-    expect(train).toEqual(expect.arrayContaining(["-e", "TRAINING_ITERATIONS=7000"]));
-    expect(reconstruct.some(arg => arg.startsWith("TRAINING_ITERATIONS="))).toBe(false);
+    expect(runArgs(0)).toEqual(expect.arrayContaining(["-e", "TRAINING_ITERATIONS=7000"]));
+    expect(runArgs(1).some(arg => arg.startsWith("TRAINING_ITERATIONS="))).toBe(false);
+  });
+
+  it("forwards FAST_TEST_MODE and EVAL_HOLDOUT to a train stage only, when web/.env sets them", () => {
+    launchJobLocal(params);
+    vi.stubEnv("FAST_TEST_MODE", "true");
+    vi.stubEnv("EVAL_HOLDOUT", "true");
+    launchJobLocal(params);
+    launchJobLocal({ ...params, stage: "reconstruct" });
+
+    expect(runArgs(0).some(arg => arg === "FAST_TEST_MODE=true" || arg === "EVAL_HOLDOUT=true")).toBe(false);
+    expect(runArgs(1)).toEqual(expect.arrayContaining(["-e", "FAST_TEST_MODE=true", "-e", "EVAL_HOLDOUT=true"]));
+    expect(runArgs(2).some(arg => arg === "FAST_TEST_MODE=true" || arg === "EVAL_HOLDOUT=true")).toBe(false);
   });
 
   it("passes a crop box to the worker container as JSON, only when one is set", () => {
     launchJobLocal({ ...params, cropBox: { center: [1, 2, 3], size: [4, 5, 6], quaternion: [0, 0, 0, 1] } });
     launchJobLocal(params);
 
-    const [[, withBox], [, withoutBox]] = spawnMock.mock.calls;
-    expect(withBox).toEqual(
+    expect(runArgs(0)).toEqual(
       expect.arrayContaining(["-e", 'CROP_BOX={"center":[1,2,3],"size":[4,5,6],"quaternion":[0,0,0,1]}']),
     );
-    expect(withoutBox.some(arg => arg.startsWith("CROP_BOX="))).toBe(false);
+    expect(runArgs(1).some(arg => arg.startsWith("CROP_BOX="))).toBe(false);
+  });
+
+  it("fails the job through its status callback instead of running, when the build fails", () => {
+    const fetchMock = vi.fn(() => Promise.resolve(new Response(null, { status: 200 })));
+    vi.stubGlobal("fetch", fetchMock);
+    buildExit.code = 1;
+    try {
+      launchJobLocal(params);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(podmanCalls("run")).toHaveLength(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("http://localhost:3000/api/v1/internal/jobs/job-123/status");
+    expect(init.method).toBe("PATCH");
+    expect(init.headers).toMatchObject({ Authorization: "Bearer tok-abc" });
+    expect(JSON.parse(init.body as string)).toMatchObject({ status: "failed" });
+  });
+
+  it("doesn't start the container for a job stopped while its image was building", () => {
+    // Stops the job from inside the build, the way a cancel landing mid-build would.
+    spawnMock.mockImplementationOnce((_command, _args, _options) => ({
+      unref: vi.fn(),
+      on: vi.fn((event: string, listener: (code: number) => void) => {
+        if (event === "exit") {
+          stopLocalWorker(params.jobId);
+          listener(0);
+        }
+      }),
+    }));
+
+    launchJobLocal(params);
+
+    expect(podmanCalls("run")).toHaveLength(0);
   });
 
   it("throws if AWS credentials aren't set", () => {

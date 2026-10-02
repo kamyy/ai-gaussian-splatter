@@ -6,7 +6,7 @@
 
 ROOT=$(git rev-parse --show-toplevel)
 
-# Prints the Terraform CLI to run. Prefers the binary scripts/dev/terraform-install.sh writes, because a terraform
+# Prints the Terraform CLI to run. Prefers the binary `scripts/dev/setup.sh terraform` writes, because a terraform
 # earlier on PATH can be a different version than infra/providers.tf pins. CI has no copy there:
 # hashicorp/setup-terraform installs whatever tf_get_required_version reads, so that is the fallback.
 tf_get_bin() {
@@ -17,16 +17,15 @@ tf_get_bin() {
     bin=$(command -v terraform || true)
   fi
   if [[ -z $bin || ! -x $bin ]]; then
-    echo "Terraform is missing. Run scripts/dev/terraform-install.sh." >&2
+    echo "Terraform is missing. Run: scripts/dev/setup.sh terraform" >&2
     return 1
   fi
   printf '%s\n' "$bin"
 }
 
-# Prints the exact required_version in infra/providers.tf. scripts/dev/terraform-install.sh and CI's
-# hashicorp/setup-terraform both call this so the pin is not copied into .github/workflows/ci.yml or
-# .github/workflows/deploy.yml. A non-x.y.z value is refused because a blank terraform_version would make
-# setup-terraform install latest.
+# Prints the exact required_version in infra/providers.tf. scripts/dev/setup.sh and CI's hashicorp/setup-terraform both
+# call this so the pin is not copied into .github/workflows/ci.yml or .github/workflows/deploy.yml. A non-x.y.z value is
+# refused because a blank terraform_version would make setup-terraform install latest.
 tf_get_required_version() {
   local version
   version=$(grep -oP 'required_version = "\K[^"]+' "$ROOT/infra/providers.tf" || true)
@@ -88,6 +87,15 @@ tf_get_app_hostname() {
 tf_get_web_image_tag() {
   local tree
   tree=$(git -C "$ROOT" rev-parse HEAD:web) || return
+  printf '%s\n' "${tree:0:12}"
+}
+
+# The tag scripts/prod/worker-push-image.sh pushes the worker images under: worker/'s git tree id at the given ref,
+# truncated the same way as tf_get_web_image_tag. The ref is an argument because that script releases origin/main, not
+# whatever this checkout has at HEAD.
+tf_get_worker_image_tag() {
+  local ref=$1 tree
+  tree=$(git -C "$ROOT" rev-parse "$ref:worker") || return
   printf '%s\n' "${tree:0:12}"
 }
 
