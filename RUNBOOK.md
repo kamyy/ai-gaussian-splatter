@@ -19,6 +19,7 @@ Most procedures below run a script from `scripts/dev/` or `scripts/prod/`, and e
   - [3.1 Fixing a bad migration](#31-fixing-a-bad-migration)
   - [3.2 Debugging a failed worker job](#32-debugging-a-failed-worker-job)
   - [3.3 Reading logs and alarms](#33-reading-logs-and-alarms)
+  - [3.4 Rotating the Clerk secret](#34-rotating-the-clerk-secret)
 - [4. Tearing down](#4-tearing-down)
 
 ---
@@ -136,21 +137,15 @@ Every step skips what already exists, so re-running the script, or one step of i
 
 It looks up `AWS_ACCOUNT_ID`, `HOSTED_ZONE_ID` and `CLERK_SECRET_KEY_ARN`. The hosted zone is referenced only, not created, so it must already exist. It asks for these, defaulting to each one's current value:
 
-- `DOMAIN_ZONE_NAME` is the public DNS zone the app is served from, e.g. `orky.net`. A trailing dot or uppercase is normalized away. Everything carrying the app's public name is built from it:
-  - The hostname, the ACM certificate, and the Route 53 record.
-  - The S3 CORS origins.
-  - The origin the worker PATCHes status back to.
-  - The origin `.github/workflows/deploy.yml` smoke-checks after a rollout.
-- `ALERT_EMAIL` is where the AWS Budget (`infra/budgets.tf`) sends spend alerts, and where the worker sweeper (`infra/worker_sweeper.tf`) and the alarms send theirs. A typo'd but well-formed address deploys green.
+- `DOMAIN_ZONE_NAME` is the public DNS zone the app is served from, e.g. `orky.net`. The app's hostname, certificate, DNS record and CORS origins are all built from it.
+- `ALERT_EMAIL` is where the AWS Budget (`infra/budgets.tf`) sends spend alerts, and where the worker sweeper (`infra/worker_sweeper.tf`) and the alarms send theirs.
 - `CLERK_PUBLISHABLE_KEY` is the `pk_live_...` key, not the secret one. `web/Dockerfile` compiles it into the browser bundle, so a later change to it reaches users on the next deploy that changes `web/` ([Image tags](ARCHITECTURE.md#111-image-tags)).
-- `GA_MEASUREMENT_ID` is the Google Analytics 4 measurement ID (`G-...`) and is optional. Leaving it empty builds the app without Google Analytics or its privacy banner. An empty answer keeps the current value, so turning analytics off is `gh variable delete GA_MEASUREMENT_ID`. Like `CLERK_PUBLISHABLE_KEY`, it is compiled into the browser bundle.
-- `WORKER_AMI_ID` is the AMI every worker instance boots. User data does no provisioning of its own, so the image must already carry Docker, the NVIDIA driver and container toolkit, and the AWS CLI. AWS's Deep Learning Base GPU AMIs do, and the script lists the newest five before asking.
+- `GA_MEASUREMENT_ID` is the Google Analytics 4 measurement ID (`G-...`) and is optional. Leaving it empty builds the app without Google Analytics or its privacy banner. An empty answer keeps the current value, so turning analytics off is `gh variable delete GA_MEASUREMENT_ID`.
+- `WORKER_AMI_ID` is the AMI every worker instance boots. The image must already carry Docker, the NVIDIA driver and container toolkit, and the AWS CLI. AWS's Deep Learning Base GPU AMIs do, and the script lists the newest five before asking.
 
 `WORKER_IMAGE_TAG` is set to `worker/`'s tree id on `origin/main` while it's unset, which is the tag step 6 pushes. After that only [Releasing a worker change](#23-releasing-a-worker-change) changes it.
 
-The CI role's policy, `scripts/prod/ci-role-policies/deploy.json`, is a reasonable starting point, not an exhaustively verified minimal policy, so expect `AccessDenied` during the first deploy, which is the first time the role creates every resource rather than updating it. Add the missing action to that file, run `scripts/prod/bootstrap.sh ci-role`, then rerun the `deploy` job (`gh run rerun <run-id> --failed-jobs`).
-
-On a first deploy, the service starts before the migration runs, so real routes 500 until the migration finishes.
+The CI role's policy, `scripts/prod/ci-role-policies/deploy.json`, is a reasonable starting point, not an exhaustively verified minimal policy, so expect `AccessDenied` during the first deploy. Add the missing action to that file, run `scripts/prod/bootstrap.sh ci-role`, then rerun the `deploy` job (`gh run rerun <run-id> --failed-jobs`).
 
 Four things have no API the script could call, so do them by hand once it finishes:
 
@@ -159,17 +154,11 @@ Four things have no API the script could call, so do them by hand once it finish
    aws sns list-subscriptions --region "$(source scripts/lib/terraform.sh && tf_get_aws_region)" \
      --query "Subscriptions[?ends_with(TopicArn, ':ai-gaussian-splatter-alerts')].SubscriptionArn"
    ```
-2. In the production Clerk instance's dashboard, open the Legal page, turn on **Require express consent to legal documents**, and set the terms of service and privacy policy URLs to the app's `/terms` and `/privacy` pages. Clerk's sign-up form then requires a checkbox, and that acceptance is what makes `web/app/(public)/terms/page.tsx` binding on users.
-3. On the same dashboard's **User & authentication** page, in the **User model** section, turn off **Allow users to delete their accounts**. Users delete their accounts through the app's own account menu item, which deletes their splats too. Deleting through Clerk's profile page would remove only the Clerk account.
+2. In the production Clerk instance's dashboard, open the Legal page, turn on **Require express consent to legal documents**, and set the terms of service and privacy policy URLs to the app's `/terms` and `/privacy` pages. Clerk's sign-up form then requires a checkbox.
+3. On the same dashboard's **User & authentication** page, in the **User model** section, turn off **Allow users to delete their accounts**. Users delete their accounts through the app's own account menu item instead, which also deletes their splats.
 4. Check that the web service can read its runtime settings. `scripts/prod/ssm.sh` should list every setting, and the new-splat page should show no "Processing is paused" notice. The notice with every setting present means the task role can't read them ([Runtime settings](ARCHITECTURE.md#95-runtime-settings)).
 
-To change the Clerk secret's value later, update it directly in Secrets Manager, then force a new ECS deployment (`aws ecs update-service --force-new-deployment`), since ECS only resolves secrets at task start.
-
-`deployment_minimum_healthy_percent = 100` will keep any old task serving until the new one passes health checks. If the new image fails those checks, the circuit breaker rolls back to the previous task definition. To roll back by hand, revert the change and push. A schema change gets a corrective migration instead ([Fixing a bad migration](#31-fixing-a-bad-migration)).
-
-Only the last few releases are kept (`local.releases_kept` in `infra/locals.tf`). That bounds the circuit breaker's automatic rollback and any fresh task placement onto an older task definition, both of which need the image still present. Reverting and pushing by hand reaches further back: an expired tag is free to push again, so that build is simply remade.
-
-To check month-to-date spend: Billing console → **Billing Home**, or **Cost Explorer** for a per-service breakdown. `aws budgets describe-budgets --account-id "$(aws sts get-caller-identity --query Account --output text)" --region us-east-1` returns the budget's `CalculatedSpend`.
+If a new image fails its health checks, the circuit breaker rolls back to the previous task definition. To roll back by hand, revert the change and push. A schema change gets a corrective migration instead ([Fixing a bad migration](#31-fixing-a-bad-migration)).
 
 ### 2.3 Releasing a worker change
 
@@ -268,6 +257,10 @@ CloudWatch also keeps default metrics for the ALB (`TargetResponseTime`, `HTTPCo
 - **`ai-gaussian-splatter-alb-unhealthy-hosts`:** a web task is failing its health check. Check the ECS service's events with `aws ecs describe-services --cluster ai-gaussian-splatter --services ai-gaussian-splatter-web`.
 - **`ai-gaussian-splatter-worker-sweeper-errors`:** the sweeper failed, so an overdue worker instance may keep billing. Run `scripts/prod/logs-tail.sh sweeper`, then list instances tagged `Role=worker` in the EC2 console.
 - **`ai-gaussian-splatter-rds-low-storage`:** the database has under 2 GB free. Raise `allocated_storage` in `infra/data.tf`.
+
+### 3.4 Rotating the Clerk secret
+
+Update the secret's value in Secrets Manager, then run `aws ecs update-service --force-new-deployment`. ECS only resolves secrets at task start, so the running tasks keep the old value until that new deployment replaces them.
 
 ---
 
