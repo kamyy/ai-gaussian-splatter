@@ -24,7 +24,7 @@ export default function TermsPage() {
         <p>
           AI Gaussian Splatter is a free, experimental personal project. By creating an account or uploading photos, you
           agree to these terms and to how the{" "}
-          <Link href="/privacy" className="text-primary underline underline-offset-2">
+          <Link href="/privacy" className="text-link">
             privacy policy
           </Link>{" "}
           says your data is handled. If you don&apos;t agree, please don&apos;t use the site.

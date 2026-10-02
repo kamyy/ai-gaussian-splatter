@@ -80,6 +80,13 @@ content lines up with the page's on a wide monitor. */
   max-width: var(--breakpoint-2xl);
 }
 
+/* An inline text link, such as one in a paragraph of the legal pages. */
+@utility text-link {
+  color: var(--color-primary);
+  text-decoration-line: underline;
+  text-underline-offset: 2px;
+}
+
 /* The raised finish of the controls floating over the 3D viewer (web/components/splats/SplatStageViewer.tsx), which
 lifts them off whatever the scene shows. The gradient is a translucent sheen laid over the element's own
 background color, so one utility works on any fill. Each element still sets that fill with a bg-* class. */

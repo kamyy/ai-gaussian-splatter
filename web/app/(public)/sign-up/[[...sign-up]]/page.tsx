@@ -22,11 +22,11 @@ export default function SignUpPage() {
       <ThemedSignUp />
       <p className="text-sm text-muted-foreground">
         Read our{" "}
-        <Link href="/terms" className="text-primary underline underline-offset-2">
+        <Link href="/terms" className="text-link">
           terms of service
         </Link>{" "}
         and{" "}
-        <Link href="/privacy" className="text-primary underline underline-offset-2">
+        <Link href="/privacy" className="text-link">
           privacy policy
         </Link>
         .

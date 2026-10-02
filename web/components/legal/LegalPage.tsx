@@ -19,7 +19,7 @@ export function LegalSection({ title, children }: { title: string; children: Rea
 /** The address privacy requests and questions about the terms go to, as a mailto link. */
 export function LegalContact() {
   return (
-    <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary underline underline-offset-2">
+    <a href={`mailto:${CONTACT_EMAIL}`} className="text-link">
       {CONTACT_EMAIL}
     </a>
   );
