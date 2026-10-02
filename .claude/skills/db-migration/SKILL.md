@@ -54,11 +54,11 @@ Needs the local Postgres running (`scripts/dev/db.sh up`, which `pnpm dev` also 
 **5. Verify.**
 
 ```bash
-(cd .. && pnpm run web:check)
+(cd .. && pnpm run web:lint)
 pnpm test
 ```
 
-`web:check` is a repo-root script, the one exception to "all commands run from `web/`" above. It's the check that matters for a schema edit. The `worker` and `infra` checks have nothing to do with `web/lib/server/db/schema.ts`.
+`web:lint` is a repo-root script, the one exception to "all commands run from `web/`" above. It's the typecheck that matters for a schema edit. The `worker` and `infra` checks have nothing to do with `web/lib/server/db/schema.ts`.
 
 `TEST_DATABASE_URL` comes from `web/.env`. `pnpm test` fails if `splat-pg` is down (`scripts/dev/db.sh up`) or that line is missing, so a pass means the new schema was tested. `ai_gaussian_splatter_test` is a separate database on the same instance, not the dev one. Vitest applies `web/drizzle/` to it before those tests. See [RUNBOOK.md § "Full test suite"](../../../RUNBOOK.md#16-full-test-suite).
 

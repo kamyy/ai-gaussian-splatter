@@ -174,7 +174,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 
 - **`next typegen` before `tsc --noEmit` on a clean checkout.**
   - Route Handlers use `RouteContext<"/path">`; Next writes those helpers into gitignored `web/.next/types/` during `next dev`/`build`. Without them: `TS2304: Cannot find name 'RouteContext'`.
-  - CI and the root `web:check` script run `typegen` first.
+  - CI and the root `web:lint` script run `typegen` first.
 - **`web/` uses TypeScript `^7.0.2` (no JS Compiler API).**
   - Next's typecheck needs `useTypeScriptCli` (default on as of Next `16.3.0`). Without it Next can't load `typescript`, including `web/next.config.ts`.
   - `infra/` has no TypeScript dependency.
@@ -226,7 +226,7 @@ Node is pinned in root `.nvmrc` (`24.18.0`); CI jobs use `node-version-file`. Ru
 ### 7.2 Formatting & linting
 
 - **Biome does not format Markdown, YAML, Dockerfiles, or shell scripts** (`@biomejs/biome@2.5.10`, pinned in both root and `web/`). Keep those consistent by hand.
-  - It doesn't lint `.sh` either. `scripts:check` runs shellcheck instead.
+  - It doesn't lint `.sh` either. `scripts:lint` runs shellcheck instead.
   - `biome.json` sets `lineWidth: 120`. One measure holds repo-wide.
   - When hand-wrapping comments in the files Biome skips, including comments inside a Markdown fenced code block, treat 120 as the fill target: greedily pack each line with words up to that width before wrapping to the next, the same way a `fmt`/text-fill pass would, not an early wrap at whatever width feels readable.
   - Markdown *prose* is the exception: no max width, since GitHub reflows paragraphs and fixed wraps only add diff noise. One line per paragraph/list item.
@@ -271,7 +271,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - `scripts/prod/worker-push-image.sh`
 - Local Terraform is `$HOME/.local/bin/terraform` (`scripts/dev/setup.sh terraform`). Scripts that run it assign `TERRAFORM=$(tf_get_bin)`, which prefers that path over PATH, because a different CLI earlier on PATH still satisfies `command -v terraform`.
   - CI has no copy there. `hashicorp/setup-terraform` in `.github/workflows/ci.yml` and `.github/workflows/deploy.yml` installs whatever `tf_get_required_version` reads from `infra/providers.tf`.
-- `scripts:check` (run by the pre-commit hook and CI's `lint-format` job) shellchecks them with `scripts/dev/shellcheck.sh`, which runs shellcheck's container image.
+- `scripts:lint` (run by the pre-commit hook and CI's `lint-format` job) shellchecks them with `scripts/dev/shellcheck.sh`, which runs shellcheck's container image.
   - The image is pinned by digest, so neither a new shellcheck release nor a re-pushed tag can change the result for an unchanged tree.
   - The repo is mounted read-only with `--security-opt label=disable`, because a `:Z` mount relabels the whole checkout for SELinux.
 
@@ -285,13 +285,14 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 
 ### 7.5 Testing
 
-- `pnpm test` at the repo root runs every lint, typecheck, and test suite.
+- Three root commands cover everything CI runs. `pnpm lint` runs every format check, lint rule, and typecheck without changing a file. `pnpm format` applies every formatter and sorts imports, and leaves other lint failures for you to fix. `pnpm test` runs every test suite.
+  - The pre-commit hook runs `pnpm lint`, so after a commit only `pnpm test` is left to run.
   - Postgres-dependent web tests need `TEST_DATABASE_URL` (see [`RUNBOOK.md`](RUNBOOK.md#16-full-test-suite)). Run the relevant subset of its commands after changes.
-- `scripts:check` also runs `scripts/dev/terraform-test-lib.sh`, which checks the HCL scrapers in `scripts/lib/terraform.sh` against `infra/variables.tf` and against fixtures. `.github/workflows/deploy.yml` signs with `tf_get_aws_region`, so a spelling in `infra/variables.tf` that it no longer reads breaks a deploy rather than a plan.
-- `pnpm biome:ci` is a single workspace-wide command (root's `biome.json` covers `scripts/*.js` and `web/**` in one pass), used by CI's `lint-format` job and by the pre-commit hook.
-  - `web:check`/`worker:check`/`infra:check` are root package.json scripts, one per package — the same scripts CI's `web`/`worker`/`infra` jobs call. `infra:check` runs `scripts/dev/terraform-check.sh` so it uses the pinned CLI in `scripts/lib/terraform.sh`, not whichever `terraform` is first on PATH.
-  - `infra:test` (`terraform test` and the worker sweeper Lambda's unit tests) stays out of `infra:check`, so the pre-commit hook skips its ~10 seconds. CI's `infra` job runs both.
-  - The pre-commit hook runs `biome:ci` plus these three (`scripts:check` included), so `web`'s and `scripts/`'s Biome checks run twice there — harmless, and worth it since `biome:ci` is what actually reaches root's own config files, which none of the per-package scripts cover.
+- Each root command chains per-area scripts named `<area>:<verb>` (`worker:lint`, `infra:test`, …), and CI's jobs call those directly. Each CI job installs only its own area's toolchain, so none of them can run a root command.
+  - Biome is its own area. `biome:lint` checks every JS, TS, JSON and CSS file in the repo in one pass, root config files included, so `web:lint` is only the typecheck and `scripts:lint` is only shellcheck.
+  - `infra:lint` runs `scripts/dev/terraform-check.sh` so it uses the pinned CLI in `scripts/lib/terraform.sh`, not whichever `terraform` is first on PATH.
+  - `infra:test` stays out of the pre-commit hook for its ~10 seconds. It runs `terraform test`, the worker sweeper Lambda's unit tests, and `scripts/dev/terraform-test-lib.sh`.
+- `scripts/dev/terraform-test-lib.sh` checks the HCL scrapers in `scripts/lib/terraform.sh` against `infra/variables.tf` and against fixtures. `.github/workflows/deploy.yml` signs with `tf_get_aws_region`, so a spelling in `infra/variables.tf` that it no longer reads breaks a deploy rather than a plan.
 
 ---
 

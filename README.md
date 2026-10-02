@@ -122,8 +122,10 @@ You'll need:
 Postgres runs in a container, so it needs no install on the host. `scripts/dev/setup.sh` does the one-time setup ([First-time setup](RUNBOOK.md#11-first-time-setup)). Then, from the repo root:
 
 ```bash
-pnpm dev    # starts Postgres, applies migrations, and serves the app on localhost:3000
-pnpm test   # every lint, typecheck and test suite CI runs
+pnpm dev      # starts Postgres, applies migrations, and serves the app on localhost:3000
+pnpm format   # applies every formatter and sorts imports
+pnpm lint     # every format check, lint rule and typecheck CI runs
+pnpm test     # every test suite CI runs
 ```
 
 ---
