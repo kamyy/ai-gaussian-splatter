@@ -96,7 +96,7 @@ COPY --chown=app:app scripts/db-migrate.cjs ./scripts/db-migrate.cjs
 # here.
 #
 # Deliberately not paired with `ENV DATABASE_SSL_CA=...` here. That would make every run of this image demand TLS,
-# breaking a local container pointed at a plain Postgres with "The server does not support SSL connections". Using the
+# breaking CI's migrator test against a plain Postgres with "The server does not support SSL connections". Using the
 # bundle is a deployment decision, so infra/locals.tf sets DATABASE_SSL_CA. Keep the two in step if /app/certs ever
 # moves.
 RUN mkdir -p /app/certs \
