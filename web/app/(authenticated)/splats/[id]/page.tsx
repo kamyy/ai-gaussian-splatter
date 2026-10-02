@@ -10,7 +10,7 @@
 
 import { use, useEffect, useState } from "react";
 
-import { BackButton } from "@/components/layout/BackButton";
+import { PageTitle } from "@/components/layout/PageTitle";
 import { PhotoGrid } from "@/components/splats/PhotoGrid";
 import { PipelineStepper } from "@/components/splats/PipelineStepper";
 import type { PhotoSelection } from "@/components/splats/photoSelection";
@@ -98,10 +98,9 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
       {/* The scrollbar's space is reserved for the same reason as in web/app/(authenticated)/splats/layout.tsx: the
       photo grid lays itself out for the width it measures. */}
       <div className="flex flex-col gap-6 px-4 pt-7 sm:px-12 lg:w-120 lg:shrink-0 lg:overflow-y-auto lg:pr-10 lg:pb-7 lg:scrollbar-gutter-stable">
-        <div className="flex items-center gap-3.5">
-          <BackButton href="/splats" label="Back to Library" />
-          <h1 className="min-w-0 font-display text-5xl leading-none tracking-tight">{splat.name}</h1>
-        </div>
+        <PageTitle backHref="/splats" backLabel="Back to Library">
+          {splat.name}
+        </PageTitle>
         <PipelineStepper stage={stage} job={job} photoCount={photos?.length ?? 0} />
         <StageCard splatId={id} stage={stage} cropBox={cropBox} onJobChanged={() => void refetchJob()} />
         {sharePanel}

@@ -10,7 +10,7 @@
 
 import { useState } from "react";
 
-import { BackButton } from "@/components/layout/BackButton";
+import { PageTitle } from "@/components/layout/PageTitle";
 import { JobStatus } from "@/lib/statuses";
 import type { CameraPose, JobTimestamps, PublicPhoto } from "@/lib/types";
 import { PhotoGrid } from "./PhotoGrid";
@@ -54,10 +54,9 @@ export function PublicSplatView({ title, splatUrl, pointCloudUrl, cameras, photo
   return (
     <div className="flex flex-col gap-6 lg:flex-row lg:gap-10">
       <div className="flex flex-col gap-6 lg:w-120 lg:shrink-0">
-        <div className="flex items-center gap-3.5">
-          <BackButton href="/" label="Back to Home" />
-          <h1 className="min-w-0 font-display text-6xl leading-none tracking-tight">{title}</h1>
-        </div>
+        <PageTitle backHref="/" backLabel="Back to Home">
+          {title}
+        </PageTitle>
         <StageShell title="How it was made">
           {/* StageShell mutes its text for prose. The stepper's finished steps take the page's own text color. */}
           <div className="text-foreground">
