@@ -80,6 +80,26 @@ run "run_instances_statements_stay_split" {
     error_message = "the tagged RunInstances statement must require aws:RequestTag/Role=worker"
   }
 
+  # A compromised web task should only be able to start the worker AMI, on the instance types the runtime settings
+  # accept.
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.task.policy).Statement :
+      s.Sid == "RunInstances" && contains(s.Resource, "arn:aws:ec2:${var.aws_region}::image/${var.worker_ami_id}") &&
+      length([for r in s.Resource : r if strcontains(r, ":image/")]) == 1
+    ])
+    error_message = "RunInstances must name only the worker AMI, not every image"
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.task.policy).Statement :
+      s.Sid == "RunInstancesTagged" &&
+      toset(try(s.Condition.StringEquals["ec2:InstanceType"], [])) == toset(["g4dn.xlarge", "g5.xlarge", "g6.xlarge", "g6e.xlarge"])
+    ])
+    error_message = "the tagged RunInstances statement must limit ec2:InstanceType to the worker instance types"
+  }
+
   assert {
     condition = anytrue([
       for s in jsondecode(aws_iam_role_policy.task.policy).Statement :

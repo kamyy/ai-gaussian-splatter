@@ -186,8 +186,9 @@ resource "aws_iam_role_policy" "task" {
         Effect = "Allow"
         Action = "ec2:RunInstances"
         Resource = [
-          # AMIs are not account-scoped, hence the empty account segment.
-          "arn:aws:ec2:${var.aws_region}::image/*",
+          # Only the worker AMI, so a compromised web task can't boot an image of its own choosing. AMIs are not
+          # account-scoped, hence the empty account segment.
+          "arn:aws:ec2:${var.aws_region}::image/${var.worker_ami_id}",
           # The worker only ever launches into one subnet and one security group (both passed as env
           # vars by web/lib/server/ec2Launcher.ts), so both are scoped to the exact resource rather than every
           # subnet or security group in the account.
@@ -203,11 +204,18 @@ resource "aws_iam_role_policy" "task" {
         ]
       },
       {
-        Sid       = "RunInstancesTagged"
-        Effect    = "Allow"
-        Action    = "ec2:RunInstances"
-        Resource  = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:instance/*"
-        Condition = { StringEquals = { "aws:RequestTag/${local.worker_tag_key}" = local.worker_tag_value } }
+        Sid      = "RunInstancesTagged"
+        Effect   = "Allow"
+        Action   = "ec2:RunInstances"
+        Resource = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:instance/*"
+        # The instance type bounds what one launch costs, so a compromised web task can't start the account's largest
+        # GPU instances.
+        Condition = {
+          StringEquals = {
+            "aws:RequestTag/${local.worker_tag_key}" = local.worker_tag_value
+            "ec2:InstanceType"                       = local.worker_instance_types
+          }
+        }
       },
       # A request carrying TagSpecifications is authorized a second time against ec2:CreateTags, separately
       # from RunInstances. Without this the launch fails even though the statements above allow it. The

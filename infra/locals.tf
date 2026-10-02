@@ -24,6 +24,11 @@ locals {
   # the upper bound web/lib/server/runtimeSettings.ts accepts for that setting.
   worker_max_lifetime_upper_bound_minutes = 240
 
+  # Every instance type the reconstruct-instance-type and train-instance-type runtime settings accept
+  # (web/lib/server/runtimeSettings.ts). The web task's RunInstances grant (infra/web.tf) refuses any other, so a type
+  # added to either allow-list there has to be added here too.
+  worker_instance_types = ["g4dn.xlarge", "g5.xlarge", "g6.xlarge", "g6e.xlarge"]
+
   # All four named explicitly rather than left to a generated name, so `aws ecs update-service
   # --force-new-deployment` (a Clerk secret rotation still needs one) can be written down literally in
   # RUNBOOK.md instead of looked up per environment.

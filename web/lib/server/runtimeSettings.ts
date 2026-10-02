@@ -20,6 +20,9 @@ import { HttpError } from "./httpError";
 
 const CACHE_TTL_MS = 60 * 1000;
 
+// infra/locals.tf's worker_instance_types lists every type in both arrays below. The web task's RunInstances grant
+// refuses any type missing from it, so a type added here has to be added there too.
+//
 // Reconstruct runs COLMAP, which works on any of these GPUs.
 const RECONSTRUCT_INSTANCE_TYPES = ["g4dn.xlarge", "g5.xlarge", "g6.xlarge"];
 
