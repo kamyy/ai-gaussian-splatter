@@ -135,7 +135,7 @@ locals {
   settings_path = "/ai-gaussian-splatter/settings"
 
   # Each setting's value when infra/settings.tf first creates it. Terraform ignores later edits to these, so on an
-  # existing stack a value is changed with scripts/prod/ssm-set.sh instead. The initial values match the defaults
+  # existing stack a value is changed with scripts/prod/ssm.sh instead. The initial values match the defaults
   # web/lib/server/runtimeSettings.ts falls back to.
   runtime_settings = {
     "processing-enabled"          = "true"
