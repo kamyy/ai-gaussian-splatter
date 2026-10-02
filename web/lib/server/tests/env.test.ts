@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { resolveDatabaseUrl } from "../databaseUrl";
+import { isLocalDev, LOCAL_APP_ORIGIN, withLocalDevEnv } from "../env";
+
 // getEnv() caches its parse in a module-level variable, so each case re-imports web/lib/server/env.ts after resetting
 // the registry. web/tests/server-test-env.ts has already filled process.env with values that parse.
 async function loadGetEnv() {
@@ -47,8 +50,8 @@ describe("getEnv", () => {
   });
 
   // Local dev runs the worker under Podman, which reads none of the EC2 launch settings, so web/.env leaves them out.
-  it("accepts a missing EC2 launch setting when the worker launches locally", async () => {
-    vi.stubEnv("WORKER_LOCAL_LAUNCH", "true");
+  it("accepts a missing EC2 launch setting in local dev", async () => {
+    vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("WORKER_AMI_ID", undefined);
     vi.stubEnv("WORKER_LOG_GROUP", undefined);
     const getEnv = await loadGetEnv();
@@ -56,8 +59,8 @@ describe("getEnv", () => {
     expect(getEnv().WORKER_AMI_ID).toBeUndefined();
   });
 
-  // The ECS task has no WORKER_LOCAL_LAUNCH, so a dropped WORKER_* variable has to fail here rather than at the first
-  // worker launch.
+  // The ECS task is not local dev, so a dropped WORKER_* variable has to fail here rather than at the first worker
+  // launch.
   it.each([
     "WORKER_AMI_ID",
     "WORKER_SUBNET_ID",
@@ -65,11 +68,164 @@ describe("getEnv", () => {
     "WORKER_INSTANCE_PROFILE_ARN",
     "WORKER_LOG_GROUP",
     "WORKER_DATA_ROLE_ARN",
-  ])("rejects an unset %s when the worker launches on EC2", async name => {
-    vi.stubEnv("WORKER_LOCAL_LAUNCH", undefined);
+  ])("rejects an unset %s outside local dev", async name => {
     vi.stubEnv(name, undefined);
     const getEnv = await loadGetEnv();
 
-    expect(() => getEnv()).toThrow(`Invalid server environment: ${name}: required unless WORKER_LOCAL_LAUNCH is true`);
+    expect(() => getEnv()).toThrow(`Invalid server environment: ${name}: required outside local dev`);
+  });
+
+  // `pnpm dev` runs with NODE_ENV=development, and web/.env leaves out the settings that never change there.
+  describe("in local dev", () => {
+    function stubLocalDev() {
+      vi.stubEnv("NODE_ENV", "development");
+      for (const name of [
+        "DATABASE_HOST",
+        "DATABASE_PORT",
+        "DATABASE_NAME",
+        "DATABASE_USER",
+        "DATABASE_PASSWORD",
+        "APP_ORIGIN",
+        "WORKER_AMI_ID",
+      ]) {
+        vi.stubEnv(name, undefined);
+      }
+    }
+
+    it("sets the database and the app origin", async () => {
+      stubLocalDev();
+      const env = (await loadGetEnv())();
+
+      expect(env).toMatchObject({
+        DATABASE_HOST: "localhost",
+        DATABASE_NAME: "ai_gaussian_splatter",
+        DATABASE_USER: "postgres",
+        DATABASE_PASSWORD: "postgres",
+        APP_ORIGIN: "http://localhost:3000",
+      });
+    });
+
+    // Without static keys the AWS SDK falls back to ~/.aws/credentials, which could name any IAM user.
+    it.each(["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"])("rejects an unset %s", async name => {
+      stubLocalDev();
+      vi.stubEnv(name, undefined);
+      const getEnv = await loadGetEnv();
+
+      expect(() => getEnv()).toThrow(`${name}: required in local dev, so the SDK can't use ~/.aws/credentials`);
+    });
+
+    // What an unedited web/.env copied from web/.env.example holds.
+    it.each([
+      ["AWS_ACCESS_KEY_ID", "replace-with-dev-user-key"],
+      ["AWS_SECRET_ACCESS_KEY", "replace-with-dev-user-secret"],
+    ])("rejects the placeholder %s", async (name, placeholder) => {
+      stubLocalDev();
+      vi.stubEnv(name, placeholder);
+      const getEnv = await loadGetEnv();
+
+      expect(() => getEnv()).toThrow(`${name}: still the placeholder from web/.env.example`);
+    });
+
+    it("rejects an empty AWS_ACCESS_KEY_ID", async () => {
+      stubLocalDev();
+      vi.stubEnv("AWS_ACCESS_KEY_ID", "");
+      const getEnv = await loadGetEnv();
+
+      expect(() => getEnv()).toThrow(/AWS_ACCESS_KEY_ID: Too small/);
+    });
+
+    // A production-style password source on top of the local password breaks the exactly-one rule, loudly.
+    it("refuses a DATABASE_SECRET_ARN, since the local password is always set", async () => {
+      stubLocalDev();
+      vi.stubEnv("DATABASE_SECRET_ARN", "arn:aws:secretsmanager:us-west-2:123456789012:secret:rds");
+      const getEnv = await loadGetEnv();
+
+      expect(() => getEnv()).toThrow("set exactly one of DATABASE_PASSWORD or DATABASE_SECRET_ARN");
+    });
+
+    it("fixes the database, whatever the environment holds", async () => {
+      stubLocalDev();
+      vi.stubEnv("DATABASE_HOST", "db.example.test");
+      vi.stubEnv("DATABASE_NAME", "other");
+
+      const env = (await loadGetEnv())();
+
+      expect(env).toMatchObject({ DATABASE_HOST: "localhost", DATABASE_NAME: "ai_gaussian_splatter" });
+    });
+
+    it("fixes the app origin, whatever the environment holds", async () => {
+      stubLocalDev();
+      vi.stubEnv("APP_ORIGIN", "http://example.test:4000");
+
+      const env = (await loadGetEnv())();
+
+      expect(env.APP_ORIGIN).toBe("http://localhost:3000");
+    });
+  });
+
+  it("accepts a missing AWS_ACCESS_KEY_ID outside local dev, where the ECS task role supplies credentials", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("AWS_ACCESS_KEY_ID", undefined);
+    vi.stubEnv("AWS_SECRET_ACCESS_KEY", undefined);
+    const getEnv = await loadGetEnv();
+
+    expect(getEnv().AWS_ACCESS_KEY_ID).toBeUndefined();
+  });
+
+  it("refuses an APP_ORIGIN with a trailing slash outside local dev", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("APP_ORIGIN", "https://app.example.com/");
+    const getEnv = await loadGetEnv();
+
+    expect(() => getEnv()).toThrow("APP_ORIGIN: must not end with a slash");
+  });
+
+  it("defaults none of the database, the app URL, or the credentials in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("APP_ORIGIN", undefined);
+    vi.stubEnv("DATABASE_HOST", undefined);
+    vi.stubEnv("DATABASE_NAME", undefined);
+    const getEnv = await loadGetEnv();
+
+    expect(() => getEnv()).toThrow(/DATABASE_HOST.*DATABASE_NAME.*APP_ORIGIN/);
+  });
+});
+
+describe("isLocalDev", () => {
+  it("is true unless NODE_ENV is production or test", () => {
+    expect(isLocalDev({})).toBe(true);
+    expect(isLocalDev({ NODE_ENV: "development" })).toBe(true);
+    expect(isLocalDev({ NODE_ENV: "production" })).toBe(false);
+    expect(isLocalDev({ NODE_ENV: "test" })).toBe(false);
+  });
+});
+
+describe("withLocalDevEnv", () => {
+  it("points every DATABASE_* variable at splat-pg in local dev, where NODE_ENV is unset or development", () => {
+    for (const nodeEnv of [undefined, "development"]) {
+      expect(resolveDatabaseUrl(withLocalDevEnv({ NODE_ENV: nodeEnv }))).toBe(
+        "postgresql://postgres:postgres@localhost:5432/ai_gaussian_splatter",
+      );
+    }
+  });
+
+  it("replaces a value the environment already holds", () => {
+    const env = withLocalDevEnv({
+      APP_ORIGIN: "http://example.test:4000",
+      DATABASE_HOST: "db.internal",
+      DATABASE_NAME: "other",
+      DATABASE_PASSWORD: "s3cret",
+    });
+
+    expect(resolveDatabaseUrl(env)).toBe("postgresql://postgres:postgres@localhost:5432/ai_gaussian_splatter");
+    expect(env.APP_ORIGIN).toBe(LOCAL_APP_ORIGIN);
+  });
+
+  it("changes nothing in production or tests", () => {
+    for (const nodeEnv of ["production", "test"]) {
+      const env = { NODE_ENV: nodeEnv, DATABASE_HOST: "db.internal" };
+
+      expect(withLocalDevEnv(env)).toBe(env);
+    }
   });
 });

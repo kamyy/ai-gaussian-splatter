@@ -273,7 +273,7 @@ flowchart TB
 - The web service reads them at request time with a one-minute cache (`web/lib/server/runtimeSettings.ts`). A task env var or `secrets` entry would need a task replacement for every change, because ECS resolves both only at task start.
 - Parameter Store rather than Secrets Manager: none of these values is secret, and standard parameters are free.
 - Terraform creates each parameter with `ignore_changes = [value]`. Terraform owns that the parameter exists, so IAM can name its path and a fresh deploy needs no manual step. `scripts/prod/ssm.sh` owns its value.
-- A missing or invalid value falls back to that setting's default rather than failing requests. The processing switch is the exception: missing, invalid or unreadable means off, since launching GPU instances blind is the one failure that costs money. Cost accepted: an SSM outage pauses processing site-wide.
+- A missing or invalid value falls back to that setting's default rather than failing requests, and in production it also turns processing off. An unreadable parameter store does the same. Launching GPU instances on settings that can't be trusted is the one failure that costs money. Cost accepted: an SSM outage, or one deleted or mistyped parameter, pauses processing site-wide until it is fixed.
 - Each worker instance carries its lifetime ceiling as a tag, and the sweeper and `web/lib/server/reconcileJob.ts` judge it by that tag rather than by the current setting. Lowering the setting then never kills a stage that launched under a longer one, and the ceiling is written in one place rather than in both `web/` and `infra/`.
 - The GitHub repository variables stay: the account ID, DNS zone, Clerk key ARN, AMI, worker image tag, alert email, and the publishable key. Each is a deploy-time input whose change needs a deploy anyway, and the publishable key is compiled into the browser bundle.
 - The sweeper's 10-minute schedule stays in Terraform. It is an EventBridge rule, so tuning it at runtime would change it behind Terraform's back, and it only sets how late the backstop fires.
@@ -337,7 +337,7 @@ Ops fallbacks: the `processing-enabled` runtime setting pauses every GPU launch 
   - The service runs up to 3 tasks with no advisory lock between them, so boot-time migration would race.
   - The migration SQL plus the script that applies it have no reason to bloat the lean `web` standalone build that actually serves traffic.
 - `migrator`'s `node_modules` is copied from a `deps-prod` stage rather than from `deps` directly. `deps-prod` is `deps` with `pnpm prune --prod` applied and its now-unused pnpm store deleted.
-- That's because the migration script needs only `@next/env`, `drizzle-orm`, and `pg`, which are regular dependencies. It never needs the devDependencies (`typescript`, `drizzle-kit`, `vitest`, `@playwright/test`, ...) that `deps` carries for `builder`'s build.
+- That's because the migration script needs only `drizzle-orm` and `pg`, which are regular dependencies. It never needs the devDependencies (`typescript`, `drizzle-kit`, `vitest`, `@playwright/test`, ...) that `deps` carries for `builder`'s build.
 
 ### 11.3 Migration ordering
 
@@ -379,7 +379,7 @@ Three tiers (`.github/workflows/ci.yml`):
 
 - **Unit/component** (every PR): `pytest` + `moto` for `worker/`; Vitest `client` (jsdom) and `server` (Node + real Postgres for rate limits).
 - **E2E** (every PR): Playwright without live Clerk. No specs yet (SSR reads DB; `page.route()` can't intercept; no seed — see [State / what's next](AGENTS.md#11-state--whats-next)). Server correctness is the Vitest `server` project.
-- **Real-pipeline** (manual/milestone-gated): real COLMAP + gsplat costs GPU money. `FAST_TEST_MODE` (20 iterations) for cheap end-to-end smoke tests; `worker/pipeline/train.py` derives its densify/log schedules from the iteration count so the short run still exercises densification.
+- **Real-pipeline** (manual/milestone-gated): real COLMAP + gsplat costs GPU money.
 
 `web/` AWS tests use `aws-sdk-client-mock` (assert command args), not `moto`-style emulation.
 

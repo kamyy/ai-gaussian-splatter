@@ -13,11 +13,11 @@ import { getEnv } from "@/lib/server/env";
 import { getRuntimeSettings } from "@/lib/server/runtimeSettings";
 import type { ExampleSplat } from "@/lib/types";
 
-/** Reads APP_PUBLIC_URL and the database per request. Neither is available during `next build`. */
+/** Reads APP_ORIGIN and the database per request. Neither is available during `next build`. */
 export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const { APP_PUBLIC_URL } = getEnv();
+  const { APP_ORIGIN } = getEnv();
 
   // A failed read still lists the landing page, the same fallback web/app/page.tsx makes.
   let exampleSplats: ExampleSplat[] = [];
@@ -31,9 +31,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   return [
-    { url: new URL("/", APP_PUBLIC_URL).toString() },
-    { url: new URL("/privacy", APP_PUBLIC_URL).toString() },
-    { url: new URL("/terms", APP_PUBLIC_URL).toString() },
-    ...exampleSplats.map(splat => ({ url: new URL(`/preview/splats/${splat.id}`, APP_PUBLIC_URL).toString() })),
+    { url: new URL("/", APP_ORIGIN).toString() },
+    { url: new URL("/privacy", APP_ORIGIN).toString() },
+    { url: new URL("/terms", APP_ORIGIN).toString() },
+    ...exampleSplats.map(splat => ({ url: new URL(`/preview/splats/${splat.id}`, APP_ORIGIN).toString() })),
   ];
 }

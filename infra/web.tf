@@ -547,9 +547,9 @@ resource "aws_ecs_task_definition" "web" {
       { name = "WORKER_RECONSTRUCT_IMAGE_URI", value = local.worker_reconstruct_image_uri },
       { name = "WORKER_TRAIN_IMAGE_URI", value = local.worker_train_image_uri },
       { name = "ECR_REGISTRY", value = local.ecr_registry },
-      # Where the GPU worker PATCHes job status back to. Passed in rather than read off the load balancer, so
-      # it stays the stable custom domain the ALB is aliased to.
-      { name = "APP_PUBLIC_URL", value = local.app_origin },
+      # The app's public origin, which the GPU worker PATCHes job status back to and the sitemap and robots.txt use.
+      # Passed in rather than read off the load balancer, so it stays the stable custom domain the ALB is aliased to.
+      { name = "APP_ORIGIN", value = local.app_origin },
       # Read by Next's standalone server.js to replace Node's 5-second idle-socket timeout, which the ALB's own idle
       # timeout outlasts. See AGENTS.md.
       { name = "KEEP_ALIVE_TIMEOUT", value = local.keep_alive_timeout_ms },

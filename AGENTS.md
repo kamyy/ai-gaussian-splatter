@@ -113,14 +113,14 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - **This Clerk SDK has no `<SignedIn>` / `<SignedOut>`.** Use `<Show when="signed-in">` (`web/components/layout/SiteHeader.tsx`).
   - Pass `fallback` for the signed-out UI.
   - While Clerk is still loading the session, `<Show>` renders nothing — not the fallback.
-- **Set `NEXT_PUBLIC_CLERK_SIGN_IN_URL` and `NEXT_PUBLIC_CLERK_SIGN_UP_URL` at build time**, or Clerk sends users to its hosted Account Portal instead of the app's own sign-in pages.
-  - The paths never change, so `web/Dockerfile` bakes them in as `ENV`.
+- **`NEXT_PUBLIC_CLERK_SIGN_IN_URL` and `NEXT_PUBLIC_CLERK_SIGN_UP_URL` are set once, in the `env` block of `web/next.config.ts`**, or Clerk sends users to its hosted Account Portal instead of the app's own sign-in pages.
+  - The paths never change, so `env` inlines them at build time and no `.env` file, Dockerfile, or workflow repeats them. The two `..._FALLBACK_REDIRECT_URL` variables live there too.
   - Both pages need an optional catch-all (`web/app/(public)/sign-in/[[...sign-in]]/page.tsx`) because Clerk puts verification and SSO steps on sub-paths; a plain `page.tsx` 404s mid-sign-in.
 - **A dummy Clerk publishable key still has to look like a real one.** `clerkMiddleware()` parses the key and rejects a malformed string. CI uses `pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk` (base64 of `"example.clerk.accounts.dev$"`), which parses without contacting Clerk.
-- **Turn off telemetry with `NEXT_PUBLIC_CLERK_TELEMETRY_DISABLED`** (set in `.github/workflows/ci.yml`, `web/Dockerfile`, and `web/.env.example`).
+- **Turn off telemetry with `NEXT_PUBLIC_CLERK_TELEMETRY_DISABLED`** (set in the `env` block of `web/next.config.ts`).
   - The package reads that name on the server and also bakes it into the browser bundle. `CLERK_TELEMETRY_DISABLED` (no `NEXT_PUBLIC_`) only covers the server collector.
   - `isCI()` hides the console notice; it does not stop reporting.
-  - A `pk_test_*` key still reports from CI; a `pk_live_*` key does not.
+  - A `pk_test_*` key reports unless this is set; a `pk_live_*` key does not.
 - **`NEXT_PUBLIC_*` values are baked into the JS at `next build` time.**
   - Setting `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` as a container env var at runtime does nothing. Pass it as `docker build --build-arg`.
   - `CLERK_SECRET_KEY` is the real secret and is injected at runtime from Secrets Manager.
@@ -141,9 +141,11 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - A `const` holding a function or component counts as a function. `export const POST = withErrorHandling(…)` and `forwardRef(…)` are examples.
   - A constant computed by calling a helper in the same file sits directly below that helper, because it can't run before the helper's own inputs exist. `POINTS` below `generatePoints` in `web/components/marketing/HeroPointCloud.tsx` is the pattern.
 - **Define a file's sub-components and helpers above the component that uses them**, so a file reads bottom-up to its main export. A sub-component used by another sub-component goes above that one too, as `Tip` sits above `ShootingTips` in `web/app/(authenticated)/splats/new/page.tsx`.
-- **A helper that only one file uses is defined in that file, not in a module of its own.** Tests don't count as a use.
+- **A helper that only one file uses is defined in that file, not in a module of its own.** Tests don't count as a use here, so a helper used by one file and its tests still lives in that file.
   - Export it only when its tests need it. Those tests go in the using file's own test file, as `pageItems` in `web/components/ui/Pager.tsx` is tested in `web/components/ui/Pager.test.tsx`.
   - Once a second file uses it, move it under `web/lib/`.
+- **Export a name only when another file imports it.** Unlike the bullet above, a test file counts here, so a helper exported for its tests stays exported. A function, constant, type or interface that nothing outside its own file uses stays unexported.
+  - A framework or tool that loads a name from the file is the other exemption: Next's `dynamic`, `generateMetadata` and `register`, and each Route Handler's `GET`/`POST`. So are the `pgEnum`s in `web/lib/server/db/schema.ts`, which Drizzle Kit reads from there to generate migrations.
 - **Every custom hook gets its own file in `web/lib/hooks/`, named after the hook** (`web/lib/hooks/useLatestJob.ts`). This holds even for a hook only one file uses. Its tests go in `web/lib/hooks/tests/`.
 - **Components import icons from `web/components/ui/icons.ts`, never from `react-icons` directly.** A new icon gets an alias there named for what it means on screen (`RemovePhotoIcon`, not `XIcon`), under the commented group for where it appears.
   - Reusing an icon for a different meaning gets its own alias, as `LuImage` is both `PhotoPlaceholderIcon` and `ThumbnailPlaceholderIcon`.
@@ -375,7 +377,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - A pushed tag can never be repointed, so the deploy job skips any build whose tag is already in the repository. That is what makes it re-runnable from any step, and what keeps an unchanged `web/` from rebuilding.
   - Per-build tags exist to keep the deployment circuit breaker's rollback meaningful: with a moving tag every release shares one task definition, and a rollback re-pulls the image that just failed.
 - **A push that leaves `web/` byte-identical builds nothing and leaves the service's *image* unchanged. It does not mean the service keeps running.** `aws_ecs_service.web` names `aws_ecs_task_definition.web.arn`, a revision-qualified ARN with no `ignore_changes`, so any task-definition change registers a new revision and ECS replaces the tasks.
-  - The image is one field among many in that task definition. `WORKER_RECONSTRUCT_IMAGE_URI`, `WORKER_TRAIN_IMAGE_URI`, `KEEP_ALIVE_TIMEOUT`, `cpu`/`memory`, `APP_PUBLIC_URL`, and the Clerk and RDS wiring all live there too, and all of them are editable from `infra/` alone.
+  - The image is one field among many in that task definition. `WORKER_RECONSTRUCT_IMAGE_URI`, `WORKER_TRAIN_IMAGE_URI`, `KEEP_ALIVE_TIMEOUT`, `cpu`/`memory`, `APP_ORIGIN`, and the Clerk and RDS wiring all live there too, and all of them are editable from `infra/` alone.
   - That rollout is load-bearing, not a leak. The worker-image flow depends on it: a deploy carries a new `WORKER_IMAGE_TAG` into both worker image URIs, and only a task replacement puts them in front of `web/lib/server/ec2Launcher.ts` ([Releasing a worker change](RUNBOOK.md#23-releasing-a-worker-change)).
   - It lands in the *first* apply, which is untargeted. The roll-forward apply is the no-op on such a push, not the other way round.
   - **The migration task still runs, and gating it on the tag is a trap** ([Migration ordering](ARCHITECTURE.md#113-migration-ordering)).
@@ -450,10 +452,10 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 ### 10.3 Local dev & tests
 
 - **`await closeDb()` in `afterAll`** or Vitest hangs (open `pg` Pool). `web/tests/migrate-test-db.ts` closes its own migration pool in `finally`.
-- **The `server` Vitest project fails outright when `TEST_DATABASE_URL` is unset**, so a green run means the DB tests actually ran.
-  - `web/tests/migrate-test-db.ts` throws before any test starts, including the server tests that never touch Postgres.
-  - CI sets it and starts Postgres as a `podman run` step in `.github/workflows/ci.yml`, not a `services:` container — see [Postgres connectivity & TLS](ARCHITECTURE.md#7-postgres-connectivity--tls).
-  - Locally `web/vitest.config.mts` reads it from `web/.env`. Run `scripts/dev/db.sh up` if Postgres seems missing ([`RUNBOOK.md`](RUNBOOK.md#12-web-frontend--rest-api)).
+- **The `server` Vitest project fails outright when it can't reach `TEST_DATABASE_URL`'s Postgres**, so a green run means the DB tests actually ran.
+  - `web/tests/migrate-test-db.ts` fails before any test starts, including the server tests that never touch Postgres.
+  - CI starts Postgres as a `podman run` step in `.github/workflows/ci.yml`, not a `services:` container, and creates the same two databases as `scripts/dev/db.sh` — see [Postgres connectivity & TLS](ARCHITECTURE.md#7-postgres-connectivity--tls).
+  - Locally `web/vitest.config.mts` defaults it to the `ai_gaussian_splatter_test` database on `splat-pg`. Run `scripts/dev/db.sh up` if Postgres seems missing ([`RUNBOOK.md`](RUNBOOK.md#12-web-frontend--rest-api)).
 - **`fileParallelism: false` in `web/vitest.config.mts`.**
   - DB-backed files share one DB and clear tables in `beforeEach`; parallel runs delete each other's fixtures. Per-worker DBs would restore parallelism.
   - Transaction-per-test can't cover the real concurrency tests (`getOrCreateUser` race, rate-limit atomicity) — one connection serializes queries.

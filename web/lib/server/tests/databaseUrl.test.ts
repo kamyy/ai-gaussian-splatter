@@ -25,14 +25,14 @@ describe("resolveDatabaseUrl", () => {
     ).toBe("postgresql://splatter_admin:s3cret@db.abc.us-west-2.rds.amazonaws.com:5432/ai_gaussian_splatter");
   });
 
-  it("defaults the port to 5432", () => {
+  it("returns undefined when the port is unset, rather than guessing one", () => {
     const url = resolveDatabaseUrl({
       DATABASE_HOST: "h",
       DATABASE_NAME: "n",
       DATABASE_USER: "u",
       DATABASE_PASSWORD: "p",
     });
-    expect(url).toBe("postgresql://u:p@h:5432/n");
+    expect(url).toBeUndefined();
   });
 
   it("percent-encodes credentials so a generated password can't corrupt the URL", () => {
@@ -40,6 +40,7 @@ describe("resolveDatabaseUrl", () => {
     // interpolated raw.
     const url = resolveDatabaseUrl({
       DATABASE_HOST: "h",
+      DATABASE_PORT: "5432",
       DATABASE_NAME: "n",
       DATABASE_USER: "u",
       DATABASE_PASSWORD: "p:a?b#c%d",

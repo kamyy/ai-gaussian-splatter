@@ -35,7 +35,7 @@ Local development runs against the dev buckets and the `splat-pg` container, nev
 scripts/dev/setup.sh
 ```
 
-`infra/` only describes production, so dev's uploads and splats buckets are created outside it, along with an `ai-gaussian-splatter-dev` IAM user that can reach only those two buckets. The script copies `web/.env.example` to `web/.env` when that's missing and writes the IAM user's key pair into it. An existing `web/.env` is never replaced. The default bucket names end in the AWS account id, because one S3 bucket namespace spans every account.
+`infra/` only describes production, so dev's uploads and splats buckets are created outside it, along with an `ai-gaussian-splatter-dev` IAM user that can reach only those two buckets. The script copies `web/.env.example` to `web/.env` when that's missing and writes the IAM user's key pair into it. An existing `web/.env` is never replaced. If the IAM user already has an access key, the script can't fill the pair in, because AWS shows a secret only once. Copy the pair from another checkout's `web/.env`, or delete the key with `aws iam delete-access-key` and run the script again. The default bucket names end in the AWS account id, because one S3 bucket namespace spans every account.
 
 Then fill in the Clerk keys in `web/.env`, from the development Clerk instance.
 
@@ -45,7 +45,7 @@ Then fill in the Clerk keys in `web/.env`, from the development Clerk instance.
 pnpm dev        # from the repo root: starts splat-pg, applies pending migrations, then runs next dev on localhost:3000
 ```
 
-The `splat-pg` container holds the dev database `ai_gaussian_splatter` and the test database `ai_gaussian_splatter_test`. `pnpm dev`, `pnpm db:migrate` and `pnpm db:studio` reach it on `localhost:5432`, since they run on the host rather than in a container.
+The `splat-pg` container holds the dev database `ai_gaussian_splatter` and the test database `ai_gaussian_splatter_test`. `pnpm dev`, `pnpm db:migrate` and `pnpm db:studio` reach it on `localhost:5432`, since they run on the host rather than in a container. They always use the dev database, so `web/.env` has no `DATABASE_*` variables and nothing there can change them. Outside local dev (`NODE_ENV` of `production` or `test`) this does not apply.
 
 ```bash
 scripts/dev/db.sh down          # deletes splat-pg and its volume, and both databases with them
@@ -68,7 +68,7 @@ Pick something opaque, matte, and genuinely three-dimensional. Stand it on a pat
 
 ### 1.4 Local worker runs
 
-With `WORKER_LOCAL_LAUNCH=true` in `web/.env` (the default in `web/.env.example`), the web app runs each worker-job stage on your own GPU in Podman instead of launching an EC2 spot instance. Create a splat at `/splats/new` under `pnpm dev` as normal. Uploading its photos starts the worker job, and the splat's page shows each stage live through the same database rows and status callback a real EC2 run uses.
+Under `pnpm dev`, the web app runs each worker-job stage on your own GPU in Podman instead of launching an EC2 spot instance. Create a splat at `/splats/new` under `pnpm dev` as normal. Uploading its photos starts the worker job, and the splat's page shows each stage live through the same database rows and status callback a real EC2 run uses.
 
 A real NVIDIA GPU is required, with its driver installed. `scripts/dev/setup.sh gpu` sets up the rest. Each stage rebuilds its image (`splat-worker-reconstruct:dev` or `splat-worker-train:dev`) from `worker/` before it runs, so a `worker/` edit is picked up by the next stage. An unchanged `worker/` builds from cache in seconds.
 
@@ -81,12 +81,9 @@ When a set registers poorly, `worker/jobdir/<jobId>/colmap/database.db` says why
 
 Very few of either points at blur, low texture, or an orbit that doesn't connect, rather than a pipeline bug. No healthy thresholds are recorded yet, so read the counts relative to each other rather than against a known-good baseline.
 
-Two `web/.env` switches change the train stage, and take effect from the next stage `pnpm dev` launches:
+One `web/.env` switch changes the train stage, and takes effect from the next stage `pnpm dev` launches. `EVAL_HOLDOUT=true` judges a change to `worker/pipeline/train.py`. It holds back every 8th photo from training, then logs PSNR and SSIM against those photos and writes side-by-side renders to `worker/jobdir/<jobId>/eval/`. The training loss can't judge a change, because it keeps falling even while the splat overfits. Identical runs can differ by up to about 1 dB, so repeat each side of a comparison a few times. Each run is a new splat, since a reconstruction is trained only once.
 
-- `FAST_TEST_MODE=true` cuts training to 20 iterations, a smoke test of the plumbing. It doesn't cut GPU memory.
-- `EVAL_HOLDOUT=true` judges a change to `worker/pipeline/train.py`. It holds back every 8th photo from training, then logs PSNR and SSIM against those photos and writes side-by-side renders to `worker/jobdir/<jobId>/eval/`. The training loss can't judge a change, because it keeps falling even while the splat overfits. Identical runs can differ by up to about 1 dB, so repeat each side of a comparison a few times. Each run is a new splat, since a reconstruction is trained only once.
-
-Leaving `WORKER_LOCAL_LAUNCH` unset (or `false`) launches a real spot instance, and then `web/lib/server/env.ts` requires the `WORKER_AMI_ID`, `WORKER_SUBNET_ID`, `WORKER_SECURITY_GROUP_ID`, `WORKER_INSTANCE_PROFILE_ARN`, `WORKER_LOG_GROUP` and `WORKER_DATA_ROLE_ARN` variables that `infra/web.tf` sets in production.
+`pnpm dev` never launches a spot instance. The dev IAM user has no EC2 access, and `web/lib/server/env.ts` requires the `WORKER_AMI_ID`, `WORKER_SUBNET_ID`, `WORKER_SECURITY_GROUP_ID`, `WORKER_INSTANCE_PROFILE_ARN`, `WORKER_LOG_GROUP` and `WORKER_DATA_ROLE_ARN` variables, which `infra/web.tf` sets in production, only outside local dev.
 
 ### 1.5 Full test suite
 
@@ -96,7 +93,7 @@ pnpm lint       # from the repo root: every format check, lint rule and typechec
 pnpm test       # from the repo root: every test suite CI runs
 ```
 
-Several of the web tests need Postgres. They use `TEST_DATABASE_URL` from `web/.env` (`ai_gaussian_splatter_test` on `splat-pg`), and fail if that container is down or the variable is missing. `web/tests/migrate-test-db.ts` migrates that database before those tests run.
+Several of the web tests need Postgres. They use `TEST_DATABASE_URL`, which `web/vitest.config.mts` defaults to `ai_gaussian_splatter_test` on `splat-pg`, and fail if that container is down. `web/tests/migrate-test-db.ts` migrates that database before those tests run.
 
 ---
 
@@ -224,13 +221,13 @@ scripts/prod/ssm.sh                            # prints every setting
 scripts/prod/ssm.sh processing-enabled false   # changes one
 ```
 
-`scripts/prod/ssm.sh --help` lists every setting and the values it accepts. It refuses a value the web service would reject, since the web service would otherwise fall back to that setting's default without saying so.
+`scripts/prod/ssm.sh --help` lists every setting and the values it accepts. It refuses a value the web service would reject, since the web service would otherwise fall back to that setting's default and pause processing site-wide.
 
 - **Pausing processing** stops new reconstruct and train launches only. Stages already running finish, and the new-splat page and the splat page tell visitors processing is paused.
 - **A new lifetime ceiling** applies to instances launched after the change. Each running instance keeps the ceiling it launched with.
 - **A new train instance type** must be one whose GPU `worker/Dockerfile` compiles gsplat's kernels for, so the script accepts only those.
 
-For local dev, each setting is an env var in `web/.env` named after it, such as `MAX_JOBS_PER_DAY` (`web/.env.example`).
+For local dev, each setting except the lifetime ceiling and the two instance types is an env var in `web/.env` named after it, such as `MAX_JOBS_PER_DAY` (`web/.env.example`). Those three only an EC2 launch reads, and `pnpm dev` never makes one.
 
 ---
 

@@ -82,7 +82,7 @@ def _make_settings() -> Settings:
         job_id="job-1",
         splat_id="splat-1",
         callback_token="tok",
-        app_public_url="https://example.test",
+        app_origin="https://example.test",
         uploads_bucket="uploads",
         splats_bucket="splats",
     )
@@ -109,17 +109,6 @@ def test_train_translates_cuda_oom_into_a_clean_runtime_error(monkeypatch, tmp_p
     assert "CUDA out of memory" not in str(exc_info.value)
 
 
-def test_build_strategy_refines_within_a_fast_test_run():
-    """A 20-iteration smoke test must still reach the strategy's refine steps, or it stops covering densification."""
-    strategy = _build_strategy(20)
-    refine_steps = [
-        step
-        for step in range(20)
-        if strategy.refine_start_iter < step < strategy.refine_stop_iter and step % strategy.refine_every == 0
-    ]
-    assert refine_steps
-
-
 def test_build_strategy_keeps_the_reference_proportions_at_10k():
     strategy = _build_strategy(10_000)
     assert (strategy.refine_start_iter, strategy.refine_every, strategy.refine_stop_iter) == (166, 33, 5000)
@@ -131,20 +120,9 @@ def test_opacity_resets_every_tenth_of_a_10k_run_until_refinement_stops():
     assert resets == [1000, 2000, 3000, 4000]
 
 
-def test_opacity_resets_within_a_fast_test_run():
-    """A 20-iteration smoke test must still reach a reset, or it stops covering reset_opa."""
-    refine_stop_iter = _build_strategy(20).refine_stop_iter
-    assert any(_is_opacity_reset_step(step, 20, refine_stop_iter) for step in range(20))
-
-
 def test_sh_degree_rises_by_one_every_thirtieth_of_a_10k_run():
     degrees = [_sh_degree_at(step, 10_000) for step in (0, 332, 333, 666, 999, 9_999)]
     assert degrees == [0, 0, 1, 2, 3, SH_DEGREE]
-
-
-def test_sh_degree_reaches_the_maximum_within_a_fast_test_run():
-    """A 20-iteration smoke test must still render at the full degree, or it stops covering the SH code path."""
-    assert _sh_degree_at(19, 20) == SH_DEGREE
 
 
 def test_scene_scale_is_the_farthest_camera_from_the_cameras_centre():

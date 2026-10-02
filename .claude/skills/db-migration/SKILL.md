@@ -49,7 +49,7 @@ Never hand-edit `web/drizzle/meta/*.json`. They are `generate`'s record of the l
 pnpm db:migrate
 ```
 
-Needs the local Postgres running (`scripts/dev/db.sh up`, which `pnpm dev` also runs) and the `DATABASE_*` variables from `web/.env`. See [Web (frontend + REST API)](../../../RUNBOOK.md#12-web-frontend--rest-api) if it isn't up.
+Needs the local Postgres running (`scripts/dev/db.sh up`, which `pnpm dev` also runs). `pnpm db:migrate` always uses that container. See [Web (frontend + REST API)](../../../RUNBOOK.md#12-web-frontend--rest-api) if it isn't up.
 
 **5. Verify.**
 
@@ -60,7 +60,7 @@ pnpm test
 
 `web:lint` is a repo-root script, the one exception to "all commands run from `web/`" above. It's the typecheck that matters for a schema edit. The `worker` and `infra` checks have nothing to do with `web/lib/server/db/schema.ts`.
 
-`TEST_DATABASE_URL` comes from `web/.env`. `pnpm test` fails if `splat-pg` is down (`scripts/dev/db.sh up`) or that line is missing, so a pass means the new schema was tested. `ai_gaussian_splatter_test` is a separate database on the same instance, not the dev one. Vitest applies `web/drizzle/` to it before those tests. See [RUNBOOK.md § "Full test suite"](../../../RUNBOOK.md#16-full-test-suite).
+`web/vitest.config.mts` defaults `TEST_DATABASE_URL` to that database. `pnpm test` fails if `splat-pg` is down (`scripts/dev/db.sh up`), so a pass means the new schema was tested. `ai_gaussian_splatter_test` is a separate database on the same instance, not the dev one. Vitest applies `web/drizzle/` to it before those tests. See [RUNBOOK.md § "Full test suite"](../../../RUNBOOK.md#15-full-test-suite).
 
 **6. Commit `web/lib/server/db/schema.ts` and the whole `web/drizzle/` tree together**, `meta/` snapshots included. CI re-runs `db:generate` and fails if it writes anything or prints an error, so a schema change committed without its migration blocks the PR. `web/drizzle/` is excluded from Biome, so the generated SQL is not reformatted.
 

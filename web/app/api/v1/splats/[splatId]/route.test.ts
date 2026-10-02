@@ -9,7 +9,7 @@ vi.mock("@clerk/nextjs/server", () => ({
 const { terminateWorkerMock } = vi.hoisted(() => ({ terminateWorkerMock: vi.fn(async () => {}) }));
 vi.mock("@/lib/server/ec2Launcher", async importOriginal => {
   const actual = await importOriginal<typeof import("@/lib/server/ec2Launcher")>();
-  return { ...actual, terminateWorker: terminateWorkerMock, localLaunchEnabled: () => false };
+  return { ...actual, terminateWorker: terminateWorkerMock };
 });
 
 const { deleteSplatObjectsMock } = vi.hoisted(() => ({ deleteSplatObjectsMock: vi.fn(async () => {}) }));

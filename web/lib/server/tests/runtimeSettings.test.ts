@@ -46,6 +46,8 @@ describe("getRuntimeSettings", () => {
     afterEach(() => {
       delete process.env.PROCESSING_ENABLED;
       delete process.env.MAX_JOBS_PER_DAY;
+      delete process.env.WORKER_MAX_LIFETIME_MINUTES;
+      delete process.env.TRAIN_INSTANCE_TYPE;
     });
 
     it("turns processing on and reads the rest from env vars named after the settings", async () => {
@@ -57,6 +59,16 @@ describe("getRuntimeSettings", () => {
       expect(settings.maxJobsPerDay).toBe(7);
       expect(settings.trainInstanceType).toBe("g5.xlarge");
       expect(ssmMock.commandCalls(GetParametersByPathCommand)).toHaveLength(0);
+    });
+
+    it("ignores env vars for the settings only an EC2 launch reads", async () => {
+      process.env.WORKER_MAX_LIFETIME_MINUTES = "60";
+      process.env.TRAIN_INSTANCE_TYPE = "g6e.xlarge";
+
+      const settings = await getRuntimeSettings();
+
+      expect(settings.workerMaxLifetimeMinutes).toBe(30);
+      expect(settings.trainInstanceType).toBe("g5.xlarge");
     });
 
     it("turns processing off from PROCESSING_ENABLED", async () => {
@@ -108,7 +120,7 @@ describe("getRuntimeSettings", () => {
       expect(ssmMock.commandCalls(GetParametersByPathCommand)).toHaveLength(2);
     });
 
-    // A typo in one limit must not take anything else down with it.
+    // A typo in one limit must not take uploads down with it. It does stop GPU launches (the next test).
     it("falls back to the default for each setting that is missing or fails its check", async () => {
       ssmMock.on(GetParametersByPathCommand).resolves(
         parameters({
@@ -122,13 +134,22 @@ describe("getRuntimeSettings", () => {
 
       const settings = await getRuntimeSettings();
 
-      expect(settings.processingEnabled).toBe(true);
       expect(settings.maxJobsPerDay).toBe(20);
       expect(settings.workerMaxLifetimeMinutes).toBe(30);
       expect(settings.minPhotosPerSplat).toBe(20);
       expect(settings.trainingIterations).toBe(10_000);
       expect(settings.uploadsPerIpPerHour).toBe(5);
       expect(console.error).toHaveBeenCalledWith(expect.stringContaining("max-jobs-per-day is invalid"));
+    });
+
+    it.each([
+      ["missing", Object.fromEntries(Object.entries(ALL_SET).filter(([name]) => name !== "training-iterations"))],
+      ["invalid", { ...ALL_SET, "max-jobs-per-day": "twenty" }],
+    ])("turns processing off when any other parameter is %s", async (_, values) => {
+      ssmMock.on(GetParametersByPathCommand).resolves(parameters(values));
+
+      expect((await getRuntimeSettings()).processingEnabled).toBe(false);
+      expect(console.error).toHaveBeenCalledWith(expect.stringContaining("so processing is off until they are fixed"));
     });
 
     it("rejects an instance type outside each stage's allow-list", async () => {

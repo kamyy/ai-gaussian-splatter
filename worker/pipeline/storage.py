@@ -25,7 +25,7 @@ _RETRY_DELAYS = (2.0, 4.0, 8.0, 16.0)
 
 def _post_for_credentials(settings: Settings) -> dict[str, str]:
     response = httpx.post(
-        f"{settings.app_public_url}/api/v1/internal/jobs/{settings.job_id}/s3-credentials",
+        f"{settings.app_origin}/api/v1/internal/jobs/{settings.job_id}/s3-credentials",
         headers={"Authorization": f"Bearer {settings.callback_token}"},
         timeout=10.0,
     )

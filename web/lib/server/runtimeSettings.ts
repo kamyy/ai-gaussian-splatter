@@ -4,12 +4,13 @@
  *
  * In production each setting is an SSM Parameter Store parameter under RUNTIME_SETTINGS_PATH (infra/settings.tf), read
  * in one call and cached for a minute, so a change made with scripts/prod/ssm.sh takes effect within a minute.
- * Local dev and tests leave RUNTIME_SETTINGS_PATH unset and read the same settings from env vars named after them
- * (max-jobs-per-day is MAX_JOBS_PER_DAY).
+ * Local dev and tests leave RUNTIME_SETTINGS_PATH unset and read the settings from env vars named after them
+ * (max-jobs-per-day is MAX_JOBS_PER_DAY), except the ones in LAUNCH_ONLY_SETTINGS.
  *
  * A setting that is missing or fails its check falls back to its default, so a typo in one limit can't take uploads
- * down. The processing switch is the exception: it defaults to off whenever it can't be read, since launching GPU
- * instances blind is the one failure that costs money.
+ * down. In production the same problem also turns processing off, and so does a failed read of the parameters: a
+ * deploy whose settings can't be trusted launches no GPU instances, since launching them blind is the one failure that
+ * costs money.
  */
 
 import { paginateGetParametersByPath, SSMClient } from "@aws-sdk/client-ssm";
@@ -35,6 +36,14 @@ const TRAIN_INSTANCE_TYPES = ["g5.xlarge", "g6.xlarge", "g6e.xlarge"];
  * here and in the sweeper, whose infra/locals.tf worker_max_lifetime_upper_bound_minutes must not be lower.
  */
 export const WORKER_MAX_LIFETIME_BOUNDS = { min: 5, max: 240 };
+
+// Only an EC2 launch reads these, and local dev always launches a local Podman container instead, so no env var sets
+// them. They keep their defaults there.
+const LAUNCH_ONLY_SETTINGS = new Set([
+  "worker-max-lifetime-minutes",
+  "reconstruct-instance-type",
+  "train-instance-type",
+]);
 
 let ssmClient: SSMClient | undefined;
 let cached: { settings: RuntimeSettings; fetchedAt: number } | undefined;
@@ -114,10 +123,14 @@ const SETTINGS: { [K in keyof RuntimeSettings]: Setting<RuntimeSettings[K]> } = 
 };
 
 // Env vars are named after the settings: max-jobs-per-day is MAX_JOBS_PER_DAY. An unset one is not an error, and
-// processing defaults to on, since local dev and tests have no switch to set.
+// processing defaults to on, since local dev and tests have no switch to set. The LAUNCH_ONLY_SETTINGS have no env var.
 function readEnvValues(): Map<string, string> {
   const values = new Map<string, string>([["processing-enabled", "true"]]);
   for (const { name } of Object.values(SETTINGS)) {
+    if (LAUNCH_ONLY_SETTINGS.has(name)) {
+      continue;
+    }
+
     const value = process.env[name.toUpperCase().replaceAll("-", "_")];
     if (value !== undefined) {
       values.set(name, value);
@@ -142,11 +155,18 @@ async function readParameterValues(path: string, region: string): Promise<Map<st
   return values;
 }
 
-function parseSetting<T>(setting: Setting<T>, values: Map<string, string>, fromParameters: boolean): T {
+// Each name that was missing (from SSM only, since an unset env var is normal) or invalid goes into `problems`.
+function parseSetting<T>(
+  setting: Setting<T>,
+  values: Map<string, string>,
+  fromParameters: boolean,
+  problems: string[],
+): T {
   const raw = values.get(setting.name);
   if (raw === undefined) {
     if (fromParameters) {
       console.error(`Runtime setting ${setting.name} is missing, so it falls back to ${String(setting.fallback)}`);
+      problems.push(setting.name);
     }
 
     return setting.fallback;
@@ -157,6 +177,7 @@ function parseSetting<T>(setting: Setting<T>, values: Map<string, string>, fromP
     console.error(
       `Runtime setting ${setting.name} is invalid (${raw}), so it falls back to ${String(setting.fallback)}`,
     );
+    problems.push(setting.name);
 
     return setting.fallback;
   }
@@ -164,26 +185,33 @@ function parseSetting<T>(setting: Setting<T>, values: Map<string, string>, fromP
   return value;
 }
 
-function parseSettings(values: Map<string, string>, fromParameters: boolean): RuntimeSettings {
+function parseSettings(values: Map<string, string>, fromParameters: boolean, problems: string[]): RuntimeSettings {
+  function read<T>(setting: Setting<T>): T {
+    return parseSetting(setting, values, fromParameters, problems);
+  }
+
   return {
-    processingEnabled: parseSetting(SETTINGS.processingEnabled, values, fromParameters),
-    maxJobsPerDay: parseSetting(SETTINGS.maxJobsPerDay, values, fromParameters),
-    uploadsPerIpPerHour: parseSetting(SETTINGS.uploadsPerIpPerHour, values, fromParameters),
-    uploadsPerUserPerDay: parseSetting(SETTINGS.uploadsPerUserPerDay, values, fromParameters),
-    minPhotosPerSplat: parseSetting(SETTINGS.minPhotosPerSplat, values, fromParameters),
-    workerMaxLifetimeMinutes: parseSetting(SETTINGS.workerMaxLifetimeMinutes, values, fromParameters),
-    reconstructInstanceType: parseSetting(SETTINGS.reconstructInstanceType, values, fromParameters),
-    trainInstanceType: parseSetting(SETTINGS.trainInstanceType, values, fromParameters),
-    trainingIterations: parseSetting(SETTINGS.trainingIterations, values, fromParameters),
-    showcaseClerkUserId: parseSetting(SETTINGS.showcaseClerkUserId, values, fromParameters),
+    processingEnabled: read(SETTINGS.processingEnabled),
+    maxJobsPerDay: read(SETTINGS.maxJobsPerDay),
+    uploadsPerIpPerHour: read(SETTINGS.uploadsPerIpPerHour),
+    uploadsPerUserPerDay: read(SETTINGS.uploadsPerUserPerDay),
+    minPhotosPerSplat: read(SETTINGS.minPhotosPerSplat),
+    workerMaxLifetimeMinutes: read(SETTINGS.workerMaxLifetimeMinutes),
+    reconstructInstanceType: read(SETTINGS.reconstructInstanceType),
+    trainInstanceType: read(SETTINGS.trainInstanceType),
+    trainingIterations: read(SETTINGS.trainingIterations),
+    showcaseClerkUserId: read(SETTINGS.showcaseClerkUserId),
   };
 }
 
-/** Never throws. A failed read leaves processing off and every other setting at its default. */
+/**
+ * Never throws. A failed read, or any missing or invalid parameter, turns processing off. Every setting that can't be
+ * used stays at its default.
+ */
 export async function getRuntimeSettings(): Promise<RuntimeSettings> {
   const { RUNTIME_SETTINGS_PATH, AWS_REGION } = getEnv();
   if (RUNTIME_SETTINGS_PATH === undefined) {
-    return parseSettings(readEnvValues(), false);
+    return parseSettings(readEnvValues(), false, []);
   }
 
   const now = Date.now();
@@ -194,10 +222,15 @@ export async function getRuntimeSettings(): Promise<RuntimeSettings> {
   // A failed read is cached like a good one, so an SSM outage costs one call a minute rather than one per request.
   let settings: RuntimeSettings;
   try {
-    settings = parseSettings(await readParameterValues(RUNTIME_SETTINGS_PATH, AWS_REGION), true);
+    const problems: string[] = [];
+    settings = parseSettings(await readParameterValues(RUNTIME_SETTINGS_PATH, AWS_REGION), true, problems);
+    if (problems.length > 0) {
+      console.error(`Runtime settings ${problems.join(", ")} can't be used, so processing is off until they are fixed`);
+      settings = { ...settings, processingEnabled: false };
+    }
   } catch (err) {
     console.error("Couldn't read the runtime settings, so processing is off until they can be read", err);
-    settings = parseSettings(new Map(), false);
+    settings = parseSettings(new Map(), false, []);
   }
 
   cached = { settings, fetchedAt: now };

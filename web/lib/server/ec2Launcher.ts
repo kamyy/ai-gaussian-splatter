@@ -20,7 +20,7 @@ import {
 } from "@aws-sdk/client-ec2";
 
 import type { CropBox } from "@/lib/types";
-import { getEnv, getWorkerInstanceEnv } from "./env";
+import { getEnv, getWorkerInstanceEnv, LOCAL_APP_ORIGIN, LOCAL_WORKER_CALLBACK_ORIGIN } from "./env";
 import type { RuntimeSettings } from "./runtimeSettings";
 
 /**
@@ -28,9 +28,6 @@ import type { RuntimeSettings } from "./runtimeSettings";
  * so the two must match.
  */
 const LIFETIME_TAG_KEY = "MaxLifetimeMinutes";
-
-/** The port `next dev` serves on, which a locally launched worker calls back to. */
-const LOCAL_APP_PORT = 3000;
 
 /**
  * Local worker jobs stopped while their image was still building. stopLocalWorker() has no container to remove yet, so
@@ -57,7 +54,7 @@ interface UserDataParams {
   callbackToken: string;
   jobId: string;
   splatId: string;
-  appPublicUrl: string;
+  appOrigin: string;
   uploadsBucket: string;
   splatsBucket: string;
   stage: WorkerStage;
@@ -99,7 +96,7 @@ BOOTED_AT="$(date +%s%3N)"
 CALLBACK_TOKEN="${p.callbackToken}"
 JOB_ID="${p.jobId}"
 SPLAT_ID="${p.splatId}"
-APP_PUBLIC_URL="${p.appPublicUrl}"
+APP_ORIGIN="${p.appOrigin}"
 UPLOADS_BUCKET="${p.uploadsBucket}"
 SPLATS_BUCKET="${p.splatsBucket}"
 STAGE="${p.stage}"
@@ -122,7 +119,7 @@ docker run --rm --gpus all \\
     -e JOB_ID="$JOB_ID" \\
     -e SPLAT_ID="$SPLAT_ID" \\
     -e CALLBACK_TOKEN="$CALLBACK_TOKEN" \\
-    -e APP_PUBLIC_URL="$APP_PUBLIC_URL" \\
+    -e APP_ORIGIN="$APP_ORIGIN" \\
     -e UPLOADS_BUCKET="$UPLOADS_BUCKET" \\
     -e SPLATS_BUCKET="$SPLATS_BUCKET" \\
     -e STAGE="$STAGE" \\
@@ -154,14 +151,6 @@ function ecrRegistry(): string {
 }
 
 /**
- * Runs the worker against the caller's own GPU via Podman instead of launching a real EC2 spot instance. See
- * launchJobLocal() below and "Local worker runs" in RUNBOOK.md.
- */
-export function localLaunchEnabled(): boolean {
-  return process.env.WORKER_LOCAL_LAUNCH === "true";
-}
-
-/**
  * A per-job token rather than one shared secret, so a compromised instance can only change the one job it was launched
  * for.
  *
@@ -180,7 +169,7 @@ export async function launchJob(params: WorkerLaunch): Promise<string> {
     callbackToken: params.callbackToken,
     jobId: params.jobId,
     splatId: params.splatId,
-    appPublicUrl: env.APP_PUBLIC_URL,
+    appOrigin: env.APP_ORIGIN,
     uploadsBucket: env.UPLOADS_BUCKET,
     splatsBucket: env.SPLATS_BUCKET,
     stage: params.stage,
@@ -310,7 +299,7 @@ export function stopLocalWorker(jobId: string): void {
  * called. Without it the job would sit in progress until web/lib/server/reconcileJob.ts gave up on it.
  */
 function reportLocalBuildFailure(params: WorkerLaunch): void {
-  fetch(`http://localhost:${LOCAL_APP_PORT}/api/v1/internal/jobs/${params.jobId}/status`, {
+  fetch(`${LOCAL_APP_ORIGIN}/api/v1/internal/jobs/${params.jobId}/status`, {
     method: "PATCH",
     headers: { Authorization: `Bearer ${params.callbackToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -322,11 +311,11 @@ function reportLocalBuildFailure(params: WorkerLaunch): void {
 
 /**
  * Local-dev replacement for launchJob(). It builds the stage's worker image from worker/ and runs it on the caller's
- * own GPU with Podman, instead of launching a real EC2 spot instance. web/lib/server/worker.ts only calls it when
- * WORKER_LOCAL_LAUNCH is set. Production can't reach it, because the ECS task has neither a podman binary nor a GPU.
+ * own GPU with Podman, instead of launching a real EC2 spot instance. web/lib/server/worker.ts only calls it under
+ * `pnpm dev`. Production can't reach it, because the ECS task has neither a podman binary nor a GPU.
  *
  * Like the EC2 launch it replaces, it doesn't wait for the container. The worker reports its own progress back through
- * APP_PUBLIC_URL and CALLBACK_TOKEN (worker/pipeline/status.py).
+ * APP_ORIGIN and CALLBACK_TOKEN (worker/pipeline/status.py).
  */
 export function launchJobLocal(params: WorkerLaunch): void {
   const env = getEnv();
@@ -364,10 +353,8 @@ export function launchJobLocal(params: WorkerLaunch): void {
     `CALLBACK_TOKEN=${params.callbackToken}`,
     "-e",
     `STAGE=${params.stage}`,
-    // Inside the container, "localhost" is the container itself, not the host running `next dev`.
-    // host.containers.internal is Podman's alias for the host.
     "-e",
-    `APP_PUBLIC_URL=http://host.containers.internal:${LOCAL_APP_PORT}`,
+    `APP_ORIGIN=${LOCAL_WORKER_CALLBACK_ORIGIN}`,
     "-e",
     `UPLOADS_BUCKET=${env.UPLOADS_BUCKET}`,
     "-e",
@@ -379,9 +366,8 @@ export function launchJobLocal(params: WorkerLaunch): void {
     "-e",
     `AWS_DEFAULT_REGION=${env.AWS_REGION}`,
     ...(params.stage === "train" ? ["-e", `TRAINING_ITERATIONS=${params.settings.trainingIterations}`] : []),
-    // The train stage's local-only switches from web/.env (worker/pipeline/config.py). FAST_TEST_MODE cuts training to
-    // 20 iterations, and EVAL_HOLDOUT scores the result against held-back photos.
-    ...(params.stage === "train" && process.env.FAST_TEST_MODE === "true" ? ["-e", "FAST_TEST_MODE=true"] : []),
+    // The train stage's local-only switch from web/.env (worker/pipeline/config.py). EVAL_HOLDOUT scores the result
+    // against held-back photos.
     ...(params.stage === "train" && process.env.EVAL_HOLDOUT === "true" ? ["-e", "EVAL_HOLDOUT=true"] : []),
     ...(params.cropBox ? ["-e", `CROP_BOX=${JSON.stringify(params.cropBox)}`] : []),
     "-v",

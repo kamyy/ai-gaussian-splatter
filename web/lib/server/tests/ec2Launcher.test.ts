@@ -166,7 +166,7 @@ describe("launchJob", () => {
     expect(userData).toContain('CALLBACK_TOKEN="tok-abc"');
     expect(userData).toContain('JOB_ID="job-123"');
     expect(userData).toContain('SPLAT_ID="splat-456"');
-    expect(userData).toContain(`APP_PUBLIC_URL="${process.env.APP_PUBLIC_URL}"`);
+    expect(userData).toContain(`APP_ORIGIN="${process.env.APP_ORIGIN}"`);
     expect(userData).toContain('STAGE="reconstruct"');
     expect(userData).toContain("123456789012.dkr.ecr.us-east-1.amazonaws.com/worker:abc-reconstruct");
   });
@@ -300,8 +300,8 @@ describe("launchJobLocal", () => {
     expect(args).toEqual(expect.arrayContaining(["-e", "CALLBACK_TOKEN=tok-abc"]));
     expect(args).toEqual(expect.arrayContaining(["-e", "STAGE=train"]));
 
-    // Podman's alias for the host running `next dev`. See the APP_PUBLIC_URL comment in web/lib/server/ec2Launcher.ts.
-    expect(args).toEqual(expect.arrayContaining(["-e", "APP_PUBLIC_URL=http://host.containers.internal:3000"]));
+    // Podman's alias for the host running `next dev`, since `localhost` inside the container is the container itself.
+    expect(args).toEqual(expect.arrayContaining(["-e", "APP_ORIGIN=http://host.containers.internal:3000"]));
     expect(options).toMatchObject({ detached: true });
   });
 
@@ -322,16 +322,15 @@ describe("launchJobLocal", () => {
     expect(runArgs(1).some(arg => arg.startsWith("TRAINING_ITERATIONS="))).toBe(false);
   });
 
-  it("forwards FAST_TEST_MODE and EVAL_HOLDOUT to a train stage only, when web/.env sets them", () => {
+  it("forwards EVAL_HOLDOUT to a train stage only, when web/.env sets it", () => {
     launchJobLocal(params);
-    vi.stubEnv("FAST_TEST_MODE", "true");
     vi.stubEnv("EVAL_HOLDOUT", "true");
     launchJobLocal(params);
     launchJobLocal({ ...params, stage: "reconstruct" });
 
-    expect(runArgs(0).some(arg => arg === "FAST_TEST_MODE=true" || arg === "EVAL_HOLDOUT=true")).toBe(false);
-    expect(runArgs(1)).toEqual(expect.arrayContaining(["-e", "FAST_TEST_MODE=true", "-e", "EVAL_HOLDOUT=true"]));
-    expect(runArgs(2).some(arg => arg === "FAST_TEST_MODE=true" || arg === "EVAL_HOLDOUT=true")).toBe(false);
+    expect(runArgs(0)).not.toContain("EVAL_HOLDOUT=true");
+    expect(runArgs(1)).toEqual(expect.arrayContaining(["-e", "EVAL_HOLDOUT=true"]));
+    expect(runArgs(2)).not.toContain("EVAL_HOLDOUT=true");
   });
 
   it("passes a crop box to the worker container as JSON, only when one is set", () => {

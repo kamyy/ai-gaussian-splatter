@@ -46,19 +46,18 @@ export function databaseSsl(env: Record<string, string | undefined> = process.en
  * Credentials are percent-encoded, because an RDS-generated password can contain `:`, `?`, `#`, or `%`, and any of them
  * would break the URL. `pg` decodes them again when it connects.
  *
- * Returns undefined rather than throwing when nothing is configured, so `drizzle-kit generate`, which needs no
+ * Returns undefined rather than throwing when any of those five is unset, so `drizzle-kit generate`, which needs no
  * database, keeps working.
  */
 export function resolveDatabaseUrl(env: Record<string, string | undefined> = process.env): string | undefined {
   const host = env.DATABASE_HOST;
   const name = env.DATABASE_NAME;
+  const port = env.DATABASE_PORT;
   const user = env.DATABASE_USER;
   const password = env.DATABASE_PASSWORD;
-  if (!host || !name || !user || !password) {
+  if (!host || !port || !name || !user || !password) {
     return undefined;
   }
-
-  const port = env.DATABASE_PORT || "5432";
 
   return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${name}`;
 }

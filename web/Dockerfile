@@ -54,15 +54,6 @@ ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 ARG NEXT_PUBLIC_GA_MEASUREMENT_ID
 ENV NEXT_PUBLIC_GA_MEASUREMENT_ID=$NEXT_PUBLIC_GA_MEASUREMENT_ID
 
-# Always disabled, in every image.
-ENV NEXT_PUBLIC_CLERK_TELEMETRY_DISABLED=1
-
-# Omitting these sends users to Clerk's hosted Account Portal (AGENTS.md).
-ENV NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
-ENV NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
-ENV NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=/splats
-ENV NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/splats
-
 RUN pnpm run build
 
 
@@ -83,10 +74,11 @@ COPY --from=deps-prod --chown=app:app /app/node_modules ./node_modules
 COPY --chown=app:app package.json ./package.json
 
 # A migration run needs only the .sql files in drizzle/ (plus meta/_journal.json, which orders them), the script that
-# applies them, and the one module that script imports for the connection URL. drizzle.config.ts isn't used here. It
+# applies them, and the two modules that script imports for the connection URL. drizzle.config.ts isn't used here. It
 # configures the drizzle-kit CLI, which only `db:generate` and `db:studio` use.
 COPY --chown=app:app drizzle ./drizzle
 COPY --chown=app:app lib/server/databaseUrl.ts ./lib/server/databaseUrl.ts
+COPY --chown=app:app lib/server/env.ts ./lib/server/env.ts
 COPY --chown=app:app scripts/db-migrate.cjs ./scripts/db-migrate.cjs
 
 # RDS certificates chain to Amazon's own certificate authority (CA), which isn't in Node's trust store. This path must

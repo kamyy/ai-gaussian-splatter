@@ -2,7 +2,7 @@
 // web/proxy.ts.
 
 // Point DATABASE_* at the test database, so no test reads or writes the dev one. web/tests/migrate-test-db.ts has
-// already failed the run if TEST_DATABASE_URL is unset.
+// already failed the run if TEST_DATABASE_URL is empty.
 const url = new URL(process.env.TEST_DATABASE_URL as string);
 process.env.DATABASE_HOST = url.hostname;
 process.env.DATABASE_PORT = url.port || "5432";
@@ -25,7 +25,7 @@ const defaults: Record<string, string> = {
   WORKER_INSTANCE_PROFILE_ARN: "arn:aws:iam::123456789012:instance-profile/worker",
   WORKER_LOG_GROUP: "/ai-gaussian-splatter/worker",
   WORKER_DATA_ROLE_ARN: "arn:aws:iam::123456789012:role/worker-data",
-  APP_PUBLIC_URL: "https://app.example.com",
+  APP_ORIGIN: "https://app.example.com",
   SHOWCASE_CLERK_USER_ID: "showcase",
 };
 
