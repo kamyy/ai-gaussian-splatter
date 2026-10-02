@@ -123,7 +123,7 @@ export default function PrivacyPage() {
       <LegalSection title="Changes">
         <p>
           If this policy changes, we will update the date at the top of this page. Using the site is also covered by our{" "}
-          <Link href="/terms" className="text-primary underline underline-offset-2">
+          <Link href="/terms" className="text-link">
             terms of service
           </Link>
           .

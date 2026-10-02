@@ -22,15 +22,17 @@ const VARIANT: Record<ButtonVariant, string> = {
   danger: "bg-error text-background hover:opacity-90",
 };
 
-// medium and large grow to 44px, the touch-target floor, only where the primary pointer is a finger.
+// medium, large and icon grow to 44px, the touch-target floor, only where the primary pointer is a finger. icon is a
+// circle holding one icon, so it needs an aria-label.
 const SIZE: Record<ButtonSize, string> = {
   small: "h-8 px-3 text-xs",
   medium: "h-9 px-4 text-sm pointer-coarse:h-11",
   large: "h-10 px-5 text-base pointer-coarse:h-11",
+  icon: "h-10 w-10 shrink-0 pointer-coarse:h-11 pointer-coarse:w-11",
 };
 
 type ButtonVariant = "contained" | "ink" | "outlined" | "text" | "danger";
-type ButtonSize = "small" | "medium" | "large";
+type ButtonSize = "small" | "medium" | "large" | "icon";
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;

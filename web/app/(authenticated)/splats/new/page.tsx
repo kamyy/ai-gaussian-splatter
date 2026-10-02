@@ -6,7 +6,7 @@
  */
 
 import type { Metadata } from "next";
-import { BackButton } from "@/components/layout/BackButton";
+import { PageTitle } from "@/components/layout/PageTitle";
 import { NewSplatForm } from "@/components/splats/NewSplatForm";
 
 export const metadata: Metadata = {
@@ -106,12 +106,11 @@ function ShootingTips() {
 
 export default function NewSplatPage() {
   return (
-    <div className="mx-auto flex max-w-(--breakpoint-2xl) flex-col gap-8 px-4 py-9 sm:px-12 lg:flex-row lg:gap-12">
+    <div className="page-width flex flex-col gap-8 px-4 py-9 sm:px-12 lg:flex-row lg:gap-12">
       <div className="flex min-w-0 flex-1 flex-col gap-6">
-        <div className="flex items-center gap-3.5">
-          <BackButton href="/splats" label="Back to Library" />
-          <h1 className="min-w-0 font-display text-5xl tracking-tight sm:text-6xl">New splat</h1>
-        </div>
+        <PageTitle backHref="/splats" backLabel="Back to Library">
+          New splat
+        </PageTitle>
         <NewSplatForm />
       </div>
       <ShootingTips />
