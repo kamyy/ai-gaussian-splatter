@@ -4,8 +4,8 @@
 # Serves the same image production runs, on http://localhost:8000, for checking a change the dev server might hide, such
 # as a missing file in the standalone build.
 
-# Needs splat-pg up (scripts/dev/db-up.sh) and a filled-in web/.env. Replaces any splat-web container from an earlier
-# run.
+# Needs splat-pg up (`scripts/dev/db.sh up`) and a filled-in web/.env. Replaces any splat-web container from an earlier
+# run. The container can't start worker jobs, because it has no podman inside it, so it runs with processing paused.
 
 set -euo pipefail
 
@@ -13,6 +13,7 @@ usage() {
   echo "Usage: scripts/dev/run-web-container.sh"
   echo
   echo "Builds the splat-web image production runs and serves it on http://localhost:8000 in place of pnpm dev."
+  echo "Processing is paused there, so creating a splat shows the paused notice. Run worker jobs from pnpm dev."
 }
 
 if [[ ${1-} == -h || ${1-} == --help ]]; then
@@ -43,6 +44,7 @@ podman rm -f --ignore splat-web >/dev/null
 podman run -d --name splat-web -p 127.0.0.1:8000:8000 --env-file "$ROOT/web/.env" \
   -e DATABASE_HOST=host.containers.internal \
   -e APP_PUBLIC_URL=http://localhost:8000 \
+  -e PROCESSING_ENABLED=false \
   splat-web:test >/dev/null
 
 READY_TIMEOUT_SEC=30
