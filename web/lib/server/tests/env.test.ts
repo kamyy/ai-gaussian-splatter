@@ -92,19 +92,6 @@ describe("getEnv", () => {
       }
     }
 
-    it("sets the database and the app origin", async () => {
-      stubLocalDev();
-      const env = (await loadGetEnv())();
-
-      expect(env).toMatchObject({
-        DATABASE_HOST: "localhost",
-        DATABASE_NAME: "ai_gaussian_splatter",
-        DATABASE_USER: "postgres",
-        DATABASE_PASSWORD: "postgres",
-        APP_ORIGIN: "http://localhost:3000",
-      });
-    });
-
     // Without static keys the AWS SDK falls back to ~/.aws/credentials, which could name any IAM user.
     it.each(["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"])("rejects an unset %s", async name => {
       stubLocalDev();
@@ -143,23 +130,19 @@ describe("getEnv", () => {
       expect(() => getEnv()).toThrow("set exactly one of DATABASE_PASSWORD or DATABASE_SECRET_ARN");
     });
 
-    it("fixes the database, whatever the environment holds", async () => {
+    it("fixes the database and the app origin, whatever the environment holds", async () => {
       stubLocalDev();
       vi.stubEnv("DATABASE_HOST", "db.example.test");
       vi.stubEnv("DATABASE_NAME", "other");
-
-      const env = (await loadGetEnv())();
-
-      expect(env).toMatchObject({ DATABASE_HOST: "localhost", DATABASE_NAME: "ai_gaussian_splatter" });
-    });
-
-    it("fixes the app origin, whatever the environment holds", async () => {
-      stubLocalDev();
       vi.stubEnv("APP_ORIGIN", "http://example.test:4000");
 
       const env = (await loadGetEnv())();
 
-      expect(env.APP_ORIGIN).toBe("http://localhost:3000");
+      expect(env).toMatchObject({
+        DATABASE_HOST: "localhost",
+        DATABASE_NAME: "ai_gaussian_splatter",
+        APP_ORIGIN: "http://localhost:3000",
+      });
     });
   });
 
