@@ -19,6 +19,7 @@ Most procedures below run a script from `scripts/dev/` or `scripts/prod/`, and e
   - [3.1 Fixing a bad migration](#31-fixing-a-bad-migration)
   - [3.2 Debugging a failed worker job](#32-debugging-a-failed-worker-job)
   - [3.3 Reading logs and alarms](#33-reading-logs-and-alarms)
+  - [3.4 Rotating the Clerk secret](#34-rotating-the-clerk-secret)
 - [4. Tearing down](#4-tearing-down)
 
 ---
@@ -68,22 +69,15 @@ Pick something opaque, matte, and genuinely three-dimensional. Stand it on a pat
 
 ### 1.4 Local worker runs
 
-Under `pnpm dev`, the web app runs each worker-job stage on your own GPU in Podman instead of launching an EC2 spot instance. Create a splat at `/splats/new` under `pnpm dev` as normal. Uploading its photos starts the worker job, and the splat's page shows each stage live through the same database rows and status callback a real EC2 run uses.
+Under `pnpm dev`, each stage of a worker job runs on your own GPU in Podman instead of on an EC2 spot instance. It needs a real NVIDIA GPU with its driver installed, and `scripts/dev/setup.sh gpu` sets up the rest.
 
-A real NVIDIA GPU is required, with its driver installed. `scripts/dev/setup.sh gpu` sets up the rest. Each stage rebuilds its image (`splat-worker-reconstruct:dev` or `splat-worker-train:dev`) from `worker/` before it runs, so a `worker/` edit is picked up by the next stage. An unchanged `worker/` builds from cache in seconds.
+Create a splat at `/splats/new` as normal. Uploading its photos starts the worker job, and the splat's page shows each stage live. Each stage rebuilds its image from `worker/` first, so a `worker/` edit is picked up by the next stage.
 
-Each worker job's files land in `worker/jobdir/<jobId>/`: `worker.log` (the image build and the container's output), `colmap/database.db`, and `result.ply`.
+A worker job's files land in `worker/jobdir/<jobId>/`, including `worker.log`, `colmap/database.db` and `result.ply`.
 
-When a set registers poorly, `worker/jobdir/<jobId>/colmap/database.db` says why. Guessing from the photos doesn't. Check two tables:
+When a set registers poorly, `colmap/database.db` says why. Its `keypoints` table has the keypoint count per image, and its `two_view_geometries` table shows how many other images each image matches. Very low counts in either point at blur, low texture, or an orbit that doesn't connect, rather than a pipeline bug. No healthy thresholds are recorded yet, so compare the counts against each other.
 
-- `keypoints` — the keypoint count per image.
-- `two_view_geometries` — how many other images each image has enough inlier matches with.
-
-Very few of either points at blur, low texture, or an orbit that doesn't connect, rather than a pipeline bug. No healthy thresholds are recorded yet, so read the counts relative to each other rather than against a known-good baseline.
-
-One `web/.env` switch changes the train stage, and takes effect from the next stage `pnpm dev` launches. `EVAL_HOLDOUT=true` judges a change to `worker/pipeline/train.py`. It holds back every 8th photo from training, then logs PSNR and SSIM against those photos and writes side-by-side renders to `worker/jobdir/<jobId>/eval/`. The training loss can't judge a change, because it keeps falling even while the splat overfits. Identical runs can differ by up to about 1 dB, so repeat each side of a comparison a few times. Each run is a new splat, since a reconstruction is trained only once.
-
-`pnpm dev` never launches a spot instance. The dev IAM user has no EC2 access, and `web/lib/server/env.ts` requires the `WORKER_AMI_ID`, `WORKER_SUBNET_ID`, `WORKER_SECURITY_GROUP_ID`, `WORKER_INSTANCE_PROFILE_ARN`, `WORKER_LOG_GROUP` and `WORKER_DATA_ROLE_ARN` variables, which `infra/web.tf` sets in production, only outside local dev.
+To judge a change to `worker/pipeline/train.py`, set `EVAL_HOLDOUT=true` in `web/.env`. The train stage then holds back every 8th photo and logs PSNR and SSIM against those photos, with side-by-side renders in `worker/jobdir/<jobId>/eval/`. Training loss can't judge a change, because it keeps falling even while the splat overfits. Identical runs differ by up to about 1 dB, so repeat each side a few times. Each run is a new splat.
 
 ### 1.5 Full test suite
 
@@ -112,13 +106,13 @@ CI's `deploy` job (`.github/workflows/deploy.yml`) does every deploy, including 
 4. Runs the migration.
 5. Rolls the service forward.
 
-It runs on a push to `main` that changes more than just `.md` files or `LICENSE`, and on a run started by hand on `main` (`gh workflow run ci.yml --ref main`), but only while the `DEPLOY_ENABLED` repository variable is `true`.
+It runs on a push to `main` that changes more than just `.md` files or `LICENSE`, and on a run started by hand on `main` (`gh workflow run ci.yml --ref main`), but only while the `DEPLOY_ENABLED` GitHub repository variable is `true`.
 
 Steps 2 and 5 do nothing on a push that leaves `web/` untouched, so a `worker/`, `scripts/` or `infra/` change applies Terraform and runs the migration without building an image ([Image tags](ARCHITECTURE.md#111-image-tags)). Step 3 still replaces the running tasks whenever it changes the web task definition, which carries the two worker image URIs and `KEEP_ALIVE_TIMEOUT` as well as the image. That replacement is what [Releasing a worker change](#23-releasing-a-worker-change) relies on.
 
 ### 2.1 Signing in to AWS
 
-Run every script in this section as an admin IAM identity signed in with `aws login`, which needs AWS CLI 2.32.0 or later. Neither the `ai-gaussian-splatter-dev` user from [First-time setup](#11-first-time-setup) nor the CI role can stand in for it. The scripts also need `gh` signed in with write access to this repository.
+Run every script in this section as an admin IAM identity signed in with `aws login`, which needs AWS CLI 2.32.0 or later. Neither the `ai-gaussian-splatter-dev` user from [First-time setup](#11-first-time-setup) nor the CI role can stand in for it. The scripts also need `gh` signed in with write access to this GitHub repository.
 
 ```bash
 aws login # Needed again only after the session expires, up to 12 hours later.
@@ -143,21 +137,15 @@ Every step skips what already exists, so re-running the script, or one step of i
 
 It looks up `AWS_ACCOUNT_ID`, `HOSTED_ZONE_ID` and `CLERK_SECRET_KEY_ARN`. The hosted zone is referenced only, not created, so it must already exist. It asks for these, defaulting to each one's current value:
 
-- `DOMAIN_ZONE_NAME` is the public DNS zone the app is served from, e.g. `orky.net`. A trailing dot or uppercase is normalized away. Everything carrying the app's public name is built from it:
-  - The hostname, the ACM certificate, and the Route 53 record.
-  - The S3 CORS origins.
-  - The origin the worker PATCHes status back to.
-  - The origin `.github/workflows/deploy.yml` smoke-checks after a rollout.
-- `ALERT_EMAIL` is where the AWS Budget (`infra/budgets.tf`) sends spend alerts, and where the worker sweeper (`infra/worker_sweeper.tf`) and the alarms send theirs. A typo'd but well-formed address deploys green.
+- `DOMAIN_ZONE_NAME` is the public DNS zone the app is served from, e.g. `orky.net`. The app's hostname, certificate, DNS record and CORS origins are all built from it.
+- `ALERT_EMAIL` is where the AWS Budget (`infra/budgets.tf`) sends spend alerts, and where the worker sweeper (`infra/worker_sweeper.tf`) and the alarms send theirs.
 - `CLERK_PUBLISHABLE_KEY` is the `pk_live_...` key, not the secret one. `web/Dockerfile` compiles it into the browser bundle, so a later change to it reaches users on the next deploy that changes `web/` ([Image tags](ARCHITECTURE.md#111-image-tags)).
-- `GA_MEASUREMENT_ID` is the Google Analytics 4 measurement ID (`G-...`) and is optional. Leaving it empty builds the app without Google Analytics or its privacy banner. An empty answer keeps the current value, so turning analytics off is `gh variable delete GA_MEASUREMENT_ID`. Like `CLERK_PUBLISHABLE_KEY`, it is compiled into the browser bundle.
-- `WORKER_AMI_ID` is the AMI every worker instance boots. User data does no provisioning of its own, so the image must already carry Docker, the NVIDIA driver and container toolkit, and the AWS CLI. AWS's Deep Learning Base GPU AMIs do, and the script lists the newest five before asking.
+- `GA_MEASUREMENT_ID` is the Google Analytics 4 measurement ID (`G-...`) and is optional. Leaving it empty builds the app without Google Analytics or its privacy banner. An empty answer keeps the current value, so turning analytics off is `gh variable delete GA_MEASUREMENT_ID`.
+- `WORKER_AMI_ID` is the AMI every worker instance boots. The image must already carry Docker, the NVIDIA driver and container toolkit, and the AWS CLI. AWS's Deep Learning Base GPU AMIs do, and the script lists the newest five before asking.
 
 `WORKER_IMAGE_TAG` is set to `worker/`'s tree id on `origin/main` while it's unset, which is the tag step 6 pushes. After that only [Releasing a worker change](#23-releasing-a-worker-change) changes it.
 
-The CI role's policy, `scripts/prod/ci-role-policies/deploy.json`, is a reasonable starting point, not an exhaustively verified minimal policy, so expect `AccessDenied` during the first deploy, which is the first time the role creates every resource rather than updating it. Add the missing action to that file, run `scripts/prod/bootstrap.sh ci-role`, then rerun the `deploy` job (`gh run rerun <run-id> --failed-jobs`).
-
-On a first deploy, the service starts before the migration runs, so real routes 500 until the migration finishes.
+The CI role's policy, `scripts/prod/ci-role-policies/deploy.json`, is a reasonable starting point, not an exhaustively verified minimal policy, so expect `AccessDenied` during the first deploy. Add the missing action to that file, run `scripts/prod/bootstrap.sh ci-role`, then rerun the `deploy` job (`gh run rerun <run-id> --failed-jobs`).
 
 Four things have no API the script could call, so do them by hand once it finishes:
 
@@ -166,17 +154,11 @@ Four things have no API the script could call, so do them by hand once it finish
    aws sns list-subscriptions --region "$(source scripts/lib/terraform.sh && tf_get_aws_region)" \
      --query "Subscriptions[?ends_with(TopicArn, ':ai-gaussian-splatter-alerts')].SubscriptionArn"
    ```
-2. In the production Clerk instance's dashboard, open the Legal page, turn on **Require express consent to legal documents**, and set the terms of service and privacy policy URLs to the app's `/terms` and `/privacy` pages. Clerk's sign-up form then requires a checkbox, and that acceptance is what makes `web/app/(public)/terms/page.tsx` binding on users.
-3. On the same dashboard's **User & authentication** page, in the **User model** section, turn off **Allow users to delete their accounts**. Users delete their accounts through the app's own account menu item, which deletes their splats too. Deleting through Clerk's profile page would remove only the Clerk account.
+2. In the production Clerk instance's dashboard, open the Legal page, turn on **Require express consent to legal documents**, and set the terms of service and privacy policy URLs to the app's `/terms` and `/privacy` pages. Clerk's sign-up form then requires a checkbox.
+3. On the same dashboard's **User & authentication** page, in the **User model** section, turn off **Allow users to delete their accounts**. Users delete their accounts through the app's own account menu item instead, which also deletes their splats.
 4. Check that the web service can read its runtime settings. `scripts/prod/ssm.sh` should list every setting, and the new-splat page should show no "Processing is paused" notice. The notice with every setting present means the task role can't read them ([Runtime settings](ARCHITECTURE.md#95-runtime-settings)).
 
-To change the Clerk secret's value later, update it directly in Secrets Manager, then force a new ECS deployment (`aws ecs update-service --force-new-deployment`), since ECS only resolves secrets at task start.
-
-`deployment_minimum_healthy_percent = 100` will keep any old task serving until the new one passes health checks. If the new image fails those checks, the circuit breaker rolls back to the previous task definition. To roll back by hand, revert the change and push. A schema change gets a corrective migration instead ([Fixing a bad migration](#31-fixing-a-bad-migration)).
-
-Only the last few releases are kept (`local.releases_kept` in `infra/locals.tf`). That bounds the circuit breaker's automatic rollback and any fresh task placement onto an older task definition, both of which need the image still present. Reverting and pushing by hand reaches further back: an expired tag is free to push again, so that build is simply remade.
-
-To check month-to-date spend: Billing console → **Billing Home**, or **Cost Explorer** for a per-service breakdown. `aws budgets describe-budgets --account-id "$(aws sts get-caller-identity --query Account --output text)" --region us-east-1` returns the budget's `CalculatedSpend`.
+If a new image fails its health checks, the circuit breaker rolls back to the previous task definition. To roll back by hand, revert the change and push. A schema change gets a corrective migration instead ([Fixing a bad migration](#31-fixing-a-bad-migration)).
 
 ### 2.3 Releasing a worker change
 
@@ -186,7 +168,7 @@ No deploy builds the worker images, so a merged `worker/` change reaches worker 
 scripts/prod/worker-push-image.sh
 ```
 
-It pushes both images to the `ai-gaussian-splatter-worker` ECR repository tagged with `worker/`'s tree id, sets the `WORKER_IMAGE_TAG` repository variable to that tag, then starts a run of `.github/workflows/ci.yml` on `main` and waits for it. That run's deploy points both worker image URIs on the web task definition at the new images and replaces the running tasks. Until it finishes, every worker instance still launches with the old images. A tag that is already built and deployed is a no-op, so a re-run after a failure finishes only what is left.
+It pushes both images to the `ai-gaussian-splatter-worker` ECR repository tagged with `worker/`'s tree id, sets the `WORKER_IMAGE_TAG` GitHub repository variable to that tag, then starts a run of `.github/workflows/ci.yml` on `main` and waits for it. That run's deploy points both worker image URIs on the web task definition at the new images and replaces the running tasks. Until it finishes, every worker instance still launches with the old images. A tag that is already built and deployed is a no-op, so a re-run after a failure finishes only what is left.
 
 Only the last `local.worker_releases_kept` images are kept (`infra/locals.tf`), which makes a `WORKER_IMAGE_TAG` that was set but never deployed the risk. Once that many newer images exist, the lifecycle policy expires the tag the web app still names, and every worker instance then fails its image pull and bills until its lifetime-ceiling shutdown (the `worker-max-lifetime-minutes` runtime setting it launched with).
 
@@ -194,7 +176,7 @@ Only the last `local.worker_releases_kept` images are kept (`infra/locals.tf`), 
 
 A `terraform plan` preview and a teardown are the only Terraform a human runs against `infra/`. Don't `apply` from here, because only the `deploy` job runs migrations before rolling the service.
 
-`scripts/prod/terraform-plan.sh` needs you signed in ([Signing in to AWS](#21-signing-in-to-aws)) to the account the `AWS_ACCOUNT_ID` repository variable names. It takes every Terraform variable from the repository variables except `web_image_tag`, which it reads from the task definition the service is running so the plan doesn't show an image change that isn't coming.
+`scripts/prod/terraform-plan.sh` needs you signed in ([Signing in to AWS](#21-signing-in-to-aws)) to the account the `AWS_ACCOUNT_ID` GitHub repository variable names. It takes every Terraform variable from the GitHub repository variables except `web_image_tag`, which it reads from the task definition the service is running so the plan doesn't show an image change that isn't coming.
 
 ```bash
 scripts/prod/terraform-plan.sh
@@ -275,6 +257,10 @@ CloudWatch also keeps default metrics for the ALB (`TargetResponseTime`, `HTTPCo
 - **`ai-gaussian-splatter-alb-unhealthy-hosts`:** a web task is failing its health check. Check the ECS service's events with `aws ecs describe-services --cluster ai-gaussian-splatter --services ai-gaussian-splatter-web`.
 - **`ai-gaussian-splatter-worker-sweeper-errors`:** the sweeper failed, so an overdue worker instance may keep billing. Run `scripts/prod/logs-tail.sh sweeper`, then list instances tagged `Role=worker` in the EC2 console.
 - **`ai-gaussian-splatter-rds-low-storage`:** the database has under 2 GB free. Raise `allocated_storage` in `infra/data.tf`.
+
+### 3.4 Rotating the Clerk secret
+
+Update the secret's value in Secrets Manager, then run `aws ecs update-service --force-new-deployment`. ECS only resolves secrets at task start, so the running tasks keep the old value until that new deployment replaces them.
 
 ---
 

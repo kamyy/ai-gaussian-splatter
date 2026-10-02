@@ -221,7 +221,7 @@ Node is pinned in root `.nvmrc` (`24.18.0`); CI jobs use `node-version-file`. Ru
 - **The deploy steps live in `.github/workflows/deploy.yml`, a `workflow_call` workflow run only by `.github/workflows/ci.yml`'s `deploy` job.**
   - That caller keeps the `needs` on the check jobs plus `capture-deploy-enabled`, the `if:` gate, and the `id-token: write` grant.
   - The `if:` reads `needs.capture-deploy-enabled.outputs.enabled`, not live `vars.DEPLOY_ENABLED`. `scripts/prod/bootstrap.sh enable` and `scripts/prod/teardown.sh disable` are the switch ([Going live](RUNBOOK.md#22-going-live)). Git does not record whether that variable is set ([CI/CD](ARCHITECTURE.md#11-cicd)).
-  - The `if:` on `capture-deploy-enabled` and on `deploy` both accept `workflow_dispatch` as well as `push`, on `main` only. `scripts/prod/worker-push-image.sh` and `scripts/prod/bootstrap.sh deploy` start a run that way, because a changed repository variable reaches no deploy until a run starts. Narrowing either `if:` back to `push` makes both scripts wait on a run whose `deploy` job is skipped.
+  - The `if:` on `capture-deploy-enabled` and on `deploy` both accept `workflow_dispatch` as well as `push`, on `main` only. `scripts/prod/worker-push-image.sh` and `scripts/prod/bootstrap.sh deploy` start a run that way, because a changed GitHub repository variable reaches no deploy until a run starts. Narrowing either `if:` back to `push` makes both scripts wait on a run whose `deploy` job is skipped.
   - The grant can't move into `.github/workflows/deploy.yml`, because a called workflow can only narrow its caller's permissions and this repo's default token is read-only.
   - A job run through a called workflow reports its check as `<caller job> / <called job>`, so moving a required one (`lint-format`, `worker`, `web`, `infra`) into its own file is a rename as far as branch protection is concerned.
 
@@ -264,8 +264,8 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 - A script that tags the AWS resources it creates sets `Project` to `ai-gaussian-splatter`, the same string as `local.project_tag` in `infra/locals.tf` (`infra/providers.tf`'s `default_tags`). The name does not change, so the scripts do not scrape it.
   - The Spot service-linked role and GitHub OIDC provider are account-wide and stay untagged.
 - A script that creates or deletes anything sources `scripts/lib/confirm.sh` and calls `confirm` first. `confirm` exits on any answer but yes, so one `confirm` covers everything a step is about to do.
-- A script that uses the GitHub CLI sources `scripts/lib/github.sh` and calls `gh_require_login` before its first `gh` call. Otherwise a logged-out `gh` reads the same as an unset repository variable.
-- A script that acts on the deployed account also calls `gh_require_aws_deploy_account`, which checks the signed-in account against the `AWS_ACCOUNT_ID` repository variable:
+- A script that uses the GitHub CLI sources `scripts/lib/github.sh` and calls `gh_require_login` before its first `gh` call. Otherwise a logged-out `gh` reads the same as an unset GitHub repository variable.
+- A script that acts on the deployed account also calls `gh_require_aws_deploy_account`, which checks the signed-in account against the `AWS_ACCOUNT_ID` GitHub repository variable:
   - `scripts/prod/bootstrap.sh` (its `deploy` step)
   - `scripts/prod/ssm.sh`
   - `scripts/prod/teardown.sh`
@@ -372,9 +372,9 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 
 - **Image tags are `<web-tree-id>-web` and `<web-tree-id>-migrate`, not commit SHAs, and the ECR repository (`infra/registry.tf`) is `IMMUTABLE`.** `scripts/lib/terraform.sh`'s `tf_get_web_image_tag` is the one definition, used by `.github/workflows/deploy.yml` and by the no-service fallback in the same file.
   - It truncates to a fixed 12 characters rather than calling `git rev-parse --short`, whose length tracks the local object count and so differs between CI's shallow checkout and a full clone. `scripts/dev/terraform-test-lib.sh` pins the width.
-  - One repository (`ai-gaussian-splatter`) holds both build targets of `web/Dockerfile`; the suffix is what tells them apart, and `infra/web.tf` appends it.
+  - One ECR repository (`ai-gaussian-splatter`) holds both build targets of `web/Dockerfile`; the suffix is what tells them apart, and `infra/web.tf` appends it.
   - `var.web_image_tag`/`var.migrate_image_tag` take a bare abbreviated hex object id; a variable `validation` block in `infra/variables.tf` refuses any other shape before `terraform plan` ever reaches AWS.
-  - A pushed tag can never be repointed, so the deploy job skips any build whose tag is already in the repository. That is what makes it re-runnable from any step, and what keeps an unchanged `web/` from rebuilding.
+  - A pushed tag can never be repointed, so the deploy job skips any build whose tag is already in the ECR repository. That is what makes it re-runnable from any step, and what keeps an unchanged `web/` from rebuilding.
   - Per-build tags exist to keep the deployment circuit breaker's rollback meaningful: with a moving tag every release shares one task definition, and a rollback re-pulls the image that just failed.
 - **A push that leaves `web/` byte-identical builds nothing and leaves the service's *image* unchanged. It does not mean the service keeps running.** `aws_ecs_service.web` names `aws_ecs_task_definition.web.arn`, a revision-qualified ARN with no `ignore_changes`, so any task-definition change registers a new revision and ECS replaces the tasks.
   - The image is one field among many in that task definition. `WORKER_RECONSTRUCT_IMAGE_URI`, `WORKER_TRAIN_IMAGE_URI`, `KEEP_ALIVE_TIMEOUT`, `cpu`/`memory`, `APP_ORIGIN`, and the Clerk and RDS wiring all live there too, and all of them are editable from `infra/` alone.
@@ -393,11 +393,11 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - `.github/workflows/deploy.yml` is the one caller that ever diverges the two — see [Migration ordering](ARCHITECTURE.md#113-migration-ordering) for why.
   - `ai-gaussian-splatter-migrate` (task family), `ai-gaussian-splatter-migrate-task` (migration task role), and `ai-gaussian-splatter-execution` (execution role) are fixed literal names, for the same reason `CLUSTER_NAME`/`SERVICE_NAME` are.
     - Rotating the Clerk secret is a write plus `aws ecs update-service --force-new-deployment`, not a `terraform apply`. That command needs names someone can write out literally rather than look up from a Terraform-assigned one.
-- **The worker images live in their own ECR repository (`ai-gaussian-splatter-worker`, `infra/registry.tf`), separate from the web repository above, and `var.worker_image_tag` has no default.**
+- **The worker images live in their own ECR repository (`ai-gaussian-splatter-worker`, `infra/registry.tf`), separate from the web ECR repository above, and `var.worker_image_tag` has no default.**
   - No deploy builds them, so this variable only changes when `scripts/prod/worker-push-image.sh` builds and pushes new ones from a workstation ([Releasing a worker change](RUNBOOK.md#23-releasing-a-worker-change)).
   - Their tag is `worker/`'s git tree id on `origin/main`, from `tf_get_worker_image_tag` in `scripts/lib/terraform.sh`, truncated the same way as the web tag. The script builds an extract of `origin/main`, never the checkout, so the tag always names what is in the image.
   - A tree whose images are already pushed skips the build, so a re-run never hits `ImageTagAlreadyExists`.
-  - Its lifecycle policy keeps far fewer images (`local.worker_releases_kept`, currently 2) than the web repository's `local.releases_kept` (10).
+  - Its lifecycle policy keeps far fewer images (`local.worker_releases_kept`, currently 2) than the web ECR repository's `local.releases_kept` (10).
     - The worker images cost real money to retain at ~1.9 GB and ~8.0 GB. They are also part of no ECS rollback mechanism, since `web/lib/server/ec2Launcher.ts` just reads whichever URI it is handed.
     - The count is per tag suffix, with one rule each for `-reconstruct` and `-train`, so both halves of a release expire together.
 
@@ -406,7 +406,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 - **No placeholder-value fallback for required variables.**
   - `terraform validate` and `terraform test` (`mock_provider`) never touch real AWS, so required variables (`worker_ami_id`, `alert_email`, `domain_zone_name`, `hosted_zone_id`, `clerk_secret_key_arn`, `web_image_tag`, `worker_image_tag`) simply have no default in `infra/variables.tf`. CI's `infra` job never has to supply one.
   - A real `terraform plan`/`apply` fails immediately when one is unset.
-  - `.github/workflows/deploy.yml` maps each from a GitHub repository variable, though, and an unset repository variable arrives as `""`, which Terraform accepts as a value. There only a `validation` block catches it, so every required variable has one that rejects `""`. Give any new required variable one too.
+  - `.github/workflows/deploy.yml` maps each from a GitHub repository variable, though, and an unset GitHub repository variable arrives as `""`, which Terraform accepts as a value. There only a `validation` block catches it, so every required variable has one that rejects `""`. Give any new required variable one too.
 - **Editing an initial value in `local.runtime_settings` (`infra/locals.tf`) changes nothing on an existing stack.** `infra/settings.tf` ignores later changes to each parameter's value, so an apply never resets a tuned setting. Change a live value with `scripts/prod/ssm.sh` ([Tuning runtime settings](RUNBOOK.md#26-tuning-runtime-settings)).
 - **The runtime settings' env vars (`MAX_JOBS_PER_DAY`, `PROCESSING_ENABLED`, …) only apply where `RUNTIME_SETTINGS_PATH` is unset.** The ECS task sets it, so in production those env vars are ignored and SSM is the only source. Local dev and the tests leave it unset.
 - **`var.aws_region`'s default in `infra/variables.tf` is the only place the region is written.** `scripts/lib/terraform.sh`'s `tf_get_aws_region` reads it, and every AWS CLI call in `scripts/` plus the `Resolve region` step in `.github/workflows/deploy.yml` take it from there.
@@ -415,7 +415,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - Moving the region means a teardown, then the whole of [Deploying to production](RUNBOOK.md#2-deploying-to-production) again. Nothing migrates an ALB, an RDS instance, or an ECR repository across regions. The state bucket, the Clerk secret, the CI role's ARNs, and `WORKER_AMI_ID` are region-specific as well.
   - Tear down before editing the default. `terraform init` looks for the state bucket in whatever the default currently says, so an edited default points `scripts/prod/teardown.sh` at a bucket that doesn't exist while the old stack keeps billing. The script then reports nothing to destroy.
 - **The account id used to build IAM/ARN resources comes from `data.aws_caller_identity.current`**, evaluated fresh on every real plan or apply.
-  - `.github/workflows/deploy.yml` still validates its own `AWS_ACCOUNT_ID` repository variable, but only to build the CI role's ARN and the state bucket name — nothing in `infra/` itself reads that environment variable.
+  - `.github/workflows/deploy.yml` still validates its own `AWS_ACCOUNT_ID` GitHub repository variable, but only to build the CI role's ARN and the state bucket name — nothing in `infra/` itself reads that environment variable.
 - **The state bucket name (`ai-gaussian-splatter-tfstate-<account-id>`) is passed to `terraform init` via `-backend-config`, never hardcoded in `infra/providers.tf`.**
   - The bucket is account-specific and created once by hand; baking its name into the shared `backend "s3"` block would make the whole config account-specific too.
 
