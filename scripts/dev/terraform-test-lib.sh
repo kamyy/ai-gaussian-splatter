@@ -4,7 +4,7 @@
 # Those helpers parse HCL (Terraform's config language) with text tools, so a change to how a value is written in infra/
 # can silently break them. This checks them against the real files and against fixtures.
 
-# The root package.json's scripts:check calls it, from the pre-commit hook and CI's lint-format job.
+# The root package.json's infra:test calls it, from CI's infra job and the root `pnpm test`.
 #
 # .github/workflows/deploy.yml signs its AWS credentials with tf_get_aws_region, so a spelling in infra/variables.tf
 # that this no longer reads breaks a deploy rather than a plan. The check against the real file is shape-only, since
@@ -24,9 +24,9 @@ if [[ ${1-} == -h || ${1-} == --help ]]; then
   exit 0
 fi
 
-# Run from the pre-commit hook, git exports its own repository's location (GIT_DIR, GIT_INDEX_FILE, ...). Left set, the
-# fixture repository's init and commit below act on this repository instead. From a linked worktree that commits the
-# staged files as "no web/" and marks the repository bare.
+# Clears any repository location git has exported (GIT_DIR, GIT_INDEX_FILE, ...), as it does for a script run from a
+# git hook. Left set, the fixture repository's init and commit below act on this repository instead. From a linked
+# worktree that commits the staged files as "no web/" and marks the repository bare.
 # shellcheck disable=SC2046
 unset $(git rev-parse --local-env-vars)
 

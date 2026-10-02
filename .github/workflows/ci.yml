@@ -33,10 +33,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # One Biome run from the repo root covers both scripts/*.js and web/. Biome needs only its own binary to lint and
       # format files, not web/'s node_modules.
-      - run: pnpm biome:ci
-      # Runs shellcheck, which Biome doesn't cover. scripts:check also runs Biome over scripts/, which repeats part of
-      # what biome:ci already checked.
-      - run: pnpm run scripts:check
+      - run: pnpm run biome:lint
+      # Runs shellcheck, which Biome doesn't cover.
+      - run: pnpm run scripts:lint
 
   worker:
     runs-on: ubuntu-latest
@@ -48,13 +47,12 @@ jobs:
           package_json_file: package.json
       - working-directory: worker
         run: uv sync --group dev
-      # worker:check (root package.json) is pure shell (`uv --directory worker run ...`). No worker node_modules to
-      # install, just the pnpm CLI above to parse and run the script.
-      - run: pnpm run worker:check
-      - working-directory: worker
-        # CI runners have no GPU or CUDA toolkit. These are the cheap tests (fetch, export, and status callbacks against
-        # mocked S3 and HTTP), not the real COLMAP and gsplat pipeline.
-        run: uv run pytest -v
+      # worker:lint and worker:test (root package.json) are pure shell (`uv --directory worker run ...`). No worker
+      # node_modules to install, just the pnpm CLI above to parse and run the scripts.
+      - run: pnpm run worker:lint
+      # CI runners have no GPU or CUDA toolkit. These are the cheap tests (fetch, export, and status callbacks against
+      # mocked S3 and HTTP), not the real COLMAP and gsplat pipeline.
+      - run: pnpm run worker:test
 
   web:
     runs-on: ubuntu-latest
@@ -133,13 +131,13 @@ jobs:
       # devDependencies are left out because none of them reach the container.
       - name: Audit production dependencies
         run: pnpm audit --prod --audit-level=high
-      # web:check runs `next typegen` before `tsc --noEmit`. CI never runs `next dev` or `next build`, so the App Router
-      # route types tsc needs don't exist until typegen writes them (see AGENTS.md). web:check is a root package.json
-      # script, so this step switches from the job's default working directory (web) back to the checkout root. The
-      # script itself passes `--dir web` to everything it runs, including its first step, `biome lint .`.
-      - name: Check (lint + typecheck)
+      # web:lint runs `next typegen` before `tsc --noEmit`. CI never runs `next dev` or `next build`, so the App Router
+      # route types tsc needs don't exist until typegen writes them (see AGENTS.md). Biome already checked web/ in the
+      # lint-format job. web:lint is a root package.json script, so this step switches from the job's default working
+      # directory (web) back to the checkout root.
+      - name: Typecheck
         working-directory: ${{ github.workspace }}
-        run: pnpm run web:check
+        run: pnpm run web:lint
       # Without this check, a schema edit with no matching migration goes unnoticed. The TypeScript types come straight
       # from schema.ts, so tsc stays green while the database drifts, and the mistake only shows up as a runtime SQL
       # error. db:generate does nothing when the schema matches the snapshot in web/drizzle/meta/, so any new file here
@@ -203,11 +201,11 @@ jobs:
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: package.json
-      - run: pnpm run infra:check
-      # `terraform test`, then the worker sweeper Lambda's unit tests. No AWS credentials are configured here (this job
-      # runs on every pull_request, including forks): `terraform test` runs entirely offline via mock_provider
-      # (infra/tests/*.tftest.hcl). The Lambda tests are stdlib only, with boto3 stubbed, so the runner's own python3
-      # runs them with nothing to install.
+      - run: pnpm run infra:lint
+      # `terraform test`, the worker sweeper Lambda's unit tests, then the HCL scraper tests in
+      # scripts/dev/terraform-test-lib.sh. No AWS credentials are configured here (this job runs on every pull_request,
+      # including forks): `terraform test` runs entirely offline via mock_provider (infra/tests/*.tftest.hcl). The
+      # Lambda tests are stdlib only, with boto3 stubbed, so the runner's own python3 runs them with nothing to install.
       - run: pnpm run infra:test
 
   # Records DEPLOY_ENABLED shortly after this run starts, once a runner picks this job up. The deploy job's if:
