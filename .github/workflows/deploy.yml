@@ -103,7 +103,7 @@ jobs:
           role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-gaussian-splatter-ci-deploy
           aws-region: ${{ env.AWS_REGION }}
 
-      # scripts/prod/set-gh-repo-variables.sh looks HOSTED_ZONE_ID up from DOMAIN_ZONE_NAME, but either variable can be
+      # `scripts/prod/bootstrap.sh gh-vars` looks HOSTED_ZONE_ID up from DOMAIN_ZONE_NAME, but either variable can be
       # edited on its own afterwards. The two then name different zones, and the ACM validation record lands in a zone
       # that doesn't serve the hostname, which stalls the first apply until ACM's own validation timeout gives up.
       - name: Check HOSTED_ZONE_ID serves DOMAIN_ZONE_NAME
@@ -186,7 +186,7 @@ jobs:
       # nothing, and a run that failed in any step below re-runs cleanly. The repository is IMMUTABLE
       # (infra/registry.tf) and podman builds aren't bit-reproducible, so rebuilding the same tree produces a different
       # digest and would abort here with ImageTagAlreadyExists. `batch-get-image` rather than `describe-images` because
-      # the CI role already grants it (scripts/prod/configure-ci-role.sh).
+      # the CI role already grants it (scripts/prod/ci-role-policies/deploy.json).
       - name: Build and push images
         working-directory: web
         env:

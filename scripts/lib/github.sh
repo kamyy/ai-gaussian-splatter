@@ -14,10 +14,10 @@ gh_require_login() {
 }
 
 # Prints a GitHub repository variable, or exits naming it when it's unset. The second argument replaces the
-# remediation line, for a variable scripts/prod/set-gh-repo-variables.sh doesn't set.
+# remediation line, for a variable scripts/prod/bootstrap.sh gh-vars doesn't set.
 gh_get_repo_var() {
   local repo_var=$1 repo_val
-  local remediation=${2:-Run scripts/prod/set-gh-repo-variables.sh.}
+  local remediation=${2:-Run scripts/prod/bootstrap.sh gh-vars.}
   if ! repo_val=$(gh variable get "$repo_var") || [[ -z $repo_val ]]; then
     echo "GitHub repository variable $repo_var is not set. $remediation" >&2
     exit 1
@@ -53,9 +53,9 @@ gh_get_running_ci_status() {
   done
 }
 
-# Exits while a ci.yml run on main is unfinished. scripts/prod/set-deploy-enabled.sh calls it because a run whose
-# capture-deploy-enabled job has not been dispatched yet still reads DEPLOY_ENABLED live, so a write would reach it.
-# scripts/prod/terraform-destroy.sh calls it because a run that captured true deploys into the state it just emptied.
+# Exits while a ci.yml run on main is unfinished. Call it before writing DEPLOY_ENABLED, because a run whose
+# capture-deploy-enabled job has not been dispatched yet still reads the variable live, so the write would reach it.
+# Call it before a destroy too, because a run that captured true would deploy into the state the destroy empties.
 gh_require_no_in_progress_ci() {
   local status
   status=$(gh_get_running_ci_status)
