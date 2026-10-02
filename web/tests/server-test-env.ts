@@ -1,4 +1,5 @@
-// Env for the server Vitest project (web/vitest.config.mts), which covers web/lib/server/ and web/app/api/.
+// Env for the server Vitest project (web/vitest.config.mts), which covers web/lib/server/, web/app/api/ and
+// web/proxy.ts.
 
 // Point DATABASE_* at the test database, so no test reads or writes the dev one. web/tests/migrate-test-db.ts has
 // already failed the run if TEST_DATABASE_URL is unset.

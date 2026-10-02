@@ -53,7 +53,7 @@ export default defineConfig({
           environment: "node",
           globalSetup: ["./tests/migrate-test-db.ts"],
           setupFiles: ["./tests/server-test-env.ts"],
-          include: ["lib/server/**/*.test.ts", "app/api/**/*.test.ts"],
+          include: ["lib/server/**/*.test.ts", "app/api/**/*.test.ts", "proxy.test.ts"],
           exclude: ["node_modules", ".next", "e2e/**"],
         },
       },
