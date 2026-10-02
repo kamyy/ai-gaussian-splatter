@@ -144,6 +144,28 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
     expect(atCap.status).toBe(200);
   });
 
+  it.each([
+    // S3 serves an object with the content type it was uploaded with, so an HTML upload would be a page on S3's domain.
+    ["a page", "a.html", "text/html"],
+    // worker/pipeline/sfm.py skips anything but JPEG and PNG, so this photo would never reach COLMAP.
+    ["a photo COLMAP can't read", "a.heic", "image/heic"],
+  ])("rejects %s, without spending the rate limit", async (_label, filename, contentType) => {
+    const splat = await seedSplat();
+
+    const res = await POST(presignRequest([{ ...photoItem(filename), contentType }]), ctx(splat.id));
+    expect(res.status).toBe(422);
+    expect(await getDb().select().from(rateLimitCounters)).toEqual([]);
+  });
+
+  it("names the S3 key after the declared type, not the uploaded filename", async () => {
+    const splat = await seedSplat();
+
+    const res = await POST(presignRequest([{ ...photoItem("a.html"), contentType: "image/png" }]), ctx(splat.id));
+    const [item] = await res.json();
+
+    expect(item.s3Key).toBe(`splats/${splat.id}/photos/${item.photoId}.png`);
+  });
+
   it("rejects a thumbnail over MAX_THUMBNAIL_BYTES", async () => {
     const splat = await seedSplat();
 

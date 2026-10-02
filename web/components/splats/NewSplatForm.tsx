@@ -29,7 +29,7 @@ import { useEnlargedTile } from "@/lib/hooks/useEnlargedTile";
 import { useJustifiedPages } from "@/lib/hooks/useJustifiedPages";
 import { type PhotoFlag, usePickedPhotos } from "@/lib/hooks/usePickedPhotos";
 import { useProcessingPaused } from "@/lib/hooks/useProcessingPaused";
-import { MAX_PHOTOS_PER_SPLAT, MIN_SHARP_PHOTO_EDGE } from "@/lib/limits";
+import { MAX_PHOTOS_PER_SPLAT, MIN_SHARP_PHOTO_EDGE, PHOTO_EXTENSIONS } from "@/lib/limits";
 import { fileKey } from "@/lib/measurePhoto";
 import type { Job, Splat } from "@/lib/types";
 import { uploadPhotos } from "@/lib/uploadPhotos";
@@ -57,6 +57,10 @@ const FLAG_LABELS: Record<PhotoFlag, string> = {
   blurry: "Looks blurry",
   low_res: `Low resolution (under ${MIN_SHARP_PHOTO_EDGE}px)`,
 };
+
+// The types the presign route accepts. The file picker offers only these. A dropped file of another type still reaches
+// addFiles, which names it in a snackbar, rather than vanishing without a word.
+const ACCEPTED_PHOTO_TYPES = Object.fromEntries(Object.keys(PHOTO_EXTENSIONS).map(type => [type, []]));
 
 type Phase = "idle" | "creating" | "uploading" | "starting";
 
@@ -150,8 +154,9 @@ export function NewSplatForm() {
   const removableFlagged = [...flagged.keys()].filter(key => !uploadedKeys.has(key));
 
   const { getRootProps, getInputProps, open, isDragAccept, isDragReject } = useDropzone({
-    onDrop: accepted => void addFiles(accepted).then(() => setPage(1)),
-    accept: { "image/*": [] },
+    onDrop: (accepted, rejected) =>
+      void addFiles([...accepted, ...rejected.map(rejection => rejection.file)]).then(() => setPage(1)),
+    accept: ACCEPTED_PHOTO_TYPES,
     multiple: true,
     disabled: submitting,
     // The zone is a drop target only. Clicking it would also fire for the remove buttons on the previews inside it,
@@ -260,7 +265,7 @@ export function NewSplatForm() {
 
   let dropHint = "More angles usually means a better result.";
   if (isDragReject) {
-    dropHint = "Only image files are accepted.";
+    dropHint = "Only JPEG and PNG photos are accepted.";
   } else if (tooManyPhotos) {
     dropHint = `The limit is ${MAX_PHOTOS_PER_SPLAT}. Remove ${photos.length - MAX_PHOTOS_PER_SPLAT} to continue.`;
   }
