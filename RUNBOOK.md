@@ -68,22 +68,15 @@ Pick something opaque, matte, and genuinely three-dimensional. Stand it on a pat
 
 ### 1.4 Local worker runs
 
-Under `pnpm dev`, the web app runs each worker-job stage on your own GPU in Podman instead of launching an EC2 spot instance. Create a splat at `/splats/new` under `pnpm dev` as normal. Uploading its photos starts the worker job, and the splat's page shows each stage live through the same database rows and status callback a real EC2 run uses.
+Under `pnpm dev`, each stage of a worker job runs on your own GPU in Podman instead of on an EC2 spot instance. It needs a real NVIDIA GPU with its driver installed, and `scripts/dev/setup.sh gpu` sets up the rest.
 
-A real NVIDIA GPU is required, with its driver installed. `scripts/dev/setup.sh gpu` sets up the rest. Each stage rebuilds its image (`splat-worker-reconstruct:dev` or `splat-worker-train:dev`) from `worker/` before it runs, so a `worker/` edit is picked up by the next stage. An unchanged `worker/` builds from cache in seconds.
+Create a splat at `/splats/new` as normal. Uploading its photos starts the worker job, and the splat's page shows each stage live. Each stage rebuilds its image from `worker/` first, so a `worker/` edit is picked up by the next stage.
 
-Each worker job's files land in `worker/jobdir/<jobId>/`: `worker.log` (the image build and the container's output), `colmap/database.db`, and `result.ply`.
+A worker job's files land in `worker/jobdir/<jobId>/`, including `worker.log`, `colmap/database.db` and `result.ply`.
 
-When a set registers poorly, `worker/jobdir/<jobId>/colmap/database.db` says why. Guessing from the photos doesn't. Check two tables:
+When a set registers poorly, `colmap/database.db` says why. Its `keypoints` table has the keypoint count per image, and its `two_view_geometries` table shows how many other images each image matches. Very low counts in either point at blur, low texture, or an orbit that doesn't connect, rather than a pipeline bug. No healthy thresholds are recorded yet, so compare the counts against each other.
 
-- `keypoints` — the keypoint count per image.
-- `two_view_geometries` — how many other images each image has enough inlier matches with.
-
-Very few of either points at blur, low texture, or an orbit that doesn't connect, rather than a pipeline bug. No healthy thresholds are recorded yet, so read the counts relative to each other rather than against a known-good baseline.
-
-One `web/.env` switch changes the train stage, and takes effect from the next stage `pnpm dev` launches. `EVAL_HOLDOUT=true` judges a change to `worker/pipeline/train.py`. It holds back every 8th photo from training, then logs PSNR and SSIM against those photos and writes side-by-side renders to `worker/jobdir/<jobId>/eval/`. The training loss can't judge a change, because it keeps falling even while the splat overfits. Identical runs can differ by up to about 1 dB, so repeat each side of a comparison a few times. Each run is a new splat, since a reconstruction is trained only once.
-
-`pnpm dev` never launches a spot instance. The dev IAM user has no EC2 access, and `web/lib/server/env.ts` requires the `WORKER_AMI_ID`, `WORKER_SUBNET_ID`, `WORKER_SECURITY_GROUP_ID`, `WORKER_INSTANCE_PROFILE_ARN`, `WORKER_LOG_GROUP` and `WORKER_DATA_ROLE_ARN` variables, which `infra/web.tf` sets in production, only outside local dev.
+To judge a change to `worker/pipeline/train.py`, set `EVAL_HOLDOUT=true` in `web/.env`. The train stage then holds back every 8th photo and logs PSNR and SSIM against those photos, with side-by-side renders in `worker/jobdir/<jobId>/eval/`. Training loss can't judge a change, because it keeps falling even while the splat overfits. Identical runs differ by up to about 1 dB, so repeat each side a few times. Each run is a new splat.
 
 ### 1.5 Full test suite
 
