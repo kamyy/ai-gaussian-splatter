@@ -4,7 +4,7 @@
 # Each setting is an SSM Parameter Store parameter that infra/settings.tf creates. The web service reads it with a
 # one-minute cache (web/lib/server/runtimeSettings.ts), so a change takes effect within a minute and needs no deploy.
 # The checks below match the ones the web service applies. A value that fails them there falls back to the setting's
-# default, so catching it here is what tells you.
+# default and turns processing off, so catching it here is what tells you.
 
 set -euo pipefail
 

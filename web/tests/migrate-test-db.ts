@@ -4,9 +4,11 @@ import { Pool } from "pg";
 
 /**
  * Applies migrations once before the server Vitest project runs (see web/vitest.config.mts), so a fresh Postgres (the
- * CI container, or a local database that has never been migrated) has the schema. Throws when TEST_DATABASE_URL is
- * unset, so the database-backed tests fail the run instead of being skipped. CI also runs `pnpm db:migrate` before
- * Vitest. This covers a local `pnpm test`, where nothing else migrated first.
+ * CI container, or a local database that has never been migrated) has the schema. CI also runs `pnpm db:migrate`
+ * before Vitest. This covers a local `pnpm test`, where nothing else migrated first.
+ *
+ * Throws when TEST_DATABASE_URL is empty, because web/vitest.config.mts defaults it only when unset. The
+ * database-backed tests then fail the run instead of being skipped.
  *
  * Uses drizzle's programmatic migrator rather than running drizzle-kit as a subprocess, and reads the URL directly
  * instead of going through web/drizzle.config.ts. Its pool is separate from the one the tests use and must be closed
@@ -16,8 +18,8 @@ export async function setup(): Promise<void> {
   const databaseUrl = process.env.TEST_DATABASE_URL;
   if (!databaseUrl) {
     throw new Error(
-      "TEST_DATABASE_URL is unset. Run `scripts/dev/setup.sh aws` to create web/.env with it. " +
-        "Then start Postgres with `scripts/dev/db.sh up`.",
+      "TEST_DATABASE_URL is empty. Unset it to use the default from web/vitest.config.mts, " +
+        "and start Postgres with `scripts/dev/db.sh up`.",
     );
   }
 

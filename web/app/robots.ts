@@ -10,12 +10,12 @@ import type { MetadataRoute } from "next";
 
 import { getEnv } from "@/lib/server/env";
 
-/** Reads APP_PUBLIC_URL per request, because it is unset during `next build`. */
+/** Reads APP_ORIGIN per request, because it is unset during `next build`. */
 export const dynamic = "force-dynamic";
 
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: { userAgent: "*", allow: "/", disallow: ["/api/", "/splats"] },
-    sitemap: new URL("/sitemap.xml", getEnv().APP_PUBLIC_URL).toString(),
+    sitemap: new URL("/sitemap.xml", getEnv().APP_ORIGIN).toString(),
   };
 }

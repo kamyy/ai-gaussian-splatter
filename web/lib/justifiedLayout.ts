@@ -14,12 +14,12 @@ export interface LayoutTile {
   height: number;
 }
 
-export interface LayoutRow {
+interface LayoutRow {
   tiles: LayoutTile[];
   height: number;
 }
 
-export interface LayoutPage {
+interface LayoutPage {
   // The photos on this page are the ones from start up to, but not including, end.
   start: number;
   end: number;

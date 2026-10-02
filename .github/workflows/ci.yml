@@ -64,36 +64,16 @@ jobs:
       # because clerkMiddleware() rejects a malformed key outright.
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk
       CLERK_SECRET_KEY: sk_test_fake_for_ci
-      # A pk_test_* key makes the Clerk SDK treat this as a development instance. The SDK hides its telemetry notice in
-      # CI but still sends the telemetry, so without this variable CI runs report it.
-      NEXT_PUBLIC_CLERK_TELEMETRY_DISABLED: "1"
-      # These are inlined at build time, so `next build` here needs the same values a real image ships with. Without
-      # them the built bundle sends users to Clerk's hosted Account Portal instead of the app's own sign-in page.
-      NEXT_PUBLIC_CLERK_SIGN_IN_URL: /sign-in
-      NEXT_PUBLIC_CLERK_SIGN_UP_URL: /sign-up
-      NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: /splats
-      NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: /splats
-      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test
-      DATABASE_HOST: localhost
-      DATABASE_PORT: "5432"
-      DATABASE_NAME: test
-      DATABASE_USER: postgres
-      DATABASE_PASSWORD: postgres
       # getEnv() validates all of these on first use, and getDb() calls getEnv(). Any page that touches the database
       # therefore throws without them, including under the dev server Playwright starts. The values are dummies:
-      # presigning is local crypto, and nothing in CI reaches AWS.
+      # presigning is local crypto, and nothing in CI reaches AWS. That dev server needs no DATABASE_*, WORKER_* or
+      # APP_ORIGIN variables, because it counts as local dev (web/lib/server/env.ts's isLocalDev()). The
+      # database it and `pnpm db:migrate` use is the same one local dev uses, created by "Start Postgres" below.
       UPLOADS_BUCKET: test-uploads
       SPLATS_BUCKET: test-splats
       AWS_REGION: us-west-2
       AWS_ACCESS_KEY_ID: testing
       AWS_SECRET_ACCESS_KEY: testing
-      WORKER_AMI_ID: ami-0123456789abcdef0
-      WORKER_SUBNET_ID: subnet-0123456789abcdef0
-      WORKER_SECURITY_GROUP_ID: sg-0123456789abcdef0
-      WORKER_INSTANCE_PROFILE_ARN: arn:aws:iam::123456789012:instance-profile/worker
-      WORKER_LOG_GROUP: /ai-gaussian-splatter/worker
-      WORKER_DATA_ROLE_ARN: arn:aws:iam::123456789012:role/worker-data
-      APP_PUBLIC_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v7
       # Postgres starts with a plain `podman run` rather than a `services:` block. The migrator-image test below runs
@@ -105,7 +85,7 @@ jobs:
         run: |
           podman network create ci-net
           podman run -d --name ci-postgres --network ci-net -p 5432:5432 \
-            -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=test \
+            -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=ai_gaussian_splatter \
             postgres:18
           # Checked over TCP, because the image's temporary init server listens only on the Unix socket and a socket check
           # can report ready before the real server starts.
@@ -117,6 +97,9 @@ jobs:
             fi
             sleep 1
           done
+          # The dev database above is what `pnpm db:migrate` uses, and this one is the tests' default
+          # (web/vitest.config.mts), the same pair scripts/dev/db.sh creates locally.
+          podman exec ci-postgres createdb -U postgres ai_gaussian_splatter_test
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: web/package.json
@@ -169,7 +152,7 @@ jobs:
           # --network host isn't used. There is no DATABASE_SSL_CA: the migrator image doesn't turn TLS on by itself
           # (web/Dockerfile), and this database doesn't offer TLS. Only RDS's rds.force_ssl setting requires it.
           podman run --rm --network ci-net \
-            -e DATABASE_HOST=ci-postgres -e DATABASE_PORT=5432 -e DATABASE_NAME=test \
+            -e DATABASE_HOST=ci-postgres -e DATABASE_PORT=5432 -e DATABASE_NAME=ai_gaussian_splatter \
             -e DATABASE_USER=postgres -e DATABASE_PASSWORD=postgres \
             migrator:ci
       # Applies the migrations again, directly rather than through the container. drizzle-kit records which migrations

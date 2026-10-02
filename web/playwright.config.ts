@@ -11,19 +11,21 @@
 
 import { defineConfig, devices } from "@playwright/test";
 
+import { LOCAL_APP_ORIGIN } from "./lib/server/env";
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
   retries: process.env.CI ? 2 : 0,
   reporter: "list",
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: LOCAL_APP_ORIGIN,
     trace: "on-first-retry",
   },
   webServer: {
     // Not `pnpm dev`, which also starts the splat-pg container. CI runs its own Postgres on the same port.
-    command: "pnpm exec next dev",
-    url: "http://localhost:3000",
+    command: "pnpm exec next dev -p 3000",
+    url: LOCAL_APP_ORIGIN,
     reuseExistingServer: !process.env.CI,
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],

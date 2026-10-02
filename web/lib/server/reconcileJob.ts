@@ -11,7 +11,8 @@ import { JobStatus } from "@/lib/statuses";
 import { WORKER_RUNNING_STATUSES } from "./cancelJob";
 import { getDb } from "./db";
 import { jobs, splats } from "./db/schema";
-import { describeWorker, localLaunchEnabled, terminateWorker } from "./ec2Launcher";
+import { describeWorker, terminateWorker } from "./ec2Launcher";
+import { isLocalDev } from "./env";
 import { WORKER_MAX_LIFETIME_BOUNDS } from "./runtimeSettings";
 
 // How long a job goes without a status callback before its instance is looked up. A healthy reconstruct stage can go
@@ -42,7 +43,7 @@ function overdueAfterMs(maxLifetimeMinutes: number | null): number {
 export async function reconcileJob(
   job: Pick<typeof jobs.$inferSelect, "id" | "status" | "updatedAt">,
 ): Promise<boolean> {
-  if (!WORKER_RUNNING_STATUSES.includes(job.status) || localLaunchEnabled()) {
+  if (!WORKER_RUNNING_STATUSES.includes(job.status) || isLocalDev()) {
     return false;
   }
 

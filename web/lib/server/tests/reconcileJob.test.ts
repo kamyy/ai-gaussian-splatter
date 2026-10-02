@@ -13,7 +13,6 @@ vi.mock("@/lib/server/ec2Launcher", async importOriginal => {
     ...actual,
     describeWorker: describeWorkerMock,
     terminateWorker: terminateWorkerMock,
-    localLaunchEnabled: () => false,
   };
 });
 

@@ -21,7 +21,21 @@ const SECURITY_HEADERS = [
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
 ];
 
+// Clerk settings that are the same in every environment. `env` inlines them into the server and browser bundles at
+// build time, so no .env file, Dockerfile, or CI workflow has to repeat them.
+const CLERK_ENV = {
+  // Without these four, Clerk sends users to its hosted Account Portal instead of the app's own sign-in pages.
+  NEXT_PUBLIC_CLERK_SIGN_IN_URL: "/sign-in",
+  NEXT_PUBLIC_CLERK_SIGN_UP_URL: "/sign-up",
+  NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: "/splats",
+  NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: "/splats",
+  // Clerk collects telemetry from any build that uses a pk_test_* key. The NEXT_PUBLIC_ prefix is required: the SDK
+  // reads this exact name on the server and inlines it into the browser bundle.
+  NEXT_PUBLIC_CLERK_TELEMETRY_DISABLED: "1",
+};
+
 const nextConfig: NextConfig = {
+  env: CLERK_ENV,
   async headers() {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },

@@ -7,32 +7,27 @@
  * This replaces `drizzle-kit migrate`, which can exit 1 without printing any error (drizzle-team/drizzle-orm#5521).
  * Delete this script and point db:migrate back at `drizzle-kit migrate` once a stable release ships the fix.
  *
- * It is CommonJS so Node doesn't reparse web/lib/server/databaseUrl.ts as a module of unknown type, which prints a
- * warning on every run.
+ * It is CommonJS so Node doesn't reparse the TypeScript modules it requires as modules of unknown type, which prints a
+ * warning on every run. Those are web/lib/server/databaseUrl.ts and web/lib/server/env.ts.
  */
 
 const path = require("node:path");
-const { loadEnvConfig } = require("@next/env");
 const { drizzle } = require("drizzle-orm/node-postgres");
 const { migrate } = require("drizzle-orm/node-postgres/migrator");
 const { Pool } = require("pg");
 
 const { databaseSsl, resolveDatabaseUrl } = require("../lib/server/databaseUrl.ts");
+const { withLocalDevEnv } = require("../lib/server/env.ts");
 
 // Locally, __dirname is web/scripts/, so this resolves to web/drizzle/. In the migrator image, __dirname is
 // /app/scripts/, so this resolves to /app/drizzle/.
 const migrationsFolder = path.join(__dirname, "..", "drizzle");
 
-// Loads web/.env the same way `next dev`/`next build` do, so a `pnpm db:migrate` can pick up local config. No-op in CI
-// and the migrator image: neither ships a .env file (.dockerignore excludes it), so this falls through to whatever the
-// job/task already set in process.env.
-loadEnvConfig(path.join(__dirname, ".."));
-
 async function main() {
-  const url = resolveDatabaseUrl();
+  const url = resolveDatabaseUrl(withLocalDevEnv());
   if (url === undefined) {
     console.error(
-      "No database configured: DATABASE_HOST, DATABASE_NAME, DATABASE_USER and DATABASE_PASSWORD must all be set.",
+      "No database configured: DATABASE_HOST, DATABASE_PORT, DATABASE_NAME, DATABASE_USER and DATABASE_PASSWORD must all be set.",
     );
     process.exit(1);
   }
