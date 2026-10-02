@@ -204,14 +204,11 @@ jobs:
         with:
           package_json_file: package.json
       - run: pnpm run infra:check
-      # No AWS credentials configured here (this job runs on every pull_request, including forks): `terraform test`
-      # runs entirely offline via mock_provider (infra/tests/*.tftest.hcl).
-      - name: terraform test
-        working-directory: infra
-        run: terraform test
-      # Stdlib only, with boto3 stubbed, so the runner's own python3 runs them with nothing to install.
-      - name: worker sweeper Lambda tests
-        run: python3 -B -m unittest discover -s infra/lambda
+      # `terraform test`, then the worker sweeper Lambda's unit tests. No AWS credentials are configured here (this job
+      # runs on every pull_request, including forks): `terraform test` runs entirely offline via mock_provider
+      # (infra/tests/*.tftest.hcl). The Lambda tests are stdlib only, with boto3 stubbed, so the runner's own python3
+      # runs them with nothing to install.
+      - run: pnpm run infra:test
 
   # Records DEPLOY_ENABLED shortly after this run starts, once a runner picks this job up. The deploy job's if:
   # reads this output, not live vars when that job starts. Not a required check. It only runs on main, for a push or a
