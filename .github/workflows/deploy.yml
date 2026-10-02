@@ -1,11 +1,12 @@
 name: Deploy
 
-# Applies infra/ and runs the migration on every push to main. It builds a new web image only when web/ changed, and it
-# rolls the service out whenever an apply changes the web task definition. See ARCHITECTURE.md "Image tags" for why the
-# image tag is web/'s tree id rather than the commit SHA, and "Migration ordering" for why the migration sits between
-# two terraform apply calls rather than inside one. See RUNBOOK.md for the one-time OIDC role setup this job's AWS
-# credentials depend on. It runs only as .github/workflows/ci.yml's deploy job, so it starts after every check job
-# passes. That caller also holds the push-to-main gate and grants the id-token permission.
+# Applies infra/ and runs the migration on every push to main, and on every run started by hand on main. It builds a new
+# web image only when web/ changed, and it rolls the service out whenever an apply changes the web task definition. See
+# ARCHITECTURE.md "Image tags" for why the image tag is web/'s tree id rather than the commit SHA, and "Migration
+# ordering" for why the migration sits between two terraform apply calls rather than inside one. See RUNBOOK.md for the
+# one-time OIDC role setup this job's AWS credentials depend on. It runs only as .github/workflows/ci.yml's deploy job,
+# so it starts after every check job passes. That caller also holds the main-branch gate and grants the id-token
+# permission.
 on:
   workflow_call:
 
@@ -33,8 +34,8 @@ jobs:
       TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
       TF_VAR_domain_zone_name: ${{ vars.DOMAIN_ZONE_NAME }}
       TF_VAR_worker_ami_id: ${{ vars.WORKER_AMI_ID }}
-      # GPU worker deployment stays manual. This value changes only when someone builds and pushes a new worker image by
-      # hand (RUNBOOK.md), not on every push to main like the web and migrate image tags.
+      # No deploy builds the worker images. This value changes only when scripts/prod/worker-push-image.sh pushes new
+      # ones from a workstation and then starts this workflow by hand (RUNBOOK.md).
       TF_VAR_worker_image_tag: ${{ vars.WORKER_IMAGE_TAG }}
     steps:
       - uses: actions/checkout@v7

@@ -91,6 +91,15 @@ tf_get_web_image_tag() {
   printf '%s\n' "${tree:0:12}"
 }
 
+# The tag scripts/prod/worker-push-image.sh pushes the worker images under: worker/'s git tree id at the given ref,
+# truncated the same way as tf_get_web_image_tag. The ref is an argument because that script releases origin/main, not
+# whatever this checkout has at HEAD.
+tf_get_worker_image_tag() {
+  local ref=$1 tree
+  tree=$(git -C "$ROOT" rev-parse "$ref:worker") || return
+  printf '%s\n' "${tree:0:12}"
+}
+
 # The tag the running service's PRIMARY task definition names, the same ECS lookup the deploy job's "Resolve tags" step
 # uses when a service exists. When nothing is serving it falls back to the tag this checkout would build, so the plan
 # doesn't show an image change that isn't coming.

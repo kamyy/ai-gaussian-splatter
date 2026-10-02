@@ -65,3 +65,38 @@ gh_require_no_in_progress_ci() {
     exit 1
   fi
 }
+
+# Prints the DEPLOY_ENABLED repository variable lowercased, or nothing when it's unset. Lowercased because a GitHub
+# Actions `==` comparison ignores case, so True and TRUE arm the deploy job in .github/workflows/ci.yml just as true
+# does.
+gh_get_deploy_enabled() {
+  local deploy_enabled
+  deploy_enabled=$(gh variable get DEPLOY_ENABLED 2>/dev/null || true)
+  printf '%s\n' "${deploy_enabled,,}"
+}
+
+# Runs .github/workflows/ci.yml on main by hand and waits for it to finish, so its deploy job applies whatever
+# repository variables were just set. Call it only while DEPLOY_ENABLED is true, since the run otherwise skips its
+# deploy job. The run is found by the URL gh prints when it starts one. Picking the newest run from `gh run list`
+# instead could pick up a push that started at the same moment.
+gh_run_deploy() {
+  local output url
+  if ! output=$(gh workflow run ci.yml --ref main 2>&1); then
+    echo "$output" >&2
+    exit 1
+  fi
+
+  url=$(grep -oE 'https://github\.com/[^[:space:]]+/actions/runs/[0-9]+' <<<"$output" || true)
+  if [[ -z $url ]]; then
+    echo "Started ci.yml on main, but gh printed no run URL to follow. Find the run here:" >&2
+    gh repo view --json url --jq '.url + "/actions/workflows/ci.yml"' >&2
+    exit 1
+  fi
+
+  echo "Deploying through $url"
+  if ! gh run watch "${url##*/}" --compact --exit-status; then
+    echo "The run failed: $url" >&2
+    exit 1
+  fi
+  echo "The deploy finished."
+}

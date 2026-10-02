@@ -115,17 +115,16 @@ variable "migrate_image_tag" {
   }
 }
 
-# GPU worker deployment stays manual (ARCHITECTURE.md): unlike web_image_tag/migrate_image_tag, no deploy ever
-# rebuilds and pushes a worker image, so this changes only when someone hand-builds and pushes a new one (RUNBOOK.md).
-# It stays a commit SHA, because scripts/prod/worker-push-image.sh tags the image with the checked-out commit.
-# Set as a stable GitHub repository variable for CI the same way worker_ami_id is.
+# No deploy builds a worker image, so this changes only when scripts/prod/worker-push-image.sh pushes one (RUNBOOK.md).
+# That script tags the images with worker/'s git tree id on main, truncated to 12 characters, and sets the
+# WORKER_IMAGE_TAG repository variable .github/workflows/deploy.yml passes in here.
 variable "worker_image_tag" {
-  description = "Commit SHA identifying the worker image's build, pushed by hand to aws_ecr_repository.worker."
+  description = "Tag identifying the worker images' build, without the -reconstruct/-train suffix infra/locals.tf appends."
   type        = string
 
   validation {
     condition     = can(regex("^[0-9a-f]{7,40}$", var.worker_image_tag))
-    error_message = "worker_image_tag must be a commit SHA identifying one immutable build, not a moving tag (see RUNBOOK.md)."
+    error_message = "worker_image_tag must be an abbreviated git object id (7-40 hex characters) identifying one immutable build, not a moving tag (see RUNBOOK.md)."
   }
 }
 

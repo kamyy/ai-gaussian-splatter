@@ -13,6 +13,9 @@ on:
     paths-ignore:
       - '**/*.md'
       - 'LICENSE'
+  # scripts/prod/worker-push-image.sh starts a run on main by hand after it changes WORKER_IMAGE_TAG, because no push
+  # carries that change. A manual run on main deploys exactly like a push to main.
+  workflow_dispatch:
 
 jobs:
   lint-format:
@@ -211,9 +214,10 @@ jobs:
         run: python3 -B -m unittest discover -s infra/lambda
 
   # Records DEPLOY_ENABLED shortly after this run starts, once a runner picks this job up. The deploy job's if:
-  # reads this output, not live vars when that job starts. Not a required check. It only runs on push to main.
+  # reads this output, not live vars when that job starts. Not a required check. It only runs on main, for a push or a
+  # manual run.
   capture-deploy-enabled:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
       enabled: ${{ steps.gate.outputs.enabled }}
@@ -229,7 +233,9 @@ jobs:
     # Deploying is off until the DEPLOY_ENABLED repository variable is set to true (RUNBOOK.md). An unset variable
     # renders as "", so a fresh fork or a torn-down account deploys nothing until someone turns it on deliberately.
     # The value is the one capture-deploy-enabled recorded shortly after this run started, not live vars now.
-    if: needs.capture-deploy-enabled.outputs.enabled == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      needs.capture-deploy-enabled.outputs.enabled == 'true' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     # Granted here rather than in .github/workflows/deploy.yml, because a called workflow can only narrow its caller's
     # permissions and this repo's default token is read-only.
     permissions:
