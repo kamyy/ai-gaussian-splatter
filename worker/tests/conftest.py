@@ -24,7 +24,7 @@ def settings(tmp_path) -> Settings:
         job_id="job-123",
         splat_id="splat-456",
         callback_token="test-token",
-        app_public_url="https://app.example.com",
+        app_origin="https://app.example.com",
         uploads_bucket="test-uploads",
         splats_bucket="test-splats",
         local_workdir=str(tmp_path),

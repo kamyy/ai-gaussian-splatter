@@ -86,7 +86,7 @@ jobs:
           fi
 
       # AWS_REGION is read from var.aws_region's default, so the region this job signs with is the one Terraform
-      # deploys, not a second copy that can drift. APP_PUBLIC_URL is https://ai-gaussian-splatter.<DOMAIN_ZONE_NAME>,
+      # deploys, not a second copy that can drift. APP_ORIGIN is https://ai-gaussian-splatter.<DOMAIN_ZONE_NAME>,
       # the same hostname local.app_hostname builds. The credential step below reads AWS_REGION too.
       - name: Resolve region and origin
         run: |
@@ -96,7 +96,7 @@ jobs:
           region=$(tf_get_aws_region)
           hostname=$(tf_get_app_hostname "$TF_VAR_domain_zone_name")
           echo "AWS_REGION=$region" >> "$GITHUB_ENV"
-          echo "APP_PUBLIC_URL=https://$hostname" >> "$GITHUB_ENV"
+          echo "APP_ORIGIN=https://$hostname" >> "$GITHUB_ENV"
 
       - uses: aws-actions/configure-aws-credentials@v5
         with:
@@ -280,7 +280,7 @@ jobs:
         run: |
           aws ecs wait services-stable --cluster "$CLUSTER_NAME" --services "$SERVICE_NAME"
           STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
-            "$APP_PUBLIC_URL/api/v1/public/splats/00000000-0000-0000-0000-000000000000")
+            "$APP_ORIGIN/api/v1/public/splats/00000000-0000-0000-0000-000000000000")
           if [ "$STATUS" != "404" ]; then
             echo "::error::GET /api/v1/public/splats/<id> returned $STATUS (expected 404) after deploying $NEW_TAG"
             exit 1

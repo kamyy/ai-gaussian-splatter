@@ -229,14 +229,14 @@ run "web_container_wiring" {
     error_message = "AWS_REGION must be set explicitly so the app's AWS SDK clients target the right region"
   }
 
-  # worker/pipeline/status.py builds its callback as f"{app_public_url}/api/v1/...", so a trailing slash here is a
+  # worker/pipeline/status.py builds its callback as f"{app_origin}/api/v1/...", so a trailing slash here is a
   # silent 404 on every status update rather than anything Terraform would reject.
   assert {
     condition = anytrue([
       for e in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].environment :
-      e.name == "APP_PUBLIC_URL" && !endswith(e.value, "/")
+      e.name == "APP_ORIGIN" && !endswith(e.value, "/")
     ])
-    error_message = "APP_PUBLIC_URL must carry no trailing slash, or the worker's status callbacks 404"
+    error_message = "APP_ORIGIN must carry no trailing slash, or the worker's status callbacks 404"
   }
 }
 
@@ -358,9 +358,9 @@ run "hostnames_follow_the_zone_variable" {
   assert {
     condition = anytrue([
       for e in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].environment :
-      e.name == "APP_PUBLIC_URL" && e.value == "https://ai-gaussian-splatter.other.test"
+      e.name == "APP_ORIGIN" && e.value == "https://ai-gaussian-splatter.other.test"
     ])
-    error_message = "APP_PUBLIC_URL must be local.app_origin, the same hostname the certificate and A record use"
+    error_message = "APP_ORIGIN must be local.app_origin, the same hostname the certificate and A record use"
   }
 }
 

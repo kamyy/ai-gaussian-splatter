@@ -132,7 +132,7 @@ def _train_loop(sparse: SparseModel, photos_dir: Path, settings: Settings):
     scene_scale = _scene_scale(viewmats)
     optimizers = _build_optimizers(params, scene_scale)
 
-    iterations = 20 if settings.fast_test_mode else settings.training_iterations
+    iterations = settings.training_iterations
     log_every = max(1, iterations // 20)
     means_lr_decay = torch.optim.lr_scheduler.ExponentialLR(
         optimizers["means"], gamma=MEANS_LR_FINAL_FRACTION ** (1 / iterations)
@@ -360,8 +360,7 @@ def _build_optimizers(params: dict[str, torch.nn.Parameter], scene_scale: float)
 
 def _build_strategy(iterations: int):
     """gsplat's defaults assume a 30k-iteration run: refine every 100 steps from step 500 to step 15k. Each is scaled
-    by the same fraction of the run here, so a 10k run keeps the reference proportions and a 20-iteration fast-test
-    run still refines.
+    by the same fraction of the run here, so a 10k run keeps the reference proportions.
 
     Its own opacity reset never fires in gsplat 1.5.3, whose condition for it is always false. _train_loop resets
     opacities itself instead, on the schedule _is_opacity_reset_step gives.

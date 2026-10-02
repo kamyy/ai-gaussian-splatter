@@ -14,7 +14,7 @@ def test_local_run_keeps_default_credentials(settings):
 @respx.mock
 def test_aws_run_uses_the_apps_scoped_credentials(settings):
     settings.s3_credentials_from_app = True
-    route = respx.post(f"{settings.app_public_url}/api/v1/internal/jobs/{settings.job_id}/s3-credentials").mock(
+    route = respx.post(f"{settings.app_origin}/api/v1/internal/jobs/{settings.job_id}/s3-credentials").mock(
         return_value=httpx.Response(
             200, json={"access_key_id": "ASIA", "secret_access_key": "secret", "session_token": "session"}
         )
@@ -35,7 +35,7 @@ def test_aws_run_raises_at_once_when_the_app_refuses(settings, monkeypatch):
     sleeps: list[float] = []
     monkeypatch.setattr("pipeline.storage.time.sleep", sleeps.append)
     settings.s3_credentials_from_app = True
-    route = respx.post(f"{settings.app_public_url}/api/v1/internal/jobs/{settings.job_id}/s3-credentials").mock(
+    route = respx.post(f"{settings.app_origin}/api/v1/internal/jobs/{settings.job_id}/s3-credentials").mock(
         return_value=httpx.Response(409)
     )
 
@@ -52,7 +52,7 @@ def test_aws_run_retries_while_the_app_is_unreachable(settings, monkeypatch):
     sleeps: list[float] = []
     monkeypatch.setattr("pipeline.storage.time.sleep", sleeps.append)
     settings.s3_credentials_from_app = True
-    route = respx.post(f"{settings.app_public_url}/api/v1/internal/jobs/{settings.job_id}/s3-credentials").mock(
+    route = respx.post(f"{settings.app_origin}/api/v1/internal/jobs/{settings.job_id}/s3-credentials").mock(
         side_effect=[
             httpx.ConnectError("connection refused"),
             httpx.Response(503),
@@ -74,7 +74,7 @@ def test_aws_run_gives_up_after_the_last_retry(settings, monkeypatch):
     sleeps: list[float] = []
     monkeypatch.setattr("pipeline.storage.time.sleep", sleeps.append)
     settings.s3_credentials_from_app = True
-    route = respx.post(f"{settings.app_public_url}/api/v1/internal/jobs/{settings.job_id}/s3-credentials").mock(
+    route = respx.post(f"{settings.app_origin}/api/v1/internal/jobs/{settings.job_id}/s3-credentials").mock(
         return_value=httpx.Response(502)
     )
 

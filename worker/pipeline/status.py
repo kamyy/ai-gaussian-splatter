@@ -45,7 +45,7 @@ def report_status(
     if booted_at is not None:
         payload["booted_at"] = booted_at
 
-    url = f"{settings.app_public_url}/api/v1/internal/jobs/{settings.job_id}/status"
+    url = f"{settings.app_origin}/api/v1/internal/jobs/{settings.job_id}/status"
     try:
         response = httpx.patch(
             url,

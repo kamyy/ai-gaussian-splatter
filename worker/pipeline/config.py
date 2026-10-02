@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     job_id: str
     splat_id: str
     callback_token: str
-    app_public_url: str
+    app_origin: str
     uploads_bucket: str
     splats_bucket: str
 
@@ -40,11 +40,6 @@ class Settings(BaseSettings):
 
     # Single-object-against-plain-background scenes converge well below the paper's 30k default.
     training_iterations: int = 10_000
-
-    # "Fast test mode": 20 training iterations instead of the full count, for a cheap smoke test of the plumbing. It
-    # uses every photo, so it doesn't reduce GPU memory. worker/pipeline/train.py scales its densify and log schedules
-    # to the iteration count, so the short run covers the same code paths as a full one.
-    fast_test_mode: bool = False
 
     # A local experiment switch, never set on AWS. worker/pipeline/train.py holds back every 8th photo from training
     # and scores the finished splat against them, since the training loss keeps falling even while the splat overfits
