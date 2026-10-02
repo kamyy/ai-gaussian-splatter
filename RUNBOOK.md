@@ -45,7 +45,7 @@ Then fill in the Clerk keys in `web/.env`, from the development Clerk instance.
 pnpm dev        # from the repo root: starts splat-pg, applies pending migrations, then runs next dev on localhost:3000
 ```
 
-The `splat-pg` container holds the dev database `ai_gaussian_splatter` and the test database `ai_gaussian_splatter_test`. `pnpm dev`, `pnpm db:migrate` and `pnpm db:studio` reach it on `localhost:5432`, since they run on the host rather than in a container. They always use the dev database, so `web/.env` has no `DATABASE_*` variables and nothing there can change them. Outside local dev (`NODE_ENV` of `production` or `test`) this does not apply.
+The `splat-pg` container holds the dev database `ai_gaussian_splatter` and the test database `ai_gaussian_splatter_test`. `pnpm dev`, `pnpm db:migrate` and `pnpm db:studio` reach it on `localhost:5432`, since they run on the host rather than in a container.
 
 ```bash
 scripts/dev/db.sh down          # deletes splat-pg and its volume, and both databases with them
