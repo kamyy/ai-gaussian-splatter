@@ -134,7 +134,7 @@ cd web
 pnpm dev
 ```
 
-Create a splat at `/splats/new` as normal: uploading its photos starts the worker job. The job goes through the same DB rows, callback token, and `/api/v1/internal/jobs/[jobId]/status` route a real EC2 run would use, so the splat's page shows each stage live. Nothing else about the worker needs setting with `WORKER_LOCAL_LAUNCH=true`. Leaving it unset (or `false`) launches a real spot instance, and then `web/lib/server/env.ts` requires the `WORKER_AMI_ID`, `WORKER_SUBNET_ID`, `WORKER_SECURITY_GROUP_ID`, `WORKER_INSTANCE_PROFILE_ARN` and `WORKER_LOG_GROUP` variables that `infra/web.tf` sets in production.
+Create a splat at `/splats/new` as normal: uploading its photos starts the worker job. The job goes through the same DB rows, callback token, and `/api/v1/internal/jobs/[jobId]/status` route a real EC2 run would use, so the splat's page shows each stage live. Nothing else about the worker needs setting with `WORKER_LOCAL_LAUNCH=true`. Leaving it unset (or `false`) launches a real spot instance, and then `web/lib/server/env.ts` requires the `WORKER_AMI_ID`, `WORKER_SUBNET_ID`, `WORKER_SECURITY_GROUP_ID`, `WORKER_INSTANCE_PROFILE_ARN`, `WORKER_LOG_GROUP` and `WORKER_DATA_ROLE_ARN` variables that `infra/web.tf` sets in production.
 
 ### 1.8 Installing Terraform
 
