@@ -14,6 +14,7 @@ const WORKER_INSTANCE_VARS = [
   "WORKER_SECURITY_GROUP_ID",
   "WORKER_INSTANCE_PROFILE_ARN",
   "WORKER_LOG_GROUP",
+  "WORKER_DATA_ROLE_ARN",
 ] as const;
 
 const envSchema = z
@@ -44,6 +45,9 @@ const envSchema = z
     WORKER_SECURITY_GROUP_ID: z.string().min(1).optional(),
     WORKER_INSTANCE_PROFILE_ARN: z.string().min(1).optional(),
     WORKER_LOG_GROUP: z.string().min(1).optional(),
+    // The role whose credentials a worker instance gets for its own splat's S3 objects
+    // (web/app/api/v1/internal/jobs/[jobId]/s3-credentials/route.ts).
+    WORKER_DATA_ROLE_ARN: z.string().min(1).optional(),
 
     // Where the GPU worker PATCHes its status back to.
     APP_PUBLIC_URL: z.string().url(),
@@ -107,5 +111,6 @@ export function getWorkerInstanceEnv(): Record<(typeof WORKER_INSTANCE_VARS)[num
     WORKER_SECURITY_GROUP_ID: env.WORKER_SECURITY_GROUP_ID as string,
     WORKER_INSTANCE_PROFILE_ARN: env.WORKER_INSTANCE_PROFILE_ARN as string,
     WORKER_LOG_GROUP: env.WORKER_LOG_GROUP as string,
+    WORKER_DATA_ROLE_ARN: env.WORKER_DATA_ROLE_ARN as string,
   };
 }

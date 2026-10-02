@@ -143,8 +143,25 @@ describe("NewSplatForm", () => {
 
   it("turns away a photo the browser can't read, naming it", async () => {
     measurePhotosMock.mockImplementation(async (files: File[]) =>
-      files.map(file => (file.name.endsWith(".heic") ? null : { file, width: 4032, height: 3024 })),
+      files.map(file => (file.name === "b.jpg" ? null : { file, width: 4032, height: 3024 })),
     );
+    render(<NewSplatForm />);
+    fireEvent.change(screen.getByLabelText("Photos"), {
+      target: {
+        files: [new File(["a"], "a.jpg", { type: "image/jpeg" }), new File(["b"], "b.jpg", { type: "image/jpeg" })],
+      },
+    });
+
+    await waitFor(() => expect(screen.getByText("1 photo added")).toBeInTheDocument());
+    expect(screen.queryByRole("img", { name: "b.jpg" })).not.toBeInTheDocument();
+    expect(enqueueSnackbarMock).toHaveBeenCalledWith("Couldn't read photo", {
+      variant: "error",
+      detail: "Try exporting b.jpg as JPEG.",
+    });
+  });
+
+  it("turns away a photo COLMAP can't read, naming it", async () => {
+    // A dropped HEIC would otherwise upload and then be skipped by worker/pipeline/sfm.py.
     render(<NewSplatForm />);
     fireEvent.change(screen.getByLabelText("Photos"), {
       target: {
@@ -153,11 +170,11 @@ describe("NewSplatForm", () => {
     });
 
     await waitFor(() => expect(screen.getByText("1 photo added")).toBeInTheDocument());
-    expect(screen.queryByRole("img", { name: "b.heic" })).not.toBeInTheDocument();
-    expect(enqueueSnackbarMock).toHaveBeenCalledWith("Couldn't read photo", {
+    expect(enqueueSnackbarMock).toHaveBeenCalledWith("Unsupported photo", {
       variant: "error",
-      detail: "Try exporting b.heic as JPEG.",
+      detail: "Only JPEG and PNG photos can be used. Try exporting b.heic as JPEG.",
     });
+    expect(measurePhotosMock).toHaveBeenCalledWith([expect.objectContaining({ name: "a.jpg" })]);
   });
 
   it("shows the button busy as soon as it's clicked, before the session token arrives", async () => {

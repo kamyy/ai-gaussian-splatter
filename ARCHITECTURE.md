@@ -294,6 +294,8 @@ The daily cap bounds how many worker instances launch, not how long each one run
 
 `MAX_PHOTO_BYTES` (`web/lib/limits.ts`) bounds one photo's storage and worker download cost. `MAX_THUMBNAIL_BYTES` (`web/lib/server/s3.ts`) bounds its thumbnail, which the browser draws and so could send at any size. The presign route signs each declared size into its upload URL, so S3 itself refuses a body of any other size. The `complete` route checks both stored objects' sizes again, so a client that skipped the form still can't get an oversized upload marked uploaded.
 
+A worker instance runs COLMAP and gsplat on files anyone can upload, so the design assumes one could be taken over and limits what that reaches. The presign route accepts only JPEG and PNG, the two formats `worker/pipeline/sfm.py` hands to COLMAP, and names each S3 key's extension after the type rather than the uploaded filename. The instance's own IAM role has no S3 access. The worker trades its callback token for credentials from `web/app/api/v1/internal/jobs/[jobId]/s3-credentials/route.ts`, which assumes a role with a session policy naming only that splat's keys. Per-object presigned URLs were rejected for two reasons. A splat's photo count would push them past EC2's 16 KB user-data limit. Replacing boto3's transfers with hand-written HTTP requests would also lose its multipart upload of large results. The status callback also refuses any result key outside the splat's own prefix, since the share page presigns those keys for anyone with the link.
+
 Ops fallbacks: the `processing-enabled` runtime setting pauses every GPU launch site-wide, and an AWS Budget (`infra/budgets.tf`) alerts on spend the request path never sees.
 
 ---

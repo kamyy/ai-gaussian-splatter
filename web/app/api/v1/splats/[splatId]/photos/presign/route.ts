@@ -8,11 +8,10 @@
  */
 
 import { randomUUID } from "node:crypto";
-import path from "node:path";
 import { and, count, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { MAX_PHOTO_BYTES, MAX_PHOTOS_PER_SPLAT } from "@/lib/limits";
+import { MAX_PHOTO_BYTES, MAX_PHOTOS_PER_SPLAT, PHOTO_EXTENSIONS } from "@/lib/limits";
 import { getClientIp, requireOwnedSplat, requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { type NewPhoto, photos } from "@/lib/server/db/schema";
@@ -28,7 +27,7 @@ const presignSchema = z
   .array(
     z.object({
       filename: z.string().min(1),
-      contentType: z.string().min(1),
+      contentType: z.string().refine(type => Object.hasOwn(PHOTO_EXTENSIONS, type), "Unsupported photo type"),
       size: z.number().int().positive().max(MAX_PHOTO_BYTES),
       thumbnailSize: z.number().int().positive().max(MAX_THUMBNAIL_BYTES),
       width: z.number().int().positive(),
@@ -66,7 +65,7 @@ export const POST = withErrorHandling(
     const rows: NewPhoto[] = [];
     for (const item of batch) {
       const photoId = randomUUID();
-      const extension = path.extname(item.filename) || ".jpg";
+      const extension = PHOTO_EXTENSIONS[item.contentType];
       const { key, url } = await presignPhotoUpload(splatId, photoId, extension, item.contentType, item.size);
       const thumbnail = await presignPhotoThumbnailUpload(splatId, photoId, item.thumbnailSize);
 

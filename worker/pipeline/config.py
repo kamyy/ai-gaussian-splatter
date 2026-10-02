@@ -1,8 +1,8 @@
 """The worker's settings, read from environment variables.
 
 web/lib/server/ec2Launcher.ts sets these in the instance's startup script: which worker job and splat to work on, where
-to report status, the S3 buckets to read and write, and which stage to run. pydantic validates them when the worker
-starts, so a missing setting fails straight away rather than partway through a GPU run.
+to report status, the S3 buckets to read and write, where their credentials come from, and which stage to run. pydantic
+validates them when the worker starts, so a missing setting fails straight away rather than partway through a GPU run.
 """
 
 from typing import Literal
@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     crop_box: CropBox | None = None
 
     local_workdir: str = "/tmp/job"
+
+    # Set by web/lib/server/ec2Launcher.ts's user-data, because a worker instance's own role has no S3 access.
+    # worker/pipeline/storage.py then asks the app for credentials scoped to this splat. Unset on a local run, which
+    # uses the dev IAM user's keys instead.
+    s3_credentials_from_app: bool = False
 
     # Epoch milliseconds at which the instance finished booting, stamped by the launch's user-data. Reported with the
     # stage's first status so the web app can split the stage's start-up into boot and image pull. Unset on a local run.

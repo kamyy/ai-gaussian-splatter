@@ -84,8 +84,9 @@ shutdown -h +${p.maxLifetimeMinutes} || poweroff -f
 # start-up into boot and image pull (web/lib/stageTimings.ts).
 BOOTED_AT="$(date +%s%3N)"
 
-# Plaintext, and EC2 user-data is readable by anyone holding ec2:DescribeInstances. The token is per-job and only
-# authorizes status updates on that one job (web/lib/server/auth.ts), which is what bounds this.
+# Plaintext, and EC2 user-data is readable by anyone allowed to describe the instance's attributes. The token is per-job.
+# It authorizes status updates on that one job, and S3 credentials for that one splat's files, which is what bounds
+# this.
 CALLBACK_TOKEN="${p.callbackToken}"
 JOB_ID="${p.jobId}"
 SPLAT_ID="${p.splatId}"
@@ -117,6 +118,7 @@ docker run --rm --gpus all \\
     -e SPLATS_BUCKET="$SPLATS_BUCKET" \\
     -e STAGE="$STAGE" \\
     -e BOOTED_AT="$BOOTED_AT" \\
+    -e S3_CREDENTIALS_FROM_APP=true \\
 ${iterationsArg}${cropBoxArg}    ${p.workerImageUri}
 `;
 }

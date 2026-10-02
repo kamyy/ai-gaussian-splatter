@@ -19,7 +19,7 @@ import { z } from "zod";
 import { getJobForCallbackToken } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { jobs, splats } from "@/lib/server/db/schema";
-import { parseJsonBody, withErrorHandling } from "@/lib/server/httpError";
+import { HttpError, parseJsonBody, withErrorHandling } from "@/lib/server/httpError";
 import { JOB_ENDED_STATUSES, JOB_STATUSES, JobStatus } from "@/lib/statuses";
 
 const workerStatusSchema = z.object({
@@ -33,6 +33,21 @@ const workerStatusSchema = z.object({
   // Epoch milliseconds, sent with each stage's first callback. Absent on a local run.
   booted_at: z.number().int().positive().nullish(),
 });
+
+/**
+ * Throws 400 unless every key sits under this splat's own prefix. The app presigns these keys for the splat's owner and
+ * for anyone holding its share link (web/lib/server/data.ts). A worker instance compromised by a crafted photo could
+ * otherwise point its own splat at another user's files and publish them through that share link. A ".." segment is
+ * refused too, because a browser collapses it before the request reaches S3.
+ */
+function requireOwnKeys(splatId: string, keys: (string | null | undefined)[]): void {
+  const prefix = `splats/${splatId}/`;
+  for (const key of keys) {
+    if (key != null && (!key.startsWith(prefix) || key.split("/").includes(".."))) {
+      throw new HttpError(400, "An S3 key is outside this splat's own prefix");
+    }
+  }
+}
 
 export const PATCH = withErrorHandling(
   async (request: NextRequest, ctx: RouteContext<"/api/v1/internal/jobs/[jobId]/status">) => {
@@ -53,6 +68,12 @@ export const PATCH = withErrorHandling(
 
     const body = await parseJsonBody(request, workerStatusSchema);
     const { status } = body;
+    requireOwnKeys(job.splatId, [
+      body.result_s3_key,
+      body.result_spz_s3_key,
+      body.thumbnail_s3_key,
+      body.point_cloud_s3_key,
+    ]);
 
     const jobData: Partial<typeof jobs.$inferInsert> = { status };
     if (body.error_message != null) {

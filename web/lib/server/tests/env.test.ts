@@ -64,6 +64,7 @@ describe("getEnv", () => {
     "WORKER_SECURITY_GROUP_ID",
     "WORKER_INSTANCE_PROFILE_ARN",
     "WORKER_LOG_GROUP",
+    "WORKER_DATA_ROLE_ARN",
   ])("rejects an unset %s when the worker launches on EC2", async name => {
     vi.stubEnv("WORKER_LOCAL_LAUNCH", undefined);
     vi.stubEnv(name, undefined);

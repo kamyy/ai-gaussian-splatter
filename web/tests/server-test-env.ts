@@ -1,4 +1,5 @@
-// Env for the server Vitest project (web/vitest.config.mts), which covers web/lib/server/ and web/app/api/.
+// Env for the server Vitest project (web/vitest.config.mts), which covers web/lib/server/, web/app/api/ and
+// web/proxy.ts.
 
 // Point DATABASE_* at the test database, so no test reads or writes the dev one. web/tests/migrate-test-db.ts has
 // already failed the run if TEST_DATABASE_URL is unset.
@@ -23,6 +24,7 @@ const defaults: Record<string, string> = {
   WORKER_SECURITY_GROUP_ID: "sg-0123456789",
   WORKER_INSTANCE_PROFILE_ARN: "arn:aws:iam::123456789012:instance-profile/worker",
   WORKER_LOG_GROUP: "/ai-gaussian-splatter/worker",
+  WORKER_DATA_ROLE_ARN: "arn:aws:iam::123456789012:role/worker-data",
   APP_PUBLIC_URL: "https://app.example.com",
   SHOWCASE_CLERK_USER_ID: "showcase",
 };

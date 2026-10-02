@@ -3,16 +3,16 @@
  *
  * Holds the photos a visitor drops onto web/components/splats/NewSplatForm.tsx before they are uploaded. Each photo is
  * measured as it's added (pixel size, a small JPEG thumbnail, when it was taken, and how sharp it is), because the
- * server stores that size so web/components/splats/PhotoGrid.tsx can lay out its rows before any image loads. A file
- * over the server's size limit, or one this browser can't decode, is turned away with a snackbar (a toast message)
- * instead of failing halfway through an upload. A blurry or low-resolution photo is only flagged, since the visitor may
+ * server stores that size so web/components/splats/PhotoGrid.tsx can lay out its rows before any image loads. A file of
+ * a type COLMAP can't read, over the server's size limit, or one this browser can't decode, is turned away with a
+ * snackbar (a toast message) instead of failing halfway through an upload. A blurry or low-resolution photo is only flagged, since the visitor may
  * have no better shot of that angle.
  */
 
 import { useState } from "react";
 
 import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
-import { MAX_PHOTO_BYTES, MIN_SHARP_PHOTO_EDGE } from "@/lib/limits";
+import { MAX_PHOTO_BYTES, MIN_SHARP_PHOTO_EDGE, PHOTO_EXTENSIONS } from "@/lib/limits";
 import { fileKey, measurePhotos, type PickedPhoto } from "@/lib/measurePhoto";
 
 const MAX_PHOTO_MB = MAX_PHOTO_BYTES / (1024 * 1024);
@@ -62,7 +62,16 @@ export function usePickedPhotos() {
 
   // Resolves once the batch is measured and added.
   async function addFiles(dropped: File[]) {
-    const tooLarge = dropped.filter(file => file.size > MAX_PHOTO_BYTES).map(file => file.name);
+    const unsupported = dropped.filter(file => !Object.hasOwn(PHOTO_EXTENSIONS, file.type)).map(file => file.name);
+    if (unsupported.length > 0) {
+      enqueueSnackbar(unsupported.length === 1 ? "Unsupported photo" : "Unsupported photos", {
+        variant: "error",
+        detail: `Only JPEG and PNG photos can be used. Try exporting ${unsupported.join(", ")} as JPEG.`,
+      });
+    }
+
+    const supported = dropped.filter(file => Object.hasOwn(PHOTO_EXTENSIONS, file.type));
+    const tooLarge = supported.filter(file => file.size > MAX_PHOTO_BYTES).map(file => file.name);
     if (tooLarge.length > 0) {
       enqueueSnackbar(tooLarge.length === 1 ? "Photo too large" : "Photos too large", {
         variant: "error",
@@ -70,7 +79,7 @@ export function usePickedPhotos() {
       });
     }
 
-    const accepted = dropped.filter(file => file.size <= MAX_PHOTO_BYTES);
+    const accepted = supported.filter(file => file.size <= MAX_PHOTO_BYTES);
     setMeasuringCount(count => count + 1);
     try {
       const measured = await measurePhotos(accepted);

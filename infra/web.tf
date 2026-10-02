@@ -136,7 +136,8 @@ resource "aws_iam_role" "task" {
 }
 
 # The application code's own permissions: read/write S3 access on both buckets, launching and terminating the GPU worker
-# (split across several statements, each explained below), and `aws ecs execute-command` access.
+# (split across several statements, each explained below), minting a worker's S3 credentials, and `aws ecs
+# execute-command` access.
 resource "aws_iam_role_policy" "task" {
   role = aws_iam_role.task.id
 
@@ -186,8 +187,9 @@ resource "aws_iam_role_policy" "task" {
         Effect = "Allow"
         Action = "ec2:RunInstances"
         Resource = [
-          # AMIs are not account-scoped, hence the empty account segment.
-          "arn:aws:ec2:${var.aws_region}::image/*",
+          # Only the worker AMI, so a compromised web task can't boot an image of its own choosing. AMIs are not
+          # account-scoped, hence the empty account segment.
+          "arn:aws:ec2:${var.aws_region}::image/${var.worker_ami_id}",
           # The worker only ever launches into one subnet and one security group (both passed as env
           # vars by web/lib/server/ec2Launcher.ts), so both are scoped to the exact resource rather than every
           # subnet or security group in the account.
@@ -203,11 +205,18 @@ resource "aws_iam_role_policy" "task" {
         ]
       },
       {
-        Sid       = "RunInstancesTagged"
-        Effect    = "Allow"
-        Action    = "ec2:RunInstances"
-        Resource  = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:instance/*"
-        Condition = { StringEquals = { "aws:RequestTag/${local.worker_tag_key}" = local.worker_tag_value } }
+        Sid      = "RunInstancesTagged"
+        Effect   = "Allow"
+        Action   = "ec2:RunInstances"
+        Resource = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:instance/*"
+        # The instance type bounds what one launch costs, so a compromised web task can't start the account's largest
+        # GPU instances.
+        Condition = {
+          StringEquals = {
+            "aws:RequestTag/${local.worker_tag_key}" = local.worker_tag_value
+            "ec2:InstanceType"                       = local.worker_instance_types
+          }
+        }
       },
       # A request carrying TagSpecifications is authorized a second time against ec2:CreateTags, separately
       # from RunInstances. Without this the launch fails even though the statements above allow it. The
@@ -234,6 +243,13 @@ resource "aws_iam_role_policy" "task" {
         Effect   = "Allow"
         Action   = "ec2:DescribeInstances"
         Resource = "*"
+      },
+      # Lets web/app/api/v1/internal/jobs/[jobId]/s3-credentials/route.ts mint a worker instance's S3 credentials.
+      {
+        Sid      = "AssumeWorkerDataRole"
+        Effect   = "Allow"
+        Action   = "sts:AssumeRole"
+        Resource = aws_iam_role.worker_data.arn
       },
       # PassRole is authorized against the role being passed, not the instance profile ARN that wraps it.
       # RunInstances with IamInstanceProfile evaluates iam:PassRole against the underlying role's ARN.
@@ -525,6 +541,7 @@ resource "aws_ecs_task_definition" "web" {
       { name = "WORKER_SECURITY_GROUP_ID", value = aws_security_group.worker.id },
       { name = "WORKER_INSTANCE_PROFILE_ARN", value = aws_iam_instance_profile.worker.arn },
       { name = "WORKER_LOG_GROUP", value = aws_cloudwatch_log_group.worker.name },
+      { name = "WORKER_DATA_ROLE_ARN", value = aws_iam_role.worker_data.arn },
       # Read by web/lib/server/ec2Launcher.ts's workerImageUri()/ecrRegistry(), which otherwise fall back to
       # REPLACE_WITH_* placeholders meant only for local/pre-deploy development.
       { name = "WORKER_RECONSTRUCT_IMAGE_URI", value = local.worker_reconstruct_image_uri },

@@ -91,6 +91,7 @@ jobs:
       WORKER_SECURITY_GROUP_ID: sg-0123456789abcdef0
       WORKER_INSTANCE_PROFILE_ARN: arn:aws:iam::123456789012:instance-profile/worker
       WORKER_LOG_GROUP: /ai-gaussian-splatter/worker
+      WORKER_DATA_ROLE_ARN: arn:aws:iam::123456789012:role/worker-data
       APP_PUBLIC_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v7
@@ -124,6 +125,11 @@ jobs:
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      # Fails on any high or critical advisory against a package the server or browser ships. A new advisory therefore
+      # fails a PR that changed nothing, which is the point: the fix is an upgrade, and it lands before anything else.
+      # devDependencies are left out because none of them reach the container.
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level=high
       # web:check runs `next typegen` before `tsc --noEmit`. CI never runs `next dev` or `next build`, so the App Router
       # route types tsc needs don't exist until typegen writes them (see AGENTS.md). web:check is a root package.json
       # script, so this step switches from the job's default working directory (web) back to the checkout root. The
