@@ -108,14 +108,15 @@ describe("worker status callback", () => {
   it("stamps colmapFinishedAt on awaiting_training, not on the later training_running callback", async () => {
     // awaiting_training can sit for hours while the user decides whether to train. Stamping colmapFinishedAt on
     // training_running instead would fold that think-time into COLMAP's own wall clock.
-    const { job } = await seed();
+    const { splat, job } = await seed();
+    const pointCloudKey = `splats/${splat.id}/point_cloud.ply`;
     await PATCH(req("tok", { status: "reconstruction_running" }), ctx(job.id));
 
-    await PATCH(req("tok", { status: "awaiting_training", point_cloud_s3_key: "p.ply" }), ctx(job.id));
+    await PATCH(req("tok", { status: "awaiting_training", point_cloud_s3_key: pointCloudKey }), ctx(job.id));
     const [afterAwaiting] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
     expect(afterAwaiting.colmapFinishedAt).not.toBeNull();
     expect(afterAwaiting.trainingStartedAt).toBeNull();
-    expect(afterAwaiting.pointCloudS3Key).toBe("p.ply");
+    expect(afterAwaiting.pointCloudS3Key).toBe(pointCloudKey);
 
     await PATCH(req("tok", { status: "training_running" }), ctx(job.id));
     const [afterTraining] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
@@ -136,9 +137,15 @@ describe("worker status callback", () => {
 
   it("moves the job and its splat together on completion", async () => {
     const { splat, job } = await seed();
+    const prefix = `splats/${splat.id}`;
 
     const res = await PATCH(
-      req("tok", { status: "complete", result_s3_key: "r.ply", result_spz_s3_key: "r.spz", thumbnail_s3_key: "t.jpg" }),
+      req("tok", {
+        status: "complete",
+        result_s3_key: `${prefix}/result.ply`,
+        result_spz_s3_key: `${prefix}/result.spz`,
+        thumbnail_s3_key: `${prefix}/thumbnail.png`,
+      }),
       ctx(job.id),
     );
     expect(res.status).toBe(204);
@@ -146,10 +153,30 @@ describe("worker status callback", () => {
     const [updatedJob] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
     const [updatedSplat] = await getDb().select().from(splats).where(eq(splats.id, splat.id));
     expect(updatedJob.status).toBe("complete");
-    expect(updatedJob.resultS3Key).toBe("r.ply");
-    expect(updatedJob.resultSpzS3Key).toBe("r.spz");
+    expect(updatedJob.resultS3Key).toBe(`${prefix}/result.ply`);
+    expect(updatedJob.resultSpzS3Key).toBe(`${prefix}/result.spz`);
     expect(updatedSplat.status).toBe("complete");
-    expect(updatedSplat.thumbnailS3Key).toBe("t.jpg");
+    expect(updatedSplat.thumbnailS3Key).toBe(`${prefix}/thumbnail.png`);
+  });
+
+  it.each([
+    ["another splat's prefix", "splats/00000000-0000-0000-0000-000000000000/result.spz"],
+    ["a key outside any splat", "result.spz"],
+    ["a .. segment climbing out of the prefix", "SPLAT/../00000000-0000-0000-0000-000000000000/result.spz"],
+  ])("rejects a result key in %s", async (_label, key) => {
+    // The share page presigns these keys for anyone with the link, so a key outside the splat's own prefix would
+    // publish someone else's files.
+    const { splat, job } = await seed();
+
+    const res = await PATCH(
+      req("tok", { status: "complete", result_spz_s3_key: key.replace("SPLAT", `splats/${splat.id}`) }),
+      ctx(job.id),
+    );
+    expect(res.status).toBe(400);
+
+    const [updatedJob] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
+    expect(updatedJob.status).toBe("queued");
+    expect(updatedJob.resultSpzS3Key).toBeNull();
   });
 
   it("fails the splat along with its job", async () => {
