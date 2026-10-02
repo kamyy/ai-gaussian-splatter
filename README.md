@@ -30,7 +30,7 @@ Built with the help of [Claude Code](https://claude.com/product/claude-code) and
 
 A 3D Gaussian Splat represents an object as millions of small, semi-transparent, colored blobs (Gaussians). Unlike a mesh, it captures fine detail and view-dependent shine, and it renders in real time in a browser.
 
-1. **Upload.** Sign in and drop in 20–100 photos taken while walking around one object. About 50 well-spaced shots work best: every side, a couple of heights, each overlapping its neighbors. Coverage matters more than count ([Capture](RUNBOOK.md#14-capture)).
+1. **Upload.** Sign in and drop in 20–100 photos taken while walking around one object. About 50 well-spaced shots work best: every side, a couple of heights, each overlapping its neighbors. Coverage matters more than count ([Capture](RUNBOOK.md#13-capture)).
 2. **Reconstruct.** COLMAP's photogrammetry (structure-from-motion) works out where each photo was taken and builds a sparse point cloud of the object.
 3. **Review.** Check the point cloud and camera positions, and optionally draw a crop box around the object to drop the background from the result.
 4. **Train.** gsplat trains a Gaussian Splat on the photos with its CUDA kernels on an NVIDIA GPU.
@@ -117,7 +117,7 @@ You'll need:
 - Node.js at the version in `.nvmrc` (run `nvm use`), and pnpm.
 - [uv](https://docs.astral.sh/uv/) for the Python worker.
 - Podman, for the local Postgres container.
-- An NVIDIA GPU with its driver, only to run the pipeline itself ([Local worker runs](RUNBOOK.md#15-local-worker-runs)).
+- An NVIDIA GPU with its driver, only to run the pipeline itself ([Local worker runs](RUNBOOK.md#14-local-worker-runs)).
 
 Postgres runs in a container, so it needs no install on the host. `scripts/dev/setup.sh` does the one-time setup ([First-time setup](RUNBOOK.md#11-first-time-setup)). Then, from the repo root:
 

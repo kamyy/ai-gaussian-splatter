@@ -168,16 +168,16 @@ create_aws_resources() {
   done
 
   # Without these rules the browser blocks both a cross-origin GET and PUT. The presigned URL is valid, so the failure
-  # only shows up in the browser console, which distinguishes a CORS-rule 403 from an IAM-policy 403. localhost:3000 is
-  # `pnpm dev` and localhost:8000 is scripts/dev/run-web-container.sh.
+  # only shows up in the browser console, which distinguishes a CORS-rule 403 from an IAM-policy 403. The one origin is
+  # `pnpm dev` on localhost:3000.
   aws s3api put-bucket-cors --bucket "$uploads" --region "$region" --cors-configuration '{
     "CORSRules": [{"AllowedMethods": ["PUT"],
-                   "AllowedOrigins": ["http://localhost:3000", "http://localhost:8000"],
+                   "AllowedOrigins": ["http://localhost:3000"],
                    "AllowedHeaders": ["*"]}]
   }'
   aws s3api put-bucket-cors --bucket "$splats" --region "$region" --cors-configuration '{
     "CORSRules": [{"AllowedMethods": ["GET", "HEAD"],
-                   "AllowedOrigins": ["http://localhost:3000", "http://localhost:8000"],
+                   "AllowedOrigins": ["http://localhost:3000"],
                    "AllowedHeaders": ["*"]}]
   }'
 

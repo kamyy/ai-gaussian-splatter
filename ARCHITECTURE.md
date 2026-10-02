@@ -41,7 +41,7 @@ Why the system is shaped this way: decisions, alternatives rejected, costs accep
 1. User uploads discrete multi-angle photos of one object — not a panorama, individual stills taken while walking around it.
    - Quality tracks angular coverage and overlap between neighboring views, not raw photo count.
    - Gaps in coverage surface as a low COLMAP registered ratio (step 2, below).
-   - [Capture](RUNBOOK.md#14-capture) procedure.
+   - [Capture](RUNBOOK.md#13-capture) procedure.
 2. **COLMAP** (`worker/pipeline/sfm.py`): exhaustive matching → camera poses + sparse cloud.
    - Accuracy over speed, since the object-centric photo sets are small.
    - `worker/run_job.py` fails below 50% registered images. That reflects capture quality, not a pipeline bug.
@@ -389,7 +389,7 @@ Three tiers (`.github/workflows/ci.yml`):
 
 Milestones (`M0`…`M10`) name phases, not a schedule, and they are not built in order. A struck-through milestone is complete. Open gaps are in [State / what's next](AGENTS.md#11-state--whats-next).
 
-- ~~**M0** — shoot one real object per [Capture](RUNBOOK.md#14-capture); hand-run COLMAP → gsplat → export; view in a standalone page.~~
+- ~~**M0** — shoot one real object per [Capture](RUNBOOK.md#13-capture); hand-run COLMAP → gsplat → export; view in a standalone page.~~
 - ~~**M1** — Same run via scripted `worker/pipeline/` modules.~~
 - ~~**M2** — Schema + CRUD endpoints.~~
 - ~~**M3** — S3 presign/complete against a real bucket.~~
