@@ -120,7 +120,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 - **Turn off telemetry with `NEXT_PUBLIC_CLERK_TELEMETRY_DISABLED`** (set in `.github/workflows/ci.yml`, `web/Dockerfile`, and `web/.env.example`).
   - The package reads that name on the server and also bakes it into the browser bundle. `CLERK_TELEMETRY_DISABLED` (no `NEXT_PUBLIC_`) only covers the server collector.
   - `isCI()` hides the console notice; it does not stop reporting.
-  - A `pk_test_*` key still reports from CI and local container builds; a `pk_live_*` key does not.
+  - A `pk_test_*` key still reports from CI; a `pk_live_*` key does not.
 - **`NEXT_PUBLIC_*` values are baked into the JS at `next build` time.**
   - Setting `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` as a container env var at runtime does nothing. Pass it as `docker build --build-arg`.
   - `CLERK_SECRET_KEY` is the real secret and is injected at runtime from Secrets Manager.
@@ -180,7 +180,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - `infra/` has no TypeScript dependency.
 - **There is deliberately no `start` script — `next start` is unsupported under `output: "standalone"`.**
   - Next says so and then serves anyway, so a re-added `pnpm start` looks like it works.
-  - `next build` emits `.next/standalone/server.js` (the container's `CMD`), which omits `.next/static`, so running it by hand serves pages with no CSS or JS unless that directory is copied in as `web/Dockerfile` does. Run the container instead ([Building and running the splat-web container locally](RUNBOOK.md#13-building-and-running-the-splat-web-container-locally)).
+  - `next build` emits `.next/standalone/server.js` (the container's `CMD`), which omits `.next/static`, so running it by hand serves pages with no CSS or JS unless that directory is copied in as `web/Dockerfile` does.
 - **Server Components reading request-time data need `export const dynamic = "force-dynamic"`**, or `next build` statically prerenders them. They call `web/lib/server/data.ts` directly — not the Route Handlers under `web/app/api/v1/`.
 - **Playwright `page.route()` can't intercept SSR** (different Node process). Share pages read the DB via `web/lib/server/data.ts`, so HTTP mocks don't help. Seed a test DB instead ([State / what's next](#11-state--whats-next)).
 
@@ -287,7 +287,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 
 - Three root commands cover everything CI runs. `pnpm lint` runs every format check, lint rule, and typecheck without changing a file. `pnpm format` applies every formatter and sorts imports, and leaves other lint failures for you to fix. `pnpm test` runs every test suite.
   - The pre-commit hook runs `pnpm lint`, so after a commit only `pnpm test` is left to run.
-  - Postgres-dependent web tests need `TEST_DATABASE_URL` (see [`RUNBOOK.md`](RUNBOOK.md#16-full-test-suite)). Run the relevant subset of its commands after changes.
+  - Postgres-dependent web tests need `TEST_DATABASE_URL` (see [`RUNBOOK.md`](RUNBOOK.md#15-full-test-suite)). Run the relevant subset of its commands after changes.
 - Each root command chains per-area scripts named `<area>:<verb>` (`worker:lint`, `infra:test`, …), and CI's jobs call those directly. Each CI job installs only its own area's toolchain, so none of them can run a root command.
   - Biome is its own area. `biome:lint` checks every JS, TS, JSON and CSS file in the repo in one pass, root config files included, so `web:lint` is only the typecheck and `scripts:lint` is only shellcheck.
   - `infra:lint` runs `scripts/dev/terraform-check.sh` so it uses the pinned CLI in `scripts/lib/terraform.sh`, not whichever `terraform` is first on PATH.
@@ -300,7 +300,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 
 - **Local pipeline runs are a Podman container: they need an NVIDIA GPU, the NVIDIA driver, and `nvidia-container-toolkit`.**
   - The CUDA runtime lives in both worker images. COLMAP lives in `worker/Dockerfile`'s `reconstruct` target and gsplat in its `train` target. Don't install any of them on the host. `worker/Dockerfile` compiles gsplat's kernels in a build stage, so neither shipped image carries `nvcc`.
-  - Setup and running one are in [Local worker runs](RUNBOOK.md#15-local-worker-runs).
+  - Setup and running one are in [Local worker runs](RUNBOOK.md#14-local-worker-runs).
 - **Each worker instance carries its own lifetime ceiling as a `MaxLifetimeMinutes` tag, which the sweeper Lambda (`infra/lambda/worker_sweeper.py`) and `web/lib/server/reconcileJob.ts` read.** The tag key is written in `web/lib/server/ec2Launcher.ts` and in the sweeper, so change both together.
   - The sweeper never waits longer than `worker_max_lifetime_upper_bound_minutes` (`infra/locals.tf`) plus 15 minutes, whatever the tag says. Keep that local at or above the largest ceiling `web/lib/server/runtimeSettings.ts` accepts, or the sweeper kills healthy stages the setting allows.
 - **A train instance type needs a GPU that `worker/Dockerfile`'s `TORCH_CUDA_ARCH_LIST` covers.** Adding one to the `train-instance-type` allow-list in `web/lib/server/runtimeSettings.ts` means checking that list, then adding it to `scripts/prod/ssm.sh` too.
@@ -316,7 +316,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - Nothing is logged when the instance never boots or `docker login` fails, since the container never starts. The EC2 console's system log covers those ([Debugging a failed worker job](RUNBOOK.md#32-debugging-a-failed-worker-job)).
 - **A local run starts only from the UI under `pnpm dev`, which needs a signed-in Clerk session.** An agent whose shell runs on a host with that setup can check `nvidia-smi` and `scripts/dev/setup.sh gpu` itself, then hand the run back to the user.
   - A `podman run` outside `launchJobLocal` (`web/lib/server/ec2Launcher.ts`) also needs `--security-opt label=disable` on an SELinux host. Without it, SELinux blocks the GPU device nodes and `nvidia-smi` in the container fails with `Insufficient Permissions`.
-- **`launchJobLocal` (`web/lib/server/ec2Launcher.ts`) rebuilds the stage's image before every local run.** A failed build fails the worker job through the worker's own status callback. The splat-web container from `scripts/dev/run-web-container.sh` has no Podman, so it runs with processing paused.
+- **`launchJobLocal` (`web/lib/server/ec2Launcher.ts`) rebuilds the stage's image before every local run.** A failed build fails the worker job through the worker's own status callback.
 - **gsplat 1.5.3's `DefaultStrategy` never resets opacities, so `worker/pipeline/train.py` does it itself** (`_is_opacity_reset_step`). The opacity reset is the step that clears floaters, the stray Gaussians left hanging in mid-air.
   - gsplat's reset condition uses a bitwise `&` where it means `and`, which makes it always false ([gsplat#797](https://github.com/nerfstudio-project/gsplat/issues/797)). [gsplat#776](https://github.com/nerfstudio-project/gsplat/pull/776) fixes it on gsplat's `main`, but no release carries the fix yet.
   - On upgrading to a release that does, delete `_is_opacity_reset_step` and pass `reset_every=iterations * 3000 // 30_000` to `DefaultStrategy` in `_build_strategy`. Without `reset_every`, gsplat falls back to its unscaled 3000-step default, which resets only once in a 10k run.
@@ -485,7 +485,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 
 ## 11. State / what's next
 
-Scaffolding (three packages + CI) is in place. Host-run `next dev` can 500 with `ECONNREFUSED ::1` in sandboxes that block loopback to the Next proxy process — use the container (own netns); not an app bug.
+Scaffolding (three packages + CI) is in place. Host-run `next dev` can 500 with `ECONNREFUSED ::1` in sandboxes that block loopback to the Next proxy process. That is a sandbox limit, not an app bug.
 
 - **The AWS account is torn down.** Nothing the `deploy` job deploys to exists: no state bucket, no CI role, no stack.
   - `scripts/prod/bootstrap.sh` redoes all of it, the first deploy and the first worker images included ([Going live](RUNBOOK.md#22-going-live)).
@@ -500,4 +500,4 @@ Known gaps, priority order:
    - `infra/variables.tf`'s validation catches a non-email string, but a typo'd address that is still email-shaped (`alert+email@gmial.com`) passes it.
    - The sweeper's SNS email subscription is the one place a typo shows. It stays `PendingConfirmation` until someone clicks the link AWS sends, so a subscription that never confirms points to a wrong address ([Going live](RUNBOOK.md#22-going-live)). The AWS Budget emails the address directly and has no such state.
 
-**M0 has run locally:** a real capture has been through COLMAP→gsplat and opened in the viewer on a local GPU, as a [local worker run](RUNBOOK.md#15-local-worker-runs). No worker job has run on AWS yet, and no run's wall clock has been recorded.
+**M0 has run locally:** a real capture has been through COLMAP→gsplat and opened in the viewer on a local GPU, as a [local worker run](RUNBOOK.md#14-local-worker-runs). No worker job has run on AWS yet, and no run's wall clock has been recorded.

@@ -5,10 +5,9 @@ Most procedures below run a script from `scripts/dev/` or `scripts/prod/`, and e
 - [1. Local development](#1-local-development)
   - [1.1 First-time setup](#11-first-time-setup)
   - [1.2 Web (frontend + REST API)](#12-web-frontend--rest-api)
-  - [1.3 Building and running the splat-web container locally](#13-building-and-running-the-splat-web-container-locally)
-  - [1.4 Capture](#14-capture)
-  - [1.5 Local worker runs](#15-local-worker-runs)
-  - [1.6 Full test suite](#16-full-test-suite)
+  - [1.3 Capture](#13-capture)
+  - [1.4 Local worker runs](#14-local-worker-runs)
+  - [1.5 Full test suite](#15-full-test-suite)
 - [2. Deploying to production](#2-deploying-to-production)
   - [2.1 Signing in to AWS](#21-signing-in-to-aws)
   - [2.2 Going live](#22-going-live)
@@ -46,7 +45,7 @@ Then fill in the Clerk keys in `web/.env`, from the development Clerk instance.
 pnpm dev        # from the repo root: starts splat-pg, applies pending migrations, then runs next dev on localhost:3000
 ```
 
-The `splat-pg` container holds the dev database `ai_gaussian_splatter` and the test database `ai_gaussian_splatter_test`. `pnpm dev`, `pnpm db:migrate` and `pnpm db:studio` reach it on `localhost:5432`, since they run on the host rather than in a container. The [splat-web container](#13-building-and-running-the-splat-web-container-locally) reaches it on `host.containers.internal:5432` instead.
+The `splat-pg` container holds the dev database `ai_gaussian_splatter` and the test database `ai_gaussian_splatter_test`. `pnpm dev`, `pnpm db:migrate` and `pnpm db:studio` reach it on `localhost:5432`, since they run on the host rather than in a container.
 
 ```bash
 scripts/dev/db.sh down          # deletes splat-pg and its volume, and both databases with them
@@ -55,15 +54,7 @@ pnpm --dir web db:studio        # opens Drizzle Studio to browse and edit rows
 
 After editing `web/lib/server/db/schema.ts`, run `pnpm --dir web db:generate` to emit a migration into `web/drizzle/`. The next `pnpm dev` applies it.
 
-### 1.3 Building and running the splat-web container locally
-
-Substitutes for `pnpm dev` to exercise the `splat-web` container that production runs, on `localhost:8000`. It uses the `splat-pg` container from above, so run `scripts/dev/db.sh up` first if `pnpm dev` hasn't. The container has no Podman inside it, so it can't start worker jobs and runs with processing paused.
-
-```bash
-scripts/dev/run-web-container.sh
-```
-
-### 1.4 Capture
+### 1.3 Capture
 
 Walk around the object shooting individual stills: every side, a couple of heights, each shot overlapping its neighbors. Aim for ~50. The API's floor of 20 (the `min-photos-per-splat` runtime setting, HTTP 400 below it) is a hard minimum, not a quality target, and its ceiling is 100 (`MAX_PHOTOS_PER_SPLAT`). Extra frames only help where they close a coverage gap, and near-duplicates just add COLMAP matching cost.
 
@@ -75,7 +66,7 @@ Object choice matters more than photo count. COLMAP triangulates surface feature
 
 Pick something opaque, matte, and genuinely three-dimensional. Stand it on a patterned surface with static clutter in frame. A plain floor or wall gives the solve nothing to hold on to.
 
-### 1.5 Local worker runs
+### 1.4 Local worker runs
 
 With `WORKER_LOCAL_LAUNCH=true` in `web/.env` (the default in `web/.env.example`), the web app runs each worker-job stage on your own GPU in Podman instead of launching an EC2 spot instance. Create a splat at `/splats/new` under `pnpm dev` as normal. Uploading its photos starts the worker job, and the splat's page shows each stage live through the same database rows and status callback a real EC2 run uses.
 
@@ -97,7 +88,7 @@ Two `web/.env` switches change the train stage, and take effect from the next st
 
 Leaving `WORKER_LOCAL_LAUNCH` unset (or `false`) launches a real spot instance, and then `web/lib/server/env.ts` requires the `WORKER_AMI_ID`, `WORKER_SUBNET_ID`, `WORKER_SECURITY_GROUP_ID`, `WORKER_INSTANCE_PROFILE_ARN`, `WORKER_LOG_GROUP` and `WORKER_DATA_ROLE_ARN` variables that `infra/web.tf` sets in production.
 
-### 1.6 Full test suite
+### 1.5 Full test suite
 
 ```bash
 pnpm format     # from the repo root: apply every formatter and sort imports
