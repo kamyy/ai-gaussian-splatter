@@ -105,13 +105,13 @@ CI's `deploy` job (`.github/workflows/deploy.yml`) does every deploy, including 
 4. Runs the migration.
 5. Rolls the service forward.
 
-It runs on a push to `main` that changes more than just `.md` files or `LICENSE`, and on a run started by hand on `main` (`gh workflow run ci.yml --ref main`), but only while the `DEPLOY_ENABLED` repository variable is `true`.
+It runs on a push to `main` that changes more than just `.md` files or `LICENSE`, and on a run started by hand on `main` (`gh workflow run ci.yml --ref main`), but only while the `DEPLOY_ENABLED` GitHub repository variable is `true`.
 
 Steps 2 and 5 do nothing on a push that leaves `web/` untouched, so a `worker/`, `scripts/` or `infra/` change applies Terraform and runs the migration without building an image ([Image tags](ARCHITECTURE.md#111-image-tags)). Step 3 still replaces the running tasks whenever it changes the web task definition, which carries the two worker image URIs and `KEEP_ALIVE_TIMEOUT` as well as the image. That replacement is what [Releasing a worker change](#23-releasing-a-worker-change) relies on.
 
 ### 2.1 Signing in to AWS
 
-Run every script in this section as an admin IAM identity signed in with `aws login`, which needs AWS CLI 2.32.0 or later. Neither the `ai-gaussian-splatter-dev` user from [First-time setup](#11-first-time-setup) nor the CI role can stand in for it. The scripts also need `gh` signed in with write access to this repository.
+Run every script in this section as an admin IAM identity signed in with `aws login`, which needs AWS CLI 2.32.0 or later. Neither the `ai-gaussian-splatter-dev` user from [First-time setup](#11-first-time-setup) nor the CI role can stand in for it. The scripts also need `gh` signed in with write access to this GitHub repository.
 
 ```bash
 aws login # Needed again only after the session expires, up to 12 hours later.
@@ -179,7 +179,7 @@ No deploy builds the worker images, so a merged `worker/` change reaches worker 
 scripts/prod/worker-push-image.sh
 ```
 
-It pushes both images to the `ai-gaussian-splatter-worker` ECR repository tagged with `worker/`'s tree id, sets the `WORKER_IMAGE_TAG` repository variable to that tag, then starts a run of `.github/workflows/ci.yml` on `main` and waits for it. That run's deploy points both worker image URIs on the web task definition at the new images and replaces the running tasks. Until it finishes, every worker instance still launches with the old images. A tag that is already built and deployed is a no-op, so a re-run after a failure finishes only what is left.
+It pushes both images to the `ai-gaussian-splatter-worker` ECR repository tagged with `worker/`'s tree id, sets the `WORKER_IMAGE_TAG` GitHub repository variable to that tag, then starts a run of `.github/workflows/ci.yml` on `main` and waits for it. That run's deploy points both worker image URIs on the web task definition at the new images and replaces the running tasks. Until it finishes, every worker instance still launches with the old images. A tag that is already built and deployed is a no-op, so a re-run after a failure finishes only what is left.
 
 Only the last `local.worker_releases_kept` images are kept (`infra/locals.tf`), which makes a `WORKER_IMAGE_TAG` that was set but never deployed the risk. Once that many newer images exist, the lifecycle policy expires the tag the web app still names, and every worker instance then fails its image pull and bills until its lifetime-ceiling shutdown (the `worker-max-lifetime-minutes` runtime setting it launched with).
 
@@ -187,7 +187,7 @@ Only the last `local.worker_releases_kept` images are kept (`infra/locals.tf`), 
 
 A `terraform plan` preview and a teardown are the only Terraform a human runs against `infra/`. Don't `apply` from here, because only the `deploy` job runs migrations before rolling the service.
 
-`scripts/prod/terraform-plan.sh` needs you signed in ([Signing in to AWS](#21-signing-in-to-aws)) to the account the `AWS_ACCOUNT_ID` repository variable names. It takes every Terraform variable from the repository variables except `web_image_tag`, which it reads from the task definition the service is running so the plan doesn't show an image change that isn't coming.
+`scripts/prod/terraform-plan.sh` needs you signed in ([Signing in to AWS](#21-signing-in-to-aws)) to the account the `AWS_ACCOUNT_ID` GitHub repository variable names. It takes every Terraform variable from the GitHub repository variables except `web_image_tag`, which it reads from the task definition the service is running so the plan doesn't show an image change that isn't coming.
 
 ```bash
 scripts/prod/terraform-plan.sh
