@@ -143,7 +143,7 @@ It looks up `AWS_ACCOUNT_ID`, `HOSTED_ZONE_ID` and `CLERK_SECRET_KEY_ARN`. The h
 - `GA_MEASUREMENT_ID` is the Google Analytics 4 measurement ID (`G-...`) and is optional. Leaving it empty builds the app without Google Analytics or its privacy banner. An empty answer keeps the current value, so turning analytics off is `gh variable delete GA_MEASUREMENT_ID`.
 - `WORKER_AMI_ID` is the AMI every worker instance boots. The image must already carry Docker, the NVIDIA driver and container toolkit, and the AWS CLI. AWS's Deep Learning Base GPU AMIs do, and the script lists the newest five before asking.
 
-`WORKER_IMAGE_TAG` is set to `worker/`'s tree id on `origin/main` while it's unset, which is the tag step 6 pushes. After that only [Releasing a worker change](#23-releasing-a-worker-change) changes it.
+The script doesn't ask for `WORKER_IMAGE_TAG`. When it is unset, the script sets it to the tag step 6 pushes the worker images under, which is `worker/`'s git tree id on `origin/main`. After that, only [Releasing a worker change](#23-releasing-a-worker-change) changes it.
 
 The CI role's policy, `scripts/prod/ci-role-policies/deploy.json`, is a reasonable starting point, not an exhaustively verified minimal policy, so expect `AccessDenied` during the first deploy. Add the missing action to that file, run `scripts/prod/bootstrap.sh ci-role`, then rerun the `deploy` job (`gh run rerun <run-id> --failed-jobs`).
 
