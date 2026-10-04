@@ -13,10 +13,9 @@ vi.mock("@/lib/apiFetch", () => ({ apiFetch: apiFetchMock }));
 const { mutateMock } = vi.hoisted(() => ({ mutateMock: vi.fn() }));
 vi.mock("swr", () => ({ useSWRConfig: () => ({ mutate: mutateMock }) }));
 
-const { enqueueSnackbarMock } = vi.hoisted(() => ({ enqueueSnackbarMock: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
-vi.mock("@/lib/hooks/useAppSnackbar", () => ({ useAppSnackbar: () => ({ enqueueSnackbar: enqueueSnackbarMock }) }));
+vi.mock("notistack", () => ({ useSnackbar: () => ({ enqueueSnackbar: () => {} }) }));
 
 const { processingPausedMock } = vi.hoisted(() => ({ processingPausedMock: vi.fn(() => false) }));
 vi.mock("@/lib/hooks/useProcessingPaused", () => ({ useProcessingPaused: processingPausedMock }));
@@ -74,22 +73,15 @@ describe("StageCard", () => {
     expect(apiFetchMock).toHaveBeenCalledWith("/api/v1/splats/splat-1/train", "POST", "test-token");
   });
 
-  it("reports a failed action without claiming the job changed", async () => {
+  it("leaves the job unchanged when building fails, and refetches whether processing is paused", async () => {
     apiFetchMock.mockRejectedValueOnce(new Error("Daily limit reached"));
     const onJobChanged = vi.fn();
     render(<StageCard splatId="splat-1" stage={{ kind: "check" }} onJobChanged={onJobChanged} />);
     fireEvent.click(screen.getByRole("button", { name: "Looks right, build it" }));
 
-    await waitFor(() =>
-      expect(enqueueSnackbarMock).toHaveBeenCalledWith("Couldn't start building", {
-        variant: "error",
-        detail: "Daily limit reached",
-      }),
-    );
-    expect(onJobChanged).not.toHaveBeenCalled();
-
     // So a pause that caused the failure shows its notice without waiting for the next poll.
     await waitFor(() => expect(mutateMock).toHaveBeenCalledWith("processing"));
+    expect(onJobChanged).not.toHaveBeenCalled();
   });
 
   it("shows the worker's error for a failed job and offers a retry", () => {

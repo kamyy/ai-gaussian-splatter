@@ -7,11 +7,11 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
+import { useSnackbar } from "notistack";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { apiFetch } from "@/lib/apiFetch";
-import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
 import { requireToken } from "@/lib/requireToken";
 import { StageShell } from "./StageShell";
 
@@ -22,7 +22,7 @@ import { StageShell } from "./StageShell";
  */
 export function SharePanel({ splatId, children }: { splatId: string; children?: React.ReactNode }) {
   const { getToken } = useAuth();
-  const { enqueueSnackbar } = useAppSnackbar();
+  const { enqueueSnackbar } = useSnackbar();
 
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -36,7 +36,11 @@ export function SharePanel({ splatId, children }: { splatId: string; children?: 
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      enqueueSnackbar("Couldn't copy the link", { variant: "error", detail: "Select it and copy it by hand." });
+      enqueueSnackbar("Couldn't copy the link", {
+        variant: "error",
+        detail: "Select it and copy it by hand.",
+        persist: true,
+      });
     }
   }
 
@@ -46,7 +50,11 @@ export function SharePanel({ splatId, children }: { splatId: string; children?: 
       const token = await requireToken(getToken);
       window.location.assign(await apiFetch<string>(`/api/v1/splats/${splatId}/download`, "GET", token));
     } catch (err) {
-      enqueueSnackbar("Download failed", { variant: "error", detail: err instanceof Error ? err.message : undefined });
+      enqueueSnackbar("Download failed", {
+        variant: "error",
+        detail: err instanceof Error ? err.message : undefined,
+        persist: true,
+      });
     } finally {
       setDownloading(false);
     }

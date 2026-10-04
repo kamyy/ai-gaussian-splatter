@@ -9,13 +9,13 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
+import { useSnackbar } from "notistack";
 import { useState } from "react";
 import { useSWRConfig } from "swr";
 
 import { Button } from "@/components/ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/Dialog";
 import { apiFetch } from "@/lib/apiFetch";
-import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
 import { requireToken } from "@/lib/requireToken";
 
 interface ConfirmButtonProps {
@@ -31,7 +31,7 @@ interface ConfirmButtonProps {
 
 // A destructive action behind a confirmation, since neither deleting nor stopping a worker job can be undone.
 function ConfirmButton({ label, variant, title, description, confirmLabel, keepLabel, onConfirm }: ConfirmButtonProps) {
-  const { enqueueSnackbar } = useAppSnackbar();
+  const { enqueueSnackbar } = useSnackbar();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
 
@@ -44,6 +44,7 @@ function ConfirmButton({ label, variant, title, description, confirmLabel, keepL
       enqueueSnackbar(`${confirmLabel} failed`, {
         variant: "error",
         detail: err instanceof Error ? err.message : undefined,
+        persist: true,
       });
     } finally {
       setPending(false);

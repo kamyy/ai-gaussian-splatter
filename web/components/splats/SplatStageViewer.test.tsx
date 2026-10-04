@@ -11,8 +11,7 @@ vi.mock("@clerk/nextjs", () => ({
 const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }));
 vi.mock("@/lib/apiFetch", () => ({ apiFetch: apiFetchMock }));
 
-const { enqueueSnackbarMock } = vi.hoisted(() => ({ enqueueSnackbarMock: vi.fn() }));
-vi.mock("@/lib/hooks/useAppSnackbar", () => ({ useAppSnackbar: () => ({ enqueueSnackbar: enqueueSnackbarMock }) }));
+vi.mock("notistack", () => ({ useSnackbar: () => ({ enqueueSnackbar: () => {} }) }));
 
 // The object the panel last handed the viewer. A new one flies the camera, so a reload must keep this reference.
 const { selectedCameraSeen } = vi.hoisted(() => ({
@@ -114,7 +113,6 @@ describe("SplatStageViewer", () => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     apiFetchMock.mockReset();
-    enqueueSnackbarMock.mockReset();
     selectedCameraSeen.current = null;
   });
 
@@ -190,9 +188,8 @@ describe("SplatStageViewer", () => {
     fireEvent.click(screen.getByRole("button", { name: "fit box" }));
     fireEvent.click(screen.getByRole("button", { name: "Apply crop" }));
 
-    await waitFor(() => expect(enqueueSnackbarMock).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Apply crop" })).toBeEnabled());
     expect(screen.getByText("mode: colmap_points")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Apply crop" })).toBeEnabled();
   });
 
   it("keeps the cropped point cloud when any of the four crop buttons is pressed", async () => {

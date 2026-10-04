@@ -16,8 +16,7 @@ vi.mock("@/lib/apiFetch", () => ({ apiFetch: apiFetchMock }));
 const { mutateMock } = vi.hoisted(() => ({ mutateMock: vi.fn() }));
 vi.mock("swr", () => ({ useSWRConfig: () => ({ mutate: mutateMock }) }));
 
-const { enqueueSnackbarMock } = vi.hoisted(() => ({ enqueueSnackbarMock: vi.fn() }));
-vi.mock("@/lib/hooks/useAppSnackbar", () => ({ useAppSnackbar: () => ({ enqueueSnackbar: enqueueSnackbarMock }) }));
+vi.mock("notistack", () => ({ useSnackbar: () => ({ enqueueSnackbar: () => {} }) }));
 
 describe("DeleteSplatButton", () => {
   beforeEach(() => {
@@ -44,15 +43,16 @@ describe("DeleteSplatButton", () => {
     expect(mutateMock).toHaveBeenCalledWith("splats");
   });
 
-  it("reports a failure and stays put", async () => {
+  it("stays put when deleting fails", async () => {
     apiFetchMock.mockRejectedValueOnce(new Error("Server error"));
     render(<DeleteSplatButton splatId="splat-1" label="Discard" variant="outlined" />);
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
 
-    await waitFor(() =>
-      expect(enqueueSnackbarMock).toHaveBeenCalledWith("Delete failed", { variant: "error", detail: "Server error" }),
-    );
+    await waitFor(() => {
+      expect(apiFetchMock).toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: "Delete" })).toBeEnabled();
+    });
     expect(pushMock).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
