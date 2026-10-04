@@ -15,7 +15,7 @@ import { PhotoGrid } from "@/components/splats/PhotoGrid";
 import { PipelineStepper } from "@/components/splats/PipelineStepper";
 import type { PhotoSelection } from "@/components/splats/photoSelection";
 import { SharePanel } from "@/components/splats/SharePanel";
-import { DeleteSplatButton } from "@/components/splats/SplatActions";
+import { DiscardSplatButton } from "@/components/splats/SplatActions";
 import { SplatStageViewer } from "@/components/splats/SplatStageViewer";
 import { StageCard } from "@/components/splats/StageCard";
 import { useCameras } from "@/lib/hooks/useCameras";
@@ -70,7 +70,7 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
   // panel when it's shareable, and stands alone when it isn't.
   let sharePanel: React.ReactNode = null;
   if (stage.kind === "complete") {
-    const discard = <DeleteSplatButton splatId={id} label="Discard" variant="outlined" />;
+    const discard = <DiscardSplatButton splatId={id} variant="outlined" />;
     sharePanel = splat.isShareable ? <SharePanel splatId={id}>{discard}</SharePanel> : discard;
   }
 

@@ -1,7 +1,7 @@
 /**
  * The Discard and Stop buttons for a splat, each behind a confirmation dialog.
  *
- * DeleteSplatButton deletes the splat with its photos and results. StopJobButton stops the worker job that's running
+ * DiscardSplatButton deletes the splat with its photos and results. StopJobButton stops the worker job that's running
  * for it. Neither can be undone, so both ask first.
  */
 
@@ -74,22 +74,14 @@ function ConfirmButton({ label, variant, title, description, confirmLabel, keepL
   );
 }
 
-export function DeleteSplatButton({
-  splatId,
-  label,
-  variant,
-}: {
-  splatId: string;
-  label: string;
-  variant: "contained" | "outlined";
-}) {
+export function DiscardSplatButton({ splatId, variant }: { splatId: string; variant: "contained" | "outlined" }) {
   const { getToken } = useAuth();
   const { mutate } = useSWRConfig();
   const router = useRouter();
 
   return (
     <ConfirmButton
-      label={label}
+      label="Discard"
       variant={variant}
       title="Delete this splat?"
       description="Its photos and anything built from them are deleted too. This can't be undone."
