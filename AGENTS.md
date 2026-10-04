@@ -149,6 +149,11 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - Module state such as `let cached` counts as a variable.
   - A `const` holding a function or component counts as a function. `export const POST = withErrorHandling(…)` and `forwardRef(…)` are examples.
   - A constant computed by calling a helper in the same file sits directly below that helper, because it can't run before the helper's own inputs exist. `POINTS` below `generatePoints` in `web/components/marketing/HeroPointCloud.tsx` is the pattern.
+- **Separate logical groups at file scope with a banner.** When a file's top-level declarations cover more than one subject, a banner names each group. A file with one subject has none.
+  - Banner a subject, as `web/lib/server/env.ts` does for the database, AWS, the worker instance, and this Next process. The constants-then-types-then-functions order stays uncommented. So do the steps inside a function, which a blank line already separates.
+  - The banner is `// --- Name ` in TypeScript and JavaScript, `# --- Name ` in Python, shell, and Terraform, and `/* --- Name ` closed by ` */` in CSS. Dashes pad the line to 88 characters.
+  - The name is the subject, in the words the code uses. A sentence that explains the group stays a normal comment directly under the banner.
+  - A banner is indented with the declarations it introduces. `infra/locals.tf` indents its banners inside the `locals` block, because that block holds the file's groups.
 - **Define a file's sub-components and helpers above the component that uses them**, so a file reads bottom-up to its main export. A sub-component used by another sub-component goes above that one too, as `Tip` sits above `ShootingTips` in `web/app/(authenticated)/splats/new/page.tsx`.
 - **A helper that only one file uses is defined in that file, not in a module of its own.** Tests don't count as a use here, so a helper used by one file and its tests still lives in that file.
   - Export it only when its tests need it. Those tests go in the using file's own test file, as `pageItems` in `web/components/ui/Pager.tsx` is tested in `web/components/ui/tests/Pager.test.tsx`.
@@ -157,9 +162,9 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - A framework or tool that loads a name from the file is the other exemption: Next's `dynamic`, `generateMetadata` and `register`, and each Route Handler's `GET`/`POST`. So are the `pgEnum`s in `web/lib/server/db/schema.ts`, which Drizzle Kit reads from there to generate migrations.
 - **Every custom hook gets its own file in `web/lib/hooks/`, named after the hook** (`web/lib/hooks/useLatestJob.ts`). This holds even for a hook only one file uses. Its tests go in `web/lib/hooks/tests/`.
 - **A component's tests go in a `tests` folder beside that component**, the same way a hook's do. `web/components/ui/Pager.tsx` is tested in `web/components/ui/tests/Pager.test.tsx`.
-- **Components import icons from `web/components/ui/icons.ts`, never from `react-icons` directly.** A new icon gets an alias there named for what it means on screen (`RemovePhotoIcon`, not `XIcon`), under the commented group for where it appears.
+- **Components import icons from `web/components/ui/icons.ts`, never from `react-icons` directly.** A new icon gets an alias there named for what it means on screen (`RemovePhotoIcon`, not `XIcon`), under the banner for where it appears.
   - Reusing an icon for a different meaning gets its own alias, as `LuImage` is both `PhotoPlaceholderIcon` and `ThumbnailPlaceholderIcon`.
-  - Write each alias as `export const RemovePhotoIcon = LuX;`. Biome's import sorting merges `export { LuX as RemovePhotoIcon }` lists into one block and drops the group comments.
+  - Write each alias as `export const RemovePhotoIcon = LuX;`. Biome's import sorting merges `export { LuX as RemovePhotoIcon }` lists into one block and drops the banners.
 - **Split a function once it grows too large to take in at once, or does more than one job.**
   - Pull each self-contained piece out into a helper, a sub-component, or a custom hook for stateful logic. `web/lib/hooks/useCameraFlight.ts` is the pattern: press tracking went to `web/lib/hooks/useClickPress.ts`, and the per-frame steps became `stepFlight` and `stepLevel`.
   - Stop where a further split would make the pieces pass shared state back and forth. A flight and levelling out stay in one hook because each cancels the other.

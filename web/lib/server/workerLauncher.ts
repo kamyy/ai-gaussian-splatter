@@ -20,7 +20,7 @@ import {
   TerminateInstancesCommand,
 } from "@aws-sdk/client-ec2";
 
-import { getEnv, getWorkerInstanceEnv, LOCAL_APP_ORIGIN, LOCAL_WORKER_CALLBACK_ORIGIN } from "./env";
+import { getEnv, LOCAL_APP_ORIGIN } from "./env";
 import type { RuntimeSettings } from "./runtimeSettings";
 
 /**
@@ -157,7 +157,10 @@ export function generateCallbackToken(): string {
 /** Launches the spot worker instance and returns its instance ID. */
 export async function launchJob(params: WorkerLaunch): Promise<string> {
   const env = getEnv();
-  const worker = getWorkerInstanceEnv();
+  // launchJob runs only outside local dev, where getEnv() has already required the worker instance settings. The
+  // schema still types them optional.
+  const logGroup = env.WORKER_LOG_GROUP as string;
+  const securityGroupId = env.WORKER_SECURITY_GROUP_ID as string;
 
   const userData = renderUserData({
     callbackToken: params.callbackToken,
@@ -170,22 +173,22 @@ export async function launchJob(params: WorkerLaunch): Promise<string> {
     workerImageUri: workerImageUri(params.stage),
     ecrRegistry: ecrRegistry(),
     awsRegion: env.AWS_REGION,
-    logGroup: worker.WORKER_LOG_GROUP,
+    logGroup,
     maxLifetimeMinutes: params.settings.workerMaxLifetimeMinutes,
     trainingIterations: params.stage === "train" ? params.settings.trainingIterations : undefined,
   });
 
   const response = await ec2Client().send(
     new RunInstancesCommand({
-      ImageId: worker.WORKER_AMI_ID,
+      ImageId: env.WORKER_AMI_ID,
       InstanceType: (params.stage === "reconstruct"
         ? params.settings.reconstructInstanceType
         : params.settings.trainInstanceType) as never,
       MinCount: 1,
       MaxCount: 1,
-      SubnetId: worker.WORKER_SUBNET_ID,
-      SecurityGroupIds: [worker.WORKER_SECURITY_GROUP_ID],
-      IamInstanceProfile: { Arn: worker.WORKER_INSTANCE_PROFILE_ARN },
+      SubnetId: env.WORKER_SUBNET_ID,
+      SecurityGroupIds: [securityGroupId],
+      IamInstanceProfile: { Arn: env.WORKER_INSTANCE_PROFILE_ARN },
       // The pipeline runs in a container on default bridge networking, one hop further from IMDS than the host. At
       // EC2's default hop limit of 1, worker/pipeline/instance.py cannot read its own instance ID and silently skips
       // self-termination, and the instance bills until someone notices (AGENTS.md). HttpTokens is only safe paired
@@ -346,8 +349,10 @@ export function launchJobLocal(params: WorkerLaunch): void {
     `CALLBACK_TOKEN=${params.callbackToken}`,
     "-e",
     `STAGE=${params.stage}`,
+    // Inside the container, "localhost" is the container itself. host.containers.internal is Podman's alias for the
+    // host running `next dev`.
     "-e",
-    `APP_ORIGIN=${LOCAL_WORKER_CALLBACK_ORIGIN}`,
+    "APP_ORIGIN=http://host.containers.internal:3000",
     "-e",
     `UPLOADS_BUCKET=${env.UPLOADS_BUCKET}`,
     "-e",

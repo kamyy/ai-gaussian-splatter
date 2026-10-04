@@ -9,6 +9,7 @@
 # origin's JavaScript read a shared or leaked splat URL cross-origin via fetch/XHR. It does not stop a leaked
 # URL from being opened directly (CORS only gates cross-origin script reads, not navigation).
 
+# --- Database -------------------------------------------------------------------------
 resource "aws_db_subnet_group" "main" {
   name       = "ai-gaussian-splatter"
   subnet_ids = [for s in aws_subnet.private : s.id]
@@ -50,6 +51,7 @@ resource "aws_db_instance" "main" {
   skip_final_snapshot = true
 }
 
+# --- S3 buckets -----------------------------------------------------------------------
 # Uploads (source photos) and splats (the deliverable) are both kept indefinitely. Nothing expires them; delete an
 # object by hand if it should go.
 resource "aws_s3_bucket" "uploads" {

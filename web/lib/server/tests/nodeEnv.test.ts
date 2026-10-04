@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-// isLocalDev() (web/lib/server/env.ts) treats any NODE_ENV but "production" or "test" as local dev. That turns
+// isLocalDevEnv() (web/lib/server/env.ts) treats any NODE_ENV but "production" or "test" as local dev. That turns
 // on the localhost database defaults and the Podman worker launch, and turns off the WORKER_* checks. A shipped image
 // that lost its NODE_ENV=production would run like that, so each one is pinned here.
 const dockerfile = readFileSync(`${import.meta.dirname}/../../../Dockerfile`, "utf8");

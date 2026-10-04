@@ -11,7 +11,7 @@ import { JobStatus, SplatStatus } from "@/lib/statuses";
 import { WORKER_RUNNING_STATUSES } from "./cancelJob";
 import { getDb } from "./db";
 import { jobs, splats } from "./db/schema";
-import { isLocalDev } from "./env";
+import { isLocalDevEnv } from "./env";
 import { WORKER_MAX_LIFETIME_BOUNDS } from "./runtimeSettings";
 import { describeWorker, terminateWorker } from "./workerLauncher";
 
@@ -43,7 +43,7 @@ function overdueAfterMs(maxLifetimeMinutes: number | null): number {
 export async function reconcileJob(
   job: Pick<typeof jobs.$inferSelect, "id" | "status" | "updatedAt">,
 ): Promise<boolean> {
-  if (!WORKER_RUNNING_STATUSES.includes(job.status) || isLocalDev()) {
+  if (!WORKER_RUNNING_STATUSES.includes(job.status) || isLocalDevEnv()) {
     return false;
   }
 

@@ -8,6 +8,7 @@
 # rule per suffix caps each, so local.releases_kept (infra/locals.tf) counts releases rather than images. A deploy that
 # leaves web/ alone pushes nothing, so those releases are distinct web/ builds rather than commits.
 
+# --- Web repository -------------------------------------------------------------------
 resource "aws_ecr_repository" "web" {
   name = "ai-gaussian-splatter"
 
@@ -65,6 +66,7 @@ resource "aws_ecr_lifecycle_policy" "web" {
   })
 }
 
+# --- Worker repository ----------------------------------------------------------------
 # A separate repository rather than more tag suffixes on the one above. The worker images are a completely different
 # build (COLMAP and gsplat rather than Next.js), with no reason to share the web repository's retention depth. They
 # aren't part of any ECS rollback either, since web/lib/server/workerLauncher.ts just reads whichever image URI it is

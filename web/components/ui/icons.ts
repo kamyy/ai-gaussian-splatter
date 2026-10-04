@@ -37,40 +37,46 @@ import {
 
 export type { IconType } from "react-icons";
 
-// Moving between pages.
+// --- Moving between pages ------------------------------------------------------------
 export const BackIcon = LuArrowLeft;
 export const PreviousPageIcon = LuChevronLeft;
 export const NextPageIcon = LuChevronRight;
 
-// The theme toggle in the site header. Each icon names the theme a click switches to.
+// --- Theme toggle --------------------------------------------------------------------
+// Each icon names the theme a click switches to.
 export const LightThemeIcon = LuSun;
 export const DarkThemeIcon = LuMoon;
 
-// The site header's button that reopens the privacy banner.
+// --- Privacy settings ----------------------------------------------------------------
+// The site header uses this to reopen the privacy banner.
 export const PrivacySettingsIcon = LuShieldCheck;
 
-// The account menu's Delete account item.
+// --- Account menu --------------------------------------------------------------------
+// This names the account menu's Delete account item.
 export const DeleteAccountIcon = LuUserX;
 
-// Toast messages: one icon per variant, plus the close button.
+// --- Toast messages ------------------------------------------------------------------
+// Each variant has an icon, and so does the close button.
 export const InfoIcon = LuInfo;
 export const SuccessIcon = LuCircleCheck;
 export const WarningIcon = LuTriangleAlert;
 export const ErrorIcon = LuCircleAlert;
 export const CloseIcon = LuX;
 
-// Photo tiles on the new-splat form and a splat's photo grid, and the pager page that holds the selected photo.
+// --- Photo tiles ---------------------------------------------------------------------
+// They appear on the new-splat form, a splat's photo grid, and the pager page that holds the selected photo.
 export const PhotoPlaceholderIcon = LuImage;
 export const PhotoUploadedIcon = LuCheck;
 export const RemovePhotoIcon = LuTrash2;
 export const SelectedPhotoIcon = PiCameraFill;
 
-// The splat library and a splat's progress through the pipeline.
+// --- Splat library -------------------------------------------------------------------
+// They also mark a splat's progress through the pipeline.
 export const ThumbnailPlaceholderIcon = LuImage;
 export const StepDoneIcon = LuCheck;
 export const ProcessingPausedIcon = LuTriangleAlert;
 
-// The 3D viewer's controls.
+// --- Viewer controls -----------------------------------------------------------------
 export const SmallPointIcon = PiSquareDuotone;
 export const LargePointIcon = PiSquareDuotone;
 export const ApplyCropIcon = TbCheck;

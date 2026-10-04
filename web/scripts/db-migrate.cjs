@@ -17,14 +17,14 @@ const { migrate } = require("drizzle-orm/node-postgres/migrator");
 const { Pool } = require("pg");
 
 const { databaseSsl, resolveDatabaseUrl } = require("../lib/server/databaseUrl.ts");
-const { withLocalDevEnv } = require("../lib/server/env.ts");
+const { isLocalDevEnv, LOCAL_DATABASE_ENV } = require("../lib/server/env.ts");
 
 // Locally, __dirname is web/scripts/, so this resolves to web/drizzle/. In the migrator image, __dirname is
 // /app/scripts/, so this resolves to /app/drizzle/.
 const migrationsFolder = path.join(__dirname, "..", "drizzle");
 
 async function main() {
-  const url = resolveDatabaseUrl(withLocalDevEnv());
+  const url = resolveDatabaseUrl(isLocalDevEnv() ? LOCAL_DATABASE_ENV : process.env);
   if (url === undefined) {
     console.error(
       "No database configured: DATABASE_HOST, DATABASE_PORT, DATABASE_NAME, DATABASE_USER and DATABASE_PASSWORD must all be set.",

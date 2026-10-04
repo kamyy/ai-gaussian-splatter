@@ -6,12 +6,12 @@
  * launch, cancel or delete a worker job never branch on it themselves.
  */
 
-import { isLocalDev } from "./env";
+import { isLocalDevEnv } from "./env";
 import { launchJob, launchJobLocal, stopLocalWorker, terminateWorker, type WorkerLaunch } from "./workerLauncher";
 
 /** Returns the stage's EC2 instance ID, or null for a local container, which has none. */
 export async function launchWorker(params: WorkerLaunch): Promise<string | null> {
-  if (isLocalDev()) {
+  if (isLocalDevEnv()) {
     launchJobLocal(params);
     return null;
   }
@@ -21,7 +21,7 @@ export async function launchWorker(params: WorkerLaunch): Promise<string | null>
 
 /** Stops the job's worker, if it has one. A job with no instance ID yet has nothing on EC2 to stop. */
 export async function stopWorker(jobId: string, ec2InstanceId: string | null): Promise<void> {
-  if (isLocalDev()) {
+  if (isLocalDevEnv()) {
     stopLocalWorker(jobId);
   } else if (ec2InstanceId !== null) {
     await terminateWorker(ec2InstanceId);
