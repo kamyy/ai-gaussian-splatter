@@ -1,9 +1,9 @@
 /**
- * The maths for where the 3D view's camera starts, and for the initial crop box.
+ * The maths for where the 3D view's camera starts, for the initial crop box, and for the front, side and top views.
  *
  * Pure functions, with no React. They frame the object from the photos' own camera positions when those are known, or
  * from the point cloud's bounding box otherwise, trimming stray points so they don't pull the view away. They also fit
- * the crop box the visitor starts from.
+ * the crop box the visitor starts from, and aim the front, side and top views the viewer's buttons animate to.
  */
 
 import { Box3, Matrix3, Matrix4, Quaternion, Vector3 } from "three";
@@ -12,7 +12,18 @@ import type { CameraPose, CropBox } from "@/lib/types";
 
 // The fraction of points trimmed from each end of every axis before framing on a bounding box. Splats and COLMAP
 // points both scatter a few strays far from the object, and an untrimmed box grows to take in every one of them.
-const BOX_TRIM = 0.05;
+const BOUNDING_BOX_TRIM = 0.05;
+// The fraction of points, nearest the object's center, that the first crop box is fitted to. The rest of a point cloud
+// is mostly the table and room around the object, which a box fitted to every point would take in.
+const CROP_NEAREST = 0.5;
+// Each axis view's direction from the object to the camera, along the object's upright axes (uprightRotation). The
+// top view leans a hair toward the front: straight down the up axis, the camera's up would be undefined, and the lean
+// puts the front at the bottom of the screen.
+const AXIS_VIEWS: Record<AxisView, Vector3> = {
+  front: new Vector3(0, 0, 1),
+  side: new Vector3(1, 0, 0),
+  top: new Vector3(0, 1, 1e-3).normalize(),
+};
 
 export interface Framing {
   target: Vector3;
@@ -20,11 +31,15 @@ export interface Framing {
   up: Vector3;
 }
 
+/** Which side of the object an axis view looks from. */
+export type AxisView = "front" | "side" | "top";
+
 /**
- * The bounding box of interleaved x, y, z positions after dropping BOX_TRIM of the values from each end of every axis.
+ * The bounding box of interleaved x, y, z positions after dropping BOUNDING_BOX_TRIM of the values from each end of
+ * every axis.
  * It is how the viewer frames a capture whose camera poses it doesn't have. An empty box when there are no positions.
  */
-export function trimmedBox(positions: ArrayLike<number>): Box3 {
+export function trimmedBoundingBox(positions: ArrayLike<number>): Box3 {
   const count = Math.floor(positions.length / 3);
   if (count === 0) {
     return new Box3();
@@ -38,8 +53,8 @@ export function trimmedBox(positions: ArrayLike<number>): Box3 {
     }
 
     values.sort();
-    box.min.setComponent(axis, values[Math.floor(count * BOX_TRIM)]);
-    box.max.setComponent(axis, values[Math.ceil(count * (1 - BOX_TRIM)) - 1]);
+    box.min.setComponent(axis, values[Math.floor(count * BOUNDING_BOX_TRIM)]);
+    box.max.setComponent(axis, values[Math.ceil(count * (1 - BOUNDING_BOX_TRIM)) - 1]);
   }
 
   return box;
@@ -107,26 +122,93 @@ export function framingFromCameras(cameras: Omit<CameraPose, "photoId">[]): Fram
 }
 
 /**
- * The crop box a capture starts with, fitted to interleaved x, y, z positions the way trimmedBox fits them. With a
- * framing, the box stands upright in the view it sets up: its y axis is the photos' up and its z axis points toward the
- * first photo. Without one, its axes are COLMAP's, which are arbitrary per capture and so look tilted to the visitor.
- * null when there are no positions.
+ * The rotation from COLMAP's axes to the object's own upright ones: y is the photos' up, z points toward the first
+ * photo along the ground, and x is to the object's side. Without a framing it is no rotation, so the axes are COLMAP's.
  */
-export function fittedCropBox(positions: ArrayLike<number>, framing: Framing | null): CropBox | null {
+export function uprightRotation(framing: Framing | null): Quaternion {
   const rotation = new Quaternion();
-  if (framing) {
-    const y = framing.up.clone().normalize();
+  if (!framing) {
+    return rotation;
+  }
 
-    // The direction toward the first photo, with its vertical part removed so it lies in the ground plane.
-    const z = framing.position.clone().sub(framing.target);
-    z.addScaledVector(y, -z.dot(y));
-    if (z.lengthSq() > 1e-12) {
-      z.normalize();
-      rotation.setFromRotationMatrix(new Matrix4().makeBasis(new Vector3().crossVectors(y, z), y, z));
-    } else {
-      rotation.setFromUnitVectors(new Vector3(0, 1, 0), y);
+  const y = framing.up.clone().normalize();
+
+  // The direction toward the first photo, with its vertical part removed so it lies in the ground plane.
+  const z = framing.position.clone().sub(framing.target);
+  z.addScaledVector(y, -z.dot(y));
+  if (z.lengthSq() > 1e-12) {
+    z.normalize();
+    rotation.setFromRotationMatrix(new Matrix4().makeBasis(new Vector3().crossVectors(y, z), y, z));
+  } else {
+    rotation.setFromUnitVectors(new Vector3(0, 1, 0), y);
+  }
+
+  return rotation;
+}
+
+/**
+ * Which way a camera looking at box from one side faces. Front looks along the box's z axis, side along its x axis,
+ * and top down its y axis. direction is the unit vector from target toward the camera, which the caller places at
+ * whatever distance its camera needs. up is always the box's y axis, so orbiting away from any of the three turns about
+ * the object's own up. extent is the box's longest side, which the caller fits to the view.
+ */
+export function axisViewPose(
+  box: CropBox,
+  view: AxisView,
+): { direction: Vector3; target: Vector3; up: Vector3; extent: number } {
+  const rotation = new Quaternion(...box.quaternion);
+
+  return {
+    direction: AXIS_VIEWS[view].clone().applyQuaternion(rotation),
+    target: new Vector3(...box.center),
+    up: new Vector3(0, 1, 0).applyQuaternion(rotation),
+    extent: Math.max(...box.size),
+  };
+}
+
+/** The middle value of values, which it sorts in place. */
+function median(values: Float32Array): number {
+  values.sort();
+
+  return values[Math.floor(values.length / 2)];
+}
+
+/**
+ * The CROP_NEAREST of interleaved x, y, z positions nearest center, also interleaved. Every point as far as the
+ * cutoff distance is kept, so points at equal distances are kept or dropped together.
+ */
+function nearestPositions(positions: Float32Array, center: Vector3): Float32Array {
+  const count = positions.length / 3;
+  const distances = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    distances[i] = Math.hypot(
+      positions[i * 3] - center.x,
+      positions[i * 3 + 1] - center.y,
+      positions[i * 3 + 2] - center.z,
+    );
+  }
+
+  const sorted = distances.slice().sort();
+  const cutoff = sorted[Math.max(0, Math.ceil(count * CROP_NEAREST) - 1)];
+  const kept: number[] = [];
+  for (let i = 0; i < count; i++) {
+    if (distances[i] <= cutoff) {
+      kept.push(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
     }
   }
+
+  return Float32Array.from(kept);
+}
+
+/**
+ * The crop box a capture starts with, fitted the way trimmedBoundingBox fits a box to the CROP_NEAREST of the
+ * positions nearest the object. With a framing, the object's center is the point the photos aim at, and the box
+ * stands upright in the view it sets up: its y axis is the photos' up and its z axis points toward the first photo.
+ * Without one, the center is the positions' median on each axis, and the box's axes are COLMAP's, which are arbitrary
+ * per capture and so look tilted to the visitor. null when there are no positions.
+ */
+export function fittedCropBox(positions: ArrayLike<number>, framing: Framing | null): CropBox | null {
+  const rotation = uprightRotation(framing);
 
   // Fit an axis-aligned box in the box's own frame, then carry its center back out to the world.
   const inverse = rotation.clone().invert();
@@ -139,7 +221,19 @@ export function fittedCropBox(positions: ArrayLike<number>, framing: Framing | n
       .toArray(local, i);
   }
 
-  const box = trimmedBox(local);
+  if (local.length === 0) {
+    return null;
+  }
+
+  let center: Vector3;
+  if (framing) {
+    center = framing.target.clone().applyQuaternion(inverse);
+  } else {
+    const axis = (offset: number) => median(local.filter((_value, i) => i % 3 === offset));
+    center = new Vector3(axis(0), axis(1), axis(2));
+  }
+
+  const box = trimmedBoundingBox(nearestPositions(local, center));
   if (box.isEmpty()) {
     return null;
   }

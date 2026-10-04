@@ -62,6 +62,7 @@ export default async function PublicSplatViewPage({ params }: Props) {
       title={splat.title}
       splatUrl={splat.splatUrl}
       pointCloudUrl={splat.pointCloudUrl}
+      cropBox={splat.cropBox}
       cameras={cameras}
       photos={splat.photos}
       timestamps={splat.timestamps}

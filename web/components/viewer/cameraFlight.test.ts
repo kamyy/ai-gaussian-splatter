@@ -2,7 +2,14 @@ import { Quaternion, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 
 import type { CameraPose } from "@/lib/types";
-import { easeInOutCubic, fittedFov, interpolatePose, orbitTargetOf, photoViewPose } from "./cameraFlight";
+import {
+  easeInOutCubic,
+  fittedFov,
+  interpolatePose,
+  orbitTargetOf,
+  orthographicZoom,
+  photoViewPose,
+} from "./cameraFlight";
 
 // COLMAP axes: x right, y down the image, z forward. This camera sits at (0, 0, 10) looking toward -z with the image's
 // down along -y, so its world up is +y.
@@ -74,6 +81,15 @@ describe("fittedFov", () => {
   it("widens until the photo's full width fits in a view narrower than the photo", () => {
     // A square view needs the same 90° vertically to show 90° across.
     expect(fittedFov(photo, 1)).toBeCloseTo(90);
+  });
+});
+
+describe("orthographicZoom", () => {
+  const photo = { ...camera, width: 4, height: 3, fx: 2, fy: 2 };
+
+  it("shows the height a perspective camera would at the same distance", () => {
+    // A wide view of this photo has tan of the half-angle 0.75, so at distance 10 the frame is 15 tall.
+    expect(orthographicZoom(30, photo, 10, 2)).toBeCloseTo(2);
   });
 });
 

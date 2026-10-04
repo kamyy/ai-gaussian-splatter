@@ -1,7 +1,7 @@
 /**
  * The share and download controls for a finished splat.
  *
- * Offers the public link to the splat, a copy button for it, and a download of the full splat file.
+ * Offers the public link to the splat, a copy button for it, and a download of the full splat file, cropped when the owner has cropped it.
  */
 
 "use client";
@@ -70,8 +70,8 @@ export function SharePanel({ splatId, children }: { splatId: string; children?: 
         <p>Anyone with the link can view it. No sign-in needed.</p>
       </div>
       <p>
-        Download the splat as a .ply file to open it in other 3D tools. Discarding it deletes the splat and its photos,
-        and the public link stops working.
+        Download the splat as a .ply file to open it in other 3D tools. A crop applies to the download too. Discarding
+        it deletes the splat and its photos, and the public link stops working.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="ink" onClick={download} loading={downloading}>

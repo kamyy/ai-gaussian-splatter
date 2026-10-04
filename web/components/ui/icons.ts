@@ -23,15 +23,17 @@ import {
   LuUserX,
   LuX,
 } from "react-icons/lu";
+import { PiCameraFill, PiSquareDuotone } from "react-icons/pi";
 import {
-  PiCameraDuotone,
-  PiCameraFill,
-  PiCameraSlashDuotone,
-  PiCircleDuotone,
-  PiDotOutlineDuotone,
-  PiSelectionDuotone,
-  PiSelectionSlashDuotone,
-} from "react-icons/pi";
+  TbArrowBackUp,
+  TbBox,
+  TbBoxAlignBottom,
+  TbBoxAlignLeft,
+  TbBoxAlignTop,
+  TbCheck,
+  TbPerspective,
+  TbSquare,
+} from "react-icons/tb";
 
 export type { IconType } from "react-icons";
 
@@ -69,9 +71,18 @@ export const StepDoneIcon = LuCheck;
 export const ProcessingPausedIcon = LuTriangleAlert;
 
 // The 3D viewer's controls.
-export const SmallPointIcon = PiDotOutlineDuotone;
-export const LargePointIcon = PiCircleDuotone;
-export const CropOnIcon = PiSelectionDuotone;
-export const CropOffIcon = PiSelectionSlashDuotone;
-export const CamerasShownIcon = PiCameraDuotone;
-export const CamerasHiddenIcon = PiCameraSlashDuotone;
+export const SmallPointIcon = PiSquareDuotone;
+export const LargePointIcon = PiSquareDuotone;
+export const ApplyCropIcon = TbCheck;
+export const UndoCropIcon = TbArrowBackUp;
+// One square drawn both ways: tilted away for the perspective camera, whose far side looks smaller, and face-on for
+// the orthographic one, which draws everything at its true size.
+export const PerspectiveCameraIcon = TbPerspective;
+export const OrthographicCameraIcon = TbSquare;
+// The front, side and top views, each a box with one side marked: the bottom, the left and the top.
+export const FrontViewIcon = TbBoxAlignBottom;
+export const SideViewIcon = TbBoxAlignLeft;
+export const TopViewIcon = TbBoxAlignTop;
+// The crop button. The same box as front, side and top, with no face marked, because this one leaves the camera
+// wherever it already is.
+export const CropIcon = TbBox;

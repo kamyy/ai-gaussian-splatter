@@ -2,8 +2,8 @@
  * The /splats/[id] page: one splat's workspace, from processing through to sharing.
  *
  * Loads the splat, its latest worker job, its photos and its camera positions, then shows the stage the splat is at: a
- * card with that stage's actions, the pipeline's progress, the 3D viewer and the photo grid. The viewer and the grid
- * share one selected photo, so picking a photo in either shows it in both.
+ * card with that stage's actions, the pipeline's progress, the 3D viewer and the photo grid. Picking a photo in the
+ * grid flies the view to where that photo was taken.
  */
 
 "use client";
@@ -25,8 +25,6 @@ import { useSplat } from "@/lib/hooks/useSplat";
 import { useStageNotification } from "@/lib/hooks/useStageNotification";
 import { splatStage } from "@/lib/splatStage";
 import { JOB_ENDED_STATUSES } from "@/lib/statuses";
-import type { CropBox } from "@/lib/types";
-
 export default function SplatPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { data: splat, isLoading: splatLoading, mutate: refetchSplat } = useSplat(id);
@@ -34,14 +32,11 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
   const { data: photos, isLoading: photosLoading } = usePhotos(id);
   const { data: cameras } = useCameras(id, Boolean(job?.pointCloudS3Key));
 
-  // Drawn in the 3D view and sent with the check stage's build button, which sit on opposite sides of the page.
-  const [cropBox, setCropBox] = useState<CropBox | null>(null);
-
-  // Picked from either the photo grid or the 3D view's cameras, and shown in both.
+  // Picked from the photo grid. The view flies to that photo's camera.
   const [selection, setSelection] = useState<PhotoSelection | null>(null);
   const selectPhoto = (photoId: string) => setSelection({ photoId });
 
-  // Hovering a photo marks its camera in the 3D view, and hovering a camera marks its photo in the grid.
+  // The photo tile the pointer is over.
   const [hoveredPhotoId, setHoveredPhotoId] = useState<string | null>(null);
 
   // Only the job is polled, but the worker's callback moves the job row and the splat row in one transaction, so a job
@@ -102,7 +97,7 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
           {splat.name}
         </PageTitle>
         <PipelineStepper stage={stage} job={job} photoCount={photos?.length ?? 0} />
-        <StageCard splatId={id} stage={stage} cropBox={cropBox} onJobChanged={() => void refetchJob()} />
+        <StageCard splatId={id} stage={stage} onJobChanged={() => void refetchJob()} />
         {sharePanel}
         {photoGrid}
       </div>
@@ -117,13 +112,9 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
           job={job}
           complete={splat.status === "complete"}
           cameras={cameras}
-          cropBox={cropBox}
           selection={selection}
-          onSelectPhoto={selectPhoto}
           onClearSelection={() => setSelection(null)}
-          hoveredPhotoId={hoveredPhotoId}
-          onHoverPhoto={setHoveredPhotoId}
-          onCropBoxChange={stage.kind === "check" ? setCropBox : undefined}
+          onJobChanged={() => void refetchJob()}
         />
       </section>
     </div>

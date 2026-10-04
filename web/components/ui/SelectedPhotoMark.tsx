@@ -1,10 +1,10 @@
 /**
  * The orange camera pill that marks the selected photo, and the pager page holding it.
  *
- * The photo grid (web/components/splats/PhotoGrid.tsx) draws it on the selected photo with a "Selected" label, and the
- * pager (web/components/ui/Pager.tsx) draws it on the page button holding that photo, as the camera alone because a
- * page button is too narrow for the label. On a photo the pill is orange with a page-colored border, which sets it
- * apart from the photo. On a page button it takes that button's colors, with the color of the page number as its border.
+ * The photo grid (web/components/splats/PhotoGrid.tsx) draws it on the selected photo, and the pager
+ * (web/components/ui/Pager.tsx) draws it on the page button holding that photo. Both show the camera alone. On a photo
+ * the pill is orange with a page-colored border, which sets it apart from the photo. On a page button it takes that
+ * button's colors, with the color of the page number as its border.
  */
 
 import { SelectedPhotoIcon } from "@/components/ui/icons";
@@ -24,28 +24,19 @@ interface SelectedPhotoMarkProps {
   tone: keyof typeof PILL_TONES;
   // Positions the mark, which is absolute, in its parent.
   className: string;
-  // Text beside the camera. Without it the pill holds the camera alone. The text shows only when the nearest @container
-  // ancestor is at least 6rem wide, so a narrow portrait photo shows the camera alone rather than an overflowing pill.
-  label?: string;
 }
 
-export function SelectedPhotoMark({ tone, className, label }: SelectedPhotoMarkProps) {
-  let labelText: React.ReactNode = null;
-  if (label !== undefined) {
-    labelText = <span className="hidden pr-0.5 @min-[6rem]:inline">{label}</span>;
-  }
-
+export function SelectedPhotoMark({ tone, className }: SelectedPhotoMarkProps) {
   return (
     <span
       aria-hidden="true"
       className={cn(
-        "pointer-events-none absolute flex h-4.5 items-center justify-center gap-0.5 rounded-full px-1 text-xs leading-none font-bold",
+        "pointer-events-none absolute flex h-4.5 w-4.5 items-center justify-center rounded-full",
         PILL_TONES[tone],
         className,
       )}
     >
       <SelectedPhotoIcon className="h-2.5 w-2.5" />
-      {labelText}
     </span>
   );
 }

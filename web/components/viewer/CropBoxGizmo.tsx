@@ -1,23 +1,30 @@
 /**
  * The draggable crop box in the 3D view.
  *
- * The visitor drags its handles to mark the part of the point cloud worth training, so the splat leaves out the room
- * around the object. The box is sent with the build request.
+ * The owner drags its handles to fit the box around the object in a finished splat's point cloud, so a crop can leave
+ * out the room around it. The box is sent when the owner applies the crop.
  */
 
 "use client";
 
-import { Edges, PivotControls } from "@react-three/drei";
+import { PivotControls } from "@react-three/drei";
 import { useMemo } from "react";
-import { Matrix4, Quaternion, Vector3 } from "three";
+import { DoubleSide, Matrix4, Quaternion, Vector3 } from "three";
 
 import type { CropBox } from "@/lib/types";
 
-// A mid blue between the info token's light and dark values, so it reads against both themes' viewer backgrounds and
-// stays distinct from the camera frustums' terracotta. A three.js material can't take a CSS variable.
-const COLOR = "#5b7bd6";
-// The gizmo's on-screen size in pixels. COLMAP's scale is arbitrary per capture, so a size in world units would be
-// invisible in one reconstruction and swamp another.
+// The x, y and z handles' colors, PivotControls' own defaults. Each pair of opposite faces takes its axis's color, so
+// a face shows which handle moves it. A three.js material can't take a CSS variable.
+const AXIS_COLORS: [string, string, string] = ["#ff2060", "#20df80", "#2080ff"];
+// In BoxGeometry's order of faces, which is how each material attaches to its face.
+const FACES = ["+x", "-x", "+y", "-y", "+z", "-z"].map((name, face) => ({
+  name,
+  color: AXIS_COLORS[Math.floor(face / 2)],
+}));
+// Faint enough that the points inside the box stay visible through two faces.
+const FACE_OPACITY = 0.15;
+// The gizmo's on-screen size in pixels. A point cloud's scale is COLMAP's, which is arbitrary per capture, so a size in
+// world units would be invisible in one reconstruction and swamp another.
 const GIZMO_PIXELS = 70;
 // The arrows' line width in pixels, half PivotControls' default. With a fixed-size gizmo it also sets how wide each
 // arrowhead is.
@@ -56,12 +63,23 @@ export function CropBoxGizmo({ box, onChange }: { box: CropBox; onChange: (box: 
       fixed
       scale={GIZMO_PIXELS}
       lineWidth={GIZMO_LINE_PIXELS}
+      axisColors={AXIS_COLORS}
       depthTest={false}
     >
+      {/* DoubleSide draws the far faces too, seen through the near ones, so the box reads as a solid. */}
       <mesh>
         <boxGeometry />
-        <meshBasicMaterial color={COLOR} transparent opacity={0.08} depthWrite={false} />
-        <Edges color={COLOR} />
+        {FACES.map(({ name, color }, face) => (
+          <meshBasicMaterial
+            key={name}
+            attach={`material-${face}`}
+            color={color}
+            transparent
+            opacity={FACE_OPACITY}
+            side={DoubleSide}
+            depthWrite={false}
+          />
+        ))}
       </mesh>
     </PivotControls>
   );

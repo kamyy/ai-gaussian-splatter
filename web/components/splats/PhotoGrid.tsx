@@ -135,7 +135,7 @@ function PhotoTile({
         className="h-full w-full rounded-md object-cover"
       />
       {unplacedMark}
-      {selected ? <SelectedPhotoMark tone="photo" className="top-1 left-1" label="Selected" /> : null}
+      {selected ? <SelectedPhotoMark tone="photo" className="top-1 left-1" /> : null}
     </EnlargingPhotoBox>
   );
 
