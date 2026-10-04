@@ -1,15 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { resolveDatabaseUrl } from "../databaseUrl";
-import { isLocalDev, LOCAL_APP_ORIGIN, withLocalDevEnv } from "../env";
+import { isLocalDevEnv } from "../env";
 
-// getEnv() caches its parse in a module-level variable, so each case re-imports web/lib/server/env.ts after resetting
-// the registry. web/tests/server-test-env.ts has already filled process.env with values that parse.
+// getEnv() caches its parse in the module, so each case re-imports web/lib/server/env.ts after resetting the registry.
+// web/tests/server-test-env.ts has already filled process.env with values that parse.
 async function loadGetEnv() {
   vi.resetModules();
-  const { getEnv } = await import("../env");
+  const imported = await import("../env");
 
-  return getEnv;
+  return imported.getEnv;
 }
 
 describe("getEnv", () => {
@@ -134,6 +134,7 @@ describe("getEnv", () => {
       stubLocalDev();
       vi.stubEnv("DATABASE_HOST", "db.example.test");
       vi.stubEnv("DATABASE_NAME", "other");
+      vi.stubEnv("DATABASE_PASSWORD", "s3cret");
       vi.stubEnv("APP_ORIGIN", "http://example.test:4000");
 
       const env = (await loadGetEnv())();
@@ -143,7 +144,17 @@ describe("getEnv", () => {
         DATABASE_NAME: "ai_gaussian_splatter",
         APP_ORIGIN: "http://localhost:3000",
       });
+      expect(resolveDatabaseUrl(env)).toBe("postgresql://postgres:postgres@localhost:5432/ai_gaussian_splatter");
     });
+  });
+
+  // `pnpm db:migrate` and `pnpm db:studio` leave NODE_ENV unset, and that is local dev the same way "development" is.
+  // The test database is named ai_gaussian_splatter_test, so this URL matches only when the overlay replaced that name.
+  it.each([undefined, "development"] as const)("points the database at splat-pg when NODE_ENV is %s", async nodeEnv => {
+    vi.stubEnv("NODE_ENV", nodeEnv);
+    const getEnv = await loadGetEnv();
+
+    expect(resolveDatabaseUrl(getEnv())).toBe("postgresql://postgres:postgres@localhost:5432/ai_gaussian_splatter");
   });
 
   it("accepts a missing AWS_ACCESS_KEY_ID outside local dev, where the ECS task role supplies credentials", async () => {
@@ -172,43 +183,23 @@ describe("getEnv", () => {
 
     expect(() => getEnv()).toThrow(/DATABASE_HOST.*DATABASE_NAME.*APP_ORIGIN/);
   });
+
+  // The test database listens on localhost, the same host local dev fills in.
+  // db.internal is what shows the overlay stayed off.
+  it.each(["production", "test"])("keeps DATABASE_HOST when NODE_ENV is %s", async nodeEnv => {
+    vi.stubEnv("NODE_ENV", nodeEnv);
+    vi.stubEnv("DATABASE_HOST", "db.internal");
+    const getEnv = await loadGetEnv();
+
+    expect(getEnv().DATABASE_HOST).toBe("db.internal");
+  });
 });
 
-describe("isLocalDev", () => {
+describe("isLocalDevEnv", () => {
   it("is true unless NODE_ENV is production or test", () => {
-    expect(isLocalDev({})).toBe(true);
-    expect(isLocalDev({ NODE_ENV: "development" })).toBe(true);
-    expect(isLocalDev({ NODE_ENV: "production" })).toBe(false);
-    expect(isLocalDev({ NODE_ENV: "test" })).toBe(false);
-  });
-});
-
-describe("withLocalDevEnv", () => {
-  it("points every DATABASE_* variable at splat-pg in local dev, where NODE_ENV is unset or development", () => {
-    for (const nodeEnv of [undefined, "development"]) {
-      expect(resolveDatabaseUrl(withLocalDevEnv({ NODE_ENV: nodeEnv }))).toBe(
-        "postgresql://postgres:postgres@localhost:5432/ai_gaussian_splatter",
-      );
-    }
-  });
-
-  it("replaces a value the environment already holds", () => {
-    const env = withLocalDevEnv({
-      APP_ORIGIN: "http://example.test:4000",
-      DATABASE_HOST: "db.internal",
-      DATABASE_NAME: "other",
-      DATABASE_PASSWORD: "s3cret",
-    });
-
-    expect(resolveDatabaseUrl(env)).toBe("postgresql://postgres:postgres@localhost:5432/ai_gaussian_splatter");
-    expect(env.APP_ORIGIN).toBe(LOCAL_APP_ORIGIN);
-  });
-
-  it("changes nothing in production or tests", () => {
-    for (const nodeEnv of ["production", "test"]) {
-      const env = { NODE_ENV: nodeEnv, DATABASE_HOST: "db.internal" };
-
-      expect(withLocalDevEnv(env)).toBe(env);
-    }
+    expect(isLocalDevEnv({})).toBe(true);
+    expect(isLocalDevEnv({ NODE_ENV: "development" })).toBe(true);
+    expect(isLocalDevEnv({ NODE_ENV: "production" })).toBe(false);
+    expect(isLocalDevEnv({ NODE_ENV: "test" })).toBe(false);
   });
 });

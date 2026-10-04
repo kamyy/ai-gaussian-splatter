@@ -15,7 +15,7 @@ import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
 import { type NextRequest, NextResponse } from "next/server";
 
 import { getJobForCallbackToken } from "@/lib/server/auth";
-import { getEnv, getWorkerInstanceEnv } from "@/lib/server/env";
+import { getEnv } from "@/lib/server/env";
 import { HttpError, withErrorHandling } from "@/lib/server/httpError";
 import { JOB_ENDED_STATUSES, type JobStatus } from "@/lib/statuses";
 
@@ -74,7 +74,7 @@ export const POST = withErrorHandling(
     const env = getEnv();
     const { Credentials: credentials } = await new STSClient({ region: env.AWS_REGION }).send(
       new AssumeRoleCommand({
-        RoleArn: getWorkerInstanceEnv().WORKER_DATA_ROLE_ARN,
+        RoleArn: env.WORKER_DATA_ROLE_ARN,
         RoleSessionName: `worker-${job.id}`,
         DurationSeconds: CREDENTIALS_DURATION_SECONDS,
         Policy: splatSessionPolicy(env.UPLOADS_BUCKET, env.SPLATS_BUCKET, job.splatId),

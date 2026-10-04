@@ -76,7 +76,8 @@ export function getDb(): NodePgDatabase<typeof schema> {
 
     const options = {
       host: DATABASE_HOST,
-      port: DATABASE_PORT,
+      // pg takes the port as a number. web/lib/server/databaseUrl.ts interpolates the string into the connection URL.
+      port: Number(DATABASE_PORT),
       database: DATABASE_NAME,
       user: DATABASE_USER,
       ssl: databaseSsl(),
