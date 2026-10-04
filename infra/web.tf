@@ -177,7 +177,7 @@ resource "aws_iam_role_policy" "task" {
         ]
       },
       # RunInstances is authorized against every resource the request touches, each one separately. Only the
-      # instance carries the worker tag (web/lib/server/ec2Launcher.ts tags ResourceType "instance"), so
+      # instance carries the worker tag (web/lib/server/workerLauncher.ts tags ResourceType "instance"), so
       # aws:RequestTag is absent from the request context for the rest. A single statement conditioned on that
       # key would evaluate false for them and deny the whole call. Hence the split: the tag constrains what can
       # be launched (the RunInstancesTagged statement below), this statement only names what it is launched from and
@@ -191,7 +191,7 @@ resource "aws_iam_role_policy" "task" {
           # account-scoped, hence the empty account segment.
           "arn:aws:ec2:${var.aws_region}::image/${var.worker_ami_id}",
           # The worker only ever launches into one subnet and one security group (both passed as env
-          # vars by web/lib/server/ec2Launcher.ts), so both are scoped to the exact resource rather than every
+          # vars by web/lib/server/workerLauncher.ts), so both are scoped to the exact resource rather than every
           # subnet or security group in the account.
           local.worker_subnet.arn,
           aws_security_group.worker.arn,
@@ -535,7 +535,7 @@ resource "aws_ecs_task_definition" "web" {
     }
     environment = concat(local.db_environment, [
       # Read via getEnv().AWS_REGION by every AWS SDK client the app constructs, in web/lib/server/s3.ts,
-      # web/lib/server/ec2Launcher.ts, and web/lib/server/databaseUrl.ts. Without this, each client falls back to
+      # web/lib/server/workerLauncher.ts, and web/lib/server/databaseUrl.ts. Without this, each client falls back to
       # its own default region resolution, which can land somewhere other than where these resources actually live.
       { name = "AWS_REGION", value = var.aws_region },
       { name = "UPLOADS_BUCKET", value = aws_s3_bucket.uploads.id },
@@ -546,7 +546,7 @@ resource "aws_ecs_task_definition" "web" {
       { name = "WORKER_INSTANCE_PROFILE_ARN", value = aws_iam_instance_profile.worker.arn },
       { name = "WORKER_LOG_GROUP", value = aws_cloudwatch_log_group.worker.name },
       { name = "WORKER_DATA_ROLE_ARN", value = aws_iam_role.worker_data.arn },
-      # Read by web/lib/server/ec2Launcher.ts's workerImageUri()/ecrRegistry(), which otherwise fall back to
+      # Read by web/lib/server/workerLauncher.ts's workerImageUri()/ecrRegistry(), which otherwise fall back to
       # REPLACE_WITH_* placeholders meant only for local/pre-deploy development.
       { name = "WORKER_RECONSTRUCT_IMAGE_URI", value = local.worker_reconstruct_image_uri },
       { name = "WORKER_TRAIN_IMAGE_URI", value = local.worker_train_image_uri },

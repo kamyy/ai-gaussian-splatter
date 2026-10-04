@@ -210,7 +210,7 @@ run "web_container_wiring" {
       for e in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].environment :
       e.name == "ECR_REGISTRY" && e.value == "000000000000.dkr.ecr.us-west-2.amazonaws.com"
     ])
-    error_message = "ECR_REGISTRY must be the account's ECR registry hostname, for docker login in ec2Launcher.ts's user-data"
+    error_message = "ECR_REGISTRY must be the account's ECR registry hostname, for docker login in workerLauncher.ts's user-data"
   }
 
   assert {
@@ -218,7 +218,7 @@ run "web_container_wiring" {
       for e in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].environment :
       e.name == "WORKER_LOG_GROUP" && e.value == aws_cloudwatch_log_group.worker.name
     ])
-    error_message = "WORKER_LOG_GROUP must name the log group the worker role can write to, for ec2Launcher.ts's docker run"
+    error_message = "WORKER_LOG_GROUP must name the log group the worker role can write to, for workerLauncher.ts's docker run"
   }
 
   # Regression guard: every AWS SDK client the app constructs reads getEnv().AWS_REGION explicitly. Without this

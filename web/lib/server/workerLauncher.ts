@@ -1,10 +1,11 @@
 /**
- * Launches, looks up and stops the GPU instances that run worker jobs.
+ * Starts, looks up and stops the compute that runs a worker-job stage.
  *
- * Each worker-job stage (reconstruct, then train) runs on its own EC2 spot instance, a discounted AWS virtual machine
- * that AWS can reclaim. This file starts one directly, with no job queue in between, passing it a startup script that
- * pulls the worker's container image and runs the stage. The instance profile these launches pass is defined in
- * infra/worker_iam.tf. In local dev it can run the worker container on this machine instead.
+ * A stage (reconstruct, then train) runs on an EC2 spot instance in production, or in a Podman container on this
+ * machine in local dev. An EC2 spot instance is a discounted AWS virtual machine that AWS can reclaim. This file
+ * starts either one directly, with no job queue in between. An EC2 launch passes a startup script that pulls the
+ * worker's container image and runs the stage. The instance profile those launches pass is defined in
+ * infra/worker_iam.tf.
  */
 
 import { execFile, spawn } from "node:child_process";

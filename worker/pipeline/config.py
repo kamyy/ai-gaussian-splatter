@@ -1,8 +1,9 @@
 """The worker's settings, read from environment variables.
 
-web/lib/server/ec2Launcher.ts sets these in the instance's startup script: which worker job and splat to work on, where
-to report status, the S3 buckets to read and write, where their credentials come from, and which stage to run. pydantic
-validates them when the worker starts, so a missing setting fails straight away rather than partway through a GPU run.
+web/lib/server/workerLauncher.ts sets these in the instance's startup script: which worker job and splat to work on,
+where to report status, the S3 buckets to read and write, where their credentials come from, and which stage to run.
+pydantic validates them when the worker starts, so a missing setting fails straight away rather than partway through a
+GPU run.
 """
 
 from typing import Literal
@@ -11,7 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Env vars set in the EC2 launch UserData (web/lib/server/ec2Launcher.ts)."""
+    """Env vars set in the EC2 launch UserData (web/lib/server/workerLauncher.ts)."""
 
     model_config = SettingsConfigDict(env_prefix="")
 
@@ -38,7 +39,7 @@ class Settings(BaseSettings):
 
     local_workdir: str = "/tmp/job"
 
-    # Set by web/lib/server/ec2Launcher.ts's user-data, because a worker instance's own role has no S3 access.
+    # Set by web/lib/server/workerLauncher.ts's user-data, because a worker instance's own role has no S3 access.
     # worker/pipeline/storage.py then asks the app for credentials scoped to this splat. Unset on a local run, which
     # uses the dev IAM user's keys instead.
     s3_credentials_from_app: bool = False

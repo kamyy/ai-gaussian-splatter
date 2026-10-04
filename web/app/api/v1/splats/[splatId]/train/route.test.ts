@@ -10,8 +10,8 @@ const { launchJobMock, terminateWorkerMock } = vi.hoisted(() => ({
   launchJobMock: vi.fn(async (_params: { jobId: string }) => "i-0abc123"),
   terminateWorkerMock: vi.fn(async () => {}),
 }));
-vi.mock("@/lib/server/ec2Launcher", async importOriginal => {
-  const actual = await importOriginal<typeof import("@/lib/server/ec2Launcher")>();
+vi.mock("@/lib/server/workerLauncher", async importOriginal => {
+  const actual = await importOriginal<typeof import("@/lib/server/workerLauncher")>();
   return { ...actual, launchJob: launchJobMock, terminateWorker: terminateWorkerMock };
 });
 

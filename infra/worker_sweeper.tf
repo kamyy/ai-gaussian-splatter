@@ -2,7 +2,7 @@
 #
 # It runs every 10 minutes, terminates any worker instance older than its own lifetime ceiling, and emails alert_email
 # the list. Each instance carries its ceiling as a MaxLifetimeMinutes tag set at launch. It backstops the `shutdown -h`
-# each instance schedules for itself in user-data (web/lib/server/ec2Launcher.ts), which never gets scheduled when
+# each instance schedules for itself in user-data (web/lib/server/workerLauncher.ts), which never gets scheduled when
 # cloud-init itself fails to run.
 #
 # The email subscription below needs a one-time confirmation click before anything is delivered (RUNBOOK.md).

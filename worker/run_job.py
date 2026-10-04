@@ -58,7 +58,7 @@ def _run_reconstruct(settings: Settings) -> int:
 
     finally:
         # Attempted on every path out of the try, success or failure. Missing it leaves the instance billing until
-        # user-data's scheduled shutdown fires at the instance's lifetime ceiling (web/lib/server/ec2Launcher.ts).
+        # user-data's scheduled shutdown fires at the instance's lifetime ceiling (web/lib/server/workerLauncher.ts).
         terminate_self()
 
 

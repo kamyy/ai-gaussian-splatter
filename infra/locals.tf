@@ -47,7 +47,7 @@ locals {
 
   availability_zones = [for suffix in ["a", "b"] : "${var.aws_region}${suffix}"]
 
-  # The one subnet the worker's spot instance ever launches into (web/lib/server/ec2Launcher.ts's SubnetId). A
+  # The one subnet the worker's spot instance ever launches into (web/lib/server/workerLauncher.ts's SubnetId). A
   # single local keeps infra/web.tf's WORKER_SUBNET_ID env var and its RunInstances IAM grant from naming two different
   # subnets.
   worker_subnet = values(aws_subnet.public)[0]
@@ -64,7 +64,7 @@ locals {
   # Container images
   # ---------------------------------------------------------------------------
 
-  # The registry hostname web/lib/server/ec2Launcher.ts's user-data logs into before pulling. It is built from
+  # The registry hostname web/lib/server/workerLauncher.ts's user-data logs into before pulling. It is built from
   # account/region directly rather than parsed out of aws_ecr_repository.worker.repository_url, matching how
   # .github/workflows/deploy.yml and RUNBOOK.md construct the same string for their own docker/podman logins.
   ecr_registry = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com"
