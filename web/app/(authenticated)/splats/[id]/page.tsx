@@ -2,8 +2,8 @@
  * The /splats/[id] page: one splat's workspace, from processing through to sharing.
  *
  * Loads the splat, its latest worker job, its photos and its camera positions, then shows the stage the splat is at: a
- * card with that stage's actions, the pipeline's progress, the 3D viewer and the photo grid. Picking a photo in the
- * grid flies the view to where that photo was taken.
+ * card with that stage's actions, the pipeline's progress, the 3D viewer and the photo grid. The view opens on the
+ * first placed photo's camera. Picking another photo flies the view to where that photo was taken.
  */
 
 "use client";
@@ -13,13 +13,13 @@ import { use, useEffect, useState } from "react";
 import { PageTitle } from "@/components/layout/PageTitle";
 import { PhotoGrid } from "@/components/splats/PhotoGrid";
 import { PipelineStepper } from "@/components/splats/PipelineStepper";
-import type { PhotoSelection } from "@/components/splats/photoSelection";
 import { SharePanel } from "@/components/splats/SharePanel";
 import { DiscardSplatButton } from "@/components/splats/SplatActions";
 import { SplatStageViewer } from "@/components/splats/SplatStageViewer";
 import { StageCard } from "@/components/splats/StageCard";
 import { useCameras } from "@/lib/hooks/useCameras";
 import { useLatestJob } from "@/lib/hooks/useLatestJob";
+import { usePhotoSelection } from "@/lib/hooks/usePhotoSelection";
 import { usePhotos } from "@/lib/hooks/usePhotos";
 import { useSplat } from "@/lib/hooks/useSplat";
 import { useStageNotification } from "@/lib/hooks/useStageNotification";
@@ -32,9 +32,7 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
   const { data: photos, isLoading: photosLoading } = usePhotos(id);
   const { data: cameras } = useCameras(id, Boolean(job?.pointCloudS3Key));
 
-  // Picked from the photo grid. The view flies to that photo's camera.
-  const [selection, setSelection] = useState<PhotoSelection | null>(null);
-  const selectPhoto = (photoId: string) => setSelection({ photoId });
+  const { selection, selectPhoto, clearSelection } = usePhotoSelection(photos, cameras);
 
   // The photo tile the pointer is over.
   const [hoveredPhotoId, setHoveredPhotoId] = useState<string | null>(null);
@@ -113,7 +111,7 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
           complete={splat.status === "complete"}
           cameras={cameras}
           selection={selection}
-          onClearSelection={() => setSelection(null)}
+          onClearSelection={clearSelection}
           onJobChanged={() => void refetchJob()}
         />
       </section>

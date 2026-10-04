@@ -1,5 +1,5 @@
 /**
- * The maths for where the 3D view's camera starts, for the initial crop box, and for the front, side and top views.
+ * The maths for the view used when no photo is selected, for the initial crop box, and for the front, side and top views.
  *
  * Pure functions, with no React. They frame the object from the photos' own camera positions when those are known, or
  * from the point cloud's bounding box otherwise, trimming stray points so they don't pull the view away. They also fit
@@ -61,10 +61,11 @@ export function trimmedBoundingBox(positions: ArrayLike<number>): Box3 {
 }
 
 /**
- * Where to put the viewer's camera so the object is framed the way it was photographed: aimed at the point the
- * photos' optical axes pass closest to, from the first photo's position, with the photos' average up direction.
+ * The camera used when no photo is selected: aimed at the point the photos' optical axes pass closest to, from the
+ * first pose in the list, with the photos' average up direction. A splat page opens on a photo's own pose instead, and
+ * keeps this as the point those poses orbit and the up direction they level back to.
  *
- * The viewer starts on the ring of photo positions rather than behind it. Nothing trains the space outside that ring,
+ * The position is on the ring of photo positions rather than behind it. Nothing trains the space outside that ring,
  * so a view from there looks through whatever floats around the capture before it reaches the object. COLMAP's world
  * axes are arbitrary per capture, which is why up comes from the photos instead of Three.js's default +Y.
  *

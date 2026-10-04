@@ -2,7 +2,8 @@
  * The body of the public share page: the 3D viewer beside the pipeline's step times and the splat's photos.
  *
  * The share page (web/app/(public)/preview/splats/[id]/page.tsx) renders on the server and passes in presigned links
- * for everything shown here. Like the owner's page, picking a photo in the grid flies the view to where it was taken.
+ * for everything shown here. Like the owner's page, the view opens on the first placed photo's camera, and picking
+ * another photo flies the view to where it was taken.
  * Nothing here can change the splat, so the viewer offers no crop controls. It shows the owner's crop, when there is
  * one, because web/lib/server/data.ts hands it the cropped file and the box, which the point cloud view hides the
  * points outside of.
@@ -13,11 +14,11 @@
 import { useState } from "react";
 
 import { PageTitle } from "@/components/layout/PageTitle";
+import { usePhotoSelection } from "@/lib/hooks/usePhotoSelection";
 import { JobStatus } from "@/lib/statuses";
 import type { CameraPose, CropBox, JobTimestamps, PublicPhoto } from "@/lib/types";
 import { PhotoGrid } from "./PhotoGrid";
 import { PipelineStepper } from "./PipelineStepper";
-import type { PhotoSelection } from "./photoSelection";
 import { SplatViewerPanel } from "./SplatViewerPanel";
 import { StageShell } from "./StageShell";
 
@@ -41,8 +42,7 @@ export function PublicSplatView({
   photos,
   timestamps,
 }: PublicSplatViewProps) {
-  const [selection, setSelection] = useState<PhotoSelection | null>(null);
-  const selectPhoto = (photoId: string) => setSelection({ photoId });
+  const { selection, selectPhoto, clearSelection } = usePhotoSelection(photos, cameras);
 
   const [hoveredPhotoId, setHoveredPhotoId] = useState<string | null>(null);
 
@@ -91,7 +91,7 @@ export function PublicSplatView({
           cameras={cameras}
           cropBox={cropBox}
           selection={selection}
-          onClearSelection={() => setSelection(null)}
+          onClearSelection={clearSelection}
         />
       </section>
     </div>

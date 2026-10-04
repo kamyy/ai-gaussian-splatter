@@ -2,8 +2,9 @@
  * Flies the 3D view to a picked photo's viewpoint, and levels it out again afterwards.
  *
  * When the visitor picks a photo, the view animates to where that photo was taken, matching its angle and zoom, so the
- * 3D scene lines up with the photo. Once the visitor drags the view away, it tilts back upright and zooms back out.
- * This runs inside the viewer's React Three Fiber canvas, animating a little every frame.
+ * 3D scene lines up with the photo. The photo a page opens on is placed there at once. Once the visitor drags the view
+ * away, it tilts back upright and zooms back out. This runs inside the viewer's React Three Fiber canvas, animating a
+ * little every frame.
  */
 
 "use client";
@@ -35,10 +36,13 @@ export const DEFAULT_FOV = 75;
 
 /**
  * A camera picked by index into the viewer's cameras. Every new object flies the view there, so selecting the same
- * camera again after orbiting away flies back to it.
+ * camera again after orbiting away flies back to it. opening is the photo the page opens on, which is placed at once
+ * rather than flown to.
  */
 export interface CameraSelection {
   index: number;
+  // True for the photo the page opens on. A pick from the grid leaves this off.
+  opening?: boolean;
 }
 
 // A flight from the view the visitor had to a photo's view. A perspective flight changes the field of view. An
@@ -69,6 +73,32 @@ function setFov(perspective: PerspectiveCamera | null, fov: number) {
   }
 }
 
+// Puts the camera on pose, with the field of view or zoom that goes with it.
+function placePose(
+  pose: ViewPose,
+  fov: number,
+  zoom: number,
+  orthographic: boolean,
+  camera: Camera,
+  perspective: PerspectiveCamera | null,
+  controls: CameraControls,
+) {
+  setFov(perspective, fov);
+  if (orthographic && camera instanceof OrthographicCamera) {
+    // A photo can sit inside the scene. A near plane in front of the camera would clip it.
+    if (camera.near !== 0) {
+      camera.near = 0;
+      camera.updateProjectionMatrix();
+    }
+    void controls.zoomTo(zoom, false);
+  }
+
+  camera.up.set(0, 1, 0).applyQuaternion(pose.quaternion);
+  controls.updateCameraUp();
+  const target = orbitTargetOf(pose);
+  void controls.setLookAt(pose.position.x, pose.position.y, pose.position.z, target.x, target.y, target.z, false);
+}
+
 // Advances flight by delta seconds and places the camera on it. Returns whether the flight has landed.
 function stepFlight(
   flight: Flight,
@@ -79,23 +109,15 @@ function stepFlight(
 ): boolean {
   flight.elapsed = Math.min(flight.elapsed + delta, FLIGHT_SECONDS);
   const t = easeInOutCubic(flight.elapsed / FLIGHT_SECONDS);
-  const pose = interpolatePose(flight.from, flight.to, t);
-  const target = orbitTargetOf(pose);
-
-  setFov(perspective, flight.fromFov + (flight.toFov - flight.fromFov) * t);
-  if (flight.orthographic && camera instanceof OrthographicCamera) {
-    // A photo can sit inside the scene. A near plane in front of the camera would clip it.
-    if (camera.near !== 0) {
-      camera.near = 0;
-      camera.updateProjectionMatrix();
-    }
-    const zoom = flight.fromZoom + (flight.toZoom - flight.fromZoom) * t;
-    void controls.zoomTo(zoom, false);
-  }
-
-  camera.up.set(0, 1, 0).applyQuaternion(pose.quaternion);
-  controls.updateCameraUp();
-  void controls.setLookAt(pose.position.x, pose.position.y, pose.position.z, target.x, target.y, target.z, false);
+  placePose(
+    interpolatePose(flight.from, flight.to, t),
+    flight.fromFov + (flight.toFov - flight.fromFov) * t,
+    flight.fromZoom + (flight.toZoom - flight.fromZoom) * t,
+    flight.orthographic,
+    camera,
+    perspective,
+    controls,
+  );
 
   return flight.elapsed === FLIGHT_SECONDS;
 }
@@ -135,10 +157,12 @@ function stepLevel(
 }
 
 /**
- * Flies the view to each new selection's photo, landing on its position, direction and roll. A perspective camera also
- * matches the photo's field of view. An orthographic camera matches that framing with zoom. Once the visitor grabs the
- * view, it levels back out to sceneUp and widens back to DEFAULT_FOV. The orthographic camera has no field of view, so
- * a level there only takes out the roll. sceneUp holds the up direction the viewer's framing set, if it has run.
+ * Flies the view to each new selection's photo, landing on its position, direction and roll. The photo the page opens
+ * on is placed there immediately. A pick from the grid flies, including a pick that is the first one this viewer
+ * receives. A perspective camera also matches the photo's field of view. An orthographic camera matches that framing
+ * with zoom. Once the visitor grabs the view, it levels back out to sceneUp and widens back to DEFAULT_FOV. The
+ * orthographic camera has no field of view, so a level there only takes out the roll. sceneUp holds the up direction
+ * the viewer's framing set, if it has run.
  *
  * A flight drives CameraControls to a new pose on every frame, so the controls stay the only thing placing the camera.
  * CameraControls keeps the view level to camera.up, so a flight turns camera.up along with the view to take on the
@@ -163,6 +187,9 @@ export function useCameraFlight(
   const flightRef = useRef<Flight | null>(null);
   const levelRef = useRef<Level | null>(null);
   const flownRef = useRef<CameraSelection | null>(null);
+  // Set once a frame has drawn the opening photo. Until then that photo is placed again if the controls are rebuilt,
+  // which happens once at start-up. A pick from the grid flies even when no photo has been placed yet.
+  const openingSettledRef = useRef(false);
   // Whether a flight has turned or zoomed the view since it last levelled out. Only a flight's roll and zoom
   // are undone, so a view placed some other way, such as the viewer's front, side or top view, keeps its own up.
   const flownSinceLevelRef = useRef(false);
@@ -179,9 +206,11 @@ export function useCameraFlight(
 
   useEffect(() => {
     const photo = selectedCamera ? cameras?.[selectedCamera.index] : undefined;
+    const opening = selectedCamera?.opening === true;
 
-    // The controls are rebuilt once after the first render, which must not restart a flight already under way.
-    if (!controls || !photo || flownRef.current === selectedCamera) {
+    // The same pick is not flown twice. The opening photo is the exception until a frame has drawn it, so the controls
+    // rebuilt at start-up get that pose too.
+    if (!controls || !photo || (flownRef.current === selectedCamera && (!opening || openingSettledRef.current))) {
       return;
     }
 
@@ -209,6 +238,12 @@ export function useCameraFlight(
     flownRef.current = selectedCamera;
     flownSinceLevelRef.current = true;
     levelRef.current = null;
+    if (opening && !openingSettledRef.current) {
+      flightRef.current = null;
+      placePose(to, toFov, toZoom, orthographic, camera, perspective, controls);
+      return;
+    }
+
     flightRef.current = {
       from: { position: camera.position.clone(), quaternion: camera.quaternion.clone(), distance: controls.distance },
       to,
@@ -267,6 +302,10 @@ export function useCameraFlight(
   }, [perspective]);
 
   useFrame((_state, delta) => {
+    if (flownRef.current?.opening) {
+      openingSettledRef.current = true;
+    }
+
     if (!controls) {
       return;
     }

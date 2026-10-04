@@ -128,12 +128,33 @@ describe("PublicSplatView", () => {
     expect(screen.getByRole("button", { name: "Point cloud" })).toBeDisabled();
   });
 
-  it("flies to a photo's camera when its tile is picked", () => {
+  it("opens on the first photo's camera, and flies to a later pick", () => {
     render(view("https://example.com/points.ply"));
 
-    fireEvent.click(screen.getByRole("button", { name: "Photo 1" }));
+    expect(screen.getByRole("button", { name: "Photo 1" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Photo 2" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText("camera: 0")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Photo 2" }));
+
+    expect(screen.getByRole("button", { name: "Photo 2" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("camera: 1")).toBeInTheDocument();
+  });
+
+  it("opens on the first grid photo when its pose is later in the camera list", () => {
+    render(
+      <PublicSplatView
+        title="Mug"
+        splatUrl="https://example.com/splat.spz"
+        pointCloudUrl="https://example.com/points.ply"
+        cropBox={null}
+        cameras={[cameras[1], cameras[0]]}
+        photos={photos}
+        timestamps={timestamps}
+      />,
+    );
 
     expect(screen.getByRole("button", { name: "Photo 1" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText("camera: 0")).toBeInTheDocument();
+    expect(screen.getByText("camera: 1")).toBeInTheDocument();
   });
 });

@@ -134,6 +134,20 @@ describe("SplatPage", () => {
     expect(screen.queryByRole("button", { name: "Discard" })).not.toBeInTheDocument();
   });
 
+  it("opens on the first photo in the grid that has a camera", async () => {
+    setup({ splat, job, placed: ["p2", "p1"] });
+    await renderPage();
+    expect(screen.getByRole("button", { name: "a.jpg" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "b.jpg" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("skips a leading photo the cameras don't include", async () => {
+    setup({ splat, job, placed: ["p2"] });
+    await renderPage();
+    expect(screen.getByRole("img", { name: "a.jpg (couldn't be placed)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "b.jpg" })).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("flags a photo the cameras don't include as not placed", async () => {
     setup({ splat, job, placed: ["p1"] });
     await renderPage();
