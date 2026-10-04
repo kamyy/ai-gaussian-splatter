@@ -67,7 +67,7 @@ resource "aws_ecr_lifecycle_policy" "web" {
 
 # A separate repository rather than more tag suffixes on the one above. The worker images are a completely different
 # build (COLMAP and gsplat rather than Next.js), with no reason to share the web repository's retention depth. They
-# aren't part of any ECS rollback either, since web/lib/server/ec2Launcher.ts just reads whichever image URI it is
+# aren't part of any ECS rollback either, since web/lib/server/workerLauncher.ts just reads whichever image URI it is
 # given. So worker_releases_kept (infra/locals.tf) is far smaller than releases_kept. GPU worker deployment stays manual
 # (RUNBOOK.md), so nothing pushes here automatically.
 #

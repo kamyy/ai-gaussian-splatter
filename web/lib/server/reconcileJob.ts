@@ -11,9 +11,9 @@ import { JobStatus } from "@/lib/statuses";
 import { WORKER_RUNNING_STATUSES } from "./cancelJob";
 import { getDb } from "./db";
 import { jobs, splats } from "./db/schema";
-import { describeWorker, terminateWorker } from "./ec2Launcher";
 import { isLocalDev } from "./env";
 import { WORKER_MAX_LIFETIME_BOUNDS } from "./runtimeSettings";
+import { describeWorker, terminateWorker } from "./workerLauncher";
 
 // How long a job goes without a status callback before its instance is looked up. A healthy reconstruct stage can go
 // many minutes between callbacks, so this only decides when to check, never on its own that the job is dead.

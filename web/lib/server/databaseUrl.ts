@@ -86,7 +86,7 @@ export async function fetchDatabasePassword(secretArn: string, region: string): 
 
   // Without an explicit region, the SDK's own default-region resolution can land somewhere other than where the
   // secret actually lives (e.g. RDS's region), failing with a not-found rather than an auth error. It matches how
-  // web/lib/server/s3.ts and web/lib/server/ec2Launcher.ts already pass region: getEnv().AWS_REGION to their own
+  // web/lib/server/s3.ts and web/lib/server/workerLauncher.ts already pass region: getEnv().AWS_REGION to their own
   // clients rather than omitting it.
   secretsClient ??= new SecretsManagerClient({ region });
   const { SecretString } = await secretsClient.send(new GetSecretValueCommand({ SecretId: secretArn }));

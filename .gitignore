@@ -47,8 +47,8 @@ next-env.d.ts
 worker/local_data/
 worker/*.ply
 worker/*.splat
-# Where web/lib/server/ec2Launcher.ts mounts each local worker job's files. worker/.dockerignore repeats it to keep it
-# out of the build context.
+# Where web/lib/server/workerLauncher.ts mounts each local worker job's files. worker/.dockerignore repeats it to keep
+# it out of the build context.
 worker/jobdir/
 
 # Logs

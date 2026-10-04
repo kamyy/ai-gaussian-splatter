@@ -1,11 +1,11 @@
 """Terminates worker instances that have outlived their lifetime ceiling, and emails a list of them.
 
-Each worker instance schedules its own `shutdown -h` from user-data (web/lib/server/ec2Launcher.ts). This catches the
+Each worker instance schedules its own `shutdown -h` from user-data (web/lib/server/workerLauncher.ts). This catches the
 instances where that never happened, such as a boot where cloud-init never ran. infra/worker_sweeper.tf runs it on a
 schedule and sets its environment.
 
-Each instance's ceiling is its own MaxLifetimeMinutes tag, which web/lib/server/ec2Launcher.ts sets at launch from the
-runtime setting in force then. Lowering that setting therefore never cuts short a stage launched under a longer one.
+Each instance's ceiling is its own MaxLifetimeMinutes tag, which web/lib/server/workerLauncher.ts sets at launch from
+the runtime setting in force then. Lowering that setting therefore never cuts short a stage launched under a longer one.
 """
 
 import os
@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 
 import boto3
 
-# Must match the tag key web/lib/server/ec2Launcher.ts writes.
+# Must match the tag key web/lib/server/workerLauncher.ts writes.
 LIFETIME_TAG_KEY = "MaxLifetimeMinutes"
 
 # Covers boot, since an instance's ceiling counts from when user-data runs rather than from launch.

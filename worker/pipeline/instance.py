@@ -1,8 +1,8 @@
 """EC2 instance self-termination via the instance metadata service (IMDSv2).
 
 Called from worker/run_job.py's finally block, so it runs on success and on a failed job alike. This is what ends a
-job's billing at the job's own end. The backstop under it is the `shutdown -h` web/lib/server/ec2Launcher.ts schedules
-in user-data, which only fires once the instance reaches its lifetime ceiling.
+job's billing at the job's own end. The backstop under it is the `shutdown -h` web/lib/server/workerLauncher.ts
+schedules in user-data, which only fires once the instance reaches its lifetime ceiling.
 """
 
 import logging

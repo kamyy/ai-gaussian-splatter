@@ -7,8 +7,8 @@ vi.mock("@clerk/nextjs/server", () => ({
 }));
 
 const { terminateWorkerMock } = vi.hoisted(() => ({ terminateWorkerMock: vi.fn(async () => {}) }));
-vi.mock("@/lib/server/ec2Launcher", async importOriginal => {
-  const actual = await importOriginal<typeof import("@/lib/server/ec2Launcher")>();
+vi.mock("@/lib/server/workerLauncher", async importOriginal => {
+  const actual = await importOriginal<typeof import("@/lib/server/workerLauncher")>();
   return { ...actual, terminateWorker: terminateWorkerMock };
 });
 

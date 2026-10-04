@@ -46,7 +46,7 @@ source "$ROOT/scripts/lib/terraform.sh"
 REPO=ai-gaussian-splatter-worker
 REGION=$(tf_get_aws_region)
 # One release is two images, one per worker-job stage. infra/locals.tf appends these same suffixes when it builds the
-# URIs the web task hands to web/lib/server/ec2Launcher.ts.
+# URIs the web task hands to web/lib/server/workerLauncher.ts.
 STAGES=(reconstruct train)
 
 # Prints the worker tag the running web service launches with, read off its task definition's WORKER_TRAIN_IMAGE_URI.

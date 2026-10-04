@@ -12,12 +12,12 @@ import { MAX_PHOTOS_PER_SPLAT } from "@/lib/limits";
 import { requireOwnedSplat, requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { jobs, photos, splats } from "@/lib/server/db/schema";
-import { generateCallbackToken } from "@/lib/server/ec2Launcher";
 import { HttpError, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
 import { requireProcessingEnabled } from "@/lib/server/runtimeSettings";
 import { jobColumns } from "@/lib/server/selects";
 import { launchWorker, stopWorker } from "@/lib/server/worker";
+import { generateCallbackToken } from "@/lib/server/workerLauncher";
 import { JOB_ENDED_STATUSES, JobStatus } from "@/lib/statuses";
 
 // How long a job may sit in a non-terminal status without its worker reporting anything before this route treats it
