@@ -2,9 +2,9 @@
  * The provider behind every snackbar (toast message) in the app.
  *
  * Every status and error message (job failures, upload failures and the like) goes through this one stack instead of an
- * inline alert of its own, so there's one consistent place they appear. Components post to it with
- * web/lib/hooks/useAppSnackbar.ts. notistack doesn't ship "use client", so web/app/layout.tsx, a Server Component,
- * renders this wrapper instead of notistack's provider directly.
+ * inline alert of its own, so there's one consistent place they appear. Components post to it with notistack's
+ * useSnackbar. notistack doesn't ship "use client", so web/app/layout.tsx, a Server Component, renders this wrapper
+ * instead of notistack's provider directly.
  */
 
 "use client";

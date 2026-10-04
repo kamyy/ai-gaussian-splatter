@@ -9,18 +9,18 @@
 "use client";
 
 import { useAuth, useClerk } from "@clerk/nextjs";
+import { useSnackbar } from "notistack";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/Dialog";
 import { apiFetch } from "@/lib/apiFetch";
-import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
 import { requireToken } from "@/lib/requireToken";
 
 export function DeleteAccountDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { getToken } = useAuth();
   const { signOut } = useClerk();
-  const { enqueueSnackbar } = useAppSnackbar();
+  const { enqueueSnackbar } = useSnackbar();
 
   const [pending, setPending] = useState(false);
 
@@ -32,6 +32,7 @@ export function DeleteAccountDialog({ open, onOpenChange }: { open: boolean; onO
       enqueueSnackbar("Delete account failed", {
         variant: "error",
         detail: err instanceof Error ? err.message : undefined,
+        persist: true,
       });
       setPending(false);
       return;

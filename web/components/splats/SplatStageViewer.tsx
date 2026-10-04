@@ -13,11 +13,11 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
+import { useSnackbar } from "notistack";
 import { useState } from "react";
 import { useSWRConfig } from "swr";
 
 import { apiFetch } from "@/lib/apiFetch";
-import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
 import { usePresignedUrl } from "@/lib/hooks/usePresignedUrl";
 import { requireToken } from "@/lib/requireToken";
 import type { CameraPose, Job } from "@/lib/types";
@@ -51,7 +51,7 @@ function splatVersion(job: Pick<Job, "cropBox" | "updatedAt"> | undefined): stri
 export function SplatStageViewer({ splatId, job, complete, onJobChanged, ...panelProps }: SplatStageViewerProps) {
   const { getToken } = useAuth();
   const { mutate } = useSWRConfig();
-  const { enqueueSnackbar } = useAppSnackbar();
+  const { enqueueSnackbar } = useSnackbar();
 
   const [busy, setBusy] = useState<CropControls["busy"]>(null);
 
@@ -83,7 +83,11 @@ export function SplatStageViewer({ splatId, job, complete, onJobChanged, ...pane
 
       return true;
     } catch (err) {
-      enqueueSnackbar(failure, { variant: "error", detail: err instanceof Error ? err.message : undefined });
+      enqueueSnackbar(failure, {
+        variant: "error",
+        detail: err instanceof Error ? err.message : undefined,
+        persist: true,
+      });
 
       return false;
     } finally {

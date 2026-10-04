@@ -9,9 +9,9 @@
  * have no better shot of that angle.
  */
 
+import { useSnackbar } from "notistack";
 import { useState } from "react";
 
-import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
 import { MAX_PHOTO_BYTES, MIN_SHARP_PHOTO_EDGE, PHOTO_EXTENSIONS } from "@/lib/limits";
 import { fileKey, measurePhotos, type PickedPhoto } from "@/lib/measurePhoto";
 
@@ -56,7 +56,7 @@ export function findFlagged(photos: PickedPhoto[]): Map<string, PhotoFlag> {
  * low-resolution photo.
  */
 export function usePickedPhotos() {
-  const { enqueueSnackbar } = useAppSnackbar();
+  const { enqueueSnackbar } = useSnackbar();
   const [photos, setPhotos] = useState<PickedPhoto[]>([]);
   const [measuringCount, setMeasuringCount] = useState(0);
 
@@ -67,6 +67,7 @@ export function usePickedPhotos() {
       enqueueSnackbar(unsupported.length === 1 ? "Unsupported photo" : "Unsupported photos", {
         variant: "error",
         detail: `Only JPEG and PNG photos can be used. Try exporting ${unsupported.join(", ")} as JPEG.`,
+        persist: true,
       });
     }
 
@@ -76,6 +77,7 @@ export function usePickedPhotos() {
       enqueueSnackbar(tooLarge.length === 1 ? "Photo too large" : "Photos too large", {
         variant: "error",
         detail: `${tooLarge.join(", ")} ${tooLarge.length === 1 ? "is" : "are"} over ${MAX_PHOTO_MB} MB.`,
+        persist: true,
       });
     }
 
@@ -88,6 +90,7 @@ export function usePickedPhotos() {
         enqueueSnackbar(unreadable.length === 1 ? "Couldn't read photo" : "Couldn't read photos", {
           variant: "error",
           detail: `Try exporting ${unreadable.join(", ")} as JPEG.`,
+          persist: true,
         });
       }
 

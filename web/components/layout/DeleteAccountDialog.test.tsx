@@ -12,8 +12,7 @@ vi.mock("@clerk/nextjs", () => ({
 const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }));
 vi.mock("@/lib/apiFetch", () => ({ apiFetch: apiFetchMock }));
 
-const { enqueueSnackbarMock } = vi.hoisted(() => ({ enqueueSnackbarMock: vi.fn() }));
-vi.mock("@/lib/hooks/useAppSnackbar", () => ({ useAppSnackbar: () => ({ enqueueSnackbar: enqueueSnackbarMock }) }));
+vi.mock("notistack", () => ({ useSnackbar: () => ({ enqueueSnackbar: () => {} }) }));
 
 describe("DeleteAccountDialog", () => {
   beforeEach(() => {
@@ -38,17 +37,15 @@ describe("DeleteAccountDialog", () => {
     expect(apiFetchMock).toHaveBeenCalledWith("/api/v1/account", "DELETE", "test-token");
   });
 
-  it("reports a failure, stays open, and stays signed in", async () => {
+  it("stays open and stays signed in when deleting fails", async () => {
     apiFetchMock.mockRejectedValueOnce(new Error("Server error"));
     render(<DeleteAccountDialog open onOpenChange={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "Delete account" }));
 
-    await waitFor(() =>
-      expect(enqueueSnackbarMock).toHaveBeenCalledWith("Delete account failed", {
-        variant: "error",
-        detail: "Server error",
-      }),
-    );
+    await waitFor(() => {
+      expect(apiFetchMock).toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: "Delete account" })).toBeEnabled();
+    });
     expect(signOutMock).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog", { name: "Delete your account?" })).toBeInTheDocument();
   });

@@ -11,12 +11,12 @@
 
 import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
+import { useSnackbar } from "notistack";
 import { useState } from "react";
 import { useSWRConfig } from "swr";
 
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { apiFetch } from "@/lib/apiFetch";
-import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
 import { useProcessingPaused } from "@/lib/hooks/useProcessingPaused";
 import { requireToken } from "@/lib/requireToken";
 import type { Stage } from "@/lib/splatStage";
@@ -87,7 +87,7 @@ function ProgressBar({ label, percent, startedAt }: { label: string; percent: nu
 export function StageCard({ splatId, stage, onJobChanged }: StageCardProps) {
   const { getToken } = useAuth();
   const { mutate } = useSWRConfig();
-  const { enqueueSnackbar } = useAppSnackbar();
+  const { enqueueSnackbar } = useSnackbar();
   const processingPaused = useProcessingPaused();
   const [pending, setPending] = useState(false);
 
@@ -98,7 +98,11 @@ export function StageCard({ splatId, stage, onJobChanged }: StageCardProps) {
       onJobChanged();
       await mutate("splats");
     } catch (err) {
-      enqueueSnackbar(failure, { variant: "error", detail: err instanceof Error ? err.message : undefined });
+      enqueueSnackbar(failure, {
+        variant: "error",
+        detail: err instanceof Error ? err.message : undefined,
+        persist: true,
+      });
 
       // The failure may be processing having just been paused. Refetching now shows the notice and disables this button
       // straight away, rather than at the next minute's poll.

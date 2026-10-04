@@ -12,6 +12,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
+import { useSnackbar } from "notistack";
 import { useEffect, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useSWRConfig } from "swr";
@@ -24,7 +25,6 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { apiFetch } from "@/lib/apiFetch";
 import { cn } from "@/lib/cn";
 import { expandedBox } from "@/lib/expandedBox";
-import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
 import { useEnlargedTile } from "@/lib/hooks/useEnlargedTile";
 import { useJustifiedPages } from "@/lib/hooks/useJustifiedPages";
 import { type PhotoFlag, usePickedPhotos } from "@/lib/hooks/usePickedPhotos";
@@ -113,7 +113,7 @@ export function NewSplatForm() {
   const { getToken } = useAuth();
   const { mutate } = useSWRConfig();
   const router = useRouter();
-  const { enqueueSnackbar } = useAppSnackbar();
+  const { enqueueSnackbar } = useSnackbar();
   const processingPaused = useProcessingPaused();
 
   const [name, setName] = useState("");
@@ -195,7 +195,7 @@ export function NewSplatForm() {
     setPhase(createdSplat ? "uploading" : "creating");
     const token = await getToken();
     if (!token) {
-      enqueueSnackbar("Not signed in", { variant: "error" });
+      enqueueSnackbar("Not signed in", { variant: "error", persist: true });
       setPhase("idle");
       return;
     }
@@ -208,6 +208,7 @@ export function NewSplatForm() {
         enqueueSnackbar("Couldn't create the splat", {
           variant: "error",
           detail: err instanceof Error ? err.message : undefined,
+          persist: true,
         });
         setPhase("idle");
         return;
@@ -227,6 +228,7 @@ export function NewSplatForm() {
       enqueueSnackbar("Photo upload failed", {
         variant: "error",
         detail: `"${trimmedName}" was created. ${err instanceof Error ? err.message : "Submit again to retry."}`,
+        persist: true,
       });
       setPhase("idle");
       return;
@@ -243,6 +245,7 @@ export function NewSplatForm() {
         enqueueSnackbar("Couldn't start processing", {
           variant: "error",
           detail: err instanceof Error ? err.message : undefined,
+          persist: true,
         });
       }
     }

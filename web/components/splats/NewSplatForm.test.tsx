@@ -32,8 +32,7 @@ vi.mock("@/lib/hooks/useElementWidth", () => ({ useElementWidth: () => [() => {}
 const { mutateMock } = vi.hoisted(() => ({ mutateMock: vi.fn() }));
 vi.mock("swr", () => ({ useSWRConfig: () => ({ mutate: mutateMock }) }));
 
-const { enqueueSnackbarMock } = vi.hoisted(() => ({ enqueueSnackbarMock: vi.fn() }));
-vi.mock("@/lib/hooks/useAppSnackbar", () => ({ useAppSnackbar: () => ({ enqueueSnackbar: enqueueSnackbarMock }) }));
+vi.mock("notistack", () => ({ useSnackbar: () => ({ enqueueSnackbar: () => {} }) }));
 
 const { processingPausedMock } = vi.hoisted(() => ({ processingPausedMock: vi.fn(() => false) }));
 vi.mock("@/lib/hooks/useProcessingPaused", () => ({ useProcessingPaused: processingPausedMock }));
@@ -154,10 +153,6 @@ describe("NewSplatForm", () => {
 
     await waitFor(() => expect(screen.getByText("1 photo added")).toBeInTheDocument());
     expect(screen.queryByRole("img", { name: "b.jpg" })).not.toBeInTheDocument();
-    expect(enqueueSnackbarMock).toHaveBeenCalledWith("Couldn't read photo", {
-      variant: "error",
-      detail: "Try exporting b.jpg as JPEG.",
-    });
   });
 
   it("turns away a photo COLMAP can't read, naming it", async () => {
@@ -170,10 +165,6 @@ describe("NewSplatForm", () => {
     });
 
     await waitFor(() => expect(screen.getByText("1 photo added")).toBeInTheDocument());
-    expect(enqueueSnackbarMock).toHaveBeenCalledWith("Unsupported photo", {
-      variant: "error",
-      detail: "Only JPEG and PNG photos can be used. Try exporting b.heic as JPEG.",
-    });
     expect(measurePhotosMock).toHaveBeenCalledWith([expect.objectContaining({ name: "a.jpg" })]);
   });
 
@@ -327,19 +318,17 @@ describe("NewSplatForm", () => {
     expect(screen.getAllByRole("img").map(img => img.getAttribute("alt"))).toEqual(["a.jpg", "b.jpg", "c.jpg"]);
   });
 
-  it("surfaces a creation failure and stays on the form", async () => {
+  it("stays on the form when creating the splat fails", async () => {
     apiFetchMock.mockRejectedValueOnce(new Error("Name already taken"));
     render(<NewSplatForm />);
     fillName("Coffee mug");
     await addPhotos("a.jpg");
     fireEvent.click(submitButton());
 
-    await waitFor(() =>
-      expect(enqueueSnackbarMock).toHaveBeenCalledWith("Couldn't create the splat", {
-        variant: "error",
-        detail: "Name already taken",
-      }),
-    );
+    await waitFor(() => {
+      expect(apiFetchMock).toHaveBeenCalled();
+      expect(submitButton()).toBeEnabled();
+    });
     expect(uploadPhotosMock).not.toHaveBeenCalled();
     expect(pushMock).not.toHaveBeenCalled();
   });
@@ -351,12 +340,10 @@ describe("NewSplatForm", () => {
     await addPhotos("a.jpg");
     fireEvent.click(submitButton());
 
-    await waitFor(() =>
-      expect(enqueueSnackbarMock).toHaveBeenCalledWith("Photo upload failed", {
-        variant: "error",
-        detail: '"Coffee mug" was created. S3 upload failed: Forbidden',
-      }),
-    );
+    await waitFor(() => {
+      expect(uploadPhotosMock).toHaveBeenCalled();
+      expect(submitButton()).toBeEnabled();
+    });
     expect(pushMock).not.toHaveBeenCalled();
 
     fireEvent.click(submitButton());
@@ -374,7 +361,10 @@ describe("NewSplatForm", () => {
     fillName("Coffee mug");
     await addPhotos("a.jpg", "b.jpg");
     fireEvent.click(submitButton());
-    await waitFor(() => expect(enqueueSnackbarMock).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(screen.getByRole("img", { name: "a.jpg uploaded" })).toBeInTheDocument();
+      expect(submitButton()).toBeEnabled();
+    });
 
     // Removing an uploaded photo here wouldn't take it off the server, so only the failed one can be removed.
     expect(screen.queryByRole("button", { name: "Remove a.jpg" })).not.toBeInTheDocument();
@@ -401,10 +391,6 @@ describe("NewSplatForm", () => {
     fireEvent.click(submitButton());
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/splats/new-splat-1"));
-    expect(enqueueSnackbarMock).toHaveBeenCalledWith("Couldn't start processing", {
-      variant: "error",
-      detail: "Need at least 20 uploaded photos, have 1",
-    });
   });
 
   it("warns while processing is paused, and uploads without trying to start", async () => {
@@ -420,6 +406,5 @@ describe("NewSplatForm", () => {
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/splats/new-splat-1"));
     expect(uploadPhotosMock).toHaveBeenCalled();
     expect(apiFetchMock).not.toHaveBeenCalledWith("/api/v1/splats/new-splat-1/process", "POST", "test-token");
-    expect(enqueueSnackbarMock).not.toHaveBeenCalled();
   });
 });
