@@ -76,6 +76,15 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
   - A plain quoted or bolded name silently goes stale the moment the target heading is renamed; a broken link is easier to spot in review.
 - **A bare mention of one of the other root docs (`AGENTS.md`, `RUNBOOK.md`, `ARCHITECTURE.md`, `README.md`) gets linked to the file too** — `` [`AGENTS.md`](AGENTS.md) ``, not just backtick text.
   - This doesn't extend to code file paths: those stay as inline code per the rule above, since linking every one would be churn for no navigational benefit.
+- **A reply includes a Mermaid diagram when it turns on order, ownership, or how parts connect.** The diagram is part of the reply, so the chat renders it with the answer.
+  - A plan.
+  - An answer to a question about the codebase.
+  - The actions the agent is about to take.
+  - A request path, a state change, a pipeline stage, or which piece of code reads which data needs a diagram.
+  - A short list of independent edits stays prose.
+  - A question a few sentences already answer stays prose.
+  - Each box uses the same name the code uses.
+  - The diagram shows a relationship the sentences beside it do not already state.
 
 ---
 
