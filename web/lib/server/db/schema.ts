@@ -12,6 +12,7 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   smallint,
@@ -22,6 +23,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { JOB_STATUS_DB_VALUES, PHOTO_UPLOAD_STATUSES, SPLAT_STATUSES } from "@/lib/statuses";
+import type { CropBox } from "@/lib/types";
 
 // Data model.
 //
@@ -105,7 +107,8 @@ export const jobs = pgTable(
     callbackToken: text("callback_token").notNull(),
     ec2InstanceId: text("ec2_instance_id"),
     errorMessage: text("error_message"),
-    resultS3Key: text("result_s3_key"),
+    // The worker's .ply and .spz of the same Gaussians. The download serves the .ply, and the viewers serve the .spz.
+    resultPlyS3Key: text("result_ply_s3_key"),
     resultSpzS3Key: text("result_spz_s3_key"),
     thumbnailS3Key: text("thumbnail_s3_key"),
     pointCloudS3Key: text("point_cloud_s3_key"),
@@ -121,9 +124,23 @@ export const jobs = pgTable(
     trainingBootedAt: timestamp("training_booted_at", { withTimezone: true, precision: 6 }),
     trainingStartedAt: timestamp("training_started_at", { withTimezone: true, precision: 6 }),
     trainingFinishedAt: timestamp("training_finished_at", { withTimezone: true, precision: 6 }),
+    // When the worker reported the job complete, which ends the build step's time. updatedAt can't stand in for it,
+    // because a crop or its undo writes to the job after that.
+    completedAt: timestamp("completed_at", { withTimezone: true, precision: 6 }),
     // Percent of gsplat's iterations done, 0-100, reported by the train stage's worker as it goes. Null before
     // training starts.
     trainingProgress: smallint("training_progress"),
+
+    // Set together by web/app/api/v1/splats/[splatId]/crop/route.ts and cleared together by its undo. While they are
+    // set, the download, the viewers and the share page serve the cropped copies instead of resultPlyS3Key and
+    // resultSpzS3Key, which keep naming the worker's untouched originals.
+    cropBox: jsonb("crop_box").$type<CropBox>(),
+    croppedResultPlyS3Key: text("cropped_result_ply_s3_key"),
+    croppedResultSpzS3Key: text("cropped_result_spz_s3_key"),
+    // Set by web/app/api/v1/splats/[splatId]/crop/route.ts while a crop request is in flight, so one user runs one
+    // crop at a time. Cleared when that request ends. A value older than the ALB idle timeout is ignored, so a task
+    // that died mid-crop does not keep the next one from starting.
+    cropStartedAt: timestamp("crop_started_at", { withTimezone: true, precision: 6 }),
 
     createdAt: timestamp("created_at", { withTimezone: true, precision: 6 }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true, precision: 6 })

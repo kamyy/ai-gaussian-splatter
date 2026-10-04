@@ -18,7 +18,7 @@ def report_status(
     status: str,
     *,
     error_message: str | None = None,
-    result_s3_key: str | None = None,
+    result_ply_s3_key: str | None = None,
     result_spz_s3_key: str | None = None,
     thumbnail_s3_key: str | None = None,
     point_cloud_s3_key: str | None = None,
@@ -32,8 +32,8 @@ def report_status(
     payload: dict[str, str | int] = {"status": status}
     if error_message is not None:
         payload["error_message"] = error_message
-    if result_s3_key is not None:
-        payload["result_s3_key"] = result_s3_key
+    if result_ply_s3_key is not None:
+        payload["result_ply_s3_key"] = result_ply_s3_key
     if result_spz_s3_key is not None:
         payload["result_spz_s3_key"] = result_spz_s3_key
     if thumbnail_s3_key is not None:

@@ -60,7 +60,7 @@ const timestamps: JobTimestamps = {
   trainingBootedAt: null,
   trainingStartedAt: "2026-01-01T10:22:57Z",
   createdAt: "2026-01-01T10:00:00Z",
-  updatedAt: "2026-01-01T10:30:07Z",
+  completedAt: "2026-01-01T10:30:07Z",
 };
 
 function view(pointCloudUrl: string | null) {

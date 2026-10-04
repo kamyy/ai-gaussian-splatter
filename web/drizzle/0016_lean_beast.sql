@@ -1,0 +1,1 @@
+ALTER TABLE "jobs" ADD COLUMN "crop_started_at" timestamp (6) with time zone;

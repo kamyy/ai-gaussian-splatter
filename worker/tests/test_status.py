@@ -27,7 +27,7 @@ def test_report_status_sends_expected_payload_and_auth(settings):
         (
             "complete",
             {
-                "result_s3_key": "splats/x/result.ply",
+                "result_ply_s3_key": "splats/x/result.ply",
                 "result_spz_s3_key": "splats/x/result.spz",
                 "thumbnail_s3_key": "splats/x/thumbnail.png",
             },

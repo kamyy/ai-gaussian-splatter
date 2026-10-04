@@ -15,7 +15,7 @@ const baseJob: Job = {
   splatId: "splat-1",
   status: JobStatus.queued,
   errorMessage: null,
-  resultS3Key: null,
+  resultPlyS3Key: null,
   thumbnailS3Key: null,
   pointCloudS3Key: null,
   colmapBootedAt: null,
@@ -24,7 +24,9 @@ const baseJob: Job = {
   trainingLaunchedAt: null,
   trainingBootedAt: null,
   trainingStartedAt: null,
+  completedAt: null,
   trainingProgress: null,
+  cropBox: null,
   createdAt: at(0),
   updatedAt: at(0),
 };
@@ -116,14 +118,14 @@ describe("stageTimings", () => {
     });
   });
 
-  it("ends a complete build at the job's last update", () => {
+  it("ends a complete build when the job completed", () => {
     const timings = stageTimings(
       {
         ...reconstructed,
         status: JobStatus.complete,
         trainingLaunchedAt: at(1192),
         trainingStartedAt: at(1377),
-        updatedAt: at(1807),
+        completedAt: at(1807),
       },
       T0 + 99_000_000,
     );
@@ -150,7 +152,7 @@ describe("stageTimings", () => {
 
   it("leaves out the build for a job trained before its launch time was recorded", () => {
     const timings = stageTimings(
-      { ...reconstructed, status: JobStatus.complete, trainingStartedAt: at(1377), updatedAt: at(1807) },
+      { ...reconstructed, status: JobStatus.complete, trainingStartedAt: at(1377), completedAt: at(1807) },
       T0 + 99_000_000,
     );
 

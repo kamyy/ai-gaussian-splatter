@@ -16,7 +16,7 @@ const reconstructed: Job = {
   splatId: "splat-1",
   status: JobStatus.training_running,
   errorMessage: null,
-  resultS3Key: null,
+  resultPlyS3Key: null,
   thumbnailS3Key: null,
   pointCloudS3Key: "splats/splat-1/points.ply",
   colmapBootedAt: null,
@@ -25,7 +25,9 @@ const reconstructed: Job = {
   trainingLaunchedAt: at(1192),
   trainingBootedAt: null,
   trainingStartedAt: at(1377),
+  completedAt: null,
   trainingProgress: 20,
+  cropBox: null,
   createdAt: at(0),
   updatedAt: at(1377),
 };
@@ -62,7 +64,7 @@ describe("PipelineStepper", () => {
     render(
       <PipelineStepper
         stage={{ kind: "complete" }}
-        job={{ ...reconstructed, status: JobStatus.complete, updatedAt: at(1807) }}
+        job={{ ...reconstructed, status: JobStatus.complete, completedAt: at(1807) }}
         photoCount={38}
       />,
     );

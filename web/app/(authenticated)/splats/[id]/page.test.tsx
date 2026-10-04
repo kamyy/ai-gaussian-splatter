@@ -46,7 +46,7 @@ const job: Job = {
   splatId: splat.id,
   status: "awaiting_training",
   errorMessage: null,
-  resultS3Key: null,
+  resultPlyS3Key: null,
   thumbnailS3Key: null,
   pointCloudS3Key: "pc.ply",
   colmapBootedAt: null,
@@ -55,7 +55,9 @@ const job: Job = {
   trainingLaunchedAt: null,
   trainingBootedAt: null,
   trainingStartedAt: null,
+  completedAt: null,
   trainingProgress: null,
+  cropBox: null,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
 };

@@ -142,7 +142,7 @@ describe("worker status callback", () => {
     const res = await PATCH(
       req("tok", {
         status: "complete",
-        result_s3_key: `${prefix}/result.ply`,
+        result_ply_s3_key: `${prefix}/result.ply`,
         result_spz_s3_key: `${prefix}/result.spz`,
         thumbnail_s3_key: `${prefix}/thumbnail.png`,
       }),
@@ -153,8 +153,9 @@ describe("worker status callback", () => {
     const [updatedJob] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
     const [updatedSplat] = await getDb().select().from(splats).where(eq(splats.id, splat.id));
     expect(updatedJob.status).toBe("complete");
-    expect(updatedJob.resultS3Key).toBe(`${prefix}/result.ply`);
+    expect(updatedJob.resultPlyS3Key).toBe(`${prefix}/result.ply`);
     expect(updatedJob.resultSpzS3Key).toBe(`${prefix}/result.spz`);
+    expect(updatedJob.completedAt).not.toBeNull();
     expect(updatedSplat.status).toBe("complete");
     expect(updatedSplat.thumbnailS3Key).toBe(`${prefix}/thumbnail.png`);
   });

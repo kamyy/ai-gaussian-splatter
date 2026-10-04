@@ -25,7 +25,7 @@ import { JOB_ENDED_STATUSES, JOB_STATUSES, JobStatus } from "@/lib/statuses";
 const workerStatusSchema = z.object({
   status: z.enum(JOB_STATUSES),
   error_message: z.string().nullish(),
-  result_s3_key: z.string().nullish(),
+  result_ply_s3_key: z.string().nullish(),
   result_spz_s3_key: z.string().nullish(),
   thumbnail_s3_key: z.string().nullish(),
   point_cloud_s3_key: z.string().nullish(),
@@ -69,7 +69,7 @@ export const PATCH = withErrorHandling(
     const body = await parseJsonBody(request, workerStatusSchema);
     const { status } = body;
     requireOwnKeys(job.splatId, [
-      body.result_s3_key,
+      body.result_ply_s3_key,
       body.result_spz_s3_key,
       body.thumbnail_s3_key,
       body.point_cloud_s3_key,
@@ -80,8 +80,8 @@ export const PATCH = withErrorHandling(
       jobData.errorMessage = body.error_message;
     }
 
-    if (body.result_s3_key != null) {
-      jobData.resultS3Key = body.result_s3_key;
+    if (body.result_ply_s3_key != null) {
+      jobData.resultPlyS3Key = body.result_ply_s3_key;
     }
 
     if (body.result_spz_s3_key != null) {
@@ -123,6 +123,8 @@ export const PATCH = withErrorHandling(
       jobData.trainingBootedAt = job.trainingBootedAt ?? bootedAt;
     } else if (status === JobStatus.uploading_result) {
       jobData.trainingFinishedAt = job.trainingFinishedAt ?? now;
+    } else if (status === JobStatus.complete) {
+      jobData.completedAt = job.completedAt ?? now;
     }
 
     const splatData: Partial<typeof splats.$inferInsert> = {};

@@ -90,7 +90,7 @@ def test_train_reports_every_result_key_on_completion_and_terminates(mocker, set
 
     assert [status for status, _ in statuses] == ["training_running", "uploading_result", "complete"]
     assert statuses[0][1] == {"booted_at": None}
-    assert statuses[-1][1] == {"result_s3_key": "r.ply", "result_spz_s3_key": "r.spz", "thumbnail_s3_key": "t.jpg"}
+    assert statuses[-1][1] == {"result_ply_s3_key": "r.ply", "result_spz_s3_key": "r.spz", "thumbnail_s3_key": "t.jpg"}
     terminate.assert_called_once()
 
 
