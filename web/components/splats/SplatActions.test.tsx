@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DeleteSplatButton, StopJobButton } from "./SplatActions";
+import { DiscardSplatButton, StopJobButton } from "./SplatActions";
 
 vi.mock("@clerk/nextjs", () => ({
   useAuth: () => ({ getToken: async () => "test-token" }),
@@ -18,14 +18,14 @@ vi.mock("swr", () => ({ useSWRConfig: () => ({ mutate: mutateMock }) }));
 
 vi.mock("notistack", () => ({ useSnackbar: () => ({ enqueueSnackbar: () => {} }) }));
 
-describe("DeleteSplatButton", () => {
+describe("DiscardSplatButton", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     apiFetchMock.mockResolvedValue(undefined);
   });
 
   it("asks first, and does nothing when the visitor keeps the splat", () => {
-    render(<DeleteSplatButton splatId="splat-1" label="Discard" variant="outlined" />);
+    render(<DiscardSplatButton splatId="splat-1" variant="outlined" />);
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
     expect(screen.getByRole("dialog", { name: "Delete this splat?" })).toBeInTheDocument();
 
@@ -34,7 +34,7 @@ describe("DeleteSplatButton", () => {
   });
 
   it("deletes the splat and returns to the library", async () => {
-    render(<DeleteSplatButton splatId="splat-1" label="Discard" variant="outlined" />);
+    render(<DiscardSplatButton splatId="splat-1" variant="outlined" />);
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
 
@@ -45,7 +45,7 @@ describe("DeleteSplatButton", () => {
 
   it("stays put when deleting fails", async () => {
     apiFetchMock.mockRejectedValueOnce(new Error("Server error"));
-    render(<DeleteSplatButton splatId="splat-1" label="Discard" variant="outlined" />);
+    render(<DiscardSplatButton splatId="splat-1" variant="outlined" />);
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
 

@@ -15,7 +15,7 @@ vi.mock("@/components/splats/StageCard", () => ({
   StageCard: ({ stage }: { stage: { kind: string } }) => <div data-testid="stage-card">{stage.kind}</div>,
 }));
 vi.mock("@/components/splats/SplatActions", () => ({
-  DeleteSplatButton: ({ label }: { label: string }) => <button type="button">{label}</button>,
+  DiscardSplatButton: () => <button type="button">Discard</button>,
 }));
 vi.mock("@/components/splats/SharePanel", () => ({
   SharePanel: ({ children }: { children?: React.ReactNode }) => <div data-testid="share-panel">{children}</div>,

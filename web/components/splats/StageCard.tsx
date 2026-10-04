@@ -22,7 +22,7 @@ import { requireToken } from "@/lib/requireToken";
 import type { Stage } from "@/lib/splatStage";
 import type { Job } from "@/lib/types";
 import { ProcessingPausedNotice } from "./ProcessingPausedNotice";
-import { DeleteSplatButton, StopJobButton } from "./SplatActions";
+import { DiscardSplatButton, StopJobButton } from "./SplatActions";
 import { StageShell } from "./StageShell";
 
 // Below this the elapsed time says too little about the rest of the run to project from.
@@ -114,7 +114,7 @@ export function StageCard({ splatId, stage, onJobChanged }: StageCardProps) {
 
   const startProcessing = () => post("process", "Couldn't start processing");
   const startTraining = () => post("train", "Couldn't start building");
-  const discardButton = <DeleteSplatButton splatId={splatId} label="Discard" variant="outlined" />;
+  const discardButton = <DiscardSplatButton splatId={splatId} variant="outlined" />;
 
   // The start and build buttons are disabled with it, so a paused site is explained rather than just unclickable.
   let pausedNotice: React.ReactNode = null;
