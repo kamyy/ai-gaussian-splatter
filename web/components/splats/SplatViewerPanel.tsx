@@ -9,7 +9,8 @@
  * past than the splat's Gaussians. The crop button and the front, side and top buttons each open the crop box. A
  * front, side or top button also aims the camera at that side of the box. The crop button does not. Clicking the
  * highlighted button again closes the box. The box starts from the last one used for this splat, when one exists.
- * None of the four buttons removes the cropped point cloud. Only undo does that. The finished splat stays on the
+ * None of the four buttons removes the cropped point cloud. Only undo does that. Without crop controls, the front,
+ * side and top buttons only aim the camera. Their tooltips name that view. The finished splat stays on the
  * perspective camera. The orthographic one is only for the point cloud, where it shows whether the box's edges line
  * up with the object. A box being fitted survives a trip to another view and back. The point cloud's camera choice
  * survives that trip too.
@@ -61,10 +62,10 @@ const PROJECTION_OPTIONS: IconOption<Projection>[] = [
   },
 ];
 
-const AXIS_VIEW_OPTIONS: IconOption<AxisView>[] = [
-  { value: "front", label: "Front view", tooltip: "Frame the crop from the front", icon: FrontViewIcon },
-  { value: "side", label: "Side view", tooltip: "Frame the crop from the side", icon: SideViewIcon },
-  { value: "top", label: "Top view", tooltip: "Frame the crop from the top", icon: TopViewIcon },
+const AXIS_VIEWS: { value: AxisView; label: string; icon: IconType }[] = [
+  { value: "front", label: "Front view", icon: FrontViewIcon },
+  { value: "side", label: "Side view", icon: SideViewIcon },
+  { value: "top", label: "Top view", icon: TopViewIcon },
 ];
 
 const CROP_OPTION: IconOption<"crop"> = {
@@ -115,6 +116,15 @@ interface SplatViewerPanelProps {
   cropBox?: CropBox | null;
   // Set only for the owner of a finished splat, which is what offers the Crop button.
   crop?: CropControls;
+}
+
+// cropping is true when the visitor can fit a box. The tooltip then says the button frames that crop. Otherwise the
+// same button only turns the camera. The tooltip names the view.
+function axisViewOptions(cropping: boolean): IconOption<AxisView>[] {
+  return AXIS_VIEWS.map(view => ({
+    ...view,
+    tooltip: cropping ? `Frame the crop from the ${view.value}` : `View from the ${view.value}`,
+  }));
 }
 
 function ViewModeButton({
@@ -603,7 +613,7 @@ export function SplatViewerPanel({
 
   // Narrow screens sit these above the view mode selector, which would otherwise overlap them. Perspective and
   // orthographic have their own pill, and only on the point cloud. The splat stays perspective. Front, side and top
-  // frame the crop box, so they share the other pill with the crop button.
+  // share the other pill with the crop button when cropping is offered.
   let pointCloudControls: React.ReactNode = null;
   if (available && url && mode === "colmap_points") {
     pointCloudControls = (
@@ -613,7 +623,7 @@ export function SplatViewerPanel({
           <IconSegmentedControl
             bare
             label="View"
-            options={AXIS_VIEW_OPTIONS}
+            options={axisViewOptions(cropControls !== undefined)}
             value={axisView}
             onChange={selectAxisView}
           />

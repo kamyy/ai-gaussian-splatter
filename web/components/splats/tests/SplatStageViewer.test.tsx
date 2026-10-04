@@ -244,6 +244,9 @@ describe("SplatStageViewer", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Point cloud" }));
     expect(screen.getByRole("button", { name: "Front view" })).toBeInTheDocument();
+    fireEvent.focus(screen.getByRole("button", { name: "Front view" }));
+    expect(await screen.findByRole("tooltip", { name: "Frame the crop from the front" })).toBeInTheDocument();
+    fireEvent.blur(screen.getByRole("button", { name: "Front view" }));
     const camera = screen.getByRole("group", { name: "Camera" });
     const view = screen.getByRole("group", { name: "View" });
     const crop = screen.getByRole("group", { name: "Crop" });
@@ -584,5 +587,7 @@ describe("SplatStageViewer", () => {
 
     expect(await screen.findByText("mode: colmap_points")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Crop" })).not.toBeInTheDocument();
+    fireEvent.focus(screen.getByRole("button", { name: "Front view" }));
+    expect(await screen.findByRole("tooltip", { name: "View from the front" })).toBeInTheDocument();
   });
 });

@@ -75,7 +75,7 @@ function view(pointCloudUrl: string | null, cropBox: CropBox | null = null) {
 }
 
 describe("PublicSplatView", () => {
-  it("opens on the splat and switches to the point cloud with its controls", () => {
+  it("opens on the splat and switches to the point cloud with its controls", async () => {
     render(view("https://example.com/points.ply"));
     expect(screen.getByText("viewer: splat")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Orthographic camera" })).not.toBeInTheDocument();
@@ -87,6 +87,17 @@ describe("PublicSplatView", () => {
     fireEvent.click(screen.getByRole("button", { name: "Orthographic camera" }));
     expect(screen.getByRole("button", { name: "Front view" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Crop" })).not.toBeInTheDocument();
+
+    for (const [name, tooltip] of [
+      ["Front view", "View from the front"],
+      ["Side view", "View from the side"],
+      ["Top view", "View from the top"],
+    ] as const) {
+      const button = screen.getByRole("button", { name });
+      fireEvent.focus(button);
+      expect(await screen.findByRole("tooltip", { name: tooltip })).toBeInTheDocument();
+      fireEvent.blur(button);
+    }
   });
 
   it("shows how long each step took, without the owner's Share step", () => {
