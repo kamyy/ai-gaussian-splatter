@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { Analytics } from "./Analytics";
+import { Analytics } from "../Analytics";
 
 const { isSignedInMock } = vi.hoisted(() => ({ isSignedInMock: vi.fn<() => boolean | undefined>() }));
 vi.mock("@clerk/nextjs", () => ({ useAuth: () => ({ isSignedIn: isSignedInMock() }) }));

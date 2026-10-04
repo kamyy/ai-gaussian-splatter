@@ -2,7 +2,7 @@ import { Quaternion, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 
 import type { CameraPose, CropBox } from "@/lib/types";
-import { axisViewPose, fittedCropBox, framingFromCameras, trimmedBoundingBox } from "./cameraFraming";
+import { axisViewPose, fittedCropBox, framingFromCameras, trimmedBoundingBox } from "../cameraFraming";
 
 // A camera at `center` looking at `target`. Only the rotation's third row, the viewing direction, matters here.
 function lookingAt(center: [number, number, number], target: [number, number, number]): CameraPose {

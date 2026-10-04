@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DeleteAccountDialog } from "./DeleteAccountDialog";
+import { DeleteAccountDialog } from "../DeleteAccountDialog";
 
 const { signOutMock } = vi.hoisted(() => ({ signOutMock: vi.fn() }));
 vi.mock("@clerk/nextjs", () => ({

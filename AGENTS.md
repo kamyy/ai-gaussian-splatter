@@ -151,11 +151,12 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
   - A constant computed by calling a helper in the same file sits directly below that helper, because it can't run before the helper's own inputs exist. `POINTS` below `generatePoints` in `web/components/marketing/HeroPointCloud.tsx` is the pattern.
 - **Define a file's sub-components and helpers above the component that uses them**, so a file reads bottom-up to its main export. A sub-component used by another sub-component goes above that one too, as `Tip` sits above `ShootingTips` in `web/app/(authenticated)/splats/new/page.tsx`.
 - **A helper that only one file uses is defined in that file, not in a module of its own.** Tests don't count as a use here, so a helper used by one file and its tests still lives in that file.
-  - Export it only when its tests need it. Those tests go in the using file's own test file, as `pageItems` in `web/components/ui/Pager.tsx` is tested in `web/components/ui/Pager.test.tsx`.
+  - Export it only when its tests need it. Those tests go in the using file's own test file, as `pageItems` in `web/components/ui/Pager.tsx` is tested in `web/components/ui/tests/Pager.test.tsx`.
   - Once a second file uses it, move it under `web/lib/`.
 - **Export a name only when another file imports it.** Unlike the bullet above, a test file counts here, so a helper exported for its tests stays exported. A function, constant, type or interface that nothing outside its own file uses stays unexported.
   - A framework or tool that loads a name from the file is the other exemption: Next's `dynamic`, `generateMetadata` and `register`, and each Route Handler's `GET`/`POST`. So are the `pgEnum`s in `web/lib/server/db/schema.ts`, which Drizzle Kit reads from there to generate migrations.
 - **Every custom hook gets its own file in `web/lib/hooks/`, named after the hook** (`web/lib/hooks/useLatestJob.ts`). This holds even for a hook only one file uses. Its tests go in `web/lib/hooks/tests/`.
+- **A component's tests go in a `tests` folder beside that component**, the same way a hook's do. `web/components/ui/Pager.tsx` is tested in `web/components/ui/tests/Pager.test.tsx`.
 - **Components import icons from `web/components/ui/icons.ts`, never from `react-icons` directly.** A new icon gets an alias there named for what it means on screen (`RemovePhotoIcon`, not `XIcon`), under the commented group for where it appears.
   - Reusing an icon for a different meaning gets its own alias, as `LuImage` is both `PhotoPlaceholderIcon` and `ThumbnailPlaceholderIcon`.
   - Write each alias as `export const RemovePhotoIcon = LuX;`. Biome's import sorting merges `export { LuX as RemovePhotoIcon }` lists into one block and drops the group comments.

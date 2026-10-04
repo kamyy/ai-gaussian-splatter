@@ -2,7 +2,7 @@ import { BufferGeometry, Float32BufferAttribute, Uint8BufferAttribute } from "th
 import { describe, expect, it } from "vitest";
 
 import type { CropBox } from "@/lib/types";
-import { croppedGeometry } from "./PointCloudScene";
+import { croppedGeometry } from "../PointCloudScene";
 
 const UNIT_BOX: CropBox = { center: [0, 0, 0], size: [2, 2, 2], quaternion: [0, 0, 0, 1] };
 

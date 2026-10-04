@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { NewSplatForm } from "./NewSplatForm";
+import { NewSplatForm } from "../NewSplatForm";
 
 const { getTokenMock } = vi.hoisted(() => ({ getTokenMock: vi.fn() }));
 vi.mock("@clerk/nextjs", () => ({

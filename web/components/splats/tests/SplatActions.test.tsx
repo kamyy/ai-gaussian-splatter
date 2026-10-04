@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DiscardSplatButton, StopJobButton } from "./SplatActions";
+import { DiscardSplatButton, StopJobButton } from "../SplatActions";
 
 vi.mock("@clerk/nextjs", () => ({
   useAuth: () => ({ getToken: async () => "test-token" }),

@@ -38,7 +38,7 @@ export default defineConfig({
           setupFiles: ["./tests/jsdom-setup.ts"],
           include: [
             "app/**/*.test.{ts,tsx}",
-            "components/**/*.test.{ts,tsx}",
+            "components/**/tests/*.test.{ts,tsx}",
             "lib/tests/*.test.ts",
             "lib/hooks/tests/*.test.ts",
           ],

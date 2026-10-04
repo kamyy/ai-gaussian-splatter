@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { PhotoListItem } from "@/lib/types";
 
-import { PhotoGrid } from "./PhotoGrid";
+import { PhotoGrid } from "../PhotoGrid";
 
 // jsdom does no layout, so the grid reports a fixed width. At 392 wide with the default 16px root font, a row holds
 // three 4:3 photos at 95px tall, so a page of three rows holds 9.
