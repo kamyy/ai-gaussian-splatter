@@ -1,5 +1,6 @@
 @import "tailwindcss";
 
+/* --- Color tokens ----------------------------------------------------------------- */
 /* Gallery color tokens. :root holds the light palette, the default for a visitor who never gets [data-theme] set (JS
 disabled, pre-hydration). next-themes sets [data-theme] on <html> before paint (web/app/layout.tsx).
 --color-muted is the recessed surface the 3D viewers and thumbnails sit on, one step off the page ground.
@@ -39,6 +40,7 @@ faint for that. */
   --raised-shade: rgb(0 0 0 / 0.5);
 }
 
+/* --- Theme ------------------------------------------------------------------------ */
 /* `inline` makes each utility read the variable at paint time, against whichever [data-theme] is active, instead of
 copying today's value in at build time. It is required because Tailwind can't otherwise know these tokens change at
 runtime. */
@@ -59,6 +61,7 @@ runtime. */
   --font-body: var(--font-body), Arial, Helvetica, sans-serif;
 }
 
+/* --- Working animation ------------------------------------------------------------ */
 /* An indeterminate progress bar's sweep (web/components/splats/StageCard.tsx), exposed as `animate-working`. */
 @theme {
   --animate-working: working 1.6s ease-in-out infinite;
@@ -73,6 +76,7 @@ runtime. */
   }
 }
 
+/* --- Page width ------------------------------------------------------------------- */
 /* The widest the site's content gets, centred in the window. The header and every page share it, so the header's
 content lines up with the page's on a wide monitor. */
 @utility page-width {
@@ -80,6 +84,7 @@ content lines up with the page's on a wide monitor. */
   max-width: var(--breakpoint-2xl);
 }
 
+/* --- Text link -------------------------------------------------------------------- */
 /* An inline text link, such as one in a paragraph of the legal pages. */
 @utility text-link {
   color: var(--color-primary);
@@ -87,6 +92,7 @@ content lines up with the page's on a wide monitor. */
   text-underline-offset: 2px;
 }
 
+/* --- Raised ----------------------------------------------------------------------- */
 /* The raised finish of the controls floating over the 3D viewer (web/components/splats/SplatStageViewer.tsx), which
 lifts them off whatever the scene shows. The gradient is a translucent sheen laid over the element's own
 background color, so one utility works on any fill. Each element still sets that fill with a bg-* class. */
@@ -115,6 +121,7 @@ transition class that covers box-shadow, such as `transition`. */
   }
 }
 
+/* --- Base ------------------------------------------------------------------------- */
 /* In the base layer so Tailwind's utilities can override these element rules, such as a link styled by
 web/components/ui/Button.tsx's buttonClassName. An unlayered rule beats every layered one regardless of specificity. */
 @layer base {

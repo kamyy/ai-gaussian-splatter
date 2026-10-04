@@ -12,6 +12,7 @@
 #
 # The ALB's own access-log bucket is here rather than in infra/data.tf, because nothing but the load balancer writes it.
 
+# --- Execution role -------------------------------------------------------------------
 resource "aws_iam_role" "execution" {
   name               = local.execution_role_name
   assume_role_policy = local.ecs_tasks_assume_role_policy
@@ -85,14 +86,13 @@ resource "aws_iam_role_policy" "execution" {
   }
 }
 
-# ---------------------------------------------------------------------------
-# Migration task. It runs `node web/scripts/db-migrate.cjs` (web/Dockerfile's `migrator` stage) as a one-off
+# --- Migration task -------------------------------------------------------------------
+# The migration task runs `node web/scripts/db-migrate.cjs` (web/Dockerfile's `migrator` stage) as a one-off
 # ecs:RunTask before the service's own rollout. See ARCHITECTURE.md for why migrations can't run when a container
 # boots. execution_role is reused as-is, since it already has the ECR pull and DB secret read this container needs to
 # start. The migration task role gets its own fixed name, so RUNBOOK.md can name it literally the same way it names
 # execution_role. That role needs no grants at all, because the container only opens a TCP connection to RDS and makes
 # no AWS API calls.
-# ---------------------------------------------------------------------------
 
 resource "aws_iam_role" "migration_task" {
   name               = local.migration_task_role_name
@@ -130,6 +130,7 @@ resource "aws_ecs_task_definition" "migration" {
   }])
 }
 
+# --- Task role ------------------------------------------------------------------------
 resource "aws_iam_role" "task" {
   name               = "ai-gaussian-splatter-task"
   assume_role_policy = local.ecs_tasks_assume_role_policy
@@ -277,10 +278,7 @@ resource "aws_iam_role_policy" "task" {
   })
 }
 
-# ---------------------------------------------------------------------------
-# TLS / DNS
-# ---------------------------------------------------------------------------
-
+# --- TLS / DNS ------------------------------------------------------------------------
 resource "aws_acm_certificate" "web" {
   domain_name       = local.app_hostname
   validation_method = "DNS"
@@ -310,10 +308,7 @@ resource "aws_acm_certificate_validation" "web" {
   validation_record_fqdns = [aws_route53_record.cert_validation[0].fqdn]
 }
 
-# ---------------------------------------------------------------------------
-# Load balancer
-# ---------------------------------------------------------------------------
-
+# --- Load balancer --------------------------------------------------------------------
 # Without this bucket the app's own logs would be the only record of who called, and those cover only requests its
 # handlers actually received, not the requests the ALB rejected or redirected first. 90 days is how far back an abuse
 # investigation is likely to reach.
@@ -477,10 +472,7 @@ resource "aws_vpc_security_group_ingress_rule" "web_from_alb" {
   ip_protocol                  = "tcp"
 }
 
-# ---------------------------------------------------------------------------
-# ECS cluster + web service
-# ---------------------------------------------------------------------------
-
+# --- ECS cluster + web service --------------------------------------------------------
 resource "aws_ecs_cluster" "main" {
   name = local.cluster_name
 

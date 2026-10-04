@@ -6,10 +6,7 @@
 # .tf files at once.
 
 locals {
-  # ---------------------------------------------------------------------------
-  # Tags and fixed names
-  # ---------------------------------------------------------------------------
-
+  # --- Tags and fixed names -----------------------------------------------------------
   project_tag = "ai-gaussian-splatter"
 
   # EC2 has no native "restrict to the calling/launched instance" condition, so the worker's self-termination
@@ -41,10 +38,7 @@ locals {
   # --task-definition ai-gaussian-splatter-migrate`) rather than looking it up.
   migration_task_family = "ai-gaussian-splatter-migrate"
 
-  # ---------------------------------------------------------------------------
-  # Network and DNS
-  # ---------------------------------------------------------------------------
-
+  # --- Network and DNS ----------------------------------------------------------------
   availability_zones = [for suffix in ["a", "b"] : "${var.aws_region}${suffix}"]
 
   # The one subnet the worker's spot instance ever launches into (web/lib/server/workerLauncher.ts's SubnetId). A
@@ -60,10 +54,7 @@ locals {
   # are matched against the browser's Origin header exactly.
   app_origin = "https://${local.app_hostname}"
 
-  # ---------------------------------------------------------------------------
-  # Container images
-  # ---------------------------------------------------------------------------
-
+  # --- Container images ---------------------------------------------------------------
   # The registry hostname web/lib/server/workerLauncher.ts's user-data logs into before pulling. It is built from
   # account/region directly rather than parsed out of aws_ecr_repository.worker.repository_url, matching how
   # .github/workflows/deploy.yml and RUNBOOK.md construct the same string for their own docker/podman logins.
@@ -85,20 +76,14 @@ locals {
   # releases. See infra/registry.tf.
   worker_releases_kept = 2
 
-  # ---------------------------------------------------------------------------
-  # Alarms
-  # ---------------------------------------------------------------------------
-
+  # --- Alarms -------------------------------------------------------------------------
   # First guesses for infra/alarms.tf, to be tuned once real traffic shows what normal looks like.
   alarm_period_seconds = 300
   alarm_5xx_threshold  = 5
   # 10% of the 20 GB aws_db_instance.main allocates.
   alarm_rds_free_storage_bytes = 2 * 1024 * 1024 * 1024
 
-  # ---------------------------------------------------------------------------
-  # Database wiring
-  # ---------------------------------------------------------------------------
-
+  # --- Database wiring ----------------------------------------------------------------
   database_name = "ai_gaussian_splatter"
 
   # Where web/Dockerfile downloads Amazon's RDS global CA bundle, in both of its stages. Must match that path.
@@ -126,10 +111,7 @@ locals {
     { name = "DATABASE_PASSWORD", valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:password::" },
   ]
 
-  # ---------------------------------------------------------------------------
-  # Runtime settings
-  # ---------------------------------------------------------------------------
-
+  # --- Runtime settings ---------------------------------------------------------------
   # The SSM Parameter Store path infra/settings.tf creates the runtime settings under. The web service reads every
   # parameter below it (web/lib/server/runtimeSettings.ts).
   settings_path = "/ai-gaussian-splatter/settings"
@@ -151,10 +133,7 @@ locals {
     "showcase-clerk-user-id" = "none"
   }
 
-  # ---------------------------------------------------------------------------
-  # Web container runtime
-  # ---------------------------------------------------------------------------
-
+  # --- Web container runtime ----------------------------------------------------------
   # Single source of truth for the Next.js container's listen port, used by the task definition, the target
   # group health check, and the ALB-to-tasks security group rule. web/Dockerfile's PORT is the one copy that
   # has to be kept in sync by hand.
@@ -168,10 +147,7 @@ locals {
   # Must stay above alb_idle_timeout_seconds or the ALB serves intermittent 502s. See AGENTS.md.
   keep_alive_timeout_ms = tostring(local.alb_idle_timeout_seconds * 1000 + 5000)
 
-  # ---------------------------------------------------------------------------
-  # Policy documents
-  # ---------------------------------------------------------------------------
-
+  # --- Policy documents ---------------------------------------------------------------
   # The trust policy shared by every ECS task role in infra/web.tf.
   ecs_tasks_assume_role_policy = jsonencode({
     Version = "2012-10-17"
