@@ -24,9 +24,10 @@ vi.mock("@/lib/server/s3", async importOriginal => {
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { jobs, photos, rateLimitCounters, splats, users } from "@/lib/server/db/schema";
+import { JobStatus, PhotoUploadStatus } from "@/lib/statuses";
 import { DELETE } from "./route";
 
-async function seedSplat(clerkUserId: string, jobStatus: "training_running" | "complete", instanceId: string) {
+async function seedSplat(clerkUserId: string, jobStatus: JobStatus, instanceId: string) {
   const user = await getOrCreateUser(clerkUserId);
   const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "obj" }).returning();
   await getDb()
@@ -36,7 +37,7 @@ async function seedSplat(clerkUserId: string, jobStatus: "training_running" | "c
       s3Key: `splats/${splat.id}/photos/a.jpg`,
       originalFilename: "a.jpg",
       contentType: "image/jpeg",
-      uploadStatus: "uploaded",
+      uploadStatus: PhotoUploadStatus.uploaded,
     });
   await getDb()
     .insert(jobs)
@@ -60,8 +61,8 @@ describe("DELETE /api/v1/account", () => {
   });
 
   it("stops running workers, deletes every row and S3 object the user owns, then deletes the Clerk user", async () => {
-    const { user, splat: running } = await seedSplat("clerk-user-1", "training_running", "i-running");
-    const { splat: finished } = await seedSplat("clerk-user-1", "complete", "i-finished");
+    const { user, splat: running } = await seedSplat("clerk-user-1", JobStatus.training_running, "i-running");
+    const { splat: finished } = await seedSplat("clerk-user-1", JobStatus.complete, "i-finished");
     await getDb()
       .insert(rateLimitCounters)
       .values([
@@ -83,8 +84,8 @@ describe("DELETE /api/v1/account", () => {
   });
 
   it("leaves other users' rows alone", async () => {
-    await seedSplat("clerk-user-1", "complete", "i-mine");
-    const { user: other, splat: theirs } = await seedSplat("clerk-user-2", "training_running", "i-theirs");
+    await seedSplat("clerk-user-1", JobStatus.complete, "i-mine");
+    const { user: other, splat: theirs } = await seedSplat("clerk-user-2", JobStatus.training_running, "i-theirs");
 
     await DELETE();
 
@@ -96,7 +97,7 @@ describe("DELETE /api/v1/account", () => {
 
   it("deletes nothing when a worker can't be stopped", async () => {
     terminateWorkerMock.mockRejectedValueOnce(new Error("UnauthorizedOperation"));
-    await seedSplat("clerk-user-1", "training_running", "i-running");
+    await seedSplat("clerk-user-1", JobStatus.training_running, "i-running");
 
     await expect(DELETE()).rejects.toThrow("UnauthorizedOperation");
     expect(await getDb().select().from(splats)).toHaveLength(1);
@@ -105,7 +106,7 @@ describe("DELETE /api/v1/account", () => {
   });
 
   it("removes a user row that another tab's request recreated before Clerk deleted the user", async () => {
-    await seedSplat("clerk-user-1", "complete", "i-finished");
+    await seedSplat("clerk-user-1", JobStatus.complete, "i-finished");
     deleteUserMock.mockImplementationOnce(async clerkUserId => {
       await getOrCreateUser(clerkUserId);
       return {};
@@ -132,7 +133,7 @@ describe("DELETE /api/v1/account", () => {
   it("still deletes the rows and the Clerk user when S3 cleanup fails", async () => {
     deleteSplatObjectsMock.mockRejectedValueOnce(new Error("AccessDenied"));
     vi.spyOn(console, "error").mockImplementation(() => {});
-    await seedSplat("clerk-user-1", "complete", "i-finished");
+    await seedSplat("clerk-user-1", JobStatus.complete, "i-finished");
 
     const res = await DELETE();
     expect(res.status).toBe(204);

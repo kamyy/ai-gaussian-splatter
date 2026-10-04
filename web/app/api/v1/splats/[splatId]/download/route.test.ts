@@ -8,7 +8,7 @@ vi.mock("@clerk/nextjs/server", () => ({
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { jobs, splats, users } from "@/lib/server/db/schema";
-import type { JobStatus, SplatStatus } from "@/lib/statuses";
+import { JobStatus, SplatStatus } from "@/lib/statuses";
 import { GET } from "./route";
 
 function ctx(splatId: string) {
@@ -50,7 +50,7 @@ describe("GET /api/v1/splats/[splatId]/download", () => {
   }
 
   it("returns the lossless .ply, not the .spz the viewer loads", async () => {
-    const splat = await seed("complete", "complete", "splats/x/result.ply");
+    const splat = await seed(SplatStatus.complete, JobStatus.complete, "splats/x/result.ply");
 
     const res = await GET({} as never, ctx(splat.id));
     expect(res.status).toBe(200);
@@ -58,7 +58,7 @@ describe("GET /api/v1/splats/[splatId]/download", () => {
   });
 
   it("returns the cropped .ply once the owner has cropped the splat", async () => {
-    const splat = await seed("complete", "complete", "splats/x/result.ply");
+    const splat = await seed(SplatStatus.complete, JobStatus.complete, "splats/x/result.ply");
     await getDb().update(jobs).set({ croppedResultPlyS3Key: "splats/x/crops/c1/result.ply" });
 
     const res = await GET({} as never, ctx(splat.id));
@@ -66,14 +66,14 @@ describe("GET /api/v1/splats/[splatId]/download", () => {
   });
 
   it("404s before the splat is complete", async () => {
-    const splat = await seed("processing", "training_running", null);
+    const splat = await seed(SplatStatus.processing, JobStatus.training_running, null);
 
     const res = await GET({} as never, ctx(splat.id));
     expect(res.status).toBe(404);
   });
 
   it("404s for a finished splat the caller doesn't own", async () => {
-    const splat = await seed("complete", "complete", "splats/x/result.ply", "clerk-user-2");
+    const splat = await seed(SplatStatus.complete, JobStatus.complete, "splats/x/result.ply", "clerk-user-2");
 
     const res = await GET({} as never, ctx(splat.id));
     expect(res.status).toBe(404);

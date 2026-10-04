@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { closeDb, getDb } from "@/lib/server/db";
 import { jobs, splats, users } from "@/lib/server/db/schema";
+import { JobStatus, SplatStatus } from "@/lib/statuses";
 import { GET } from "./route";
 
 function ctx(splatId: string) {
@@ -25,11 +26,11 @@ describe("GET /api/v1/public/splats/[splatId]", () => {
     const [user] = await getDb().insert(users).values({ clerkUserId: "u1" }).returning();
     const [splat] = await getDb()
       .insert(splats)
-      .values({ userId: user.id, name: "Mug", status: "complete", thumbnailS3Key: "t.jpg", isShareable })
+      .values({ userId: user.id, name: "Mug", status: SplatStatus.complete, thumbnailS3Key: "t.jpg", isShareable })
       .returning();
     await getDb()
       .insert(jobs)
-      .values({ splatId: splat.id, callbackToken: "tok", status: "complete", resultSpzS3Key: "r.spz" });
+      .values({ splatId: splat.id, callbackToken: "tok", status: JobStatus.complete, resultSpzS3Key: "r.spz" });
     return splat;
   }
 

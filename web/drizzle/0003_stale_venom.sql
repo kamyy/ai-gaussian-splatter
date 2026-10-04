@@ -1,1 +1,0 @@
-DROP TABLE "gallery_items" CASCADE;

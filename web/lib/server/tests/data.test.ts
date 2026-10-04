@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { JobStatus, PhotoUploadStatus, SplatStatus } from "@/lib/statuses";
 import type { CropBox } from "@/lib/types";
 import { getExampleSplats, getPublicSplat, getPublicSplatView } from "../data";
 import { closeDb, getDb } from "../db";
@@ -23,11 +24,16 @@ describe("getPublicSplat", () => {
     const [user] = await getDb().insert(users).values({ clerkUserId: "u1" }).returning();
     const [splat] = await getDb()
       .insert(splats)
-      .values({ userId: user.id, name: "Mug", status: "complete", thumbnailS3Key: "splats/x/thumbnail.jpg" })
+      .values({ userId: user.id, name: "Mug", status: SplatStatus.complete, thumbnailS3Key: "splats/x/thumbnail.jpg" })
       .returning();
     const [job] = await getDb()
       .insert(jobs)
-      .values({ splatId: splat.id, callbackToken: "tok", status: "complete", resultSpzS3Key: "splats/x/result.spz" })
+      .values({
+        splatId: splat.id,
+        callbackToken: "tok",
+        status: JobStatus.complete,
+        resultSpzS3Key: "splats/x/result.spz",
+      })
       .returning();
     return { splat, job };
   }
@@ -72,7 +78,7 @@ describe("getPublicSplat", () => {
 
   it("hides a splat that isn't complete", async () => {
     const { splat } = await seedShared();
-    await getDb().update(splats).set({ status: "processing" }).where(eq(splats.id, splat.id));
+    await getDb().update(splats).set({ status: SplatStatus.processing }).where(eq(splats.id, splat.id));
 
     expect(await getPublicSplat(splat.id)).toBeNull();
   });
@@ -102,7 +108,7 @@ describe("getPublicSplat", () => {
       .values({
         splatId: splat.id,
         callbackToken: "tok-2",
-        status: "complete",
+        status: JobStatus.complete,
         resultSpzS3Key: "splats/x/retrained.spz",
         createdAt: new Date("2026-01-02T00:00:00Z"),
       });
@@ -139,14 +145,17 @@ describe("getPublicSplatView", () => {
       .values({
         userId: user.id,
         name: "Mug",
-        status: "complete",
+        status: SplatStatus.complete,
         thumbnailS3Key: "splats/x/thumbnail.jpg",
         isShareable,
       })
       .returning();
-    await getDb()
-      .insert(jobs)
-      .values({ splatId: splat.id, callbackToken: "tok", status: "complete", resultSpzS3Key: "splats/x/result.spz" });
+    await getDb().insert(jobs).values({
+      splatId: splat.id,
+      callbackToken: "tok",
+      status: JobStatus.complete,
+      resultSpzS3Key: "splats/x/result.spz",
+    });
     return splat;
   }
 
@@ -157,7 +166,7 @@ describe("getPublicSplatView", () => {
       originalFilename: `${name}.jpg`,
       contentType: "image/jpeg",
       thumbnailS3Key: `splats/x/photo-thumbnails/${name}.jpg`,
-      uploadStatus: "uploaded" as const,
+      uploadStatus: PhotoUploadStatus.uploaded,
       ...overrides,
     };
   }
@@ -177,7 +186,7 @@ describe("getPublicSplatView", () => {
         photo(splat.id, "late", { takenAt: new Date("2026-01-02T00:00:00Z") }),
         photo(splat.id, "early", { takenAt: new Date("2026-01-01T00:00:00Z") }),
         photo(splat.id, "legacy", { thumbnailS3Key: null }),
-        photo(splat.id, "pending", { uploadStatus: "pending" }),
+        photo(splat.id, "pending", { uploadStatus: PhotoUploadStatus.pending }),
       ]);
 
     const view = await getPublicSplatView(splat.id);
@@ -227,14 +236,20 @@ describe("getExampleSplats", () => {
   async function seedExample(userId: string, name: string, overrides: Partial<typeof splats.$inferInsert> = {}) {
     const [splat] = await getDb()
       .insert(splats)
-      .values({ userId, name, status: "complete", thumbnailS3Key: `splats/${name}/thumbnail.jpg`, ...overrides })
+      .values({
+        userId,
+        name,
+        status: SplatStatus.complete,
+        thumbnailS3Key: `splats/${name}/thumbnail.jpg`,
+        ...overrides,
+      })
       .returning();
     await getDb()
       .insert(jobs)
       .values({
         splatId: splat.id,
         callbackToken: `tok-${name}`,
-        status: "complete",
+        status: JobStatus.complete,
         resultSpzS3Key: `splats/${name}/result.spz`,
       });
     return splat;
@@ -245,14 +260,19 @@ describe("getExampleSplats", () => {
     const other = await seedUser("someone-else");
     await seedExample(owner.id, "shown");
     await seedExample(owner.id, "private", { isShareable: false });
-    await seedExample(owner.id, "processing", { status: "processing" });
+    await seedExample(owner.id, "processing", { status: SplatStatus.processing });
     await seedExample(owner.id, "no-preview", { thumbnailS3Key: null });
     await seedExample(other.id, "not-theirs");
     const [noSpz] = await getDb()
       .insert(splats)
-      .values({ userId: owner.id, name: "no-spz", status: "complete", thumbnailS3Key: "splats/no-spz/thumbnail.jpg" })
+      .values({
+        userId: owner.id,
+        name: "no-spz",
+        status: SplatStatus.complete,
+        thumbnailS3Key: "splats/no-spz/thumbnail.jpg",
+      })
       .returning();
-    await getDb().insert(jobs).values({ splatId: noSpz.id, callbackToken: "tok-no-spz", status: "complete" });
+    await getDb().insert(jobs).values({ splatId: noSpz.id, callbackToken: "tok-no-spz", status: JobStatus.complete });
 
     const examples = await getExampleSplats("showcase");
 
@@ -271,7 +291,7 @@ describe("getExampleSplats", () => {
       .values({
         splatId: splat.id,
         callbackToken: "tok-newer",
-        status: "complete",
+        status: JobStatus.complete,
         createdAt: new Date("2026-01-02T00:00:00Z"),
       });
 
@@ -321,7 +341,7 @@ describe("getExampleSplats", () => {
       originalFilename: `${name}.jpg`,
       contentType: "image/jpeg",
       thumbnailS3Key: `splats/mug/photo-thumbnails/${name}.jpg`,
-      uploadStatus: "uploaded" as const,
+      uploadStatus: PhotoUploadStatus.uploaded,
       ...overrides,
     });
     await getDb()
@@ -330,7 +350,7 @@ describe("getExampleSplats", () => {
         photo("late", { takenAt: new Date("2026-01-02T00:00:00Z") }),
         photo("early", { takenAt: new Date("2026-01-01T00:00:00Z"), width: 3024, height: 4032 }),
         photo("legacy", { thumbnailS3Key: null, takenAt: new Date("2025-12-31T00:00:00Z") }),
-        photo("pending", { uploadStatus: "pending" }),
+        photo("pending", { uploadStatus: PhotoUploadStatus.pending }),
       ]);
 
     const [example] = await getExampleSplats("showcase");

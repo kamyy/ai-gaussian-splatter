@@ -19,7 +19,7 @@ vi.mock("@/lib/server/workerLauncher", async importOriginal => {
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { jobs, splats, users } from "@/lib/server/db/schema";
-import type { JobStatus } from "@/lib/statuses";
+import { JobStatus, SplatStatus } from "@/lib/statuses";
 import { reconcileJob } from "../reconcileJob";
 
 const MINUTE = 60 * 1000;
@@ -41,7 +41,7 @@ describe("reconcileJob", () => {
     const user = await getOrCreateUser("clerk-user-1");
     const [splat] = await getDb()
       .insert(splats)
-      .values({ userId: user.id, name: "obj", status: "processing" })
+      .values({ userId: user.id, name: "obj", status: SplatStatus.processing })
       .returning();
     const [job] = await getDb()
       .insert(jobs)
@@ -65,14 +65,14 @@ describe("reconcileJob", () => {
   }
 
   it("leaves a job alone while its callbacks are recent, without looking the instance up", async () => {
-    const job = await seed("reconstruction_running", 5);
+    const job = await seed(JobStatus.reconstruction_running, 5);
 
     expect(await reconcileJob(job)).toBe(false);
     expect(describeWorkerMock).not.toHaveBeenCalled();
   });
 
   it("leaves a quiet job alone while its instance is running inside the ceiling", async () => {
-    const job = await seed("reconstruction_running", 30);
+    const job = await seed(JobStatus.reconstruction_running, 30);
     describeWorkerMock.mockResolvedValueOnce({
       state: "running",
       launchTime: new Date(Date.now() - 20 * MINUTE),
@@ -84,7 +84,7 @@ describe("reconcileJob", () => {
   });
 
   it("fails a job whose instance has terminated", async () => {
-    const job = await seed("training_running", 30);
+    const job = await seed(JobStatus.training_running, 30);
     describeWorkerMock.mockResolvedValueOnce({
       state: "terminated",
       launchTime: new Date(Date.now() - 40 * MINUTE),
@@ -101,7 +101,7 @@ describe("reconcileJob", () => {
   });
 
   it("fails a job whose instance EC2 no longer knows about", async () => {
-    const job = await seed("launching", 30);
+    const job = await seed(JobStatus.launching, 30);
     describeWorkerMock.mockResolvedValueOnce(null);
 
     expect(await reconcileJob(job)).toBe(true);
@@ -109,7 +109,7 @@ describe("reconcileJob", () => {
   });
 
   it("terminates an instance running past its own ceiling and fails its job", async () => {
-    const job = await seed("training_running", 30);
+    const job = await seed(JobStatus.training_running, 30);
     describeWorkerMock.mockResolvedValueOnce({
       state: "running",
       launchTime: new Date(Date.now() - 60 * MINUTE),
@@ -126,7 +126,7 @@ describe("reconcileJob", () => {
   });
 
   it("leaves an instance inside the longer ceiling it was launched with", async () => {
-    const job = await seed("training_running", 30);
+    const job = await seed(JobStatus.training_running, 30);
     describeWorkerMock.mockResolvedValueOnce({
       state: "running",
       launchTime: new Date(Date.now() - 60 * MINUTE),
@@ -138,7 +138,7 @@ describe("reconcileJob", () => {
   });
 
   it("gives an instance with no lifetime tag the longest ceiling the setting allows", async () => {
-    const job = await seed("training_running", 30);
+    const job = await seed(JobStatus.training_running, 30);
     describeWorkerMock.mockResolvedValueOnce({
       state: "running",
       launchTime: new Date(Date.now() - 200 * MINUTE),
@@ -150,16 +150,16 @@ describe("reconcileJob", () => {
   });
 
   it("leaves a job awaiting training alone, since no instance runs then", async () => {
-    const job = await seed("awaiting_training", 300);
+    const job = await seed(JobStatus.awaiting_training, 300);
 
     expect(await reconcileJob(job)).toBe(false);
     expect(describeWorkerMock).not.toHaveBeenCalled();
   });
 
   it("doesn't fail a reconstruct stage that finished and terminated its instance during the lookup", async () => {
-    const job = await seed("reconstruction_running", 30);
+    const job = await seed(JobStatus.reconstruction_running, 30);
     describeWorkerMock.mockImplementationOnce(async () => {
-      await getDb().update(jobs).set({ status: "awaiting_training" }).where(eq(jobs.id, job.id));
+      await getDb().update(jobs).set({ status: JobStatus.awaiting_training }).where(eq(jobs.id, job.id));
       return { state: "shutting-down", launchTime: new Date(Date.now() - 20 * MINUTE), maxLifetimeMinutes: 30 };
     });
 
@@ -168,7 +168,7 @@ describe("reconcileJob", () => {
   });
 
   it("doesn't fail a job whose instance was replaced during the lookup", async () => {
-    const job = await seed("training_running", 30);
+    const job = await seed(JobStatus.training_running, 30);
     describeWorkerMock.mockImplementationOnce(async () => {
       await getDb().update(jobs).set({ ec2InstanceId: "i-0def456" }).where(eq(jobs.id, job.id));
       return null;
@@ -179,9 +179,9 @@ describe("reconcileJob", () => {
   });
 
   it("doesn't overwrite a job that ended during the lookup", async () => {
-    const job = await seed("training_running", 30);
+    const job = await seed(JobStatus.training_running, 30);
     describeWorkerMock.mockImplementationOnce(async () => {
-      await getDb().update(jobs).set({ status: "complete" }).where(eq(jobs.id, job.id));
+      await getDb().update(jobs).set({ status: JobStatus.complete }).where(eq(jobs.id, job.id));
       return null;
     });
 

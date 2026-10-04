@@ -1,1 +1,0 @@
-ALTER TABLE "jobs" RENAME COLUMN "colmap_point_cloud_s3_key" TO "point_cloud_s3_key";

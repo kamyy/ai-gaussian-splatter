@@ -14,6 +14,7 @@ vi.mock("@/lib/server/s3", async importOriginal => {
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { jobs, splats, users } from "@/lib/server/db/schema";
+import { JobStatus } from "@/lib/statuses";
 import { GET } from "./route";
 
 const POSE = {
@@ -53,7 +54,7 @@ describe("GET /api/v1/splats/[splatId]/cameras", () => {
     const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "obj" }).returning();
     await getDb()
       .insert(jobs)
-      .values({ splatId: splat.id, callbackToken: "tok", status: "awaiting_training", pointCloudS3Key });
+      .values({ splatId: splat.id, callbackToken: "tok", status: JobStatus.awaiting_training, pointCloudS3Key });
     return splat;
   }
 

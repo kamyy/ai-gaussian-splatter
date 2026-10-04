@@ -4,6 +4,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { closeDb, getDb } from "@/lib/server/db";
 import { jobs, splats, users } from "@/lib/server/db/schema";
+import { JobStatus } from "@/lib/statuses";
 import { PATCH } from "./route";
 
 const EARLIER = new Date("2026-01-01T00:00:00Z");
@@ -60,7 +61,7 @@ describe("worker status callback", () => {
     // be processed again. Letting that worker wake up and write a non-terminal status back would give the splat a
     // second active job and trip uq_jobs_splat_id_active.
     const { job } = await seed();
-    await getDb().update(jobs).set({ status: "cancelled" }).where(eq(jobs.id, job.id));
+    await getDb().update(jobs).set({ status: JobStatus.cancelled }).where(eq(jobs.id, job.id));
 
     const res = await PATCH(req("tok", { status: "reconstruction_running" }), ctx(job.id));
     expect(res.status).toBe(204);
@@ -75,7 +76,7 @@ describe("worker status callback", () => {
     const { job } = await seed();
     await getDb()
       .update(jobs)
-      .set({ status: "reconstruction_running", colmapStartedAt: EARLIER })
+      .set({ status: JobStatus.reconstruction_running, colmapStartedAt: EARLIER })
       .where(eq(jobs.id, job.id));
 
     await PATCH(req("tok", { status: "reconstruction_running" }), ctx(job.id));
@@ -215,7 +216,7 @@ describe("worker status callback", () => {
     const { job } = await seed();
     await getDb()
       .update(jobs)
-      .set({ status: "uploading_result", trainingFinishedAt: EARLIER })
+      .set({ status: JobStatus.uploading_result, trainingFinishedAt: EARLIER })
       .where(eq(jobs.id, job.id));
 
     await PATCH(req("tok", { status: "uploading_result" }), ctx(job.id));
@@ -226,7 +227,7 @@ describe("worker status callback", () => {
 
   it.each([
     ["a PascalCase spelling", "ReconstructionRunning"],
-    ["the enum's unused label", "colmap_running"],
+    ["an unknown status", "colmap_running"],
   ])("rejects %s as a status", async (_label, status) => {
     const { job } = await seed();
     const res = await PATCH(req("tok", { status }), ctx(job.id));

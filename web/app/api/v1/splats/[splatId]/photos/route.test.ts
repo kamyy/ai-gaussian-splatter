@@ -8,6 +8,7 @@ vi.mock("@clerk/nextjs/server", () => ({
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { photos, splats, users } from "@/lib/server/db/schema";
+import { PhotoUploadStatus } from "@/lib/statuses";
 import type { PhotoListItem } from "@/lib/types";
 import { GET } from "./route";
 
@@ -39,7 +40,7 @@ describe("GET /api/v1/splats/[splatId]/photos", () => {
           contentType: "image/jpeg",
           width: 3024,
           height: 4032,
-          uploadStatus: "uploaded",
+          uploadStatus: PhotoUploadStatus.uploaded,
           createdAt: new Date("2026-01-01T00:01:00Z"),
         },
         {
@@ -50,7 +51,7 @@ describe("GET /api/v1/splats/[splatId]/photos", () => {
           contentType: "image/jpeg",
           width: 4032,
           height: 3024,
-          uploadStatus: "uploaded",
+          uploadStatus: PhotoUploadStatus.uploaded,
           createdAt: new Date("2026-01-01T00:00:00Z"),
         },
         {
@@ -60,7 +61,7 @@ describe("GET /api/v1/splats/[splatId]/photos", () => {
           contentType: "image/jpeg",
           width: 4032,
           height: 3024,
-          uploadStatus: "pending",
+          uploadStatus: PhotoUploadStatus.pending,
           createdAt: new Date("2026-01-01T00:02:00Z"),
         },
       ]);
@@ -92,7 +93,7 @@ describe("GET /api/v1/splats/[splatId]/photos", () => {
         width: 4032,
         height: 3024,
         takenAt,
-        uploadStatus: "uploaded" as const,
+        uploadStatus: PhotoUploadStatus.uploaded,
         createdAt,
       };
     }

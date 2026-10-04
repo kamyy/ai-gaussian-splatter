@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { splatBadge } from "../splatBadge";
-import { JOB_STATUSES } from "../statuses";
+import { JobStatus } from "../statuses";
 
 describe("splatBadge", () => {
   it("shows a splat with no job as a dead end without photos, and ready to start with them", () => {
@@ -14,13 +14,13 @@ describe("splatBadge", () => {
   });
 
   it("gives every job status a badge", () => {
-    for (const status of JOB_STATUSES) {
+    for (const status of Object.values(JobStatus)) {
       expect(splatBadge({ photoCount: 3, latestJobStatus: status })?.label).toBeTruthy();
     }
   });
 
   it("lists only the splats waiting on the visitor under needs_you", () => {
-    const needsYou = JOB_STATUSES.filter(
+    const needsYou = Object.values(JobStatus).filter(
       status => splatBadge({ photoCount: 3, latestJobStatus: status }).filter === "needs_you",
     );
     expect(needsYou.sort()).toEqual(["awaiting_training", "cancelled", "failed"]);

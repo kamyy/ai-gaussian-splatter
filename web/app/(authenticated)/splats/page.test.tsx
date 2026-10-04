@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { JobStatus } from "@/lib/statuses";
+import { JobStatus, SplatStatus } from "@/lib/statuses";
 import type { SplatListItem } from "@/lib/types";
 
 import LibraryPage from "./page";
@@ -16,7 +16,7 @@ function makeSplat(i: number, overrides: Partial<SplatListItem> = {}): SplatList
   return {
     id: `splat-${i}`,
     name: `Splat ${i}`,
-    status: "complete",
+    status: SplatStatus.complete,
     thumbnailS3Key: null,
     isShareable: false,
     createdAt: "2026-01-01T00:00:00Z",

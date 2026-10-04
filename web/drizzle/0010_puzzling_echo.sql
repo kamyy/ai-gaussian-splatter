@@ -1,1 +1,0 @@
-ALTER TABLE "jobs" ADD COLUMN "result_spz_s3_key" text;

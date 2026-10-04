@@ -1,60 +1,9 @@
 {
-  "id": "146145f8-e560-487b-990f-86110e2871c9",
+  "id": "338f3f2e-a41e-4956-84bd-ed183001b3e6",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.gallery_items": {
-      "name": "gallery_items",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "title": {
-          "name": "title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "splat_s3_key": {
-          "name": "splat_s3_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "thumbnail_s3_key": {
-          "name": "thumbnail_s3_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "display_order": {
-          "name": "display_order",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.global_job_counters": {
       "name": "global_job_counters",
       "schema": "",
@@ -124,8 +73,14 @@
           "primaryKey": false,
           "notNull": false
         },
-        "result_s3_key": {
-          "name": "result_s3_key",
+        "result_ply_s3_key": {
+          "name": "result_ply_s3_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "result_spz_s3_key": {
+          "name": "result_spz_s3_key",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -133,6 +88,18 @@
         "thumbnail_s3_key": {
           "name": "thumbnail_s3_key",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "point_cloud_s3_key": {
+          "name": "point_cloud_s3_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "colmap_booted_at": {
+          "name": "colmap_booted_at",
+          "type": "timestamp (6) with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -148,6 +115,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "training_launched_at": {
+          "name": "training_launched_at",
+          "type": "timestamp (6) with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "training_booted_at": {
+          "name": "training_booted_at",
+          "type": "timestamp (6) with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "training_started_at": {
           "name": "training_started_at",
           "type": "timestamp (6) with time zone",
@@ -156,6 +135,42 @@
         },
         "training_finished_at": {
           "name": "training_finished_at",
+          "type": "timestamp (6) with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp (6) with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "training_progress": {
+          "name": "training_progress",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "crop_box": {
+          "name": "crop_box",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cropped_result_ply_s3_key": {
+          "name": "cropped_result_ply_s3_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cropped_result_spz_s3_key": {
+          "name": "cropped_result_spz_s3_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "crop_started_at": {
+          "name": "crop_started_at",
           "type": "timestamp (6) with time zone",
           "primaryKey": false,
           "notNull": false
@@ -187,6 +202,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "uq_jobs_splat_id_active": {
+          "name": "uq_jobs_splat_id_active",
+          "columns": [
+            {
+              "expression": "splat_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"jobs\".\"status\" not in ('complete', 'failed', 'cancelled')",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -251,6 +282,30 @@
         "size_bytes": {
           "name": "size_bytes",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "width": {
+          "name": "width",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "height": {
+          "name": "height",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "thumbnail_s3_key": {
+          "name": "thumbnail_s3_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "taken_at": {
+          "name": "taken_at",
+          "type": "timestamp (3) with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -470,7 +525,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
+          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -529,7 +584,8 @@
       "values": [
         "queued",
         "launching",
-        "colmap_running",
+        "reconstruction_running",
+        "awaiting_training",
         "training_running",
         "uploading_result",
         "complete",

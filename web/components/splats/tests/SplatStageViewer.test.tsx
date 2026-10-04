@@ -15,7 +15,7 @@ vi.mock("notistack", () => ({ useSnackbar: () => ({ enqueueSnackbar: () => {} })
 
 // The object the panel last handed the viewer. A new one flies the camera, so a reload must keep this reference.
 const { selectedCameraSeen } = vi.hoisted(() => ({
-  selectedCameraSeen: { current: null as { index: number } | null },
+  selectedCameraSeen: { current: null as { index: number; opening?: boolean } | null },
 }));
 
 const BOX: CropBox = { center: [1, 2, 3], size: [4, 5, 6], quaternion: [0, 0, 0, 1] };
@@ -43,7 +43,7 @@ vi.mock("@/components/viewer/SplatViewer", () => ({
     cropping: boolean;
     onCropBoxChange?: (box: CropBox) => void;
     appliedCropBox?: CropBox | null;
-    selectedCamera?: { index: number } | null;
+    selectedCamera?: { index: number; opening?: boolean } | null;
   }) => {
     selectedCameraSeen.current = selectedCamera ?? null;
     let fit: React.ReactNode = null;
@@ -346,6 +346,110 @@ describe("SplatStageViewer", () => {
     }
     expect(screen.getByRole("button", { name: "Crop" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "fit box" })).toBeInTheDocument();
+  });
+
+  it("keeps a front, side or top view when the opening photo arrives after it", async () => {
+    apiFetchMock.mockResolvedValue("url-1");
+    const cameras: CameraPose[] = [
+      {
+        photoId: "photo-1",
+        center: [0, 0, 0],
+        rotation: [
+          [1, 0, 0],
+          [0, 1, 0],
+          [0, 0, 1],
+        ],
+        width: 4,
+        height: 3,
+        fx: 4,
+        fy: 4,
+      },
+    ];
+    const onClearSelection = vi.fn();
+    const { rerender } = render(viewer("splat-opening-photo", { latestJob: withPoints }));
+    await screen.findByText("viewer: url-1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Point cloud" }));
+    fireEvent.click(screen.getByRole("button", { name: "Top view" }));
+    expect(screen.getByText("view: top")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "fit box" })).toBeInTheDocument();
+
+    rerender(
+      <SplatStageViewer
+        splatId="splat-opening-photo"
+        job={withPoints}
+        complete
+        cameras={cameras}
+        selection={{ photoId: "photo-1", opening: true }}
+        onClearSelection={onClearSelection}
+        onJobChanged={() => {}}
+      />,
+    );
+    expect(screen.getByText("view: top")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "fit box" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Top view" })).toHaveAttribute("aria-pressed", "true");
+    expect(onClearSelection).toHaveBeenCalledOnce();
+    expect(selectedCameraSeen.current).toBeNull();
+
+    rerender(
+      <SplatStageViewer
+        splatId="splat-opening-photo"
+        job={withPoints}
+        complete
+        cameras={cameras}
+        selection={{ photoId: "photo-1" }}
+        onClearSelection={onClearSelection}
+        onJobChanged={() => {}}
+      />,
+    );
+    expect(screen.getByText("view: none")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "fit box" })).not.toBeInTheDocument();
+    expect(selectedCameraSeen.current).toEqual({ index: 0 });
+  });
+
+  it("keeps the opening photo's camera when the crop opens over it", async () => {
+    apiFetchMock.mockResolvedValue("url-1");
+    const cameras: CameraPose[] = [
+      {
+        photoId: "photo-1",
+        center: [0, 0, 0],
+        rotation: [
+          [1, 0, 0],
+          [0, 1, 0],
+          [0, 0, 1],
+        ],
+        width: 4,
+        height: 3,
+        fx: 4,
+        fy: 4,
+      },
+    ];
+    const selection = { photoId: "photo-1", opening: true };
+    const onClearSelection = vi.fn();
+    render(
+      <SplatStageViewer
+        splatId="splat-opening-crop"
+        job={withPoints}
+        complete
+        cameras={cameras}
+        selection={selection}
+        onClearSelection={onClearSelection}
+        onJobChanged={() => {}}
+      />,
+    );
+    await screen.findByText("viewer: url-1");
+    const camera = selectedCameraSeen.current;
+    expect(camera).toEqual({ index: 0, opening: true });
+
+    fireEvent.click(screen.getByRole("button", { name: "Point cloud" }));
+    fireEvent.click(screen.getByRole("button", { name: "Crop" }));
+    expect(screen.getByRole("button", { name: "Crop" })).toHaveAttribute("aria-pressed", "true");
+    expect(selectedCameraSeen.current).toBe(camera);
+    expect(onClearSelection).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Crop" }));
+    expect(screen.getByRole("button", { name: "Crop" })).toHaveAttribute("aria-pressed", "false");
+    expect(selectedCameraSeen.current).toBe(camera);
   });
 
   it("leaves a front, side or top view when a photo is selected under the orthographic camera", async () => {

@@ -21,7 +21,6 @@ import { randomUUID } from "node:crypto";
 import { and, eq, gt, isNotNull, isNull, lte, or, type SQL, sql } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-
 import { requireUser } from "@/lib/server/auth";
 import { cropSplatFiles } from "@/lib/server/cropSplat";
 import { getDb } from "@/lib/server/db";
@@ -31,6 +30,7 @@ import { HttpError, parseJsonBody, withErrorHandling } from "@/lib/server/httpEr
 import { assertUserCropCapacity, checkAndIncrementUserCrops } from "@/lib/server/rateLimit";
 import { deleteSplatsBucketObjects, splatCropS3Keys } from "@/lib/server/s3";
 import { jobColumns } from "@/lib/server/selects";
+import { JobStatus } from "@/lib/statuses";
 
 // infra/locals.tf's alb_idle_timeout_seconds, in milliseconds. The crop writes no response bytes until it finishes,
 // so the load balancer closes the request after this long with nothing sent. A claim older than that belongs to a
@@ -78,7 +78,7 @@ async function setCrop(
 ): Promise<Partial<Job> | undefined> {
   const matches = [
     eq(jobs.id, job.id),
-    eq(jobs.status, "complete"),
+    eq(jobs.status, JobStatus.complete),
     sameCropKey(jobs.croppedResultPlyS3Key, job.croppedResultPlyS3Key),
     sameCropKey(jobs.croppedResultSpzS3Key, job.croppedResultSpzS3Key),
   ];
@@ -129,7 +129,7 @@ async function claimCrop(userId: string, job: Job): Promise<Date> {
       set crop_started_at = ${claimedAt.toISOString()}
       where ${and(
         eq(jobs.id, job.id),
-        eq(jobs.status, "complete"),
+        eq(jobs.status, JobStatus.complete),
         sameCropKey(jobs.croppedResultPlyS3Key, job.croppedResultPlyS3Key),
         sameCropKey(jobs.croppedResultSpzS3Key, job.croppedResultSpzS3Key),
         or(isNull(jobs.cropStartedAt), lte(jobs.cropStartedAt, staleBefore)),

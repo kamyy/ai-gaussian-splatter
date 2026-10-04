@@ -8,6 +8,7 @@ vi.mock("@clerk/nextjs/server", () => ({
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { jobs, photos, splats, users } from "@/lib/server/db/schema";
+import { JobStatus, PhotoUploadStatus } from "@/lib/statuses";
 import { GET, POST } from "./route";
 
 // Requires a real Postgres (TEST_DATABASE_URL). Covers what GET /api/v1/splats adds on top of the plain splat list:
@@ -60,7 +61,7 @@ describe("GET /api/v1/splats", () => {
           height: 4032,
           // Taken first, though uploaded second.
           takenAt: new Date("2025-06-01T12:00:00Z"),
-          uploadStatus: "uploaded",
+          uploadStatus: PhotoUploadStatus.uploaded,
           createdAt: new Date("2026-01-01T00:01:00Z"),
         },
         {
@@ -71,7 +72,7 @@ describe("GET /api/v1/splats", () => {
           width: 4032,
           height: 3024,
           takenAt: new Date("2025-06-01T12:00:05Z"),
-          uploadStatus: "uploaded",
+          uploadStatus: PhotoUploadStatus.uploaded,
           createdAt: new Date("2026-01-01T00:00:00Z"),
         },
         {
@@ -81,7 +82,7 @@ describe("GET /api/v1/splats", () => {
           contentType: "image/jpeg",
           width: 4032,
           height: 3024,
-          uploadStatus: "pending",
+          uploadStatus: PhotoUploadStatus.pending,
           createdAt: new Date("2025-12-31T23:59:00Z"),
         },
       ]);
@@ -101,7 +102,7 @@ describe("GET /api/v1/splats", () => {
       .insert(jobs)
       .values({
         splatId: splat.id,
-        status: "failed",
+        status: JobStatus.failed,
         callbackToken: "token-1",
         createdAt: new Date("2026-01-01T00:00:00Z"),
       });
@@ -110,7 +111,7 @@ describe("GET /api/v1/splats", () => {
       .insert(jobs)
       .values({
         splatId: splat.id,
-        status: "queued",
+        status: JobStatus.queued,
         callbackToken: "token-2",
         createdAt: new Date("2026-01-01T00:05:00Z"),
       });
@@ -139,7 +140,7 @@ describe("GET /api/v1/splats", () => {
         contentType: "image/jpeg",
         width: 4032,
         height: 3024,
-        uploadStatus: "uploaded" as const,
+        uploadStatus: PhotoUploadStatus.uploaded,
       };
     }
 
@@ -149,8 +150,8 @@ describe("GET /api/v1/splats", () => {
     await getDb()
       .insert(jobs)
       .values([
-        { splatId: older.id, status: "complete", callbackToken: "token-1" },
-        { splatId: newer.id, status: "failed", callbackToken: "token-2" },
+        { splatId: older.id, status: JobStatus.complete, callbackToken: "token-1" },
+        { splatId: newer.id, status: JobStatus.failed, callbackToken: "token-2" },
       ]);
 
     const res = await GET();

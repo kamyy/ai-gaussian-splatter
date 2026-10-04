@@ -21,6 +21,7 @@ vi.mock("@/lib/server/s3", async importOriginal => {
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { jobs, photos, splats, users } from "@/lib/server/db/schema";
+import { JobStatus, PhotoUploadStatus } from "@/lib/statuses";
 import { DELETE, GET } from "./route";
 
 function ctx(splatId: string) {
@@ -85,11 +86,14 @@ describe("DELETE /api/v1/splats/[splatId]", () => {
         contentType: "image/jpeg",
         width: 4032,
         height: 3024,
-        uploadStatus: "uploaded",
+        uploadStatus: PhotoUploadStatus.uploaded,
       });
-    await getDb()
-      .insert(jobs)
-      .values({ splatId: splat.id, status: "training_running", callbackToken: "t", ec2InstanceId: "i-0abc123" });
+    await getDb().insert(jobs).values({
+      splatId: splat.id,
+      status: JobStatus.training_running,
+      callbackToken: "t",
+      ec2InstanceId: "i-0abc123",
+    });
     return splat;
   }
 

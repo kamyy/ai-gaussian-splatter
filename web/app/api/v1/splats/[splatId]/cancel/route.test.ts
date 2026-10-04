@@ -15,7 +15,7 @@ vi.mock("@/lib/server/workerLauncher", async importOriginal => {
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { jobs, splats, users } from "@/lib/server/db/schema";
-import type { JobStatus } from "@/lib/statuses";
+import { JobStatus } from "@/lib/statuses";
 import { POST } from "./route";
 
 function ctx(splatId: string) {
@@ -50,7 +50,7 @@ describe("POST /api/v1/splats/[splatId]/cancel", () => {
   }
 
   it("terminates a running worker and marks its job cancelled", async () => {
-    const { splat, job } = await seed("training_running");
+    const { splat, job } = await seed(JobStatus.training_running);
 
     const res = await POST({} as never, ctx(splat.id));
     expect(res.status).toBe(200);
@@ -63,7 +63,7 @@ describe("POST /api/v1/splats/[splatId]/cancel", () => {
   });
 
   it("cancels a job paused for review without terminating anything", async () => {
-    const { splat, job } = await seed("awaiting_training");
+    const { splat, job } = await seed(JobStatus.awaiting_training);
 
     const res = await POST({} as never, ctx(splat.id));
     expect(res.status).toBe(200);
@@ -76,11 +76,11 @@ describe("POST /api/v1/splats/[splatId]/cancel", () => {
   });
 
   it("keeps the result of a job that completed while its worker was being stopped", async () => {
-    const { splat, job } = await seed("uploading_result");
+    const { splat, job } = await seed(JobStatus.uploading_result);
     terminateWorkerMock.mockImplementationOnce(async () => {
       await getDb()
         .update(jobs)
-        .set({ status: "complete" })
+        .set({ status: JobStatus.complete })
         .where(eq(jobs.id, job?.id ?? ""));
     });
 
@@ -95,7 +95,7 @@ describe("POST /api/v1/splats/[splatId]/cancel", () => {
 
   it("leaves the job running when the worker can't be stopped", async () => {
     terminateWorkerMock.mockRejectedValueOnce(new Error("UnauthorizedOperation"));
-    const { splat, job } = await seed("reconstruction_running");
+    const { splat, job } = await seed(JobStatus.reconstruction_running);
 
     await expect(POST({} as never, ctx(splat.id))).rejects.toThrow("UnauthorizedOperation");
     const [row] = await getDb()
@@ -106,14 +106,14 @@ describe("POST /api/v1/splats/[splatId]/cancel", () => {
   });
 
   it("409s when nothing is running", async () => {
-    const { splat } = await seed("complete");
+    const { splat } = await seed(JobStatus.complete);
 
     const res = await POST({} as never, ctx(splat.id));
     expect(res.status).toBe(409);
   });
 
   it("404s for someone else's splat", async () => {
-    const { splat } = await seed("training_running", "clerk-user-2");
+    const { splat } = await seed(JobStatus.training_running, "clerk-user-2");
 
     const res = await POST({} as never, ctx(splat.id));
     expect(res.status).toBe(404);

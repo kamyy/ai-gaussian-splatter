@@ -7,7 +7,7 @@
  * session.
  *
  * This is the one endpoint whose field names are snake_case, because worker/pipeline/status.py sends a literal
- * snake_case body. Status values need no translation. They are the Postgres enum labels as-is, so JOB_STATUSES
+ * snake_case body. Status values need no translation. They are the Postgres enum labels as-is, so JobStatus
  * validates the incoming value and it goes straight into the column. Changing either the field names or the status list
  * means changing worker/ at the same time.
  */
@@ -20,10 +20,10 @@ import { getJobForCallbackToken } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { jobs, splats } from "@/lib/server/db/schema";
 import { HttpError, parseJsonBody, withErrorHandling } from "@/lib/server/httpError";
-import { JOB_ENDED_STATUSES, JOB_STATUSES, JobStatus } from "@/lib/statuses";
+import { JOB_ENDED_STATUSES, JobStatus, SplatStatus } from "@/lib/statuses";
 
 const workerStatusSchema = z.object({
-  status: z.enum(JOB_STATUSES),
+  status: z.enum(JobStatus),
   error_message: z.string().nullish(),
   result_ply_s3_key: z.string().nullish(),
   result_spz_s3_key: z.string().nullish(),
@@ -59,10 +59,7 @@ export const PATCH = withErrorHandling(
     // non-terminal status back would give the splat a second active job and trip uq_jobs_splat_id_active
     // (web/lib/server/db/schema.ts). 204 rather than an error because there is nothing for the worker to retry:
     // worker/pipeline/status.py only logs a failed callback anyway.
-    //
-    // job.status's column type also includes the unused "colmap_running" label (web/lib/statuses.ts), which is not an
-    // ended status either, so the cast is safe for this membership check.
-    if (JOB_ENDED_STATUSES.includes(job.status as JobStatus)) {
+    if (JOB_ENDED_STATUSES.includes(job.status)) {
       return new NextResponse(null, { status: 204 });
     }
 
@@ -129,12 +126,12 @@ export const PATCH = withErrorHandling(
 
     const splatData: Partial<typeof splats.$inferInsert> = {};
     if (status === JobStatus.complete) {
-      splatData.status = "complete";
+      splatData.status = SplatStatus.complete;
       if (body.thumbnail_s3_key != null) {
         splatData.thumbnailS3Key = body.thumbnail_s3_key;
       }
     } else if (status === JobStatus.failed) {
-      splatData.status = "failed";
+      splatData.status = SplatStatus.failed;
     }
 
     // Both rows move together or not at all. The job write is conditional on it still not having ended, so a cancel

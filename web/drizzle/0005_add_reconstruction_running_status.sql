@@ -1,1 +1,0 @@
-ALTER TYPE "public"."job_status" ADD VALUE 'reconstruction_running';

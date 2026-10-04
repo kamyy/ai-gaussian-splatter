@@ -20,6 +20,7 @@ import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { globalJobCounters, jobs, photos, splats, users } from "@/lib/server/db/schema";
 import { getRuntimeSettings } from "@/lib/server/runtimeSettings";
+import { JobStatus, PhotoUploadStatus } from "@/lib/statuses";
 import { POST } from "./route";
 
 function ctx(splatId: string) {
@@ -60,7 +61,7 @@ describe("POST /api/v1/splats/[splatId]/process", () => {
           contentType: "image/jpeg",
           width: 4032,
           height: 3024,
-          uploadStatus: "uploaded" as const,
+          uploadStatus: PhotoUploadStatus.uploaded,
         })),
       );
     return { user, splat };
@@ -135,7 +136,7 @@ describe("POST /api/v1/splats/[splatId]/process", () => {
   it("terminates the worker it just launched when the job was cancelled during the launch", async () => {
     const { splat } = await seed();
     launchJobMock.mockImplementationOnce(async ({ jobId }) => {
-      await getDb().update(jobs).set({ status: "cancelled" }).where(eq(jobs.id, jobId));
+      await getDb().update(jobs).set({ status: JobStatus.cancelled }).where(eq(jobs.id, jobId));
       return "i-0late";
     });
 
@@ -149,7 +150,7 @@ describe("POST /api/v1/splats/[splatId]/process", () => {
   it("keeps a cancel that lands while the launch is failing, without failing the splat", async () => {
     const { splat } = await seed();
     launchJobMock.mockImplementationOnce(async ({ jobId }) => {
-      await getDb().update(jobs).set({ status: "cancelled" }).where(eq(jobs.id, jobId));
+      await getDb().update(jobs).set({ status: JobStatus.cancelled }).where(eq(jobs.id, jobId));
       throw new Error("RunInstances denied");
     });
 

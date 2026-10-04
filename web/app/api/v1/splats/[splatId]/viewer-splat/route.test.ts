@@ -9,7 +9,7 @@ vi.mock("@clerk/nextjs/server", () => ({
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { jobs, splats, users } from "@/lib/server/db/schema";
-import type { JobStatus, SplatStatus } from "@/lib/statuses";
+import { JobStatus, SplatStatus } from "@/lib/statuses";
 import { GET } from "./route";
 
 function viewerRequest() {
@@ -54,7 +54,7 @@ describe("GET /api/v1/splats/[splatId]/viewer-splat", () => {
   }
 
   it("returns the .spz, not the .ply the download route serves", async () => {
-    const splat = await seed("complete", "complete", "splats/x/result.spz");
+    const splat = await seed(SplatStatus.complete, JobStatus.complete, "splats/x/result.spz");
 
     const res = await GET(viewerRequest(), ctx(splat.id));
     expect(res.status).toBe(200);
@@ -62,21 +62,21 @@ describe("GET /api/v1/splats/[splatId]/viewer-splat", () => {
   });
 
   it("returns the cropped .spz once the owner has cropped the splat", async () => {
-    const splat = await seed("complete", "complete", "splats/x/result.spz");
+    const splat = await seed(SplatStatus.complete, JobStatus.complete, "splats/x/result.spz");
     await getDb().update(jobs).set({ croppedResultSpzS3Key: "splats/x/crops/c1/result.spz" });
 
     expect(await (await GET(viewerRequest(), ctx(splat.id))).json()).toContain("crops/c1/result.spz");
   });
 
   it("404s before the splat is complete", async () => {
-    const splat = await seed("processing", "training_running", null);
+    const splat = await seed(SplatStatus.processing, JobStatus.training_running, null);
 
     const res = await GET(viewerRequest(), ctx(splat.id));
     expect(res.status).toBe(404);
   });
 
   it("404s for a finished splat the caller doesn't own", async () => {
-    const splat = await seed("complete", "complete", "splats/x/result.spz", "clerk-user-2");
+    const splat = await seed(SplatStatus.complete, JobStatus.complete, "splats/x/result.spz", "clerk-user-2");
 
     const res = await GET(viewerRequest(), ctx(splat.id));
     expect(res.status).toBe(404);

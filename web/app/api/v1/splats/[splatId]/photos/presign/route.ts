@@ -19,6 +19,7 @@ import { HttpError, parseJsonBody, withErrorHandling } from "@/lib/server/httpEr
 import { checkAndIncrementIp, checkAndIncrementUser } from "@/lib/server/rateLimit";
 import { getRuntimeSettings } from "@/lib/server/runtimeSettings";
 import { MAX_THUMBNAIL_BYTES, presignPhotoThumbnailUpload, presignPhotoUpload } from "@/lib/server/s3";
+import { PhotoUploadStatus } from "@/lib/statuses";
 import type { PhotoPresignItem } from "@/lib/types";
 
 // Rate limiting happens here: it gates *before* any upload happens (per-IP + per-user), separate from the global daily
@@ -50,7 +51,7 @@ export const POST = withErrorHandling(
     const [uploaded] = await getDb()
       .select({ n: count() })
       .from(photos)
-      .where(and(eq(photos.splatId, splatId), eq(photos.uploadStatus, "uploaded")));
+      .where(and(eq(photos.splatId, splatId), eq(photos.uploadStatus, PhotoUploadStatus.uploaded)));
     if (uploaded.n + batch.length > MAX_PHOTOS_PER_SPLAT) {
       throw new HttpError(400, `A splat can have at most ${MAX_PHOTOS_PER_SPLAT} photos`);
     }
@@ -80,7 +81,7 @@ export const POST = withErrorHandling(
         height: item.height,
         thumbnailS3Key: thumbnail.key,
         takenAt: new Date(item.takenAt),
-        uploadStatus: "pending",
+        uploadStatus: PhotoUploadStatus.pending,
       });
       items.push({ photoId, presignedPutUrl: url, s3Key: key, thumbnailPutUrl: thumbnail.url });
     }

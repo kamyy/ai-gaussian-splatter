@@ -399,6 +399,7 @@ function ViewerSceneManager({
   cameras,
   framing,
   selectedCamera,
+  axisView,
   onManualMove,
   pointSize,
   pointsCropBox,
@@ -415,6 +416,9 @@ function ViewerSceneManager({
   cameras: Omit<CameraPose, "photoId">[] | null;
   framing: Framing | null;
   selectedCamera: CameraSelection | null;
+  // The front, side or top view, when one is showing. While the point cloud is on screen that view owns the camera,
+  // and a framing that arrives must not move it.
+  axisView: AxisView | null;
   onManualMove?: () => void;
   pointSize: number;
   pointsCropBox: CropBox | null;
@@ -426,7 +430,11 @@ function ViewerSceneManager({
   onSceneLoad: (box: Box3) => void;
   onPointCloudLoad: (positions: ArrayLike<number>) => void;
 }) {
-  const { sceneUpRef, onFirstLoad } = useSceneFraming(framing);
+  const { sceneUpRef, onFirstLoad } = useSceneFraming(
+    framing,
+    selectedCamera !== null,
+    mode === "colmap_points" && axisView !== null,
+  );
   useCameraFlight(cameras, selectedCamera, sceneUpRef, framing?.target ?? null, onManualMove);
 
   // Both stable, like onFirstLoad, because each scene's load effect depends on its callback.
@@ -674,6 +682,7 @@ export function SplatViewer({
           cameras={cameras}
           framing={framing}
           selectedCamera={selectedCamera}
+          axisView={axisView}
           onManualMove={onManualMove}
           pointSize={pointSize}
           pointsCropBox={appliedCropBox}

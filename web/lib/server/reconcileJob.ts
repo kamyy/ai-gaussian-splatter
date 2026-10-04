@@ -7,7 +7,7 @@
 
 import { and, eq } from "drizzle-orm";
 
-import { JobStatus } from "@/lib/statuses";
+import { JobStatus, SplatStatus } from "@/lib/statuses";
 import { WORKER_RUNNING_STATUSES } from "./cancelJob";
 import { getDb } from "./db";
 import { jobs, splats } from "./db/schema";
@@ -87,7 +87,7 @@ export async function reconcileJob(
       return false;
     }
 
-    await tx.update(splats).set({ status: "failed" }).where(eq(splats.id, splatId));
+    await tx.update(splats).set({ status: SplatStatus.failed }).where(eq(splats.id, splatId));
 
     return true;
   });

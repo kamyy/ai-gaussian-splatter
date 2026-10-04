@@ -21,7 +21,7 @@
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Center } from "@/components/layout/Center";
 import {
@@ -372,12 +372,30 @@ export function SplatViewerPanel({
   // The box undo just removed. The job can still report it until the refetch, and a later crop is a different box.
   const [undoneCrop, setUndoneCrop] = useState<CropBox | null>(null);
 
-  const selectedIndex = cameraIndexOf(cameras, selection?.photoId ?? null);
+  // True while a front, side or top view or a crop is open.
+  const engagedRef = useRef(false);
+  engagedRef.current = axisView !== null || editing;
+  const onClearSelectionRef = useRef(onClearSelection);
+  onClearSelectionRef.current = onClearSelection;
+  // True once the opening photo has been on screen with nothing else aimed. A crop opened after that keeps the photo,
+  // so a drag still levels its roll.
+  const acceptedOpeningRef = useRef(false);
+  if (selection?.opening === true && !engagedRef.current) {
+    acceptedOpeningRef.current = true;
+  }
+  // The opening photo showed up while the view was already aimed, so the viewer does not take it.
+  const suppressOpening = selection?.opening === true && engagedRef.current && !acceptedOpeningRef.current;
+
+  const selectedIndex = cameraIndexOf(cameras, suppressOpening ? null : (selection?.photoId ?? null));
   // A new object flies the view again. Picking a photo builds one, including a second pick of the photo already shown.
   // A reloaded camera list keeps the object already built for that photo.
   const selectedCamera = useMemo<CameraSelection | null>(() => {
     if (selection === null || selectedIndex === null) {
       return null;
+    }
+
+    if (selection.opening) {
+      return { index: selectedIndex, opening: true };
     }
 
     return { index: selectedIndex };
@@ -392,10 +410,19 @@ export function SplatViewerPanel({
   // Turning away from one of those views leaves the crop open, so the button takes over.
   const cropButtonSelected = editingCrop && axisView === null;
 
-  // A selected photo flies the camera to its view, which leaves the front, side or top view and the crop box behind.
-  // selection is that pick. A reloaded camera list keeps the same object and must not close the crop.
+  // A photo picked from the grid flies the camera to its view, which leaves the front, side or top view and the crop
+  // box behind. The photo the page opens on does not. When that photo shows up after the visitor has already aimed,
+  // it is dropped instead. A crop opened over the photo already on screen keeps both. A reloaded camera list keeps
+  // the same object and must not close the crop.
   useEffect(() => {
     if (!selection) {
+      return;
+    }
+
+    if (selection.opening) {
+      if (engagedRef.current && !acceptedOpeningRef.current) {
+        onClearSelectionRef.current();
+      }
       return;
     }
 

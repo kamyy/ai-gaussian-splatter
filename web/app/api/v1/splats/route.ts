@@ -9,13 +9,13 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-
 import { requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { jobs, photos, splats } from "@/lib/server/db/schema";
 import { parseJsonBody, withErrorHandling } from "@/lib/server/httpError";
 import { presignPhotoDownload } from "@/lib/server/s3";
 import { jobColumns, photoColumns, photoOrder, splatColumns } from "@/lib/server/selects";
+import { PhotoUploadStatus } from "@/lib/statuses";
 
 const schema = z.object({
   name: z.string().min(1),
@@ -67,7 +67,7 @@ export const GET = withErrorHandling(async () => {
     getDb()
       .select(photoColumns)
       .from(photos)
-      .where(and(inArray(photos.splatId, ids), eq(photos.uploadStatus, "uploaded")))
+      .where(and(inArray(photos.splatId, ids), eq(photos.uploadStatus, PhotoUploadStatus.uploaded)))
       .orderBy(photos.splatId, ...photoOrder),
     // Ordered newest-first per splat so the loop's "keep the first seen" reduction picks the latest job, matching
     // web/app/api/v1/splats/[splatId]/jobs/latest/route.ts's single-splat query.
