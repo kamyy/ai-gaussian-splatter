@@ -21,7 +21,7 @@ import { closeDb, getDb } from "@/lib/server/db";
 import { jobs, rateLimitCounters, splats, users } from "@/lib/server/db/schema";
 import { HttpError } from "@/lib/server/httpError";
 import { userCropRateLimitScope } from "@/lib/server/rateLimit";
-import type { JobStatus } from "@/lib/statuses";
+import { JobStatus, SplatStatus } from "@/lib/statuses";
 import { DELETE, POST } from "./route";
 
 const BOX = { center: [1, 2, 3], size: [4, 5, 6], quaternion: [0, 0, 0, 1] };
@@ -49,11 +49,16 @@ describe("/api/v1/splats/[splatId]/crop", () => {
     await closeDb();
   });
 
-  async function seed({ jobStatus = "complete" as JobStatus, clerkUserId = "clerk-user-1", cropped = false } = {}) {
+  async function seed({ jobStatus = JobStatus.complete, clerkUserId = "clerk-user-1", cropped = false } = {}) {
     const user = await getOrCreateUser(clerkUserId);
     const [splat] = await getDb()
       .insert(splats)
-      .values({ userId: user.id, name: "obj", status: "complete", thumbnailS3Key: "splats/x/original-thumbnail.png" })
+      .values({
+        userId: user.id,
+        name: "obj",
+        status: SplatStatus.complete,
+        thumbnailS3Key: "splats/x/original-thumbnail.png",
+      })
       .returning();
     const [job] = await getDb()
       .insert(jobs)
@@ -223,7 +228,7 @@ describe("/api/v1/splats/[splatId]/crop", () => {
     });
 
     it("404s before the splat has finished", async () => {
-      const { splat } = await seed({ jobStatus: "training_running" });
+      const { splat } = await seed({ jobStatus: JobStatus.training_running });
 
       expect((await POST(cropRequest({ box: BOX }), ctx(splat.id))).status).toBe(404);
     });
@@ -243,7 +248,7 @@ describe("/api/v1/splats/[splatId]/crop", () => {
     it("deletes its own objects and 409s when the job was replaced while cropping", async () => {
       const { splat, job } = await seed();
       cropSplatFilesMock.mockImplementationOnce(async () => {
-        await getDb().update(jobs).set({ status: "failed" }).where(eq(jobs.id, job.id));
+        await getDb().update(jobs).set({ status: JobStatus.failed }).where(eq(jobs.id, job.id));
       });
 
       expect((await POST(cropRequest({ box: BOX }), ctx(splat.id))).status).toBe(409);

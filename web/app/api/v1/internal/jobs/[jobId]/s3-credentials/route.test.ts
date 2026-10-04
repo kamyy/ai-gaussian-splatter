@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { closeDb, getDb } from "@/lib/server/db";
 import { jobs, splats, users } from "@/lib/server/db/schema";
+import { JobStatus } from "@/lib/statuses";
 import { POST, splatSessionPolicy } from "./route";
 
 // aws-sdk-client-mock is a call stub with no simulated IAM, so these assert on what AssumeRole was asked for.
@@ -79,7 +80,7 @@ describe("worker S3 credentials", () => {
 
   it("refuses a job that has ended", async () => {
     const { job } = await seed();
-    await getDb().update(jobs).set({ status: "cancelled" }).where(eq(jobs.id, job.id));
+    await getDb().update(jobs).set({ status: JobStatus.cancelled }).where(eq(jobs.id, job.id));
 
     const res = await POST(req("tok"), ctx(job.id));
     expect(res.status).toBe(409);

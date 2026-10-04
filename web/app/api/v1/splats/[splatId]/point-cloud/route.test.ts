@@ -8,7 +8,7 @@ vi.mock("@clerk/nextjs/server", () => ({
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { jobs, splats, users } from "@/lib/server/db/schema";
-import type { JobStatus } from "@/lib/statuses";
+import { JobStatus } from "@/lib/statuses";
 import { GET } from "./route";
 
 function ctx(splatId: string) {
@@ -37,21 +37,21 @@ describe("GET /api/v1/splats/[splatId]/point-cloud", () => {
   }
 
   it("404s before the reconstruct phase has produced a point cloud key", async () => {
-    const { splat } = await seed("reconstruction_running", null);
+    const { splat } = await seed(JobStatus.reconstruction_running, null);
 
     const res = await GET({} as never, ctx(splat.id));
     expect(res.status).toBe(404);
   });
 
   it("404s for a splat the caller doesn't own", async () => {
-    const { splat } = await seed("awaiting_training", "splats/x/point_cloud.ply", "clerk-user-2");
+    const { splat } = await seed(JobStatus.awaiting_training, "splats/x/point_cloud.ply", "clerk-user-2");
 
     const res = await GET({} as never, ctx(splat.id));
     expect(res.status).toBe(404);
   });
 
   it("200s once the key is set, while still awaiting training", async () => {
-    const { splat } = await seed("awaiting_training", "splats/x/point_cloud.ply");
+    const { splat } = await seed(JobStatus.awaiting_training, "splats/x/point_cloud.ply");
 
     const res = await GET({} as never, ctx(splat.id));
     expect(res.status).toBe(200);
@@ -60,7 +60,7 @@ describe("GET /api/v1/splats/[splatId]/point-cloud", () => {
   });
 
   it("stays 200 once the job later reaches complete — the key is never cleared", async () => {
-    const { splat } = await seed("complete", "splats/x/point_cloud.ply");
+    const { splat } = await seed(JobStatus.complete, "splats/x/point_cloud.ply");
 
     const res = await GET({} as never, ctx(splat.id));
     expect(res.status).toBe(200);

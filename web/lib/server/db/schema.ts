@@ -22,7 +22,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { JOB_STATUS_DB_VALUES, PHOTO_UPLOAD_STATUSES, SPLAT_STATUSES } from "@/lib/statuses";
+import { JobStatus, PhotoUploadStatus, SplatStatus } from "@/lib/statuses";
 import type { CropBox } from "@/lib/types";
 
 // Data model.
@@ -31,15 +31,11 @@ import type { CropBox } from "@/lib/types";
 // database name explicitly rather than relying on drizzle's `casing` option. So a migration and a runtime query can
 // never silently disagree on a name.
 //
-// Enum labels come from web/lib/statuses.ts, so the client-side unions and the Postgres labels are one list.
+// Enum labels come from web/lib/statuses.ts, so the client-side enums and the Postgres labels are one list.
 
-export const splatStatus = pgEnum("splat_status", SPLAT_STATUSES);
-export const photoUploadStatus = pgEnum("photo_upload_status", PHOTO_UPLOAD_STATUSES);
-/**
- * JOB_STATUS_DB_VALUES keeps the labels in the order each was added (web/lib/statuses.ts). JOB_STATUSES lists
- * reconstruction_running earlier, with the other running stages.
- */
-export const jobStatus = pgEnum("job_status", JOB_STATUS_DB_VALUES);
+export const splatStatus = pgEnum("splat_status", SplatStatus);
+export const photoUploadStatus = pgEnum("photo_upload_status", PhotoUploadStatus);
+export const jobStatus = pgEnum("job_status", JobStatus);
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -57,7 +53,7 @@ export const splats = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    status: splatStatus("status").notNull().default("draft"),
+    status: splatStatus("status").notNull().default(SplatStatus.draft),
     thumbnailS3Key: text("thumbnail_s3_key"),
     isShareable: boolean("is_shareable").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true, precision: 6 }).notNull().defaultNow(),
@@ -90,7 +86,7 @@ export const photos = pgTable(
     // When the photo was taken: its EXIF capture time, else the file's last-modified time, both read in the browser.
     // Photos are shown oldest first. Null for a photo uploaded before this was recorded, which sorts last.
     takenAt: timestamp("taken_at", { withTimezone: true, precision: 3 }),
-    uploadStatus: photoUploadStatus("upload_status").notNull().default("pending"),
+    uploadStatus: photoUploadStatus("upload_status").notNull().default(PhotoUploadStatus.pending),
     createdAt: timestamp("created_at", { withTimezone: true, precision: 6 }).notNull().defaultNow(),
   },
   table => [index("ix_photos_splat_id").on(table.splatId)],
@@ -103,7 +99,7 @@ export const jobs = pgTable(
     splatId: uuid("splat_id")
       .notNull()
       .references(() => splats.id, { onDelete: "cascade" }),
-    status: jobStatus("status").notNull().default("queued"),
+    status: jobStatus("status").notNull().default(JobStatus.queued),
     callbackToken: text("callback_token").notNull(),
     ec2InstanceId: text("ec2_instance_id"),
     errorMessage: text("error_message"),

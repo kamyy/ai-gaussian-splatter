@@ -1,7 +1,7 @@
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { JOB_ENDED_STATUSES, JOB_STATUSES, type JobStatus } from "@/lib/statuses";
+import { JOB_ENDED_STATUSES, JobStatus } from "@/lib/statuses";
 import type { Job } from "@/lib/types";
 import { useLatestJob } from "../useLatestJob";
 
@@ -12,7 +12,7 @@ vi.mock("@clerk/nextjs", () => ({
 const baseJob: Job = {
   id: "job-1",
   splatId: "splat-1",
-  status: "training_running",
+  status: JobStatus.training_running,
   errorMessage: null,
   resultPlyS3Key: null,
   thumbnailS3Key: null,
@@ -82,9 +82,13 @@ describe("useLatestJob", () => {
     renderHook(() => useLatestJob("splat-1"));
     const { refreshInterval } = capturedConfig();
 
-    const intervals = (
-      ["queued", "launching", "reconstruction_running", "training_running", "uploading_result"] as const
-    ).map(status => refreshInterval({ ...baseJob, status }));
+    const intervals = [
+      JobStatus.queued,
+      JobStatus.launching,
+      JobStatus.reconstruction_running,
+      JobStatus.training_running,
+      JobStatus.uploading_result,
+    ].map(status => refreshInterval({ ...baseJob, status }));
 
     expect(intervals.every(interval => interval > 0)).toBe(true);
     expect(intervals).toStrictEqual([...intervals].sort((a, b) => b - a));
@@ -99,7 +103,7 @@ describe("useLatestJob", () => {
     renderHook(() => useLatestJob("splat-1"));
     const { refreshInterval } = capturedConfig();
 
-    for (const status of JOB_STATUSES as readonly JobStatus[]) {
+    for (const status of Object.values(JobStatus)) {
       if (JOB_ENDED_STATUSES.includes(status)) {
         expect(refreshInterval({ ...baseJob, status })).toBe(0);
       } else {

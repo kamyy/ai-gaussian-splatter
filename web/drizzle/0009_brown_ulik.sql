@@ -1,1 +1,0 @@
-ALTER TABLE "photos" ADD COLUMN "taken_at" timestamp (3) with time zone;

@@ -7,6 +7,7 @@
 
 import { and, desc, eq } from "drizzle-orm";
 
+import { JobStatus, SplatStatus } from "@/lib/statuses";
 import { getDb } from "./db";
 import { type Job, jobs, splats } from "./db/schema";
 import { HttpError, requireUuid } from "./httpError";
@@ -28,9 +29,9 @@ export async function requireFinishedJob(splatId: string, userId: string): Promi
     .where(
       and(
         eq(jobs.splatId, splatId),
-        eq(jobs.status, "complete"),
+        eq(jobs.status, JobStatus.complete),
         eq(splats.userId, userId),
-        eq(splats.status, "complete"),
+        eq(splats.status, SplatStatus.complete),
       ),
     )
     .orderBy(desc(jobs.createdAt))

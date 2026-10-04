@@ -1,1 +1,0 @@
-CREATE UNIQUE INDEX "uq_jobs_splat_id_active" ON "jobs" USING btree ("splat_id") WHERE "jobs"."status" not in ('complete', 'failed', 'cancelled');

@@ -7,13 +7,13 @@
 
 import { and, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
-
 import { requireOwnedSplat, requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { photos } from "@/lib/server/db/schema";
 import { withErrorHandling } from "@/lib/server/httpError";
 import { presignPhotoDownload } from "@/lib/server/s3";
 import { photoColumns, photoOrder } from "@/lib/server/selects";
+import { PhotoUploadStatus } from "@/lib/statuses";
 import type { PhotoListItem } from "@/lib/types";
 
 export const GET = withErrorHandling(
@@ -25,7 +25,7 @@ export const GET = withErrorHandling(
     const rows = await getDb()
       .select(photoColumns)
       .from(photos)
-      .where(and(eq(photos.splatId, splatId), eq(photos.uploadStatus, "uploaded")))
+      .where(and(eq(photos.splatId, splatId), eq(photos.uploadStatus, PhotoUploadStatus.uploaded)))
       .orderBy(...photoOrder);
 
     const items: PhotoListItem[] = await Promise.all(

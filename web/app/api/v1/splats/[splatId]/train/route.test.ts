@@ -18,7 +18,7 @@ vi.mock("@/lib/server/workerLauncher", async importOriginal => {
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { globalJobCounters, jobs, splats, users } from "@/lib/server/db/schema";
-import type { JobStatus } from "@/lib/statuses";
+import { JobStatus } from "@/lib/statuses";
 import { POST } from "./route";
 
 function trainRequest() {
@@ -45,7 +45,7 @@ describe("POST /api/v1/splats/[splatId]/train", () => {
     await closeDb();
   });
 
-  async function seed(jobStatus: JobStatus = "awaiting_training", clerkUserId = "clerk-user-1") {
+  async function seed(jobStatus: JobStatus = JobStatus.awaiting_training, clerkUserId = "clerk-user-1") {
     const user = await getOrCreateUser(clerkUserId);
     const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "obj" }).returning();
     const [job] = await getDb()
@@ -56,7 +56,7 @@ describe("POST /api/v1/splats/[splatId]/train", () => {
   }
 
   it("404s for a splat the caller doesn't own, leaving its job untouched", async () => {
-    const { splat, job } = await seed("awaiting_training", "clerk-user-2");
+    const { splat, job } = await seed(JobStatus.awaiting_training, "clerk-user-2");
 
     const res = await POST(trainRequest(), ctx(splat.id));
     expect(res.status).toBe(404);
@@ -136,7 +136,7 @@ describe("POST /api/v1/splats/[splatId]/train", () => {
   it("keeps a cancel that lands while the launch is failing", async () => {
     const { splat, job } = await seed();
     launchJobMock.mockImplementationOnce(async ({ jobId }) => {
-      await getDb().update(jobs).set({ status: "cancelled" }).where(eq(jobs.id, jobId));
+      await getDb().update(jobs).set({ status: JobStatus.cancelled }).where(eq(jobs.id, jobId));
       throw new Error("InsufficientInstanceCapacity");
     });
 
@@ -149,7 +149,7 @@ describe("POST /api/v1/splats/[splatId]/train", () => {
   it("terminates the worker it just launched when the job was cancelled during the launch", async () => {
     const { splat, job } = await seed();
     launchJobMock.mockImplementationOnce(async ({ jobId }) => {
-      await getDb().update(jobs).set({ status: "cancelled" }).where(eq(jobs.id, jobId));
+      await getDb().update(jobs).set({ status: JobStatus.cancelled }).where(eq(jobs.id, jobId));
       return "i-0late";
     });
 
@@ -162,7 +162,7 @@ describe("POST /api/v1/splats/[splatId]/train", () => {
   });
 
   it("409s when the latest job for the splat isn't awaiting_training", async () => {
-    const { splat } = await seed("training_running");
+    const { splat } = await seed(JobStatus.training_running);
 
     const res = await POST(trainRequest(), ctx(splat.id));
     expect(res.status).toBe(409);

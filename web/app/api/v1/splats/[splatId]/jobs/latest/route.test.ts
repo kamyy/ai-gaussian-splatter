@@ -13,6 +13,7 @@ vi.mock("@/lib/server/reconcileJob", () => ({ reconcileJob: reconcileJobMock }))
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { jobs, splats, users } from "@/lib/server/db/schema";
+import { JobStatus } from "@/lib/statuses";
 import { GET } from "./route";
 
 function ctx(splatId: string) {
@@ -39,9 +40,12 @@ describe("GET /api/v1/splats/[splatId]/jobs/latest", () => {
   async function seed(clerkUserId = "clerk-user-1") {
     const user = await getOrCreateUser(clerkUserId);
     const [splat] = await getDb().insert(splats).values({ userId: user.id, name: "obj" }).returning();
-    await getDb()
-      .insert(jobs)
-      .values({ splatId: splat.id, status: "reconstruction_running", callbackToken: "t", ec2InstanceId: "i-0abc123" });
+    await getDb().insert(jobs).values({
+      splatId: splat.id,
+      status: JobStatus.reconstruction_running,
+      callbackToken: "t",
+      ec2InstanceId: "i-0abc123",
+    });
     return splat;
   }
 
@@ -66,7 +70,7 @@ describe("GET /api/v1/splats/[splatId]/jobs/latest", () => {
   it("returns the job as reconciled when reconciling failed it", async () => {
     const splat = await seed();
     reconcileJobMock.mockImplementationOnce(async () => {
-      await getDb().update(jobs).set({ status: "failed" }).where(eq(jobs.splatId, splat.id));
+      await getDb().update(jobs).set({ status: JobStatus.failed }).where(eq(jobs.splatId, splat.id));
       return true;
     });
 

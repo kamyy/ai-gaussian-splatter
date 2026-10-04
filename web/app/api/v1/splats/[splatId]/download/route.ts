@@ -14,7 +14,7 @@ import { getDb } from "@/lib/server/db";
 import { jobs, splats } from "@/lib/server/db/schema";
 import { HttpError, requireUuid, withErrorHandling } from "@/lib/server/httpError";
 import { presignSplatDownload } from "@/lib/server/s3";
-import { JobStatus } from "@/lib/statuses";
+import { JobStatus, SplatStatus } from "@/lib/statuses";
 
 export const GET = withErrorHandling(
   async (_request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/download">) => {
@@ -32,7 +32,7 @@ export const GET = withErrorHandling(
           eq(jobs.splatId, splatId),
           eq(jobs.status, JobStatus.complete),
           eq(splats.userId, user.id),
-          eq(splats.status, "complete"),
+          eq(splats.status, SplatStatus.complete),
         ),
       )
       .orderBy(desc(jobs.createdAt))

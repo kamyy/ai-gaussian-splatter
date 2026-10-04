@@ -25,6 +25,7 @@ import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { photos, splats, users } from "@/lib/server/db/schema";
 import { MAX_THUMBNAIL_BYTES } from "@/lib/server/s3";
+import { PhotoUploadStatus } from "@/lib/statuses";
 import { POST } from "./route";
 
 function ctx(splatId: string, photoId: string) {
@@ -62,7 +63,7 @@ describe("POST /api/v1/splats/[splatId]/photos/[photoId]/complete", () => {
         contentType: "image/jpeg",
         width: 3024,
         height: 4032,
-        uploadStatus: "pending",
+        uploadStatus: PhotoUploadStatus.pending,
       })
       .returning();
     return { ...photo, thumbnailS3Key: photo.thumbnailS3Key as string };

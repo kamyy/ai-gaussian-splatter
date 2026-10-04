@@ -11,6 +11,7 @@ import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { photos, rateLimitCounters, splats, users } from "@/lib/server/db/schema";
 import { MAX_THUMBNAIL_BYTES } from "@/lib/server/s3";
+import { PhotoUploadStatus } from "@/lib/statuses";
 import { POST } from "./route";
 
 function ctx(splatId: string) {
@@ -183,7 +184,7 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
     expect(new URL(item.thumbnailPutUrl).searchParams.get("X-Amz-SignedHeaders")).toContain("content-length");
   });
 
-  async function seedPhotos(splatId: string, n: number, uploadStatus: "pending" | "uploaded") {
+  async function seedPhotos(splatId: string, n: number, uploadStatus: PhotoUploadStatus) {
     await getDb()
       .insert(photos)
       .values(
@@ -202,7 +203,7 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
 
   it("rejects a batch that would take the splat past MAX_PHOTOS_PER_SPLAT, without spending the rate limit", async () => {
     const splat = await seedSplat();
-    await seedPhotos(splat.id, MAX_PHOTOS_PER_SPLAT - 1, "uploaded");
+    await seedPhotos(splat.id, MAX_PHOTOS_PER_SPLAT - 1, PhotoUploadStatus.uploaded);
 
     const res = await POST(presignRequest([photoItem("a.jpg"), photoItem("b.jpg")]), ctx(splat.id));
     expect(res.status).toBe(400);
@@ -214,7 +215,7 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
 
   it("doesn't count a failed batch's photos that were never uploaded", async () => {
     const splat = await seedSplat();
-    await seedPhotos(splat.id, MAX_PHOTOS_PER_SPLAT, "pending");
+    await seedPhotos(splat.id, MAX_PHOTOS_PER_SPLAT, PhotoUploadStatus.pending);
 
     const res = await POST(presignRequest([photoItem("a.jpg")]), ctx(splat.id));
     expect(res.status).toBe(200);

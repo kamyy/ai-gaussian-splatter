@@ -8,7 +8,7 @@
  */
 
 import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
-import { JobStatus } from "@/lib/statuses";
+import { JobStatus, PhotoUploadStatus, SplatStatus } from "@/lib/statuses";
 import type { ExampleSplat, PublicSplat, PublicSplatView } from "../types";
 import { getDb } from "./db";
 import { jobs, photos, splats, users } from "./db/schema";
@@ -39,7 +39,7 @@ async function findExampleSplatRows(ownerClerkUserId: string): Promise<{ id: str
     .where(
       and(
         eq(users.clerkUserId, ownerClerkUserId),
-        eq(splats.status, "complete"),
+        eq(splats.status, SplatStatus.complete),
         eq(splats.isShareable, true),
         isNotNull(splats.thumbnailS3Key),
         // The newest complete job's .spz, the one getPublicSplat serves. An older job's result doesn't count, because
@@ -82,7 +82,7 @@ async function findPublicSplat(
     .select({ splat: splats, ownerClerkUserId: users.clerkUserId })
     .from(splats)
     .innerJoin(users, eq(users.id, splats.userId))
-    .where(and(eq(splats.id, splatId), eq(splats.status, "complete"), eq(splats.isShareable, true)))
+    .where(and(eq(splats.id, splatId), eq(splats.status, SplatStatus.complete), eq(splats.isShareable, true)))
     .limit(1);
   if (row === undefined) {
     return null;
@@ -151,7 +151,7 @@ export async function getPublicSplatView(splatId: string): Promise<PublicSplatVi
       height: photos.height,
     })
     .from(photos)
-    .where(and(eq(photos.splatId, splatId), eq(photos.uploadStatus, "uploaded")))
+    .where(and(eq(photos.splatId, splatId), eq(photos.uploadStatus, PhotoUploadStatus.uploaded)))
     .orderBy(...photoOrder);
   const withThumbnails = rows.flatMap(({ thumbnailS3Key, ...photo }) =>
     thumbnailS3Key === null ? [] : [{ ...photo, thumbnailS3Key }],
@@ -210,7 +210,7 @@ export async function getExampleSplats(ownerClerkUserId: string): Promise<Exampl
           photos.splatId,
           rows.map(row => row.id),
         ),
-        eq(photos.uploadStatus, "uploaded"),
+        eq(photos.uploadStatus, PhotoUploadStatus.uploaded),
         isNotNull(photos.thumbnailS3Key),
       ),
     )

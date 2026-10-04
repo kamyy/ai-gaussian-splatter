@@ -2,6 +2,7 @@ import { act, render, screen } from "@testing-library/react";
 import { Suspense } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { JobStatus, SplatStatus } from "@/lib/statuses";
 import type { Job, PhotoListItem, Splat } from "@/lib/types";
 import SplatPage from "./page";
 
@@ -35,7 +36,7 @@ vi.mock("@/lib/hooks/useCameras", () => ({ useCameras: useCamerasMock }));
 const splat: Splat = {
   id: "11111111-1111-4111-8111-111111111111",
   name: "Ceramic mug",
-  status: "processing",
+  status: SplatStatus.processing,
   thumbnailS3Key: null,
   isShareable: true,
   createdAt: "2026-01-01T00:00:00Z",
@@ -44,7 +45,7 @@ const splat: Splat = {
 const job: Job = {
   id: "job-1",
   splatId: splat.id,
-  status: "awaiting_training",
+  status: JobStatus.awaiting_training,
   errorMessage: null,
   resultPlyS3Key: null,
   thumbnailS3Key: null,
@@ -157,7 +158,7 @@ describe("SplatPage", () => {
   });
 
   it("offers the share panel once the splat is complete and shareable", async () => {
-    setup({ splat: { ...splat, status: "complete" }, job: { ...job, status: "complete" } });
+    setup({ splat: { ...splat, status: SplatStatus.complete }, job: { ...job, status: JobStatus.complete } });
     await renderPage();
     expect(screen.getByTestId("share-panel")).toBeInTheDocument();
     expect(screen.getByTestId("viewer")).toHaveTextContent("true");
@@ -165,14 +166,17 @@ describe("SplatPage", () => {
   });
 
   it("still offers Discard for a finished splat that isn't shareable", async () => {
-    setup({ splat: { ...splat, status: "complete", isShareable: false }, job: { ...job, status: "complete" } });
+    setup({
+      splat: { ...splat, status: SplatStatus.complete, isShareable: false },
+      job: { ...job, status: JobStatus.complete },
+    });
     await renderPage();
     expect(screen.queryByTestId("share-panel")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Discard" })).toBeInTheDocument();
   });
 
   it("refetches the splat once its job has ended", async () => {
-    setup({ splat, job: { ...job, status: "failed" } });
+    setup({ splat, job: { ...job, status: JobStatus.failed } });
     await renderPage();
     expect(refetchSplat).toHaveBeenCalled();
   });

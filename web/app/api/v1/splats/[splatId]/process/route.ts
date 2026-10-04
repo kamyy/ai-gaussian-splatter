@@ -18,7 +18,7 @@ import { requireProcessingEnabled } from "@/lib/server/runtimeSettings";
 import { jobColumns } from "@/lib/server/selects";
 import { launchWorker, stopWorker } from "@/lib/server/worker";
 import { generateCallbackToken } from "@/lib/server/workerLauncher";
-import { JOB_ENDED_STATUSES, JobStatus } from "@/lib/statuses";
+import { JOB_ENDED_STATUSES, JobStatus, PhotoUploadStatus, SplatStatus } from "@/lib/statuses";
 
 // How long a job may sit in a non-terminal status without its worker reporting anything before this route treats it
 // as dead and cancels it. The window has to clear the longest gap a healthy job can go between callbacks, which is a
@@ -52,7 +52,7 @@ export const POST = withErrorHandling(
     const [uploaded] = await getDb()
       .select({ n: count() })
       .from(photos)
-      .where(and(eq(photos.splatId, splatId), eq(photos.uploadStatus, "uploaded")));
+      .where(and(eq(photos.splatId, splatId), eq(photos.uploadStatus, PhotoUploadStatus.uploaded)));
     if (uploaded.n < settings.minPhotosPerSplat) {
       throw new HttpError(400, `Need at least ${settings.minPhotosPerSplat} uploaded photos, have ${uploaded.n}`);
     }
@@ -117,7 +117,7 @@ export const POST = withErrorHandling(
       throw err;
     }
 
-    await getDb().update(splats).set({ status: "processing" }).where(eq(splats.id, splatId));
+    await getDb().update(splats).set({ status: SplatStatus.processing }).where(eq(splats.id, splatId));
 
     let instanceId: string | null;
     try {
@@ -134,7 +134,7 @@ export const POST = withErrorHandling(
           .where(and(eq(jobs.id, created.id), eq(jobs.status, JobStatus.queued)))
           .returning({ id: jobs.id });
         if (failed !== undefined) {
-          await tx.update(splats).set({ status: "failed" }).where(eq(splats.id, splatId));
+          await tx.update(splats).set({ status: SplatStatus.failed }).where(eq(splats.id, splatId));
         }
       });
       throw err;
