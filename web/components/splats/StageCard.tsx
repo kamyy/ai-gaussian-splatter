@@ -20,7 +20,7 @@ import { useAppSnackbar } from "@/lib/hooks/useAppSnackbar";
 import { useProcessingPaused } from "@/lib/hooks/useProcessingPaused";
 import { requireToken } from "@/lib/requireToken";
 import type { Stage } from "@/lib/splatStage";
-import type { CropBox, Job } from "@/lib/types";
+import type { Job } from "@/lib/types";
 import { ProcessingPausedNotice } from "./ProcessingPausedNotice";
 import { DeleteSplatButton, StopJobButton } from "./SplatActions";
 import { StageShell } from "./StageShell";
@@ -31,8 +31,6 @@ const MIN_PERCENT_FOR_ESTIMATE = 5;
 interface StageCardProps {
   splatId: string;
   stage: Stage;
-  // The crop box drawn in the 3D view, sent with the check stage's build button. Null builds the whole scene.
-  cropBox?: CropBox | null;
   // Called once an action has changed the splat's job, so the page refetches it.
   onJobChanged: () => void;
 }
@@ -86,17 +84,17 @@ function ProgressBar({ label, percent, startedAt }: { label: string; percent: nu
  * What the visitor can do, or is waiting on, at the current stage. The complete stage has no card of its own. The
  * share panel (web/components/splats/SharePanel.tsx) takes its place in the same StageShell.
  */
-export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: StageCardProps) {
+export function StageCard({ splatId, stage, onJobChanged }: StageCardProps) {
   const { getToken } = useAuth();
   const { mutate } = useSWRConfig();
   const { enqueueSnackbar } = useAppSnackbar();
   const processingPaused = useProcessingPaused();
   const [pending, setPending] = useState(false);
 
-  async function post(path: "process" | "train", failure: string, body?: unknown) {
+  async function post(path: "process" | "train", failure: string) {
     setPending(true);
     try {
-      await apiFetch<Job>(`/api/v1/splats/${splatId}/${path}`, "POST", await requireToken(getToken), body);
+      await apiFetch<Job>(`/api/v1/splats/${splatId}/${path}`, "POST", await requireToken(getToken));
       onJobChanged();
       await mutate("splats");
     } catch (err) {
@@ -111,7 +109,7 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
   }
 
   const startProcessing = () => post("process", "Couldn't start processing");
-  const startTraining = () => post("train", "Couldn't start building", cropBox ? { cropBox } : {});
+  const startTraining = () => post("train", "Couldn't start building");
   const discardButton = <DeleteSplatButton splatId={splatId} label="Discard" variant="outlined" />;
 
   // The start and build buttons are disabled with it, so a paused site is explained rather than just unclickable.
@@ -171,7 +169,7 @@ export function StageCard({ splatId, stage, cropBox = null, onJobChanged }: Stag
             This is a rough sketch of the shape. If the outline looks right, build the full 3D version. If it&apos;s a
             jumble, re-shoot with more overlap between photos.
           </p>
-          <p>To leave out the background, turn on Crop in the 3D view and fit the box around your object.</p>
+          <p>Once it&apos;s built, you can crop away the background in the 3D view.</p>
           {pausedNotice}
           <div className="flex flex-wrap gap-2">
             <Button variant="contained" onClick={startTraining} loading={pending} disabled={processingPaused}>

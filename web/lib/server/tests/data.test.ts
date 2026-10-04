@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-
+import type { CropBox } from "@/lib/types";
 import { getExampleSplats, getPublicSplat, getPublicSplatView } from "../data";
 import { closeDb, getDb } from "../db";
 import { jobs, photos, splats, users } from "../db/schema";
@@ -41,6 +41,19 @@ describe("getPublicSplat", () => {
     expect(result?.isShowcase).toBe(false);
     expect(result?.thumbnailUrl).toContain("splats/x/thumbnail.jpg");
     expect(result?.splatUrl).toContain("splats/x/result.spz");
+  });
+
+  it("serves the owner's crop, when there is one", async () => {
+    const { splat, job } = await seedShared();
+    const cropBox: CropBox = { center: [1, 2, 3], size: [1, 1, 1], quaternion: [0, 0, 0, 1] };
+    await getDb()
+      .update(jobs)
+      .set({ cropBox, croppedResultSpzS3Key: "splats/x/crops/c1/result.spz" })
+      .where(eq(jobs.id, job.id));
+
+    const result = await getPublicSplat(splat.id);
+    expect(result?.splatUrl).toContain("splats/x/crops/c1/result.spz");
+    expect(result?.cropBox).toEqual(cropBox);
   });
 
   it("marks a splat owned by the showcase account", async () => {

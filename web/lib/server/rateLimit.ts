@@ -15,9 +15,10 @@
  *
  * Each rejection names the limit that was hit and how long until it resets, since the message is shown to the user
  * as it is. The per-IP and per-user messages speak of uploads, because photo presigning is the one endpoint they guard.
+ * Cropping a finished splat has its own per-user hourly limit.
  */
 
-import { lt, sql } from "drizzle-orm";
+import { and, eq, lt, sql } from "drizzle-orm";
 
 import { getDb } from "./db";
 import { globalJobCounters, rateLimitCounters } from "./db/schema";
@@ -30,6 +31,7 @@ const DAY_MS = 24 * HOUR_MS;
 const COUNTER_RETENTION_MS = DAY_MS;
 const PRUNE_INTERVAL_MS = HOUR_MS;
 const FIRST_PRUNE_DELAY_MS = 60 * 1000;
+const MAX_CROPS_PER_HOUR = 30;
 
 export async function checkAndIncrementIp(ip: string, limitPerHour: number): Promise<void> {
   const hour = truncateToHour(new Date());
@@ -58,6 +60,40 @@ export async function checkAndIncrementUser(userId: string, limitPerDay: number)
     limitPerDay,
     `You've used all ${limitPerDay} of today's uploads for your account. Try again in ${wait}, after midnight UTC.`,
   );
+}
+
+/** The counter scope for one user's hourly crop limit. Deleting an account deletes that user's counter by it. */
+export function userCropRateLimitScope(userId: string): string {
+  return `crop:${userId}`;
+}
+
+function cropLimitMessage(hour: Date): string {
+  const wait = formatWaitUntil(new Date(hour.getTime() + HOUR_MS));
+
+  return `You've cropped ${MAX_CROPS_PER_HOUR} times this hour. Try again in ${wait}.`;
+}
+
+/**
+ * Throws 429 when this user has already finished this hour's crops. It does not count an attempt. The crop route
+ * counts a crop only once that crop has committed.
+ */
+export async function assertUserCropCapacity(userId: string): Promise<void> {
+  const hour = truncateToHour(new Date());
+  const [row] = await getDb()
+    .select({ count: rateLimitCounters.count })
+    .from(rateLimitCounters)
+    .where(and(eq(rateLimitCounters.scope, userCropRateLimitScope(userId)), eq(rateLimitCounters.windowStart, hour)))
+    .limit(1);
+  if ((row?.count ?? 0) >= MAX_CROPS_PER_HOUR) {
+    throw new HttpError(429, cropLimitMessage(hour));
+  }
+}
+
+/** Each crop streams a whole splat through the web task, so one user can't keep its CPU busy with them. */
+export async function checkAndIncrementUserCrops(userId: string): Promise<void> {
+  const hour = truncateToHour(new Date());
+
+  await checkAndIncrement(userCropRateLimitScope(userId), hour, MAX_CROPS_PER_HOUR, cropLimitMessage(hour));
 }
 
 /**

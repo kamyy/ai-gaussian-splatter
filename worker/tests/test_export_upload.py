@@ -1,12 +1,18 @@
+import gzip
+from pathlib import Path
+
 import boto3
-import pytest
 import torch
 from moto import mock_aws
 from plyfile import PlyData
 
-from pipeline.config import CropBox
-from pipeline.export import ExportedFiles, _crop_scene, _write_ply, upload_result
+from pipeline.export import ExportedFiles, _write_ply, upload_result
+from pipeline.spz import write_spz
 from pipeline.train import SH_DEGREE, GaussianModel, TrainedScene
+
+# The .ply and .spz web/lib/server/tests/cropSplat.test.ts crops. Regenerating them is running this test's scene
+# through the two writers; gzip's timestamp differs per call, so the .spz is compared after decompressing.
+CROP_FIXTURE = Path(__file__).parent / "fixtures" / "crop"
 
 
 def _scene(means: list[list[float]]) -> TrainedScene:
@@ -27,28 +33,35 @@ def _scene(means: list[list[float]]) -> TrainedScene:
     )
 
 
-def test_crop_scene_keeps_every_attribute_of_the_gaussians_inside():
-    box = CropBox(center=(0, 0, 0), size=(2, 2, 2), quaternion=(0, 0, 0, 1))
-    cropped = _crop_scene(_scene([[0, 0, 0], [5, 0, 0], [0.5, 0.5, 0.5]]), box).model
+def _crop_fixture_scene() -> TrainedScene:
+    """Three Gaussians: two inside the unit box at the origin, and one at x=5 outside it."""
+    means = [[0.0, 0.0, 0.0], [5.0, 0.0, 0.0], [0.5, -0.5, 0.5]]
+    n = len(means)
+    return TrainedScene(
+        model=GaussianModel(
+            means=torch.tensor(means),
+            scales=torch.arange(n, dtype=torch.float32)[:, None].repeat(1, 3),
+            quats=torch.tensor([[1.0, 0.0, 0.0, 0.0]]).repeat(n, 1),
+            opacities=torch.arange(n, dtype=torch.float32),
+            sh0=torch.arange(n, dtype=torch.float32)[:, None, None].repeat(1, 1, 3),
+            shN=torch.arange(n, dtype=torch.float32)[:, None, None].repeat(1, (SH_DEGREE + 1) ** 2 - 1, 3),
+        ),
+        canonical_viewmat=torch.eye(4),
+        canonical_K=torch.eye(3),
+        canonical_width=4,
+        canonical_height=3,
+    )
 
-    assert cropped.means.tolist() == [[0, 0, 0], [0.5, 0.5, 0.5]]
-    assert cropped.opacities.tolist() == [0, 2]
-    assert cropped.scales[:, 0].tolist() == [0, 2]
-    assert cropped.sh0[:, 0, 0].tolist() == [0, 2]
-    assert cropped.shN[:, 0, 0].tolist() == [0, 2]
 
+def test_crop_fixture_matches_the_writers(tmp_path):
+    scene = _crop_fixture_scene()
+    ply = tmp_path / "result.ply"
+    spz = tmp_path / "result.spz"
+    _write_ply(scene, ply)
+    write_spz(scene.model, spz)
 
-def test_crop_scene_fails_when_the_box_holds_nothing():
-    box = CropBox(center=(10, 10, 10), size=(1, 1, 1), quaternion=(0, 0, 0, 1))
-    with pytest.raises(RuntimeError, match="crop box"):
-        _crop_scene(_scene([[0, 0, 0]]), box)
-
-
-def test_crop_box_is_read_from_its_json_env_var(monkeypatch, settings):
-    monkeypatch.setenv("CROP_BOX", '{"center":[1,2,3],"size":[4,5,6],"quaternion":[0,0,0,1]}')
-    loaded = type(settings)(**settings.model_dump(exclude={"crop_box"}))
-
-    assert loaded.crop_box == CropBox(center=(1, 2, 3), size=(4, 5, 6), quaternion=(0, 0, 0, 1))
+    assert ply.read_bytes() == (CROP_FIXTURE / "result.ply").read_bytes()
+    assert gzip.decompress(spz.read_bytes()) == gzip.decompress((CROP_FIXTURE / "result.spz").read_bytes())
 
 
 def test_write_ply_orders_higher_sh_coefficients_channel_major(tmp_path):

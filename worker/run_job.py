@@ -90,7 +90,7 @@ def _run_train(settings: Settings) -> int:
         status.report_status(
             settings,
             "complete",
-            result_s3_key=keys.ply,
+            result_ply_s3_key=keys.ply,
             result_spz_s3_key=keys.spz,
             thumbnail_s3_key=keys.thumbnail,
         )

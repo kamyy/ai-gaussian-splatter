@@ -394,6 +394,10 @@ resource "aws_lb" "web" {
   # assembled out of them.
   drop_invalid_header_fields = true
 
+  # A crop holds its request open with no bytes until both files are written. Left unset, the load balancer
+  # closes that request after 60s.
+  idle_timeout = local.alb_idle_timeout_seconds
+
   access_logs {
     bucket  = aws_s3_bucket.access_logs.id
     enabled = true

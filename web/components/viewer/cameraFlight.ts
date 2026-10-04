@@ -56,6 +56,22 @@ export function fittedFov({ width, height, fx, fy }: Omit<CameraPose, "photoId">
 }
 
 /**
+ * The orthographic zoom that shows the same height fittedFov would at distance, for a camera whose view is
+ * frustumHeight world units tall at zoom 1.
+ */
+export function orthographicZoom(
+  frustumHeight: number,
+  photo: Omit<CameraPose, "photoId">,
+  distance: number,
+  aspect: number,
+): number {
+  const tanHalfVertical = Math.tan(MathUtils.degToRad(fittedFov(photo, aspect) / 2));
+  const visibleHeight = 2 * distance * tanHalfVertical;
+
+  return frustumHeight / visibleHeight;
+}
+
+/**
  * The pose a fraction t of the way from one pose to another. The position moves in a straight line and the
  * orientation turns at a steady rate, so the view doesn't swing wide the way separately interpolated angles would.
  */

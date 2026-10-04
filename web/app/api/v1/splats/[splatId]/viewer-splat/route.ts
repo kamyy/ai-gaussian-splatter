@@ -2,7 +2,8 @@
  * GET /api/v1/splats/[splatId]/viewer-splat: a link to the splat the 3D viewer loads.
  *
  * Returns a presigned URL (a time-limited S3 link) for the compressed .spz copy of the finished splat, which loads far
- * faster than the lossless .ply the download route serves.
+ * faster than the lossless .ply the download route serves. Once the owner has cropped the splat, that is the cropped
+ * copy.
  */
 
 import { and, desc, eq } from "drizzle-orm";
@@ -25,7 +26,7 @@ export const GET = withErrorHandling(
     // web/app/api/v1/splats/[splatId]/download/route.ts. Both deliberately collapse "not ready" and "not yours" into
     // the same 404.
     const [latestJob] = await getDb()
-      .select({ resultSpzS3Key: jobs.resultSpzS3Key })
+      .select({ resultSpzS3Key: jobs.resultSpzS3Key, croppedResultSpzS3Key: jobs.croppedResultSpzS3Key })
       .from(jobs)
       .innerJoin(splats, eq(splats.id, jobs.splatId))
       .where(
@@ -42,6 +43,6 @@ export const GET = withErrorHandling(
       throw new HttpError(404, "Splat not ready");
     }
 
-    return NextResponse.json(await presignSplatDownload(latestJob.resultSpzS3Key));
+    return NextResponse.json(await presignSplatDownload(latestJob.croppedResultSpzS3Key ?? latestJob.resultSpzS3Key));
   },
 );

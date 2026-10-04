@@ -9,15 +9,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-import torch
 from PIL import Image as PILImage
 from plyfile import PlyData, PlyElement
 
-from .config import CropBox, Settings
-from .crop import inside_crop_box
+from .config import Settings
 from .spz import write_spz
 from .storage import s3_client
-from .train import GaussianModel, TrainedScene, render_view
+from .train import TrainedScene, render_view
 
 
 @dataclass
@@ -41,9 +39,6 @@ def export_scene(scene: TrainedScene, settings: Settings) -> ExportedFiles:
     workdir = Path(settings.local_workdir)
     files = ExportedFiles(ply=workdir / "result.ply", spz=workdir / "result.spz", thumbnail=workdir / "thumbnail.png")
 
-    if settings.crop_box is not None:
-        scene = _crop_scene(scene, settings.crop_box)
-
     _write_ply(scene, files.ply)
     write_spz(scene.model, files.spz)
     _render_thumbnail(scene, files.thumbnail)
@@ -62,29 +57,6 @@ def upload_result(files: ExportedFiles, settings: Settings) -> UploadedKeys:
     s3.upload_file(str(files.thumbnail), settings.splats_bucket, keys.thumbnail)
 
     return keys
-
-
-def _crop_scene(scene: TrainedScene, box: CropBox) -> TrainedScene:
-    """Keeps each Gaussian whose center is inside the box. A Gaussian straddling a face is kept or dropped whole."""
-    model = scene.model
-    mask = torch.from_numpy(inside_crop_box(model.means.detach().cpu().numpy(), box)).to(model.means.device)
-    if not bool(mask.any()):
-        raise RuntimeError("The crop box doesn't contain any of the splat")
-    cropped = GaussianModel(
-        means=model.means[mask],
-        scales=model.scales[mask],
-        quats=model.quats[mask],
-        opacities=model.opacities[mask],
-        sh0=model.sh0[mask],
-        shN=model.shN[mask],
-    )
-    return TrainedScene(
-        model=cropped,
-        canonical_viewmat=scene.canonical_viewmat,
-        canonical_K=scene.canonical_K,
-        canonical_width=scene.canonical_width,
-        canonical_height=scene.canonical_height,
-    )
 
 
 def _write_ply(scene: TrainedScene, path: Path) -> None:

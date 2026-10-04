@@ -1,8 +1,8 @@
 import { Quaternion, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 
-import type { CameraPose } from "@/lib/types";
-import { fittedCropBox, framingFromCameras, trimmedBox } from "./cameraFraming";
+import type { CameraPose, CropBox } from "@/lib/types";
+import { axisViewPose, fittedCropBox, framingFromCameras, trimmedBoundingBox } from "./cameraFraming";
 
 // A camera at `center` looking at `target`. Only the rotation's third row, the viewing direction, matters here.
 function lookingAt(center: [number, number, number], target: [number, number, number]): CameraPose {
@@ -39,18 +39,18 @@ describe("framingFromCameras", () => {
   });
 });
 
-describe("trimmedBox", () => {
+describe("trimmedBoundingBox", () => {
   it("ignores a stray point far from the rest", () => {
     const positions = Array.from({ length: 100 }, (_, i) => [i % 10, Math.floor(i / 10), 0]).flat();
     positions.push(1000, 1000, 1000);
 
-    const box = trimmedBox(positions);
+    const box = trimmedBoundingBox(positions);
 
     expect(box.max.toArray().every(v => v < 10)).toBe(true);
   });
 
   it("is empty without positions", () => {
-    expect(trimmedBox([]).isEmpty()).toBe(true);
+    expect(trimmedBoundingBox([]).isEmpty()).toBe(true);
   });
 });
 
@@ -77,11 +77,57 @@ describe("fittedCropBox", () => {
     expect(round(box?.quaternion ?? [])).toEqual(round(tilt.toArray()));
   });
 
+  it("fits the object the photos aim at, not the table around it", () => {
+    // A 2 x 2 x 2 object of 125 points on the origin, standing on a 36 x 36 table of 100 points.
+    const object = [-1, -0.5, 0, 0.5, 1].flatMap(x =>
+      [-1, -0.5, 0, 0.5, 1].flatMap(y => [-1, -0.5, 0, 0.5, 1].flatMap(z => [x, y, z])),
+    );
+    const table = Array.from({ length: 100 }, (_, i) => [(i % 10) * 4 - 18, -1, Math.floor(i / 10) * 4 - 18]).flat();
+    const framing = { target: new Vector3(0, 0, 0), position: new Vector3(0, 0, 10), up: new Vector3(0, 1, 0) };
+
+    const box = fittedCropBox([...object, ...table], framing);
+
+    expect(box?.size.every(side => side <= 3)).toBe(true);
+  });
+
   it("keeps COLMAP's axes without a framing", () => {
     expect(fittedCropBox(corners, null)?.quaternion).toEqual([0, 0, 0, 1]);
   });
 
   it("is null without positions", () => {
     expect(fittedCropBox([], null)).toBeNull();
+  });
+});
+
+describe("axisViewPose", () => {
+  // A 2 x 4 x 6 box on (1, 2, 3), turned a quarter about y, so its front (+z) faces world +x.
+  const quarter = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI / 2);
+  const box: CropBox = { center: [1, 2, 3], size: [2, 4, 6], quaternion: quarter.toArray() };
+  const round = (vector: Vector3) => vector.toArray().map(v => Number(v.toFixed(6)) + 0);
+
+  it("looks at the front along the box's own z axis", () => {
+    const pose = axisViewPose(box, "front");
+
+    expect(round(pose.target)).toEqual([1, 2, 3]);
+    expect(round(pose.direction)).toEqual([1, 0, 0]);
+    expect(round(pose.up)).toEqual([0, 1, 0]);
+    expect(pose.extent).toBe(6);
+  });
+
+  it("looks at the side along the box's own x axis", () => {
+    const pose = axisViewPose(box, "side");
+
+    expect(round(pose.direction)).toEqual([0, 0, -1]);
+    expect(round(pose.up)).toEqual([0, 1, 0]);
+  });
+
+  it("looks down from the top, leaning a hair toward the front", () => {
+    const pose = axisViewPose(box, "top");
+    const { direction } = pose;
+
+    expect(direction.dot(new Vector3(0, 1, 0))).toBeCloseTo(1, 5);
+    // The box's front faces world +x.
+    expect(direction.x).toBeGreaterThan(0);
+    expect(round(pose.up)).toEqual([0, 1, 0]);
   });
 });

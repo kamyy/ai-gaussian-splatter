@@ -19,7 +19,6 @@ import {
   TerminateInstancesCommand,
 } from "@aws-sdk/client-ec2";
 
-import type { CropBox } from "@/lib/types";
 import { getEnv, getWorkerInstanceEnv, LOCAL_APP_ORIGIN, LOCAL_WORKER_CALLBACK_ORIGIN } from "./env";
 import type { RuntimeSettings } from "./runtimeSettings";
 
@@ -47,7 +46,6 @@ export interface WorkerLaunch {
   callbackToken: string;
   stage: WorkerStage;
   settings: RuntimeSettings;
-  cropBox?: CropBox;
 }
 
 interface UserDataParams {
@@ -64,14 +62,9 @@ interface UserDataParams {
   logGroup: string;
   maxLifetimeMinutes: number;
   trainingIterations?: number;
-  cropBox?: CropBox;
 }
 
 function renderUserData(p: UserDataParams): string {
-  // Single-quoted in the script. The train route's schema has already reduced the box to numbers, so its JSON holds no
-  // quote of either kind.
-  const cropBoxVar = p.cropBox ? `CROP_BOX='${JSON.stringify(p.cropBox)}'\n` : "";
-  const cropBoxArg = p.cropBox ? `    -e CROP_BOX="$CROP_BOX" \\\n` : "";
   const iterationsArg = p.trainingIterations ? `    -e TRAINING_ITERATIONS=${p.trainingIterations} \\\n` : "";
 
   return `#!/bin/bash
@@ -100,7 +93,7 @@ APP_ORIGIN="${p.appOrigin}"
 UPLOADS_BUCKET="${p.uploadsBucket}"
 SPLATS_BUCKET="${p.splatsBucket}"
 STAGE="${p.stage}"
-${cropBoxVar}
+
 $(aws ecr get-login --no-include-email --region ${p.awsRegion}) || \\
     aws ecr get-login-password --region ${p.awsRegion} | docker login --username AWS --password-stdin ${p.ecrRegistry}
 
@@ -125,7 +118,7 @@ docker run --rm --gpus all \\
     -e STAGE="$STAGE" \\
     -e BOOTED_AT="$BOOTED_AT" \\
     -e S3_CREDENTIALS_FROM_APP=true \\
-${iterationsArg}${cropBoxArg}    ${p.workerImageUri}
+${iterationsArg}    ${p.workerImageUri}
 `;
 }
 
@@ -179,7 +172,6 @@ export async function launchJob(params: WorkerLaunch): Promise<string> {
     logGroup: worker.WORKER_LOG_GROUP,
     maxLifetimeMinutes: params.settings.workerMaxLifetimeMinutes,
     trainingIterations: params.stage === "train" ? params.settings.trainingIterations : undefined,
-    cropBox: params.cropBox,
   });
 
   const response = await ec2Client().send(
@@ -369,7 +361,6 @@ export function launchJobLocal(params: WorkerLaunch): void {
     // The train stage's local-only switch from web/.env (worker/pipeline/config.py). EVAL_HOLDOUT scores the result
     // against held-back photos.
     ...(params.stage === "train" && process.env.EVAL_HOLDOUT === "true" ? ["-e", "EVAL_HOLDOUT=true"] : []),
-    ...(params.cropBox ? ["-e", `CROP_BOX=${JSON.stringify(params.cropBox)}`] : []),
     "-v",
     `${jobDir}:/tmp/job`,
     image,

@@ -14,7 +14,7 @@ const baseJob: Job = {
   splatId: "splat-1",
   status: "training_running",
   errorMessage: null,
-  resultS3Key: null,
+  resultPlyS3Key: null,
   thumbnailS3Key: null,
   pointCloudS3Key: null,
   colmapBootedAt: null,
@@ -23,7 +23,9 @@ const baseJob: Job = {
   trainingLaunchedAt: null,
   trainingBootedAt: null,
   trainingStartedAt: null,
+  completedAt: null,
   trainingProgress: null,
+  cropBox: null,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
 };

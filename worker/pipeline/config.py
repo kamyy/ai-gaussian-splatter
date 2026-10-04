@@ -7,18 +7,7 @@ validates them when the worker starts, so a missing setting fails straight away 
 
 from typing import Literal
 
-from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-class CropBox(BaseModel):
-    """An oriented box in the COLMAP point cloud's world frame, as the browser's crop gizmo leaves it. size is the full
-    edge length on each of the box's own axes. quaternion is x, y, z, w, which is three.js's order, not COLMAP's.
-    """
-
-    center: tuple[float, float, float]
-    size: tuple[float, float, float]
-    quaternion: tuple[float, float, float, float]
 
 
 class Settings(BaseSettings):
@@ -46,10 +35,6 @@ class Settings(BaseSettings):
     # the photos it trains on. It also seeds the random view order, but GPU nondeterminism still moves the score of two
     # identical runs by up to about 1 dB, so compare a change over several runs.
     eval_holdout: bool = False
-
-    # Set only on a train-stage launch, as JSON in CROP_BOX. worker/pipeline/export.py drops every Gaussian whose center
-    # falls outside it. Training ignores it, for the reason ARCHITECTURE.md's Pipeline section gives.
-    crop_box: CropBox | None = None
 
     local_workdir: str = "/tmp/job"
 

@@ -21,11 +21,8 @@ import { globalJobCounters, jobs, splats, users } from "@/lib/server/db/schema";
 import type { JobStatus } from "@/lib/statuses";
 import { POST } from "./route";
 
-function trainRequest(body: unknown = {}) {
-  return new Request("http://localhost/api/v1/splats/x/train", {
-    method: "POST",
-    body: JSON.stringify(body),
-  }) as never;
+function trainRequest() {
+  return new Request("http://localhost/api/v1/splats/x/train", { method: "POST" }) as never;
 }
 
 function ctx(splatId: string) {
@@ -162,39 +159,6 @@ describe("POST /api/v1/splats/[splatId]/train", () => {
     const [row] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
     expect(row.status).toBe("cancelled");
     expect(row.ec2InstanceId).toBeNull();
-  });
-
-  it("passes a crop box through to the train stage's worker", async () => {
-    const { splat } = await seed();
-    const cropBox = { center: [1, 2, 3], size: [4, 5, 6], quaternion: [0, 0, 0, 1] };
-
-    const res = await POST(trainRequest({ cropBox }), ctx(splat.id));
-    expect(res.status).toBe(200);
-    expect(launchJobMock).toHaveBeenCalledWith(expect.objectContaining({ cropBox }));
-  });
-
-  it.each([
-    ["a missing body", undefined],
-    ["a non-positive size", { cropBox: { center: [0, 0, 0], size: [1, 0, 1], quaternion: [0, 0, 0, 1] } }],
-    ["a zero quaternion", { cropBox: { center: [0, 0, 0], size: [1, 1, 1], quaternion: [0, 0, 0, 0] } }],
-    [
-      "a string where a number goes",
-      { cropBox: { center: ["0';reboot;'", 0, 0], size: [1, 1, 1], quaternion: [0, 0, 0, 1] } },
-    ],
-  ])("422s on %s without moving the job or charging the cap", async (_label, body) => {
-    const { splat, job } = await seed();
-    const request =
-      body === undefined
-        ? (new Request("http://localhost/api/v1/splats/x/train", { method: "POST" }) as never)
-        : trainRequest(body);
-
-    const res = await POST(request, ctx(splat.id));
-    expect(res.status).toBe(422);
-    expect(launchJobMock).not.toHaveBeenCalled();
-
-    const [unchanged] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
-    expect(unchanged.status).toBe("awaiting_training");
-    expect(await getDb().select().from(globalJobCounters)).toEqual([]);
   });
 
   it("409s when the latest job for the splat isn't awaiting_training", async () => {

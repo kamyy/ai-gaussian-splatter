@@ -1,9 +1,9 @@
 /**
  * Tells a click on the 3D view apart from the start of a drag.
  *
- * Pressing the mouse on the view already turns it slightly, so a click on a camera looks like a tiny drag. This hook
- * watches the pointer, so web/lib/hooks/useCameraFlight.ts can ignore that small movement while a press may still end
- * as a click.
+ * Pressing the mouse on the view already turns it slightly. This hook watches the pointer, so
+ * web/lib/hooks/useCameraFlight.ts can ignore that small movement and keep a selected photo's view until the press
+ * becomes a drag.
  */
 
 "use client";
@@ -11,7 +11,8 @@
 import { useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useRef } from "react";
 
-import { CLICK_SLOP_PX } from "@/components/viewer/CameraFrustums";
+// How far, in pixels, the pointer may move during a press before that press counts as a drag.
+const CLICK_SLOP_PX = 4;
 
 /**
  * Tracks the press in progress on the R3F canvas. The returned function is true while that press has stayed within

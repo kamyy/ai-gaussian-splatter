@@ -15,7 +15,7 @@ import { WORKER_RUNNING_STATUSES } from "@/lib/server/cancelJob";
 import { getDb } from "@/lib/server/db";
 import { jobs, rateLimitCounters, splats, users } from "@/lib/server/db/schema";
 import { withErrorHandling } from "@/lib/server/httpError";
-import { userRateLimitScope } from "@/lib/server/rateLimit";
+import { userCropRateLimitScope, userRateLimitScope } from "@/lib/server/rateLimit";
 import { deleteSplatObjects } from "@/lib/server/s3";
 import { stopWorker } from "@/lib/server/worker";
 
@@ -69,7 +69,8 @@ export const DELETE = withErrorHandling(async () => {
 
     await getDb().execute(sql`
       with deleted_counters as (
-        delete from ${rateLimitCounters} where ${rateLimitCounters.scope} = ${userRateLimitScope(userId)}
+        delete from ${rateLimitCounters}
+        where ${rateLimitCounters.scope} in (${userRateLimitScope(userId)}, ${userCropRateLimitScope(userId)})
       )
       delete from ${users} where ${users.id} = ${userId}`);
 

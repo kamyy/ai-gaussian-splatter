@@ -1,48 +1,29 @@
 /**
  * POST /api/v1/splats/[splatId]/train: start the training stage.
  *
- * The check stage's build button calls this once the visitor has looked over the point cloud, optionally with a crop
- * box. It launches the second GPU spot instance for a job whose reconstruct stage stopped at "awaiting_training",
+ * The check stage's build button calls this once the visitor has looked over the point cloud. It launches the second GPU spot instance for a job whose reconstruct stage stopped at "awaiting_training",
  * reusing that job's own id and callback token rather than creating a new job row (see worker/run_job.py's stage
  * split).
  */
 
 import { and, desc, eq, notInArray } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 
 import { requireOwnedSplat, requireUser } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { jobs } from "@/lib/server/db/schema";
-import { HttpError, parseJsonBody, withErrorHandling } from "@/lib/server/httpError";
+import { HttpError, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementGlobalDaily } from "@/lib/server/rateLimit";
 import { requireProcessingEnabled } from "@/lib/server/runtimeSettings";
 import { jobColumns } from "@/lib/server/selects";
 import { launchWorker, stopWorker } from "@/lib/server/worker";
 import { JOB_ENDED_STATUSES, JobStatus } from "@/lib/statuses";
 
-// Nothing but numbers survives the parse, which is what lets web/lib/server/ec2Launcher.ts single-quote the box's JSON
-// inside the user-data script.
-const trainSchema = z.object({
-  cropBox: z
-    .object({
-      center: z.tuple([z.number(), z.number(), z.number()]),
-      size: z.tuple([z.number().positive(), z.number().positive(), z.number().positive()]),
-      quaternion: z
-        .tuple([z.number(), z.number(), z.number(), z.number()])
-        .refine(quaternion => Math.hypot(...quaternion) > 1e-6, "A rotation quaternion can't be zero"),
-    })
-    .optional(),
-});
-
 export const POST = withErrorHandling(
-  async (request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/train">) => {
+  async (_request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/train">) => {
     const user = await requireUser();
     const { splatId } = await ctx.params;
     await requireOwnedSplat(splatId, user.id);
-
-    // Parsed before the flip below, so a malformed box never moves the job or charges the daily cap.
-    const { cropBox } = await parseJsonBody(request, trainSchema);
 
     // Checked before the flip below, so a paused site leaves the job waiting at "awaiting_training".
     const settings = await requireProcessingEnabled();
@@ -90,7 +71,6 @@ export const POST = withErrorHandling(
         callbackToken: flipped.callbackToken,
         stage: "train",
         settings,
-        cropBox,
       });
     } catch (err) {
       await getDb()

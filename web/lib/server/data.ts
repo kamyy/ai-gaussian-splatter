@@ -110,8 +110,10 @@ async function findPublicSplat(
       title: splat.name,
       isShowcase: await isExampleSplat(splatId, ownerClerkUserId),
       thumbnailUrl: await presignPublic(SPLATS_BUCKET, splat.thumbnailS3Key),
-      splatUrl: await presignPublic(SPLATS_BUCKET, latestJob.resultSpzS3Key),
+      // The owner's crop, when there is one (web/app/api/v1/splats/[splatId]/crop/route.ts).
+      splatUrl: await presignPublic(SPLATS_BUCKET, latestJob.croppedResultSpzS3Key ?? latestJob.resultSpzS3Key),
       pointCloudUrl: latestJob.pointCloudS3Key ? await presignPublic(SPLATS_BUCKET, latestJob.pointCloudS3Key) : null,
+      cropBox: latestJob.cropBox,
     },
     job: latestJob,
   };
@@ -176,8 +178,8 @@ export async function getPublicSplatView(splatId: string): Promise<PublicSplatVi
       trainingLaunchedAt: job.trainingLaunchedAt?.toISOString() ?? null,
       trainingBootedAt: job.trainingBootedAt?.toISOString() ?? null,
       trainingStartedAt: job.trainingStartedAt?.toISOString() ?? null,
+      completedAt: job.completedAt?.toISOString() ?? null,
       createdAt: job.createdAt.toISOString(),
-      updatedAt: job.updatedAt.toISOString(),
     },
   };
 }

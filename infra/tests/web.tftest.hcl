@@ -134,11 +134,14 @@ run "web_container_wiring" {
   }
 
   assert {
-    condition = anytrue([
-      for e in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].environment :
-      e.name == "KEEP_ALIVE_TIMEOUT" && e.value == "65000"
-    ])
-    error_message = "KEEP_ALIVE_TIMEOUT must exceed the ALB's 60s idle timeout, or healthy deploys serve intermittent 502s"
+    condition = (
+      aws_lb.web.idle_timeout == 300 &&
+      anytrue([
+        for e in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].environment :
+        e.name == "KEEP_ALIVE_TIMEOUT" && tonumber(e.value) > aws_lb.web.idle_timeout * 1000
+      ])
+    )
+    error_message = "KEEP_ALIVE_TIMEOUT must exceed the ALB idle timeout, or healthy deploys serve intermittent 502s"
   }
 
   assert {

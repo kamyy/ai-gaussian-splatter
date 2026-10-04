@@ -19,8 +19,9 @@ export interface Splat {
 /**
  * GET /api/v1/splats: what a library card needs for each splat, without one API call per card. thumbnailPhotoUrl is a
  * presigned GET for the first uploaded photo's thumbnail, or for the photo itself when it has none. That differs from
- * Splat.thumbnailS3Key, the splat preview the worker renders once a job completes. photoCount counts uploaded photos
- * only. thumbnailWidth and thumbnailHeight are that photo's size, null when there is no photo or no size was recorded.
+ * Splat.thumbnailS3Key, the Open Graph preview the worker renders once a job completes. A crop leaves it in place.
+ * photoCount counts uploaded photos only. thumbnailWidth and thumbnailHeight are that photo's
+ * size, null when there is no photo or no size was recorded.
  */
 export interface SplatListItem extends Splat {
   photoCount: number;
@@ -55,7 +56,7 @@ export interface Job {
   splatId: string;
   status: JobStatus;
   errorMessage: string | null;
-  resultS3Key: string | null;
+  resultPlyS3Key: string | null;
   thumbnailS3Key: string | null;
   pointCloudS3Key: string | null;
   // Each stage's timestamps, which web/lib/stageTimings.ts turns into durations. A *BootedAt is when the stage's
@@ -67,8 +68,12 @@ export interface Job {
   trainingLaunchedAt: string | null;
   trainingBootedAt: string | null;
   trainingStartedAt: string | null;
+  // When the worker reported the job complete. Null until then.
+  completedAt: string | null;
   // Percent of training done, 0-100. Null until the train stage's worker first reports it.
   trainingProgress: number | null;
+  // The box the finished splat is cropped to. Null while the download and the viewers serve the uncropped splat.
+  cropBox: CropBox | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -90,9 +95,9 @@ export interface CameraPose {
 }
 
 /**
- * POST /api/v1/splats/[splatId]/train's optional body. An oriented box in the point cloud's coordinate frame: size is
- * the full edge length on each of the box's own axes, and quaternion is x, y, z, w, as three.js orders it. The train
- * stage's worker drops every Gaussian whose center falls outside it.
+ * POST /api/v1/splats/[splatId]/crop's body, and Job.cropBox. An oriented box in the splat's coordinate frame: size is
+ * the full edge length on each of the box's own axes, and quaternion is x, y, z, w, as three.js orders it. The crop
+ * keeps every Gaussian whose center falls inside it.
  */
 export interface CropBox {
   center: [number, number, number];
@@ -113,6 +118,8 @@ export interface PublicSplat {
   thumbnailUrl: string;
   splatUrl: string;
   pointCloudUrl: string | null;
+  /** The owner's crop, which splatUrl's file already has. The viewer hides the point cloud's points outside it too. */
+  cropBox: CropBox | null;
 }
 
 /**
@@ -130,8 +137,8 @@ export type JobTimestamps = Pick<
   | "trainingLaunchedAt"
   | "trainingBootedAt"
   | "trainingStartedAt"
+  | "completedAt"
   | "createdAt"
-  | "updatedAt"
 >;
 
 /** timestamps belong to the complete worker job that produced the splat. */

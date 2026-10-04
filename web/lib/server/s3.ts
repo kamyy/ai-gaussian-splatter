@@ -2,11 +2,14 @@
  * Everything the app stores in S3, AWS's file storage: photo uploads, and the worker's results.
  *
  * Builds the object keys (paths) photos are stored under, and presigned URLs, time-limited links that let the browser
- * upload or download a file directly without the app handling the bytes. It also reads back an object's size, and
- * deletes a splat's objects. Uploads are only presigned by the API, so the rate limit is enforced before any bytes
+ * upload or download a file directly without the app handling the bytes. It also reads back an object's size, reads
+ * and writes the cropped copies of a finished splat, and deletes a splat's objects. Uploads are only presigned by the API, so the rate limit is enforced before any bytes
  * reach S3.
  */
 
+import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
+import { Readable } from "node:stream";
 import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
@@ -127,6 +130,54 @@ export async function presignSplatDownload(splatsBucketKey: string): Promise<str
 /** Uploaded photos live in UPLOADS_BUCKET (see presignPhotoUpload above), not SPLATS_BUCKET. */
 export async function presignPhotoDownload(uploadsBucketKey: string): Promise<string> {
   return presignDownload(getEnv().UPLOADS_BUCKET, uploadsBucketKey);
+}
+
+/**
+ * Where one crop of a splat's finished result is stored. Each crop gets a fresh cropId, so a crop never overwrites an
+ * object a viewer may still be downloading.
+ */
+export function splatCropS3Keys(splatId: string, cropId: string): { ply: string; spz: string } {
+  const prefix = `splats/${splatId}/crops/${cropId}`;
+  return { ply: `${prefix}/result.ply`, spz: `${prefix}/result.spz` };
+}
+
+/** Streams an object in SPLATS_BUCKET, so a file larger than the web task's memory never has to fit in it. */
+export async function openSplatObject(splatsBucketKey: string): Promise<Readable> {
+  const response = await s3Client().send(
+    new GetObjectCommand({ Bucket: getEnv().SPLATS_BUCKET, Key: splatsBucketKey }),
+  );
+  if (!(response.Body instanceof Readable)) {
+    throw new Error(`S3 returned no body for ${splatsBucketKey}`);
+  }
+
+  return response.Body;
+}
+
+/** Uploads the file at path to SPLATS_BUCKET. */
+export async function putSplatObject(splatsBucketKey: string, path: string, contentType: string): Promise<void> {
+  await s3Client().send(
+    new PutObjectCommand({
+      Bucket: getEnv().SPLATS_BUCKET,
+      Key: splatsBucketKey,
+      Body: createReadStream(path),
+      ContentLength: (await stat(path)).size,
+      ContentType: contentType,
+    }),
+  );
+}
+
+/** Deletes these keys from SPLATS_BUCKET. A key with no object behind it is skipped. */
+export async function deleteSplatsBucketObjects(splatsBucketKeys: string[]): Promise<void> {
+  if (splatsBucketKeys.length === 0) {
+    return;
+  }
+
+  await s3Client().send(
+    new DeleteObjectsCommand({
+      Bucket: getEnv().SPLATS_BUCKET,
+      Delete: { Objects: splatsBucketKeys.map(Key => ({ Key })), Quiet: true },
+    }),
+  );
 }
 
 /**

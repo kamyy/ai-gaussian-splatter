@@ -76,6 +76,15 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
   - A plain quoted or bolded name silently goes stale the moment the target heading is renamed; a broken link is easier to spot in review.
 - **A bare mention of one of the other root docs (`AGENTS.md`, `RUNBOOK.md`, `ARCHITECTURE.md`, `README.md`) gets linked to the file too** — `` [`AGENTS.md`](AGENTS.md) ``, not just backtick text.
   - This doesn't extend to code file paths: those stay as inline code per the rule above, since linking every one would be churn for no navigational benefit.
+- **A reply includes a Mermaid diagram when it turns on order, ownership, or how parts connect.** The diagram is part of the reply, so the chat renders it with the answer.
+  - A plan.
+  - An answer to a question about the codebase.
+  - The actions the agent is about to take.
+  - A request path, a state change, a pipeline stage, or which piece of code reads which data needs a diagram.
+  - A short list of independent edits stays prose.
+  - A question a few sentences already answer stays prose.
+  - Each box uses the same name the code uses.
+  - The diagram shows a relationship the sentences beside it do not already state.
 
 ---
 
@@ -319,6 +328,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 - **A local run starts only from the UI under `pnpm dev`, which needs a signed-in Clerk session.** An agent whose shell runs on a host with that setup can check `nvidia-smi` and `scripts/dev/setup.sh gpu` itself, then hand the run back to the user.
   - A `podman run` outside `launchJobLocal` (`web/lib/server/ec2Launcher.ts`) also needs `--security-opt label=disable` on an SELinux host. Without it, SELinux blocks the GPU device nodes and `nvidia-smi` in the container fails with `Insufficient Permissions`.
 - **`launchJobLocal` (`web/lib/server/ec2Launcher.ts`) rebuilds the stage's image before every local run.** A failed build fails the worker job through the worker's own status callback.
+- **`worker/pipeline/export.py` must write the `.ply` and `.spz` with their Gaussians in the same order.** `web/lib/server/cropSplat.ts` decides which Gaussians to keep from the `.spz` alone and applies that list to the `.ply` by position.
 - **gsplat 1.5.3's `DefaultStrategy` never resets opacities, so `worker/pipeline/train.py` does it itself** (`_is_opacity_reset_step`). The opacity reset is the step that clears floaters, the stray Gaussians left hanging in mid-air.
   - gsplat's reset condition uses a bitwise `&` where it means `and`, which makes it always false ([gsplat#797](https://github.com/nerfstudio-project/gsplat/issues/797)). [gsplat#776](https://github.com/nerfstudio-project/gsplat/pull/776) fixes it on gsplat's `main`, but no release carries the fix yet.
   - On upgrading to a release that does, delete `_is_opacity_reset_step` and pass `reset_every=iterations * 3000 // 30_000` to `DefaultStrategy` in `_build_strategy`. Without `reset_every`, gsplat falls back to its unscaled 3000-step default, which resets only once in a 10k run.
@@ -351,9 +361,9 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - Tasks are in public subnets with a public IP and no NAT.
   - That group's single rule, `aws_vpc_security_group_ingress_rule.web_from_alb` (`infra/web.tf`), sourced from the ALB security group on `local.container_port`, is the only network control ([Networking](ARCHITECTURE.md#92-networking)).
   - `infra/tests/network.tftest.hcl` and `web.tftest.hcl` assert this; tripping it is a security change.
-- **`KEEP_ALIVE_TIMEOUT` must exceed the ALB idle timeout (60s), or healthy deploys serve intermittent 502s.**
+- **`KEEP_ALIVE_TIMEOUT` must exceed the ALB idle timeout (300s), or healthy deploys serve intermittent 502s.**
   - Node's default keep-alive is 5s; Next standalone only overrides via `KEEP_ALIVE_TIMEOUT`. ALB then hands requests to sockets the app already closed — no app log entry.
-  - `infra/locals.tf` sets `65000` ms. Raising ALB idle without raising this reopens the gap.
+  - `infra/locals.tf` sets the idle timeout to 300s and the keep-alive to 305000 ms. A crop writes no response bytes until it finishes, so the idle timeout is how long that request may run. `web/app/api/v1/splats/[splatId]/crop/route.ts`'s `CROP_DEADLINE_MS` is the same 300s. Raising one without the others reopens the gap.
 
 ### 9.3 IAM & secrets
 

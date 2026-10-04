@@ -3,6 +3,7 @@
  *
  * Returns a presigned URL (a time-limited link straight to the file in S3, AWS's file storage) for the lossless .ply
  * file the Download button saves. The 3D viewer loads a smaller compressed copy from the viewer-splat route instead.
+ * Once the owner has cropped the splat, both serve the cropped copy (web/app/api/v1/splats/[splatId]/crop/route.ts).
  */
 
 import { and, desc, eq } from "drizzle-orm";
@@ -23,7 +24,7 @@ export const GET = withErrorHandling(
 
     // "Not ready" and "not yours" deliberately collapse to the same 404.
     const [latestJob] = await getDb()
-      .select({ resultS3Key: jobs.resultS3Key })
+      .select({ resultPlyS3Key: jobs.resultPlyS3Key, croppedResultPlyS3Key: jobs.croppedResultPlyS3Key })
       .from(jobs)
       .innerJoin(splats, eq(splats.id, jobs.splatId))
       .where(
@@ -36,10 +37,10 @@ export const GET = withErrorHandling(
       )
       .orderBy(desc(jobs.createdAt))
       .limit(1);
-    if (latestJob === undefined || latestJob.resultS3Key === null) {
+    if (latestJob === undefined || latestJob.resultPlyS3Key === null) {
       throw new HttpError(404, "Splat not ready");
     }
 
-    return NextResponse.json(await presignSplatDownload(latestJob.resultS3Key));
+    return NextResponse.json(await presignSplatDownload(latestJob.croppedResultPlyS3Key ?? latestJob.resultPlyS3Key));
   },
 );

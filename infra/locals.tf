@@ -160,9 +160,13 @@ locals {
   # has to be kept in sync by hand.
   container_port = 8000
 
-  # Must stay above the ALB's own idle timeout (60s, left at its default in infra/web.tf) or the ALB serves intermittent
-  # 502s. See AGENTS.md.
-  keep_alive_timeout_ms = "65000"
+  # How long a connection may sit with no bytes. A crop writes no response until it finishes
+  # (web/app/api/v1/splats/[splatId]/crop/route.ts), so this is that request's deadline. The route's CROP_DEADLINE_MS
+  # is this value in milliseconds, and a crop claim older than it is treated as abandoned.
+  alb_idle_timeout_seconds = 300
+
+  # Must stay above alb_idle_timeout_seconds or the ALB serves intermittent 502s. See AGENTS.md.
+  keep_alive_timeout_ms = tostring(local.alb_idle_timeout_seconds * 1000 + 5000)
 
   # ---------------------------------------------------------------------------
   # Policy documents

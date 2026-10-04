@@ -30,7 +30,7 @@ describe("GET /api/v1/splats/[splatId]/download", () => {
   async function seed(
     splatStatus: SplatStatus,
     jobStatus: JobStatus,
-    resultS3Key: string | null,
+    resultPlyS3Key: string | null,
     clerkUserId = "clerk-user-1",
   ) {
     const user = await getOrCreateUser(clerkUserId);
@@ -42,7 +42,7 @@ describe("GET /api/v1/splats/[splatId]/download", () => {
       splatId: splat.id,
       callbackToken: "tok",
       status: jobStatus,
-      resultS3Key,
+      resultPlyS3Key,
       resultSpzS3Key: "splats/x/result.spz",
     });
 
@@ -55,6 +55,14 @@ describe("GET /api/v1/splats/[splatId]/download", () => {
     const res = await GET({} as never, ctx(splat.id));
     expect(res.status).toBe(200);
     expect(await res.json()).toContain("result.ply");
+  });
+
+  it("returns the cropped .ply once the owner has cropped the splat", async () => {
+    const splat = await seed("complete", "complete", "splats/x/result.ply");
+    await getDb().update(jobs).set({ croppedResultPlyS3Key: "splats/x/crops/c1/result.ply" });
+
+    const res = await GET({} as never, ctx(splat.id));
+    expect(await res.json()).toContain("crops/c1/result.ply");
   });
 
   it("404s before the splat is complete", async () => {

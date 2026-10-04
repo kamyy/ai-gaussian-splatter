@@ -64,7 +64,7 @@ function stepTiming(
 
 /**
  * A stage that ended without finishing (failed or cancelled) gets no timing, since neither timestamp marks when it
- * stopped. The build stage's end is updatedAt, because nothing writes to a job once it is complete.
+ * stopped. The build stage's end is completedAt, when the worker reported the job complete.
  */
 export function stageTimings(job: TimedJob, now: number): StageTimings {
   const placingCameras =
@@ -96,7 +96,7 @@ export function stageTimings(job: TimedJob, now: number): StageTimings {
       trainingLaunchedAt,
       time(job.trainingBootedAt),
       time(job.trainingStartedAt),
-      job.status === JobStatus.complete ? time(job.updatedAt) : null,
+      time(job.completedAt),
       building,
       now,
     ),

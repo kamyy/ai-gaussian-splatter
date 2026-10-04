@@ -26,7 +26,7 @@ export const jobColumns = {
   splatId: jobs.splatId,
   status: jobs.status,
   errorMessage: jobs.errorMessage,
-  resultS3Key: jobs.resultS3Key,
+  resultPlyS3Key: jobs.resultPlyS3Key,
   thumbnailS3Key: jobs.thumbnailS3Key,
   pointCloudS3Key: jobs.pointCloudS3Key,
   colmapBootedAt: jobs.colmapBootedAt,
@@ -35,7 +35,9 @@ export const jobColumns = {
   trainingLaunchedAt: jobs.trainingLaunchedAt,
   trainingBootedAt: jobs.trainingBootedAt,
   trainingStartedAt: jobs.trainingStartedAt,
+  completedAt: jobs.completedAt,
   trainingProgress: jobs.trainingProgress,
+  cropBox: jobs.cropBox,
   createdAt: jobs.createdAt,
   updatedAt: jobs.updatedAt,
 };
