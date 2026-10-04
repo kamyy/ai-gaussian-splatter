@@ -32,9 +32,10 @@ A 3D Gaussian Splat represents an object as millions of small, semi-transparent,
 
 1. **Upload.** Sign in and drop in 20–100 photos taken while walking around one object. About 50 well-spaced shots work best: every side, a couple of heights, each overlapping its neighbors. Coverage matters more than count ([Capture](RUNBOOK.md#13-capture)).
 2. **Reconstruct.** COLMAP's photogrammetry (structure-from-motion) works out where each photo was taken and builds a sparse point cloud of the object.
-3. **Review.** Check the point cloud and camera positions, and optionally draw a crop box around the object to drop the background from the result.
+3. **Review.** Check the point cloud and camera positions before paying for training.
 4. **Train.** gsplat trains a Gaussian Splat on the photos with its CUDA kernels on an NVIDIA GPU.
-5. **View and share.** Orbit the splat in the browser, share a public link (with an Open Graph preview image), or download the `.ply` to edit in other splat tools.
+5. **Crop.** Optionally fit a box around the object in the point cloud view, checking it from the front, side or top, to drop the background from the finished splat. Undo brings the original back.
+6. **View and share.** Orbit the splat in the browser, share a public link (with an Open Graph preview image), or download the `.ply` to edit in other splat tools.
 
 The AI training is per-object gradient descent through a differentiable renderer, not a pretrained model ([Pipeline](ARCHITECTURE.md#2-pipeline)).
 

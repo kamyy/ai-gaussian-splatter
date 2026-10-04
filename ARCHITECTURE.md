@@ -52,9 +52,13 @@ Why the system is shaped this way: decisions, alternatives rejected, costs accep
 4. **Export** (`worker/pipeline/export.py`): the splat twice, plus a thumbnail from gsplat's own rasterizer, for Open Graph. Using gsplat's rasterizer avoids pulling in an extra dependency just for the thumbnail.
    - `.ply` is the Download button's file. It's lossless and every splat tool reads it, which matters to someone who downloads a splat to edit or convert it.
    - `.spz` (Niantic's compressed format, written by `worker/pipeline/spz.py`) is what the viewer loads. It's about a twelfth of the `.ply`'s size, and its quantization isn't visible on screen.
-   - The optional crop box is drawn on the point cloud before training but applied only here, where it drops every Gaussian centered outside it.
-   - Training still sees the whole scene. The photos show the background too, and without Gaussians there to explain those pixels, the optimizer grows floaters around the object.
-
+5. **Crop** (optional, `web/lib/server/cropSplat.ts`): the owner fits a box around the object in the finished splat's point cloud, and the web API writes copies of both files holding only the Gaussians whose centers fall inside it.
+   - The crop controls live in the point cloud view, because the splat's Gaussians make the box difficult to see. Once a crop is applied, the viewer hides the points outside the box too. `web/lib/cropBox.ts` is the one inside-the-box test for both.
+   - The crop controls work under either camera. The orthographic camera, which draws without perspective, is the one to check the fit with: animated to the object's front, side or top, it shows whether the box's edges line up with the object's, which a perspective view distorts.
+   - It runs after training rather than before, so the owner sees what the crop did to the splat they will actually keep. Cropping costs no GPU time, so refitting it is free.
+   - It runs in the web task rather than on a worker instance. Streaming a million Gaussians through takes under a second, which a GPU instance's boot time would dwarf.
+   - The originals are never changed, so Undo crop only clears the job's crop columns. The download, the viewer and the share page all serve the cropped copy while one exists.
+   - The share preview keeps the thumbnail the worker rendered at export.
 The "AI" here is per-object gradient descent through a differentiable rasterizer, not a pretrained inference model. COLMAP is classical computer vision (bundle adjustment), not ML.
 
 ---
@@ -131,7 +135,7 @@ A baked AMI would attack the smaller half — fixed overhead, not training. Trai
   - Drizzle also needs no codegen step or query-engine binary.
   - Cons: there's no `@@map` equivalent for enum members, so Postgres labels and TypeScript unions must match exactly (see status values, below).
 - JSON field *names* are camelCase. Status *values* are snake_case (`reconstruction_running`), because `pgEnum` values are both the DB labels and the TS members, so there is one spelling end to end.
-- The GPU worker callback accepts snake_case request fields (`error_message`, `result_s3_key`, …) and remaps them to camelCase for Drizzle. Status *values* need no translation, since they're already the shared spelling.
+- The GPU worker callback accepts snake_case request fields (`error_message`, `result_ply_s3_key`, …) and remaps them to camelCase for Drizzle. Status *values* need no translation, since they're already the shared spelling.
 
 ---
 
@@ -293,6 +297,8 @@ Three request-path layers (`web/lib/server/rateLimit.ts`), each limit a runtime 
 The daily cap bounds how many worker instances launch, not how long each one runs. `MAX_PHOTOS_PER_SPLAT` (`web/lib/limits.ts`) bounds the second, since COLMAP's exhaustive matching compares every pair of photos. The presign route rejects a batch past it, and the `process` route rejects a splat past it before charging the daily cap.
 
 `MAX_PHOTO_BYTES` (`web/lib/limits.ts`) bounds one photo's storage and worker download cost. `MAX_THUMBNAIL_BYTES` (`web/lib/server/s3.ts`) bounds its thumbnail, which the browser draws and so could send at any size. The presign route signs each declared size into its upload URL, so S3 itself refuses a body of any other size. The `complete` route checks both stored objects' sizes again, so a client that skipped the form still can't get an oversized upload marked uploaded.
+
+A crop streams a whole splat through the web task, so `MAX_CROPS_PER_HOUR` (`web/lib/server/rateLimit.ts`) caps each user's crops. The cap is a constant rather than a runtime setting, because a crop costs no GPU time.
 
 A worker instance runs COLMAP and gsplat on files anyone can upload, so the design assumes one could be taken over and limits what that reaches. The presign route accepts only JPEG and PNG, the two formats `worker/pipeline/sfm.py` hands to COLMAP, and names each S3 key's extension after the type rather than the uploaded filename. The instance's own IAM role has no S3 access. The worker trades its callback token for credentials from `web/app/api/v1/internal/jobs/[jobId]/s3-credentials/route.ts`, which assumes a role with a session policy naming only that splat's keys. Per-object presigned URLs were rejected for two reasons. A splat's photo count would push them past EC2's 16 KB user-data limit. Replacing boto3's transfers with hand-written HTTP requests would also lose its multipart upload of large results. The status callback also refuses any result key outside the splat's own prefix, since the share page presigns those keys for anyone with the link.
 
