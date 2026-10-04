@@ -226,7 +226,7 @@ describe("worker status callback", () => {
 
   it.each([
     ["a PascalCase spelling", "ReconstructionRunning"],
-    ["the enum's unused label", "colmap_running"],
+    ["an unknown status", "colmap_running"],
   ])("rejects %s as a status", async (_label, status) => {
     const { job } = await seed();
     const res = await PATCH(req("tok", { status }), ctx(job.id));

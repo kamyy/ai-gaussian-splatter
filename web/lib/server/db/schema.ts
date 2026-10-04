@@ -36,8 +36,8 @@ import type { CropBox } from "@/lib/types";
 export const splatStatus = pgEnum("splat_status", SPLAT_STATUSES);
 export const photoUploadStatus = pgEnum("photo_upload_status", PHOTO_UPLOAD_STATUSES);
 /**
- * JOB_STATUS_DB_VALUES, not JOB_STATUSES: the enum's label set also holds the unused "colmap_running" label
- * (web/lib/statuses.ts).
+ * JOB_STATUS_DB_VALUES keeps the labels in the order each was added (web/lib/statuses.ts). JOB_STATUSES lists
+ * reconstruction_running earlier, with the other running stages.
  */
 export const jobStatus = pgEnum("job_status", JOB_STATUS_DB_VALUES);
 

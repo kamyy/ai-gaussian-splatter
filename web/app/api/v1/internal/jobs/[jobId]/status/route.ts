@@ -59,10 +59,7 @@ export const PATCH = withErrorHandling(
     // non-terminal status back would give the splat a second active job and trip uq_jobs_splat_id_active
     // (web/lib/server/db/schema.ts). 204 rather than an error because there is nothing for the worker to retry:
     // worker/pipeline/status.py only logs a failed callback anyway.
-    //
-    // job.status's column type also includes the unused "colmap_running" label (web/lib/statuses.ts), which is not an
-    // ended status either, so the cast is safe for this membership check.
-    if (JOB_ENDED_STATUSES.includes(job.status as JobStatus)) {
+    if (JOB_ENDED_STATUSES.includes(job.status)) {
       return new NextResponse(null, { status: 204 });
     }
 

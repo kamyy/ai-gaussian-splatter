@@ -34,18 +34,15 @@ export const JobStatus = {
  */
 export const JOB_STATUSES = Object.values(JobStatus) as [JobStatus, ...JobStatus[]];
 
-// The Postgres enum's own label set: every value the type has ever had, in the order each was added, rather than in
-// JOB_STATUSES' order. "colmap_running" is a label nothing writes any more. Postgres has no cheap way to drop an enum
-// label short of recreating the whole type, so it stays in the list.
+// The Postgres enum's labels, in the order each was added. JOB_STATUSES lists reconstruction_running with the other
+// running stages, ahead of where this enum appended it.
 //
-// Written out in this exact order, not derived from JOB_STATUSES, so that `pnpm db:generate` sees a new value as a
-// plain append and emits a single ALTER TYPE … ADD VALUE. Reordering the existing values makes drizzle-kit drop and
-// recreate the type around the column instead, which .claude/skills/db-migration/SKILL.md flags as unsafe on a live
-// table.
+// Written out in this exact order, so that `pnpm db:generate` sees a new value as a plain append and emits a single
+// ALTER TYPE … ADD VALUE. Reordering the existing values makes drizzle-kit drop and recreate the type around the
+// column instead, which .claude/skills/db-migration/SKILL.md flags as unsafe on a live table.
 export const JOB_STATUS_DB_VALUES = [
   JobStatus.queued,
   JobStatus.launching,
-  "colmap_running",
   JobStatus.awaiting_training,
   JobStatus.training_running,
   JobStatus.uploading_result,
@@ -53,12 +50,10 @@ export const JOB_STATUS_DB_VALUES = [
   JobStatus.failed,
   JobStatus.cancelled,
   JobStatus.reconstruction_running,
-] as [JobStatusDbValue, ...JobStatusDbValue[]];
+] as [JobStatus, ...JobStatus[]];
 
 export const JOB_ENDED_STATUSES: JobStatus[] = [JobStatus.complete, JobStatus.failed, JobStatus.cancelled];
 
 export type SplatStatus = (typeof SPLAT_STATUSES)[number];
 
 export type JobStatus = (typeof JobStatus)[keyof typeof JobStatus];
-
-export type JobStatusDbValue = JobStatus | "colmap_running";
