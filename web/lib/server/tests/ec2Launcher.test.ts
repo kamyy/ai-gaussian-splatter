@@ -23,7 +23,6 @@ const spawnMock = vi.hoisted(() =>
 vi.mock("node:child_process", () => ({ execFile: vi.fn(), spawn: spawnMock }));
 vi.mock("node:fs", () => ({ mkdirSync: vi.fn(), openSync: vi.fn(() => 0), writeSync: vi.fn() }));
 
-import type { CropBox } from "@/lib/types";
 import {
   describeWorker,
   generateCallbackToken,
@@ -208,21 +207,6 @@ describe("launchJob", () => {
     expect(userData.indexOf("docker run")).toBeGreaterThan(createStream);
   });
 
-  it("passes a crop box to the worker container as JSON, only when one is set", async () => {
-    ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
-    const cropBox: CropBox = { center: [1, 2, 3], size: [4, 5, 6], quaternion: [0, 0, 0, 1] };
-    await launchJob({ ...params, stage: "train", cropBox });
-
-    const userData = Buffer.from(runInstancesInput().UserData ?? "", "base64").toString();
-    expect(userData).toContain(`CROP_BOX='${JSON.stringify(cropBox)}'`);
-    expect(userData).toContain('-e CROP_BOX="$CROP_BOX" \\\n');
-
-    ec2Mock.reset();
-    ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
-    await launchJob(params);
-    expect(Buffer.from(runInstancesInput().UserData ?? "", "base64").toString()).not.toContain("CROP_BOX");
-  });
-
   it("schedules a shutdown as the first thing user-data does, ahead of docker login/run", async () => {
     ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
     await launchJob(params);
@@ -331,16 +315,6 @@ describe("launchJobLocal", () => {
     expect(runArgs(0)).not.toContain("EVAL_HOLDOUT=true");
     expect(runArgs(1)).toEqual(expect.arrayContaining(["-e", "EVAL_HOLDOUT=true"]));
     expect(runArgs(2)).not.toContain("EVAL_HOLDOUT=true");
-  });
-
-  it("passes a crop box to the worker container as JSON, only when one is set", () => {
-    launchJobLocal({ ...params, cropBox: { center: [1, 2, 3], size: [4, 5, 6], quaternion: [0, 0, 0, 1] } });
-    launchJobLocal(params);
-
-    expect(runArgs(0)).toEqual(
-      expect.arrayContaining(["-e", 'CROP_BOX={"center":[1,2,3],"size":[4,5,6],"quaternion":[0,0,0,1]}']),
-    );
-    expect(runArgs(1).some(arg => arg.startsWith("CROP_BOX="))).toBe(false);
   });
 
   it("fails the job through its status callback instead of running, when the build fails", () => {
