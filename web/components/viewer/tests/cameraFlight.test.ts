@@ -9,7 +9,7 @@ import {
   orbitTargetOf,
   orthographicZoom,
   photoViewPose,
-} from "./cameraFlight";
+} from "../cameraFlight";
 
 // COLMAP axes: x right, y down the image, z forward. This camera sits at (0, 0, 10) looking toward -z with the image's
 // down along -y, so its world up is +y.

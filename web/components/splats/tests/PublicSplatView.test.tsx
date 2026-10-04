@@ -2,9 +2,9 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { CameraPose, CropBox, JobTimestamps, PublicPhoto } from "@/lib/types";
-import { PublicSplatView } from "./PublicSplatView";
+import { PublicSplatView } from "../PublicSplatView";
 
-// jsdom does no layout, so the grid reports a fixed width, as in web/components/splats/PhotoGrid.test.tsx.
+// jsdom does no layout, so the grid reports a fixed width, as in web/components/splats/tests/PhotoGrid.test.tsx.
 vi.mock("@/lib/hooks/useElementWidth", () => ({ useElementWidth: () => [() => {}, 392] }));
 
 // Stands in for the WebGL viewer, which jsdom can't run. It shows the mode and the camera a picked photo flies to.

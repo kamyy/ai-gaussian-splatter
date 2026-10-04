@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { JobStatus } from "@/lib/statuses";
 import type { Job } from "@/lib/types";
-import { PipelineStepper } from "./PipelineStepper";
+import { PipelineStepper } from "../PipelineStepper";
 
 const T0 = Date.parse("2026-01-01T10:00:00Z");
 

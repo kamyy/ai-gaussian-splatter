@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { useSWRConfig } from "swr";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SignedInGate } from "./SignedInGate";
+import { SignedInGate } from "../SignedInGate";
 
 const { auth } = vi.hoisted(() => ({
   auth: { isSignedIn: undefined as boolean | undefined, userId: "user_a" },

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { StageCard } from "./StageCard";
+import { StageCard } from "../StageCard";
 
 vi.mock("@clerk/nextjs", () => ({
   useAuth: () => ({ getToken: async () => "test-token" }),
