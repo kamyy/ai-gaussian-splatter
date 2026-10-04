@@ -139,7 +139,7 @@ Server-only code lives in `web/lib/server/` — never import it from a `"use cli
 ## 4. Coding standards
 
 - **Don't overengineer.** Solve the problem in front of you, not the general case it might become. Add no abstraction, config option, or extensibility hook for a second use case that doesn't exist yet. Add it when that use case actually shows up.
-- **Prefer `function` declarations over arrow functions**, except closures assigned to a local (`const handleClick = () => {...}`) or inline arguments (`.map(x => ...)`, `useEffect(() => {...})`). Top-level: `export function foo() {}`, not `export const foo = () => {}`.
+- **Prefer `function` declarations over arrow functions**, except closures assigned to a local (`const handleClick = () => {...}`), inline arguments (`.map(x => ...)`, `useEffect(() => {...})`), or an arrow function returned from a function (`return x => doSomething(x)`). Top-level: `export function foo() {}`, not `export const foo = () => {}`.
 - **Use named exports. A file default exports only when the framework or tool that loads it accepts nothing else.** Biome `style/noDefaultExport` enforces this, and an override in `biome.json` exempts each file that needs one.
   - Next.js reads a page or layout only through its default export. So do Drizzle Kit, Next, Playwright, PostCSS and Vitest for their config files.
   - Where the loader also accepts a named export, use that. `web/proxy.ts` exports `proxy`, and `web/tests/migrate-test-db.ts` exports `setup`.
