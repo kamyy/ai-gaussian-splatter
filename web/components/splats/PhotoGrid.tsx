@@ -18,9 +18,8 @@ import { cn } from "@/lib/cn";
 import { type Box, expandedBox } from "@/lib/expandedBox";
 import { useEnlargedTile } from "@/lib/hooks/useEnlargedTile";
 import { useJustifiedPages } from "@/lib/hooks/useJustifiedPages";
-import type { PublicPhoto } from "@/lib/types";
+import type { PhotoSelection, PublicPhoto } from "@/lib/types";
 import { EnlargingPhotoBox } from "./EnlargingPhotoBox";
-import type { PhotoSelection } from "./photoSelection";
 
 // A page is this many whole rows, so every page but the last ends on a full row.
 const ROWS_PER_PAGE = 3;

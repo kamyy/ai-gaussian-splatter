@@ -44,8 +44,7 @@ import { DEFAULT_POINT_SIZE } from "@/components/viewer/PointCloudScene";
 import { type Projection, SplatViewer, type ViewMode } from "@/components/viewer/SplatViewer";
 import { cn } from "@/lib/cn";
 import type { CameraSelection } from "@/lib/hooks/useCameraFlight";
-import type { CameraPose, CropBox } from "@/lib/types";
-import type { PhotoSelection } from "./photoSelection";
+import type { CameraPose, CropBox, PhotoSelection } from "@/lib/types";
 
 const PROJECTION_OPTIONS: IconOption<Projection>[] = [
   {

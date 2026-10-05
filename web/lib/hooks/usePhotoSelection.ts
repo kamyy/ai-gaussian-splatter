@@ -11,7 +11,7 @@
 
 import { useState } from "react";
 
-import type { PhotoSelection } from "@/components/splats/photoSelection";
+import type { PhotoSelection } from "@/lib/types";
 
 // Undefined while the photos or the cameras are still loading. Null when they have loaded and no photo has a pose.
 function openingPhotoId(

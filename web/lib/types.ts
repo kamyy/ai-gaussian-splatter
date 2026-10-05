@@ -96,6 +96,16 @@ export interface CameraPose {
 }
 
 /**
+ * The photo picked on a splat's page. Every pick from the grid is a new object, even of the same photo, so picking it
+ * again after orbiting away flies the view back to it and turns the grid back to its page. opening is true for the
+ * photo the page opens on, so that arrival does not count as one of those picks.
+ */
+export interface PhotoSelection {
+  photoId: string;
+  opening?: boolean;
+}
+
+/**
  * POST /api/v1/splats/[splatId]/crop's body, and Job.cropBox. An oriented box in the splat's coordinate frame: size is
  * the full edge length on each of the box's own axes, and quaternion is x, y, z, w, as three.js orders it. The crop
  * keeps every Gaussian whose center falls inside it.

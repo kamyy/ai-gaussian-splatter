@@ -50,6 +50,16 @@ export interface WorkerLaunch {
   settings: RuntimeSettings;
 }
 
+// getEnv()'s result with the worker instance settings launchJob reads typed as set.
+type LaunchEnv = ReturnType<typeof getEnv> & {
+  [K in
+    | "WORKER_AMI_ID"
+    | "WORKER_SUBNET_ID"
+    | "WORKER_SECURITY_GROUP_ID"
+    | "WORKER_INSTANCE_PROFILE_ARN"
+    | "WORKER_LOG_GROUP"]: string;
+};
+
 interface UserDataParams {
   callbackToken: string;
   jobId: string;
@@ -157,11 +167,9 @@ export function generateCallbackToken(): string {
 
 /** Launches the spot worker instance and returns its instance ID. */
 export async function launchJob(params: WorkerLaunch): Promise<string> {
-  const env = getEnv();
-  // launchJob runs only outside local dev, where getEnv() has already required the worker instance settings. The
-  // schema still types them optional.
-  const logGroup = env.WORKER_LOG_GROUP as string;
-  const securityGroupId = env.WORKER_SECURITY_GROUP_ID as string;
+  // launchJob runs only outside local dev, where getEnv() has already required every worker instance setting. The
+  // schema still types them optional, because local dev leaves them unset.
+  const env = getEnv() as LaunchEnv;
 
   const userData = renderUserData({
     callbackToken: params.callbackToken,
@@ -174,7 +182,7 @@ export async function launchJob(params: WorkerLaunch): Promise<string> {
     workerImageUri: workerImageUri(params.stage),
     ecrRegistry: ecrRegistry(),
     awsRegion: env.AWS_REGION,
-    logGroup,
+    logGroup: env.WORKER_LOG_GROUP,
     maxLifetimeMinutes: params.settings.workerMaxLifetimeMinutes,
     trainingIterations: params.stage === "train" ? params.settings.trainingIterations : undefined,
   });
@@ -188,7 +196,7 @@ export async function launchJob(params: WorkerLaunch): Promise<string> {
       MinCount: 1,
       MaxCount: 1,
       SubnetId: env.WORKER_SUBNET_ID,
-      SecurityGroupIds: [securityGroupId],
+      SecurityGroupIds: [env.WORKER_SECURITY_GROUP_ID],
       IamInstanceProfile: { Arn: env.WORKER_INSTANCE_PROFILE_ARN },
       // The pipeline runs in a container on default bridge networking, one hop further from IMDS than the host. At
       // EC2's default hop limit of 1, worker/pipeline/instance.py cannot read its own instance ID and silently skips
