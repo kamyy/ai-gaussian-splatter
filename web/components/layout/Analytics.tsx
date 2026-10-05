@@ -15,7 +15,6 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { type AnalyticsConsent, useAnalyticsConsent } from "@/lib/hooks/useAnalyticsConsent";
 
-// Decline uses the outlined button. Accept uses the solid ink button.
 function PrivacyBanner({ onAnswer }: { onAnswer: (consent: AnalyticsConsent) => void }) {
   const { isSignedIn } = useAuth();
 

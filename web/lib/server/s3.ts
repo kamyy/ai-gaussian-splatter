@@ -3,8 +3,8 @@
  *
  * Builds the object keys (paths) photos are stored under, and presigned URLs, time-limited links that let the browser
  * upload or download a file directly without the app handling the bytes. It also reads back an object's size, reads
- * and writes the cropped copies of a finished splat, and deletes a splat's objects. Uploads are only presigned by the API, so the rate limit is enforced before any bytes
- * reach S3.
+ * and writes the cropped copies of a finished splat, and deletes a splat's objects. Uploads are only presigned by the
+ * API, so the rate limit is enforced before any bytes reach S3.
  */
 
 import { createReadStream } from "node:fs";

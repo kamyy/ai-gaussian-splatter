@@ -84,9 +84,9 @@ shutdown -h +${p.maxLifetimeMinutes} || poweroff -f
 # start-up into boot and image pull (web/lib/stageTimings.ts).
 BOOTED_AT="$(date +%s%3N)"
 
-# Plaintext, and EC2 user-data is readable by anyone allowed to describe the instance's attributes. The token is per-job.
-# It authorizes status updates on that one job, and S3 credentials for that one splat's files, which is what bounds
-# this.
+# Plaintext, and EC2 user-data is readable by anyone allowed to describe the instance's attributes. The token is
+# per-job. It authorizes status updates on that one job, and S3 credentials for that one splat's files, which is what
+# bounds this.
 CALLBACK_TOKEN="${p.callbackToken}"
 JOB_ID="${p.jobId}"
 SPLAT_ID="${p.splatId}"
@@ -207,9 +207,9 @@ export async function launchJob(params: WorkerLaunch): Promise<string> {
           ResourceType: "instance",
           Tags: [
             { Key: "Name", Value: `ai-gaussian-splatter-worker-${params.jobId}` },
-            // Must match infra/locals.tf's worker_tag_key/worker_tag_value and infra/worker_iam.tf's self-termination
-            // grant. That's a separate Terraform config, so the constant can't be imported directly, and the two must
-            // stay in sync by hand.
+            // Must match infra/locals.tf's worker_tag_key/worker_tag_value, which scope the IAM grants that launch and
+            // terminate worker instances. Terraform can't import a TypeScript constant, so the two stay in sync by
+            // hand.
             { Key: "Role", Value: "worker" },
             { Key: "JobId", Value: params.jobId },
             // The sweeper and web/lib/server/reconcileJob.ts judge this instance by the ceiling it was launched with,

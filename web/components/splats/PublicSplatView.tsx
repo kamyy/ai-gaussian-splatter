@@ -3,10 +3,9 @@
  *
  * The share page (web/app/(public)/preview/splats/[id]/page.tsx) renders on the server and passes in presigned links
  * for everything shown here. Like the owner's page, the view opens on the first placed photo's camera, and picking
- * another photo flies the view to where it was taken.
- * Nothing here can change the splat, so the viewer offers no crop controls. It shows the owner's crop, when there is
- * one, because web/lib/server/data.ts hands it the cropped file and the box, which the point cloud view hides the
- * points outside of.
+ * another photo flies the view to where it was taken. Nothing here can change the splat, so the viewer offers no crop
+ * controls. It still shows the owner's crop, when there is one: web/lib/server/data.ts hands it the cropped file and
+ * the box, and the point cloud view hides the points outside that box.
  */
 
 "use client";

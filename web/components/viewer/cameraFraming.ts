@@ -1,5 +1,5 @@
 /**
- * The maths for the view used when no photo is selected, for the initial crop box, and for the front, side and top views.
+ * The maths for the view used when no photo is selected, the initial crop box, and the front, side and top views.
  *
  * Pure functions, with no React. They frame the object from the photos' own camera positions when those are known, or
  * from the point cloud's bounding box otherwise, trimming stray points so they don't pull the view away. They also fit
@@ -36,8 +36,8 @@ export type AxisView = "front" | "side" | "top";
 
 /**
  * The bounding box of interleaved x, y, z positions after dropping BOUNDING_BOX_TRIM of the values from each end of
- * every axis.
- * It is how the viewer frames a capture whose camera poses it doesn't have. An empty box when there are no positions.
+ * every axis. It is how the viewer frames a capture whose camera poses it doesn't have. An empty box when there are no
+ * positions.
  */
 export function trimmedBoundingBox(positions: ArrayLike<number>): Box3 {
   const count = Math.floor(positions.length / 3);

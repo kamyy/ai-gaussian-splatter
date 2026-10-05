@@ -71,9 +71,9 @@ export const PhotoUploadedIcon = LuCheck;
 export const RemovePhotoIcon = LuTrash2;
 export const SelectedPhotoIcon = PiCameraFill;
 
-// --- Splat library -------------------------------------------------------------------
-// StepDoneIcon marks a finished pipeline step. ThumbnailPlaceholderIcon is the empty card. ProcessingPausedIcon is
-// the site-wide pause notice.
+// --- Splat pages ---------------------------------------------------------------------
+// StepDoneIcon marks a finished pipeline step. ThumbnailPlaceholderIcon is a library card with no photo.
+// ProcessingPausedIcon is the site-wide pause notice.
 export const ThumbnailPlaceholderIcon = LuImage;
 export const StepDoneIcon = LuCheck;
 export const ProcessingPausedIcon = LuTriangleAlert;

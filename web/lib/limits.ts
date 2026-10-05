@@ -32,8 +32,7 @@ export const PHOTO_EXTENSIONS: Readonly<Record<string, string>> = {
 
 /**
  * A photo whose long side is shorter than this is flagged as low resolution before upload, and web/lib/measurePhoto.ts
- * scores every photo's sharpness at this size. It matches
- * worker/pipeline/train.py's MAX_TRAINING_EDGE, the size training works at, so a smaller photo makes a softer splat.
- * Advisory only: the server doesn't check it.
+ * scores every photo's sharpness at this size. It matches worker/pipeline/train.py's MAX_TRAINING_EDGE, the size
+ * training works at, so a smaller photo makes a softer splat. Advisory only: the server doesn't check it.
  */
 export const MIN_SHARP_PHOTO_EDGE = 1600;

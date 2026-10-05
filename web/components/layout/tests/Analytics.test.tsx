@@ -68,7 +68,8 @@ describe("Analytics", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  // Before hydration the answer is unknown, and showing the banner then would flash it at visitors who already answered.
+  // Before hydration the answer is unknown, and showing the banner then would flash it at visitors who already
+  // answered.
   it("renders nothing before hydration", () => {
     consentMock.mockReturnValue(undefined);
     const { container } = render(<Analytics gaId="G-TEST123" />);

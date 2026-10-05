@@ -66,12 +66,12 @@ export const POST = withErrorHandling(
     }
 
     // `uq_jobs_splat_id_active` (web/lib/server/db/schema.ts) makes an active worker job block every later POST here.
-    // web/lib/server/reconcileJob.ts fails a worker job whose worker instance died. That check runs while the splat's
-    // page polls. A local launch stays unchanged. A worker job with no instance id stays unchanged. Any other dead
-    // worker instance would leave its splat unprocessable, so a worker job whose row has not changed in
-    // JOB_STALE_AFTER_MS is cancelled here to free the index. The status callback ignores a worker job that has already
-    // ended (web/app/api/v1/internal/jobs/[jobId]/status/route.ts). A worker that wakes up late can't bring the
-    // cancelled row back.
+    // web/lib/server/reconcileJob.ts fails a worker job whose worker instance died, but only while the splat's page
+    // polls, and never a local run or a worker job with no instance id. Any job it misses would leave its splat
+    // unprocessable, so a worker job whose row has not changed in JOB_STALE_AFTER_MS is cancelled here to free the
+    // index. The status callback ignores a worker job that has already ended
+    // (web/app/api/v1/internal/jobs/[jobId]/status/route.ts), so a worker that wakes up late can't bring the cancelled
+    // row back.
     await getDb()
       .update(jobs)
       .set({
@@ -86,9 +86,8 @@ export const POST = withErrorHandling(
         ),
       );
 
-    // A worker job sits at "awaiting_training" while the visitor decides. This route cancels it once the row has gone
-    // JOB_STALE_AFTER_MS without a change. A second POST is easy to reach before then. The unique index above
-    // enforces at most one active worker job per splat. A race loses here as a unique violation. A separate
+    // A second POST is easy to reach while a worker job sits at "awaiting_training" for the visitor to decide. The
+    // unique index above refuses it, and a racing request loses at this INSERT as a unique violation. A separate
     // read-then-write check could itself race.
     //
     // The row is claimed before the daily cap is charged. A rejected duplicate must not consume one of the day's

@@ -7,10 +7,9 @@
  * the TypeScript types cannot drift apart.
  *
  * Values are snake_case because they are also the Postgres enum labels, so there is exactly one spelling from the
- * database through to the JSON responses. Public JSON field names stay camelCase. The status callback and the S3
- * credentials route send snake_case field names.
- * SplatStatus.draft is the string "draft", and the same is true of every member here, so a comparison can name the
- * status.
+ * database through to the JSON responses. Public JSON field names stay camelCase. The worker's status callback and S3
+ * credentials requests use snake_case field names. SplatStatus.draft is the string "draft", and the same is true of
+ * every member here, so a comparison can name the status.
  *
  * Declaration order of each enum is its Postgres enum order. Adding or moving a member makes drizzle-kit drop and
  * recreate the type around the column that uses it. Follow .claude/skills/db-migration/SKILL.md for that migration.

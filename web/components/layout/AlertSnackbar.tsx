@@ -49,8 +49,8 @@ export const AlertSnackbar = forwardRef<HTMLDivElement, CustomContentProps & { d
       detailLine = <p className="text-sm text-muted-foreground">{detail}</p>;
     }
 
-    // The tint is mixed into the paper color rather than laid over it as a translucent fill. A toast can sit over the 3D
-    // viewer, which would otherwise show through.
+    // The tint is mixed into the paper color rather than laid over it as a translucent fill. A toast can sit over the
+    // 3D viewer, which would otherwise show through.
     return (
       <div
         ref={ref}

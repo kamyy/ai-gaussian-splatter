@@ -2,10 +2,10 @@
  * Rate limits per IP address and per user, and the site-wide daily cap on worker jobs.
  *
  * Each per-IP, per-user, and crop check counts one request in a Postgres counter and throws a 429 once the limit is
- * passed. checkAndIncrementGlobalDaily throws a 503. The counter update is
- * a single INSERT ... ON CONFLICT ... DO UPDATE SET count = count + 1 RETURNING count, so the check-and-increment is
- * race-free without a read-then-write step. The `set` clause must keep referencing the column, never a JavaScript
- * value. AGENTS.md has the race that reopens, and how to check the SQL Postgres actually received.
+ * passed. checkAndIncrementGlobalDaily throws a 503. The counter update is a single INSERT ... ON CONFLICT ... DO
+ * UPDATE SET count = count + 1 RETURNING count, so the check-and-increment is race-free without a read-then-write step.
+ * The `set` clause must keep referencing the column, never a JavaScript value. AGENTS.md has the race that reopens,
+ * and how to check the SQL Postgres actually received.
  *
  * Checks are per endpoint rather than blanket middleware, since cheap reads shouldn't be throttled. The costly
  * endpoints stay easy to audit this way too.

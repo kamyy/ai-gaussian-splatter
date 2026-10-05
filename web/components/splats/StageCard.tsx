@@ -35,7 +35,7 @@ interface StageCardProps {
   onJobChanged: () => void;
 }
 
-// WorkingBar is for a stage that doesn't report how far along it is. WorkingBar only shows that something is running.
+// An indeterminate bar, for a stage that doesn't report how far along it is.
 function WorkingBar({ label }: { label: string }) {
   return (
     <div role="progressbar" aria-label={label} className="h-2 overflow-hidden rounded-full bg-divider">
