@@ -199,12 +199,7 @@ export async function cropSpz(
     await reader.drain();
   }
 
-  // A trailing undefined is a stream to pipeline(), so the signal is passed only when the caller has one.
-  if (signal) {
-    await pipeline(input, createGunzip(), crop, createGzip(), output, { signal });
-  } else {
-    await pipeline(input, createGunzip(), crop, createGzip(), output);
-  }
+  await pipeline(input, createGunzip(), crop, createGzip(), output, { signal });
 
   return mask;
 }
@@ -259,11 +254,7 @@ export async function cropPly(
     await reader.drain();
   }
 
-  if (signal) {
-    await pipeline(input, crop, output, { signal });
-  } else {
-    await pipeline(input, crop, output);
-  }
+  await pipeline(input, crop, output, { signal });
 }
 
 /**
