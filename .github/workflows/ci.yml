@@ -45,6 +45,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          # Keeps this job off cache entries saved before it installed CPU-only torch. Those hold the CUDA wheels too,
+          # and their key, a hash of worker/pyproject.toml and worker/uv.lock, would otherwise still match.
+          cache-suffix: cpu-torch
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: package.json
