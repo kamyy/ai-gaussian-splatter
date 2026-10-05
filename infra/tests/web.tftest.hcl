@@ -221,9 +221,8 @@ run "web_container_wiring" {
     error_message = "WORKER_LOG_GROUP must name the log group the worker role can write to, for workerLauncher.ts's docker run"
   }
 
-  # Regression guard: every AWS SDK client the app constructs reads getEnv().AWS_REGION explicitly. Without this
-  # env var, each client falls back to its own default-region resolution instead, which can silently land on the
-  # wrong region.
+  # Regression guard: web/lib/server/env.ts rejects a missing AWS_REGION before any client is built. The task sets it
+  # so every client built from getEnv() uses this deploy's region.
   assert {
     condition = anytrue([
       for e in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].environment :

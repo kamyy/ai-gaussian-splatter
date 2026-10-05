@@ -19,7 +19,7 @@ export async function launchWorker(params: WorkerLaunch): Promise<string | null>
   return launchJob(params);
 }
 
-/** Stops the job's worker, if it has one. A job with no instance ID yet has nothing on EC2 to stop. */
+/** Stops the worker job's instance, if it has one. A worker job with no instance ID yet has nothing on EC2 to stop. */
 export async function stopWorker(jobId: string, ec2InstanceId: string | null): Promise<void> {
   if (isLocalDevEnv()) {
     stopLocalWorker(jobId);

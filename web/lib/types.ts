@@ -39,8 +39,8 @@ export interface PhotoPresignItem {
 }
 
 /**
- * width and height are null only for a photo uploaded before sizes were recorded. thumbnailUrl is the photo's small
- * copy, or the original for a photo uploaded before thumbnails existed.
+ * width and height are null when the photo's display size was not recorded. thumbnailUrl is the photo's small copy.
+ * When the photo has no thumbnail, thumbnailUrl is the original.
  */
 export interface PhotoListItem {
   id: string;
@@ -60,8 +60,9 @@ export interface Job {
   thumbnailS3Key: string | null;
   pointCloudS3Key: string | null;
   // Each stage's timestamps, which web/lib/stageTimings.ts turns into durations. A *BootedAt is when the stage's
-  // instance finished booting, and a *StartedAt comes from the worker's first callback after its image pull. Both are
-  // null for a local run. trainingLaunchedAt is null for a job trained before it was recorded.
+  // instance finished booting. A *StartedAt comes from the worker's first callback after its image pull. A local run
+  // omits booted_at, so the *BootedAt fields stay null. The status route still stamps *StartedAt from the callback
+  // clock. trainingLaunchedAt is null until the train stage is launched.
   colmapBootedAt: string | null;
   colmapStartedAt: string | null;
   colmapFinishedAt: string | null;
@@ -110,7 +111,7 @@ export interface ProcessingStatus {
   enabled: boolean;
 }
 
-/** pointCloudUrl is null for a splat whose job was reconstructed before the point cloud was kept. */
+/** pointCloudUrl is null when the splat has no point cloud. */
 export interface PublicSplat {
   title: string;
   /** True for a splat the / landing page shows as an example. */

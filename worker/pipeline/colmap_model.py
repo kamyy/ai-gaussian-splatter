@@ -98,7 +98,7 @@ def _read_images(path: Path) -> dict[int, Image]:
             camera_id = struct.unpack("<i", f.read(4))[0]
             name = _read_cstring(f)
             (num_points2d,) = struct.unpack("<Q", f.read(8))
-            f.read(24 * num_points2d)  # x, y, point3D_id per 2D point — unused here
+            f.read(24 * num_points2d)  # x, y, point3D_id per 2D point. Those bytes are skipped.
             images[image_id] = Image(image_id, qvec, tvec, camera_id, name)
     return images
 
@@ -114,7 +114,7 @@ def _read_points3d(path: Path) -> tuple[np.ndarray, np.ndarray]:
             rgb = struct.unpack("<3B", f.read(3))
             f.read(8)  # error
             (track_length,) = struct.unpack("<Q", f.read(8))
-            f.read(8 * track_length)  # image_id, point2D_idx per track entry — unused
+            f.read(8 * track_length)  # image_id, point2D_idx per track entry. Those bytes are skipped.
             xyz_list.append(xyz)
             rgb_list.append(rgb)
     return np.array(xyz_list, dtype=np.float64), np.array(rgb_list, dtype=np.uint8)

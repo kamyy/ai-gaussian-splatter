@@ -21,7 +21,7 @@ function exampleHref(splat: ExampleSplat) {
   return `/preview/splats/${splat.id}`;
 }
 
-/** One justified row, cut off after the last card that fits. */
+// One justified row, cut off after the last card that fits.
 function ExampleRow({ splats, className }: { splats: ExampleSplat[]; className: string }) {
   const aspects = useMemo(() => splats.map(splatCardAspect), [splats]);
   // The first page is the first row. The examples on later pages aren't shown.
@@ -43,10 +43,8 @@ function ExampleRow({ splats, className }: { splats: ExampleSplat[]; className: 
   );
 }
 
-/**
- * Every example in a sideways-scrolling strip of cards the same height. The strip runs out to the screen's edges, so
- * the next card peeking in shows there is more to swipe to.
- */
+// Every example in a sideways-scrolling strip of cards the same height. The strip runs out to the screen's edges, so
+// the next card peeking in shows there is more to swipe to.
 function ExampleStrip({ splats, className }: { splats: ExampleSplat[]; className: string }) {
   return (
     <ul className={cn("-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-x-4 overflow-x-auto px-4 pb-2", className)}>

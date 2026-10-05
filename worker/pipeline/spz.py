@@ -61,8 +61,8 @@ def _to_uint8(x: np.ndarray) -> np.ndarray:
 
 
 def _fractional_bits_for(means: np.ndarray) -> int:
-    """The most fractional bits that still fit the farthest coordinate in 24 bits. A coordinate that doesn't fit wraps
-    around to the opposite side of the scene rather than saturating.
+    """The most fractional bits that still fit the farthest coordinate in 24 bits. The count drops until that
+    coordinate fits. _pack_positions then clips into the signed 24-bit range.
     """
     farthest = float(np.abs(means).max(initial=0))
     bits = _MAX_FRACTIONAL_BITS

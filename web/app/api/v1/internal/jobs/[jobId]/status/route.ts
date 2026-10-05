@@ -2,14 +2,14 @@
  * PATCH /api/v1/internal/jobs/[jobId]/status: the worker's progress callback.
  *
  * The GPU worker (worker/) calls this as it moves a worker job through its stages, and once more when it finishes or
- * fails. Each call updates the job's row, and the matching splat's row when the job ends. The caller is a machine, not
- * a signed-in person, so auth is the per-job bearer token the app handed the worker at launch rather than a Clerk
- * session.
+ * fails. Each call updates the worker job's row, and the matching splat's row when the worker job completes or fails.
+ * The caller is a machine, not a signed-in person, so auth is the per-worker-job bearer token the app handed the
+ * worker at launch rather than a Clerk session.
  *
- * This is the one endpoint whose field names are snake_case, because worker/pipeline/status.py sends a literal
- * snake_case body. Status values need no translation. They are the Postgres enum labels as-is, so JobStatus
- * validates the incoming value and it goes straight into the column. Changing either the field names or the status list
- * means changing worker/ at the same time.
+ * The field names on this route are snake_case, because worker/pipeline/status.py sends a literal snake_case body.
+ * web/app/api/v1/internal/jobs/[jobId]/s3-credentials/route.ts uses snake_case field names too. Status values need no
+ * translation. They are the Postgres enum labels as-is, so JobStatus validates the incoming value and it goes straight
+ * into the column. Changing either the field names or the status list means changing worker/ at the same time.
  */
 
 import { and, eq, notInArray } from "drizzle-orm";

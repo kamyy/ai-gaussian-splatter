@@ -83,10 +83,8 @@ interface IconOption<T extends string> {
   icon: IconType;
 }
 
-/**
- * One 3D file the panel can show. available says the file exists. url is undefined while its link is still being
- * fetched, and error is set when fetching it failed.
- */
+// One 3D file the panel can show. available says the file exists. url is undefined while its link is still being
+// fetched, and error is set when fetching it failed.
 interface ViewerAsset {
   available: boolean;
   url: string | undefined;
@@ -107,7 +105,8 @@ export interface CropControls {
 interface SplatViewerPanelProps {
   splat: ViewerAsset;
   pointCloud: ViewerAsset;
-  // Null or undefined while loading, and for a job reconstructed before the worker wrote them.
+  // null on the share page when cameras.json is missing. undefined on the owner's page while the fetch is loading,
+  // while it is disabled, or after a 404.
   cameras: CameraPose[] | null | undefined;
   selection: PhotoSelection | null;
   // Clears the selection once the visitor moves the view away from the selected photo's by hand.
@@ -369,7 +368,8 @@ export function SplatViewerPanel({
   const [draftBox, setDraftBox] = useState<CropBox | null>(null);
   // The box front, side and top aim at for this fitting. Set when crop mode opens, and unchanged by a handle drag.
   const [aimBox, setAimBox] = useState<CropBox | null>(null);
-  // The box undo just removed. The job can still report it until the refetch, and a later crop is a different box.
+  // The box undo just removed. The worker job can still report that box until the refetch. A later crop is a
+  // different box.
   const [undoneCrop, setUndoneCrop] = useState<CropBox | null>(null);
 
   // True while a front, side or top view or a crop is open.

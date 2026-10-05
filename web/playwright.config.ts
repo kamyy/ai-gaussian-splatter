@@ -1,8 +1,8 @@
 /**
  * Configuration for the Playwright end-to-end tests in web/e2e/.
  *
- * End-to-end tests drive a real browser against the running app. They run on every PR, since they're fast and free. The
- * tests that run the real pipeline cost GPU money, so they stay manual.
+ * End-to-end tests drive a real browser against the running app. web/e2e/ has no specs yet. CI skips Playwright until
+ * that directory has a file.
  *
  * Only one server starts: the app itself. There's no HTTP mock to set up, because the share and view pages read the
  * database in the same process during server rendering, so nothing they render can be intercepted over the network.

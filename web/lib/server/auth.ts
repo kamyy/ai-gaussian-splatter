@@ -3,7 +3,8 @@
  *
  * requireUser() and requireClerkUserId() are how each authenticated Route Handler checks for a Clerk session.
  * requireUser() also creates the user's own database row on their first request, once Clerk confirms the user exists.
- * getJobForCallbackToken() checks the worker's per-job bearer token instead, for the status callback.
+ * getJobForCallbackToken() checks the worker's per-worker-job bearer token. The status callback uses it. The S3
+ * credentials route uses it too.
  * requireOwnedSplat() checks that a splat in the URL belongs to the caller. getClientIp() reads the caller's IP address
  * for rate limiting.
  */
@@ -118,9 +119,9 @@ export function getClientIp(request: NextRequest): string {
 }
 
 /**
- * Auth for the worker's status callback to this app. It compares a random per-job token against the job's own
- * `callbackToken` column instead of checking a Clerk session, so a compromised instance can only change the one job it
- * was launched for.
+ * Auth for the worker's status callback and for the S3 credentials route. It compares a random per-worker-job token
+ * against the worker job's own `callbackToken` column instead of checking a Clerk session. A compromised instance can
+ * update that worker job's status, and can read and write that splat's S3 objects.
  */
 export async function getJobForCallbackToken(jobId: string, request: NextRequest): Promise<Job> {
   const authHeader = request.headers.get("Authorization") ?? "";

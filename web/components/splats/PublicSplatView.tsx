@@ -27,7 +27,7 @@ interface PublicSplatViewProps {
   splatUrl: string;
   pointCloudUrl: string | null;
   cropBox: CropBox | null;
-  // Null for a job reconstructed before the worker wrote them.
+  // Null when cameras.json is missing.
   cameras: CameraPose[] | null;
   photos: PublicPhoto[];
   timestamps: JobTimestamps;
@@ -71,7 +71,7 @@ export function PublicSplatView({
         <StageShell title="How it was made">
           {/* StageShell mutes its text for prose. The stepper's finished steps take the page's own text color. */}
           <div className="text-foreground">
-            {/* The share page only serves a complete splat, so the job is complete and its point cloud key is
+            {/* The share page only serves a complete splat, so the worker job is complete and its point cloud key is
             unread. */}
             <PipelineStepper
               stage={{ kind: "complete" }}

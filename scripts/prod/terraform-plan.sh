@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # Previews what the deploy job would change in AWS.
 #
-# Runs terraform plan against the deployed account with the same repository variables the deploy job applies with,
-# without changing anything.
+# Runs terraform plan against the deployed account. The repository variables match the deploy job, except the image
+# tags. TF_VAR_web_image_tag comes from the running service. TF_VAR_migrate_image_tag is left unset, so it falls back
+# to that tag.
 
 set -euo pipefail
 
 usage() {
   echo "Usage: scripts/prod/terraform-plan.sh [terraform-plan-args...]"
   echo
-  echo "Previews what the deploy job would change, using the repository variables it applies with. Extra arguments go"
-  echo "to terraform plan."
+  echo "Previews what the deploy job would change. Image tags come from the running service. Other variables match"
+  echo "the deploy job. Extra arguments go to terraform plan."
 }
 
 if [[ ${1-} == -h || ${1-} == --help ]]; then

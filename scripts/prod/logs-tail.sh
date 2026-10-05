@@ -36,8 +36,10 @@ fi
 source_name=$1
 since=${2:-10m}
 
-# These names are fixed in infra/web.tf, infra/worker_sweeper.tf and infra/worker_iam.tf. They never change, so they
-# aren't scraped from there.
+# These names are fixed. They are not scraped from Terraform. The names live in:
+# - infra/web.tf
+# - infra/worker_iam.tf
+# - infra/worker_sweeper.tf
 case $source_name in
   web) LOG_GROUP=/ecs/ai-gaussian-splatter-web ;;
   migrate) LOG_GROUP=/ecs/ai-gaussian-splatter-migrate ;;

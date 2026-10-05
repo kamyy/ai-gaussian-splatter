@@ -34,9 +34,10 @@ export function isUuid(value: string): boolean {
 /**
  * Guards a path parameter before it reaches the database.
  *
- * The id columns are `uuid`, so a malformed value makes Postgres raise `22P02`, which surfaces as a 500. 404 rather
- * than 422 because these are all lookup-by-id routes that already collapse "not yours" into "not found." An
- * unparseable id can't name a row, so it gets the same answer.
+ * The id columns are `uuid`, so a malformed value makes Postgres raise `22P02`, which surfaces as a 500.
+ * requireUuid throws the status the caller passes. Lookup-by-id routes pass 404, the same answer they use when the
+ * row exists and belongs to someone else. getJobForCallbackToken passes 401, so a malformed id matches an unknown
+ * id. An unparseable id can't name a row.
  */
 export function requireUuid(value: string, status: number, message: string): void {
   if (!isUuid(value)) {

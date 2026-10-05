@@ -9,9 +9,10 @@ locals {
   # --- Tags and fixed names -----------------------------------------------------------
   project_tag = "ai-gaussian-splatter"
 
-  # EC2 has no native "restrict to the calling/launched instance" condition, so the worker's self-termination
-  # grant (infra/worker_iam.tf) and the web task role's RunInstances/TerminateInstances grants (infra/web.tf) both scope
-  # themselves to instances carrying this tag instead.
+  # EC2 has no native "restrict to the calling/launched instance" condition. These grants scope themselves to instances
+  # carrying this tag instead:
+  # - infra/web.tf
+  # - infra/worker_iam.tf
   worker_tag_key   = "Role"
   worker_tag_value = "worker"
 
@@ -50,14 +51,16 @@ locals {
 
   # Derived from the hostname above rather than passed in separately, so the certificate, the DNS record, and the
   # origin the worker PATCHes status back to cannot disagree. It carries no trailing slash, because both consumers
-  # append to it: worker/pipeline/status.py would double-slash its callback path, and the S3 CORS rules in infra/data.tf
+  # append to it. worker/pipeline/status.py would double-slash its callback path. The S3 CORS rules in infra/data.tf
   # are matched against the browser's Origin header exactly.
   app_origin = "https://${local.app_hostname}"
 
   # --- Container images ---------------------------------------------------------------
   # The registry hostname web/lib/server/workerLauncher.ts's user-data logs into before pulling. It is built from
-  # account/region directly rather than parsed out of aws_ecr_repository.worker.repository_url, matching how
-  # .github/workflows/deploy.yml and RUNBOOK.md construct the same string for their own docker/podman logins.
+  # account/region directly rather than parsed out of aws_ecr_repository.worker.repository_url, matching how these
+  # construct the same string for their own docker/podman logins:
+  # - .github/workflows/deploy.yml
+  # - RUNBOOK.md
   ecr_registry = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com"
   # One repository, two tag suffixes, the same shape infra/web.tf uses for -web and -migrate. The stages run
   # different images: worker/Dockerfile's reconstruct target carries COLMAP and no torch, its train target the
@@ -158,8 +161,10 @@ locals {
     }]
   })
 
-  # Shared by every S3 role-policy grant in infra/web.tf and infra/worker_iam.tf, so an action list change (e.g.
-  # adding s3:PutObjectTagging) is made once instead of separately on each role/bucket pair.
+  # Shared by every S3 role-policy grant in these files, so an action list change (e.g. adding s3:PutObjectTagging)
+  # is made once instead of separately on each role/bucket pair:
+  # - infra/web.tf
+  # - infra/worker_iam.tf
   s3_read_actions = [
     "s3:GetBucketLocation",
     "s3:GetObject",

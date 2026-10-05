@@ -28,10 +28,10 @@ function clerkFrontendApi(): string {
 /**
  * The CSP for every page. Exported for its tests.
  *
- * script-src allows inline scripts, which next-themes' pre-hydration script and Google Analytics both are. Allowing
- * them by nonce instead would force every page to render per request, and the policy still limits scripts to these
- * origins. 'wasm-unsafe-eval' lets the splat viewer (@sparkjsdev/spark) compile its WebAssembly. Development also needs
- * 'unsafe-eval', because React uses eval there to rebuild server error stacks.
+ * script-src allows inline scripts, which next-themes' pre-hydration script and Google Analytics both are. A nonce
+ * would force every page to render per request. The policy still limits scripts to these origins. 'wasm-unsafe-eval'
+ * lets the splat viewer (@sparkjsdev/spark) compile its WebAssembly. Development also needs 'unsafe-eval', because
+ * React uses eval there to rebuild server error stacks.
  */
 export function contentSecurityPolicy(): string {
   const env = getEnv();
@@ -82,11 +82,11 @@ export const proxy = clerkMiddleware(() => {
 
 export const config = {
   matcher: [
-    // Skip Next.js internals and all static files, unless found in search params
+    // This pattern skips Next.js internals and static files, unless the extension is only in the search params.
     "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    // Always run for API routes
+    // This pattern always runs for API routes.
     "/(api|trpc)(.*)",
-    // Always run for Clerk-specific frontend API routes
+    // This pattern always runs for Clerk's frontend API routes.
     "/__clerk/(.*)",
   ],
 };

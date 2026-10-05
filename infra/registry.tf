@@ -29,12 +29,13 @@ resource "aws_ecr_repository" "web" {
   }
 }
 
-# An ECR lifecycle rule cannot see ECS: it expires by push date alone, so a tag the service is currently
-# running is eligible once enough newer images exist. Running tasks survive that, having already pulled. The
-# next placement (a Spot reclaim, a scale-out, or the circuit breaker's own rollback) fails with
-# CannotPullContainerError. The exposure is real after a rollback, where the live tag is deliberately an old
-# one, so local.releases_kept is the number that protects it. Rolling back also re-points the migration task
-# definition at the matching -migrate tag, so both of a release's tags are kept to the same depth.
+# An ECR lifecycle rule cannot see ECS. Images expire by count (imageCountMoreThan), oldest push first, so a tag
+# the service is currently running is eligible once enough newer images exist. Running tasks survive that, having
+# already pulled. The next placement (a Spot reclaim, a scale-out, or the circuit breaker's own rollback) fails
+# with CannotPullContainerError. The exposure is real after a rollback, where the live tag is deliberately an old
+# one, so local.releases_kept is the number that protects it. A circuit-breaker rollback restores the previous web
+# task definition. Both tag suffixes are kept to local.releases_kept so an old -web tag and its -migrate pair age
+# out together.
 resource "aws_ecr_lifecycle_policy" "web" {
   repository = aws_ecr_repository.web.name
 

@@ -36,7 +36,7 @@ def _post_for_credentials(settings: Settings) -> dict[str, str]:
 
 def _request_credentials(settings: Settings) -> dict[str, str]:
     """Asks the app for credentials, retrying a network failure or a 5xx. A 4xx is raised straight away, because asking
-    again gets the same answer: a wrong token, or a job that has ended.
+    again gets the same answer: a wrong token, or a worker job that has ended.
 
     Each warning logs the error with %r, not %s, for the same reason as worker/pipeline/status.py: httpx's timeout
     errors have empty messages.

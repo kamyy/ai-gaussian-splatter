@@ -28,18 +28,16 @@ interface SplatStageViewerProps {
   splatId: string;
   job: Job | undefined;
   complete: boolean;
-  // Undefined while loading, and for a job reconstructed before the worker wrote them.
+  // Undefined while the camera fetch is loading, while it is disabled, or when cameras.json is missing.
   cameras: CameraPose[] | undefined;
   selection: PhotoSelection | null;
   onClearSelection: () => void;
-  // Called once a crop or an undo has changed the job, so the page refetches it.
+  // Called once a crop or an undo has changed the worker job, so the page refetches it.
   onJobChanged: () => void;
 }
 
-/**
- * Names which file the viewer shows. updatedAt changes on every committed crop, including one that repeats the same
- * box, so the viewer reloads that new file instead of keeping a link to the one the crop just deleted.
- */
+// Names which file the viewer shows. updatedAt changes on every committed crop, including one that repeats the same
+// box, so the viewer reloads that new file instead of keeping a link to the one the crop just deleted.
 function splatVersion(job: Pick<Job, "cropBox" | "updatedAt"> | undefined): string {
   if (!job?.cropBox) {
     return "original";

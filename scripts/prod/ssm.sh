@@ -3,8 +3,10 @@
 #
 # Each setting is an SSM Parameter Store parameter that infra/settings.tf creates. The web service reads it with a
 # one-minute cache (web/lib/server/runtimeSettings.ts), so a change takes effect within a minute and needs no deploy.
-# The checks below match the ones the web service applies. A value that fails them there falls back to the setting's
-# default and turns processing off, so catching it here is what tells you.
+# The checks below are tighter than the ones web/lib/server/runtimeSettings.ts applies. Integers stop at 1000000 here.
+# The web parser allows up to Number.MAX_SAFE_INTEGER. showcase-clerk-user-id must match user_ followed by letters and
+# digits, or none. parseShowcase accepts any other string. A value the web parser rejects falls back to the setting's
+# default and turns processing off.
 
 set -euo pipefail
 

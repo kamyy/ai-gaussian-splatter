@@ -1,8 +1,8 @@
 /**
  * The provider behind every snackbar (toast message) in the app.
  *
- * Every status and error message (job failures, upload failures and the like) goes through this one stack instead of an
- * inline alert of its own, so there's one consistent place they appear. Components post to it with notistack's
+ * Every status and error message (worker-job failures, upload failures, and the like) goes through one stack instead
+ * of an inline alert of its own, so there's one consistent place they appear. Components post to it with notistack's
  * useSnackbar. notistack doesn't ship "use client", so web/app/layout.tsx, a Server Component, renders this wrapper
  * instead of notistack's provider directly.
  */

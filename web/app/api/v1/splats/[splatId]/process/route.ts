@@ -2,8 +2,9 @@
  * POST /api/v1/splats/[splatId]/process: start processing a splat.
  *
  * Creates a worker job and launches its first GPU spot instance, which runs the reconstruct stage (COLMAP, the
- * structure-from-motion step that works out where each photo was taken). This is the expensive step, so it is where the
- * site-wide daily cap on worker jobs applies, and where at most one active job per splat is enforced.
+ * structure-from-motion step that works out where each photo was taken). At most one active worker job per splat is
+ * enforced here. The site-wide daily cap on worker jobs is charged here.
+ * web/app/api/v1/splats/[splatId]/train/route.ts charges that same cap when the train stage launches.
  */
 
 import { and, count, eq, lt, notInArray } from "drizzle-orm";
@@ -20,9 +21,10 @@ import { launchWorker, stopWorker } from "@/lib/server/worker";
 import { generateCallbackToken } from "@/lib/server/workerLauncher";
 import { JOB_ENDED_STATUSES, JobStatus, PhotoUploadStatus, SplatStatus } from "@/lib/statuses";
 
-// How long a job may sit in a non-terminal status without its worker reporting anything before this route treats it
-// as dead and cancels it. The window has to clear the longest gap a healthy job can go between callbacks, which is a
-// whole training run, so it is deliberately generous.
+// How long a non-ended worker job on this splat may go without a row change before this route cancels it.
+// awaiting_training is included, so a visitor who waits out the window loses that worker job. Training reports
+// progress about 20 times a run. The long silent stretch of a running stage is reconstruct, from reconstruction_running
+// until awaiting_training.
 const JOB_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
 
 // Postgres error code 23505 (unique violation). drizzle-orm wraps the raw node-postgres DatabaseError, which carries
@@ -63,12 +65,13 @@ export const POST = withErrorHandling(
       throw new HttpError(400, `A splat can have at most ${MAX_PHOTOS_PER_SPLAT} photos, has ${uploaded.n}`);
     }
 
-    // `uq_jobs_splat_id_active` (web/lib/server/db/schema.ts) makes an active job block every later POST here.
-    // web/lib/server/reconcileJob.ts fails a job whose worker died, but only while its page polls, and never for a
-    // local launch or a job with no instance ID. Any other dead worker would leave its splat unprocessable for good, so
-    // a job whose row hasn't changed in JOB_STALE_AFTER_MS is cancelled here to free the index. The status callback
-    // ignores a job that has already ended (web/app/api/v1/internal/jobs/[jobId]/status/route.ts), so a worker that
-    // wakes up late can't bring the cancelled row back.
+    // `uq_jobs_splat_id_active` (web/lib/server/db/schema.ts) makes an active worker job block every later POST here.
+    // web/lib/server/reconcileJob.ts fails a worker job whose worker instance died. That check runs while the splat's
+    // page polls. A local launch stays unchanged. A worker job with no instance id stays unchanged. Any other dead
+    // worker instance would leave its splat unprocessable, so a worker job whose row has not changed in
+    // JOB_STALE_AFTER_MS is cancelled here to free the index. The status callback ignores a worker job that has already
+    // ended (web/app/api/v1/internal/jobs/[jobId]/status/route.ts). A worker that wakes up late can't bring the
+    // cancelled row back.
     await getDb()
       .update(jobs)
       .set({
@@ -83,10 +86,10 @@ export const POST = withErrorHandling(
         ),
       );
 
-    // A job can sit at "awaiting_training" for as long as the user takes to decide, so a second POST arriving while
-    // one is in flight is easy to reach by accident. The unique index above enforces "at most one active job per
-    // splat" at the database level, so a race loses here as a unique violation rather than needing a separate
-    // read-then-write check that could itself race.
+    // A worker job sits at "awaiting_training" while the visitor decides. This route cancels it once the row has gone
+    // JOB_STALE_AFTER_MS without a change. A second POST is easy to reach before then. The unique index above
+    // enforces at most one active worker job per splat. A race loses here as a unique violation. A separate
+    // read-then-write check could itself race.
     //
     // The row is claimed before the daily cap is charged. A rejected duplicate must not consume one of the day's
     // max-jobs-per-day units, or a user clicking a dead button could exhaust the site-wide GPU budget without

@@ -148,7 +148,8 @@ create_aws_resources() {
   if ! aws iam get-user --user-name "$DEV_USER" >/dev/null 2>&1; then
     missing=true
   fi
-  # Asks only when something is about to be created. A re-run only rewrites settings to the values they already hold.
+  # Asks only when something is about to be created. A re-run skips the confirm when the buckets and user already
+  # exist, then still writes this script's tagging, CORS, and IAM policy.
   if [[ $missing == true ]]; then
     confirm "Create the $uploads and $splats buckets and the $DEV_USER IAM user in $region, account $AWS_ACCOUNT_ID?"
   fi

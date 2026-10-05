@@ -23,9 +23,11 @@ tf_get_bin() {
   printf '%s\n' "$bin"
 }
 
-# Prints the exact required_version in infra/providers.tf. scripts/dev/setup.sh and CI's hashicorp/setup-terraform both
-# call this so the pin is not copied into .github/workflows/ci.yml or .github/workflows/deploy.yml. A non-x.y.z value is
-# refused because a blank terraform_version would make setup-terraform install latest.
+# Prints the exact required_version in infra/providers.tf. These callers install that pin instead of copying it:
+# - .github/workflows/ci.yml
+# - .github/workflows/deploy.yml
+# - scripts/dev/setup.sh
+# A non-x.y.z value is refused because a blank terraform_version would make setup-terraform install latest.
 tf_get_required_version() {
   local version
   version=$(grep -oP 'required_version = "\K[^"]+' "$ROOT/infra/providers.tf" || true)

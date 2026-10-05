@@ -1,5 +1,5 @@
 /**
- * The status values for splats, photos and jobs, shared by the database, the API and the UI.
+ * The status values for splats, photos, and worker jobs, shared by the database, the API, and the UI.
  *
  * These live outside web/lib/server/ because client components must not import from it, since that would pull the
  * database client and AWS SDK into the browser bundle. The dependency runs the safe direction instead:
@@ -7,7 +7,8 @@
  * the TypeScript types cannot drift apart.
  *
  * Values are snake_case because they are also the Postgres enum labels, so there is exactly one spelling from the
- * database through to the JSON responses. Field names stay camelCase. Only these values are snake_case.
+ * database through to the JSON responses. Public JSON field names stay camelCase. The status callback and the S3
+ * credentials route send snake_case field names.
  * SplatStatus.draft is the string "draft", and the same is true of every member here, so a comparison can name the
  * status.
  *

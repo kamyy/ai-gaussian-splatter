@@ -17,7 +17,7 @@ const BOUNDING_BOX_TRIM = 0.05;
 // is mostly the table and room around the object, which a box fitted to every point would take in.
 const CROP_NEAREST = 0.5;
 // Each axis view's direction from the object to the camera, along the object's upright axes (uprightRotation). The
-// top view leans a hair toward the front: straight down the up axis, the camera's up would be undefined, and the lean
+// top view leans a hair toward the front. Straight down the up axis, the camera's up would be undefined. The lean
 // puts the front at the bottom of the screen.
 const AXIS_VIEWS: Record<AxisView, Vector3> = {
   front: new Vector3(0, 0, 1),
@@ -167,17 +167,15 @@ export function axisViewPose(
   };
 }
 
-/** The middle value of values, which it sorts in place. */
+// The middle value of values, which it sorts in place.
 function median(values: Float32Array): number {
   values.sort();
 
   return values[Math.floor(values.length / 2)];
 }
 
-/**
- * The CROP_NEAREST of interleaved x, y, z positions nearest center, also interleaved. Every point as far as the
- * cutoff distance is kept, so points at equal distances are kept or dropped together.
- */
+// The CROP_NEAREST of interleaved x, y, z positions nearest center, also interleaved. Every point as far as the
+// cutoff distance is kept, so points at equal distances are kept or dropped together.
 function nearestPositions(positions: Float32Array, center: Vector3): Float32Array {
   const count = positions.length / 3;
   const distances = new Float32Array(count);

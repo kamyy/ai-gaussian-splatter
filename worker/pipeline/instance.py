@@ -1,8 +1,8 @@
 """EC2 instance self-termination via the instance metadata service (IMDSv2).
 
-Called from worker/run_job.py's finally block, so it runs on success and on a failed job alike. This is what ends a
-job's billing at the job's own end. The backstop under it is the `shutdown -h` web/lib/server/workerLauncher.ts
-schedules in user-data, which only fires once the instance reaches its lifetime ceiling.
+Runs on success and on a failed worker job alike. This is what ends the worker instance's billing when the stage
+ends. The backstop is the `shutdown -h` web/lib/server/workerLauncher.ts schedules in user-data, which fires once
+the instance reaches its lifetime ceiling.
 """
 
 import logging
@@ -16,8 +16,8 @@ _IMDS_BASE = "http://169.254.169.254/latest"
 
 
 def get_self_instance_id() -> str | None:
-    """Returns None rather than raising when not running on EC2, such as in a local pipeline run, where there is no
-    real instance to terminate.
+    """Returns None on any httpx.HTTPError. That includes a local pipeline run, and IMDS unreachable on a real worker
+    instance. terminate_self() then returns without calling terminate_instances.
     """
     try:
         token_resp = httpx.put(
