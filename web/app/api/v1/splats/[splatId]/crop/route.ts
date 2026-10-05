@@ -126,8 +126,8 @@ async function claimCrop(userId: string, job: Job): Promise<Date> {
       throw new HttpError(409, "A crop is already running. Wait for it to finish.");
     }
 
-    // The timestamp comes back from the row, so the later match uses the value Postgres stored.
-    const claimed = await tx.execute<{ crop_started_at: string }>(sql`
+    // A timestamp column keeps microseconds, so it stores claimedAt's milliseconds exactly and later matches on it.
+    const claimed = await tx.execute(sql`
       update ${jobs}
       set crop_started_at = ${claimedAt.toISOString()}
       where ${and(
@@ -137,21 +137,19 @@ async function claimCrop(userId: string, job: Job): Promise<Date> {
         sameCropKey(jobs.croppedResultSpzS3Key, job.croppedResultSpzS3Key),
         or(isNull(jobs.cropStartedAt), lte(jobs.cropStartedAt, staleBefore)),
       )}
-      returning crop_started_at
     `);
-    const storedAt = claimed.rows[0]?.crop_started_at;
-    if (storedAt === undefined) {
+    if (claimed.rowCount === 0) {
       throw new HttpError(409, "The splat changed while it was being cropped");
     }
 
-    return new Date(storedAt);
+    return claimedAt;
   });
 }
 
 /** Drops a claim this request still holds. A raw update, so it leaves updatedAt where it is. */
 async function releaseCrop(jobId: string, claimedAt: Date): Promise<void> {
   await getDb().execute(
-    sql`update jobs set crop_started_at = null where id = ${jobId} and crop_started_at = ${claimedAt}`,
+    sql`update ${jobs} set crop_started_at = null where ${and(eq(jobs.id, jobId), eq(jobs.cropStartedAt, claimedAt))}`,
   );
 }
 
