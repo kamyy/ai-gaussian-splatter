@@ -10,8 +10,6 @@
 
 "use client";
 
-import { useState } from "react";
-
 import { PageTitle } from "@/components/layout/PageTitle";
 import { usePhotoSelection } from "@/lib/hooks/usePhotoSelection";
 import { JobStatus } from "@/lib/statuses";
@@ -43,21 +41,12 @@ export function PublicSplatView({
 }: PublicSplatViewProps) {
   const { selection, selectPhoto, clearSelection } = usePhotoSelection(photos, cameras);
 
-  const [hoveredPhotoId, setHoveredPhotoId] = useState<string | null>(null);
-
   const placedPhotoIds = cameras ? new Set(cameras.map(camera => camera.photoId)) : null;
 
   let photoGrid: React.ReactNode = null;
   if (photos.length > 0) {
     photoGrid = (
-      <PhotoGrid
-        photos={photos}
-        placedPhotoIds={placedPhotoIds}
-        selection={selection}
-        onSelect={selectPhoto}
-        hoveredPhotoId={hoveredPhotoId}
-        onHover={setHoveredPhotoId}
-      />
+      <PhotoGrid photos={photos} placedPhotoIds={placedPhotoIds} selection={selection} onSelect={selectPhoto} />
     );
   }
 
