@@ -100,7 +100,7 @@ After that, a human only releases worker changes ([Releasing a worker change](#2
 
 CI's `deploy` job (`.github/workflows/deploy.yml`) does every deploy, including the first one into an empty account:
 
-1. Creates the `ai-gaussian-splatter` and `ai-gaussian-splatter-worker` ECR repositories (`infra/registry.tf`) — first deploy only.
+1. Creates the `ai-gaussian-splatter` ECR repository for the web images (`infra/registry.tf`) — first deploy only.
 2. Builds both web images (`<tree>-web` and `<tree>-migrate`, tagged with `web/`'s git tree id) and pushes them — skipped when that tag is already there.
 3. Applies the rest of the stack.
 4. Runs the migration.
@@ -260,7 +260,14 @@ CloudWatch also keeps default metrics for the ALB (`TargetResponseTime`, `HTTPCo
 
 ### 3.4 Rotating the Clerk secret
 
-Update the secret's value in Secrets Manager, then run `aws ecs update-service --force-new-deployment`. ECS only resolves secrets at task start, so the running tasks keep the old value until that new deployment replaces them.
+Update the secret's value in Secrets Manager, then start a new deployment:
+
+```bash
+aws ecs update-service --region "$(source scripts/lib/terraform.sh && tf_get_aws_region)" \
+  --cluster ai-gaussian-splatter --service ai-gaussian-splatter-web --force-new-deployment
+```
+
+ECS only resolves secrets at task start, so the running tasks keep the old value until that new deployment replaces them.
 
 ---
 

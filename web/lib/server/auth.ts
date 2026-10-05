@@ -3,8 +3,7 @@
  *
  * requireUser() and requireClerkUserId() are how each authenticated Route Handler checks for a Clerk session.
  * requireUser() also creates the user's own database row on their first request, once Clerk confirms the user exists.
- * getJobForCallbackToken() checks the worker's per-worker-job bearer token. The status callback uses it. The S3
- * credentials route uses it too.
+ * getJobForCallbackToken() checks the per-worker-job bearer token a worker instance sends in place of a Clerk session.
  * requireOwnedSplat() checks that a splat in the URL belongs to the caller. getClientIp() reads the caller's IP address
  * for rate limiting.
  */

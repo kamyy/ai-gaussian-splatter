@@ -4,8 +4,6 @@
 # Those helpers parse HCL (Terraform's config language) with text tools, so a change to how a value is written in infra/
 # can silently break them. This checks them against the real files and against fixtures.
 
-# The root package.json's infra:test calls it, from CI's infra job and the root `pnpm test`.
-#
 # .github/workflows/deploy.yml signs its AWS credentials with tf_get_aws_region, so a scraper that does not read a
 # variable in infra/variables.tf breaks a deploy rather than a plan. The check against the real file is shape-only,
 # since asserting the region literally would write it a second time. The fixtures below own their inputs, so those

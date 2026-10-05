@@ -96,15 +96,15 @@ interface SplatViewerProps {
   height?: string;
 }
 
-// Spark's render loop starts its sort from a timeout. Nothing awaits that promise. Disposing the renderer while the
-// sort is still running clears the depth target the sort is about to read. The promise then rejects with "No target".
-// Leaving the page disposes the renderer at that moment. Fast Refresh does the same when it tears the canvas down.
-// The sort has nowhere to land. The rejection is ignored. A rejection while the renderer is still on screen is
-// rethrown.
+// Spark's render loop starts its sort from a timeout, and nothing awaits the promise that sort returns. Disposing the
+// renderer mid-sort clears the depth target the sort is about to read, and the promise rejects with "No target".
+// Leaving the page disposes the renderer at just that moment, and so does Fast Refresh when it tears the canvas down.
+// A rejection after release is ignored, since the sort has nowhere to land. One while the renderer is still on screen
+// is rethrown.
 function holdSparkSorts(spark: SparkRenderer): () => void {
   let released = false;
-  // updateInternal and driveSort are private. Naming those methods on SparkRenderer would make a direct cast the type
-  // never.
+  // updateInternal and driveSort are private. Naming them alongside SparkRenderer's own type resolves to never, so the
+  // cast goes through unknown to a type holding only those two.
   const runtime = spark as unknown as {
     updateInternal: (args: { scene: Scene; camera: Camera; autoUpdate: boolean }) => Promise<void>;
     driveSort: () => Promise<void>;

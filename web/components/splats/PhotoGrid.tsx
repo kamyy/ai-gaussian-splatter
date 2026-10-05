@@ -4,8 +4,8 @@
  * Shows the photos in justified rows (each row stretched to fill the width, keeping every photo's shape), a few rows
  * per page. Picking a photo selects its camera in the 3D viewer, and hovering one highlights it there. A photo the
  * pointer rests on is enlarged over its neighbours, so its detail can be made out. A photo COLMAP (the
- * structure-from-motion tool in worker/) couldn't place in 3D is faded, labelled "Not placed" and can't be picked. Arrow
- * keys move between photos.
+ * structure-from-motion tool in worker/) couldn't place in 3D is faded, labelled "Not placed" and can't be picked.
+ * Arrow keys move between photos.
  */
 
 "use client";

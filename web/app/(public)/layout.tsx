@@ -1,5 +1,5 @@
 /**
- * Layout for the pages anyone can open: sign-in, sign-up and the public share view.
+ * Layout for the pages anyone can open: sign-in, sign-up, the public share view, and the privacy and terms pages.
  *
  * Adds the site header above each page. The signed-out "/" landing page and the authenticated splat workspace are
  * siblings of this route group, not descendants of it, so each renders web/components/layout/SiteHeader.tsx itself.

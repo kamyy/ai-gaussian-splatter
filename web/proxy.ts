@@ -1,9 +1,9 @@
 /**
  * Runs Clerk's middleware ahead of every page and API route, and sets the Content Security Policy.
  *
- * Next.js runs the function this file exports as `proxy` before each matching request. clerkMiddleware() reads the Clerk session
- * cookie, so later code can tell who is signed in. It doesn't block anyone itself: pages and API routes check sign-in
- * on their own. The matcher is the list of URL patterns it runs for. It skips static files by extension.
+ * Next.js runs the function this file exports as `proxy` before each matching request. clerkMiddleware() reads the
+ * Clerk session cookie, so later code can tell who is signed in. It doesn't block anyone itself: pages and API routes
+ * check sign-in on their own. The matcher is the list of URL patterns it runs for. It skips static files by extension.
  *
  * The Content Security Policy (CSP) tells the browser which origins a page may load scripts, styles, images and
  * connections from. It is built here rather than in web/next.config.ts because it names the S3 buckets, which are only

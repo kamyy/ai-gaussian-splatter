@@ -10,8 +10,8 @@
  *
  * `next dev`, `pnpm db:migrate` and `pnpm db:studio` run on the host against the `splat-pg` Postgres container, and the
  * app is always served on port 3000. Because those never change, they live here as literals, and web/.env lists only
- * the settings a developer actually chooses. getEnv() applies them over the environment, so a stray shell
- * variable can't move dev elsewhere. Deploys and tests get none of them.
+ * the settings a developer actually chooses. getEnv() applies them over the environment, so a stray shell variable
+ * can't move dev elsewhere. Deploys and tests get none of them.
  *
  * The migrator image ships this file, because web/scripts/db-migrate.cjs reads LOCAL_DATABASE_ENV and isLocalDevEnv().
  *

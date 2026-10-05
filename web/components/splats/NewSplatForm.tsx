@@ -1,10 +1,10 @@
 /**
  * The form on /splats/new that creates a splat from a name and a set of photos.
  *
- * The visitor names the splat and drops photos onto it, previewed in justified rows. A blurry or low-resolution photo is
- * marked in the preview, with an offer to remove every marked photo at once. Submitting creates the splat,
- * uploads the photos straight to S3 (AWS's file storage), and starts processing, then moves to the new splat's page. If
- * an upload fails partway, a retry reuses the splat and sends only the photos that didn't make it. While processing is
+ * The visitor names the splat and drops photos onto it, previewed in justified rows. A blurry or low-resolution photo
+ * is marked in the preview, with an offer to remove every marked photo at once. Submitting creates the splat, uploads
+ * the photos straight to S3 (AWS's file storage), and starts processing, then moves to the new splat's page. If an
+ * upload fails partway, a retry reuses the splat and sends only the photos that didn't make it. While processing is
  * paused for the whole site, the form says so, and submitting only creates the splat and uploads its photos.
  */
 
@@ -150,8 +150,8 @@ export function NewSplatForm() {
   const submitting = phase !== "idle";
   const tooManyPhotos = photos.length > MAX_PHOTOS_PER_SPLAT;
 
-  // An uploaded photo is already on the server. The remove button is replaced. The flag is cleared, because flagging
-  // an uploaded photo would only nag.
+  // An uploaded photo is already on the server, so it gets an uploaded mark in place of its remove button. It isn't
+  // flagged either, because flagging a photo that can no longer be removed would only nag.
   const removableFlagged = [...flagged.keys()].filter(key => !uploadedKeys.has(key));
 
   const { getRootProps, getInputProps, open, isDragAccept, isDragReject } = useDropzone({

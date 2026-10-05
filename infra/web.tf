@@ -4,11 +4,10 @@
 # internet-facing load balancer spreads requests across its tasks. This file also holds the TLS certificate, the DNS
 # record, and the IAM roles the tasks run with.
 #
-# The tasks share the public subnets with the ALB and carry a public IP. Their calls to the EC2 API egress
-# through the internet gateway; S3 calls stay on AWS's network through the gateway endpoint (infra/network.tf) instead.
-# Nothing can open a connection to them regardless: aws_security_group.web admits only aws_security_group.alb.
-# TLS terminates at the ALB with an ACM certificate for local.app_hostname, and plain HTTP is redirected to
-# HTTPS.
+# The tasks share the public subnets with the ALB and carry a public IP. Their calls to the EC2 API egress through the
+# internet gateway. S3 calls stay on AWS's network through the gateway endpoint (infra/network.tf) instead. Nothing can
+# open a connection to them, because aws_security_group.web admits only aws_security_group.alb. TLS terminates at the
+# ALB with an ACM certificate for local.app_hostname, and plain HTTP is redirected to HTTPS.
 #
 # The ALB's own access-log bucket is here rather than in infra/data.tf, because nothing but the load balancer writes it.
 
@@ -90,9 +89,8 @@ resource "aws_iam_role_policy" "execution" {
 # The migration task runs `node web/scripts/db-migrate.cjs` as a one-off ecs:RunTask before the service's own
 # rollout. The image is web/Dockerfile's migrator stage. See ARCHITECTURE.md for why migrations can't run when a
 # container boots. execution_role is reused as-is, since it already has the ECR pull and DB secret read this
-# container needs to start. The migration task role gets its own fixed name, so RUNBOOK.md can name it literally
-# the same way it names execution_role. That role needs no grants at all, because the container only opens a TCP
-# connection to RDS and makes no AWS API calls.
+# container needs to start. The migration task role has a fixed name, like execution_role (infra/locals.tf). It
+# needs no grants at all, because the container only opens a TCP connection to RDS and makes no AWS API calls.
 
 resource "aws_iam_role" "migration_task" {
   name               = local.migration_task_role_name

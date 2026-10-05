@@ -1,10 +1,9 @@
 /**
  * The / landing page for signed-out visitors.
  *
- * Explains what the app does and links to sign-up. When the showcase account (a runtime setting) has
- * examples, the page is laid out around them, so a visitor can open a finished splat without an account. Otherwise the
- * hero shows a decorative point cloud beside the text instead. A signed-in visitor is sent straight to their library at
- * /splats.
+ * Explains what the app does and links to sign-up. When the showcase account (a runtime setting) has examples, the
+ * page is laid out around them, so a visitor can open a finished splat without an account. Otherwise the hero shows a
+ * decorative point cloud beside the text instead. A signed-in visitor is sent straight to their library at /splats.
  */
 
 import { auth } from "@clerk/nextjs/server";

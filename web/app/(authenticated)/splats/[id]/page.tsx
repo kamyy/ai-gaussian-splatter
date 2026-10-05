@@ -25,6 +25,7 @@ import { useSplat } from "@/lib/hooks/useSplat";
 import { useStageNotification } from "@/lib/hooks/useStageNotification";
 import { splatStage } from "@/lib/splatStage";
 import { JOB_ENDED_STATUSES } from "@/lib/statuses";
+
 export default function SplatPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { data: splat, isLoading: splatLoading, mutate: refetchSplat } = useSplat(id);

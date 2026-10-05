@@ -130,7 +130,7 @@ export function PointCloudScene({
   const [geometry, setGeometry] = useState<BufferGeometry | null>(null);
 
   // Read by the load effect below instead of being a dependency of it, for the reason SplatScene
-  // (web/components/viewer/SplatViewer.tsx) gives: a re-minted presigned URL is the same object, and reloading on it
+  // (web/components/viewer/SplatViewer.tsx) gives: a re-minted presigned URL names the same file, and reloading on it
   // would re-download the whole point cloud.
   const urlRef = useLatestRef(url);
 

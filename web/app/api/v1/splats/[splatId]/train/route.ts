@@ -1,9 +1,9 @@
 /**
  * POST /api/v1/splats/[splatId]/train: start the training stage.
  *
- * The check stage's build button calls this once the visitor has looked over the point cloud. It launches the second GPU spot instance for a job whose reconstruct stage stopped at "awaiting_training",
- * reusing that job's own id and callback token rather than creating a new job row (see worker/run_job.py's stage
- * split).
+ * The check stage's build button calls this once the visitor has looked over the point cloud. It launches the second
+ * GPU spot instance for a job whose reconstruct stage stopped at "awaiting_training", reusing that job's own id and
+ * callback token rather than creating a new job row (see worker/run_job.py's stage split).
  */
 
 import { and, desc, eq, notInArray } from "drizzle-orm";

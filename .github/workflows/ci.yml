@@ -1,9 +1,8 @@
 name: CI
 
-# Unit and component tests run on every PR here. Playwright runs too, but there are no specs yet, so
-# `--pass-with-no-tests` keeps it green until a seeded test database exists (AGENTS.md). Tests that run the real
-# pipeline (COLMAP and gsplat on a real GPU) are deliberately not run here. They cost real time and money, so they stay
-# manual.
+# Unit and component tests run on every PR here. Playwright is wired up but skipped until web/e2e/ holds a spec, which
+# waits on a seeded test database (AGENTS.md). Tests that run the real pipeline (COLMAP and gsplat on a real GPU) are
+# deliberately not run here. They cost real time and money, so they stay manual.
 on:
   pull_request:
   push:
@@ -87,8 +86,8 @@ jobs:
           podman run -d --name ci-postgres --network ci-net -p 5432:5432 \
             -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=ai_gaussian_splatter \
             postgres:18
-          # Checked over TCP, because the image's temporary init server listens only on the Unix socket and a socket check
-          # can report ready before the real server starts.
+          # Checked over TCP, because the image's temporary init server listens only on the Unix socket and a socket
+          # check can report ready before the real server starts.
           deadline=$((SECONDS + 30))
           until podman exec ci-postgres pg_isready -h 127.0.0.1 -U postgres; do
             if ((SECONDS >= deadline)); then
@@ -161,8 +160,8 @@ jobs:
       - run: pnpm db:migrate
       - run: pnpm test
       - run: pnpm build
-      # Skipped until web/e2e/ holds a spec, so the browser download isn't paid for zero tests. The first spec turns both
-      # steps on.
+      # Skipped until web/e2e/ holds a spec, so the browser download isn't paid for zero tests. The first spec turns
+      # both steps on.
       - name: Install Playwright browsers
         if: hashFiles('web/e2e/**') != ''
         run: npx playwright install --with-deps chromium

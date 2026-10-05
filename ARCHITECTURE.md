@@ -59,6 +59,7 @@ Why the system is shaped this way: decisions, alternatives rejected, costs accep
    - It runs in the web task rather than on a worker instance. Streaming a million Gaussians through takes under a second, which a GPU instance's boot time would dwarf.
    - The originals are never changed, so Undo crop only clears the job's crop columns. The download, the viewer and the share page all serve the cropped copy while one exists.
    - The share preview keeps the thumbnail the worker rendered at export.
+
 The "AI" here is per-object gradient descent through a differentiable rasterizer, not a pretrained inference model. COLMAP is classical computer vision (bundle adjustment), not ML.
 
 ---
@@ -99,7 +100,7 @@ A baked AMI would attack the smaller half — fixed overhead, not training. Trai
 
 ## 4. API design
 
-- REST (`web/app/api/v1/`), not GraphQL. 16 flat endpoints don't need GraphQL's query flexibility.
+- REST (`web/app/api/v1/`), not GraphQL. A couple of dozen flat endpoints don't need GraphQL's query flexibility.
 - Postgres (RDS) for `users`, `splats`, `photos`, `jobs`, and rate-limit/job counters. Relational, low traffic, and needs atomic `INSERT ... ON CONFLICT`.
 - Auth: Clerk (`@clerk/nextjs`). It is simple to integrate, and this app doesn't need enterprise features (SSO, SCIM, custom identity federation).
 - API and pages share one Next.js app.
@@ -157,7 +158,7 @@ Two fixes were considered:
 - **Scheduled forced redeployment**: an EventBridge Scheduler rule calling `ecs:UpdateService(forceNewDeployment)` on a cadence under 7 days, via a direct "universal target" API call with no Lambda needed. Fully infra-only and cheap. It adds a routine rolling restart as a permanent fixture of the architecture, and it only patches the symptom, since the app still never verifies it's holding a current password between restarts.
 - **Fetch the password at connect time** (chosen): the web service re-fetches the current password from Secrets Manager on every new `pg` connection instead of trusting a cached value. It is then never more than a few minutes stale, whenever RDS rotates. This is also what Secrets Manager rotation is designed around, where the alternative treats an env var as a cache of something meant to be read live.
 
-The migration task (`web/scripts/db-migrate.cjs`) keeps the old static-env-var behavior: it runs for seconds and exits, well inside the 7-day window, so there's nothing for it to go stale against, and changing it would need its own Secrets Manager IAM grant for no benefit.
+The migration task (`web/scripts/db-migrate.cjs`) takes its password as a static env var. It runs for seconds and exits, well inside the 7-day window, so the value can't go stale. Fetching it live would cost its own Secrets Manager IAM grant for no benefit.
 
 ---
 
@@ -197,7 +198,7 @@ flowchart LR
   - **settings** — the SSM parameters behind the runtime settings ([Runtime settings](#95-runtime-settings)).
   - **alarms** — the CloudWatch alarms that publish to the sweeper's alert topic, which emails `alert_email`, when the site degrades.
   - **budgets** — a second, `us-east-1`-aliased provider, since the Budgets API only operates there.
-- `infra/tests/*.tftest.hcl` (native `terraform test`, `mock_provider "aws" {}`) replaces hand-written assertions against synthesized templates with the same offline, zero-credential guarantee, run by `.github/workflows/ci.yml`'s `infra` job on every PR.
+- `infra/tests/*.tftest.hcl` run under native `terraform test` with `mock_provider "aws" {}`, so they need no AWS credentials or network. `.github/workflows/ci.yml`'s `infra` job runs them on every PR.
 
 ---
 
@@ -375,7 +376,7 @@ A rolled-back *service* deployment does not undo an already-applied migration. R
 - CI authenticates to AWS through **GitHub OIDC** (OpenID Connect), not static IAM access keys, so there is no long-lived credential to leak or rotate.
 - The identity token's `sub` claim scopes it specifically to `repo:<owner>@<ownerId>/<repo>@<repoId>:ref:refs/heads/main`, so PRs and forks can't assume the role.
 - That role, `ai-gaussian-splatter-ci-deploy`, is created by `scripts/prod/bootstrap.sh` from a workstation ([Going live](RUNBOOK.md#22-going-live)), not by `infra/`, because it's chicken-and-egg: CI can't apply the config that grants CI its own apply permission.
-- Unlike a design that delegates through a separate bootstrap role, this role directly holds the AWS permissions `terraform apply` needs (ec2, ecr, rds, s3, iam, ecs, elasticloadbalancing, route53, acm, budgets, logs, secretsmanager), scoped by resource-name prefix where a service supports it. The same reasoning keeps the Clerk secret, the state bucket, and `AWSServiceRoleForEC2Spot` as setup run from a workstation rather than Terraform-managed resources ([Going live](RUNBOOK.md#22-going-live)). Granting broad infrastructure permissions to a CI role is a step this repo keeps out of any automated apply.
+- Unlike a design that delegates through a separate bootstrap role, this role directly holds the AWS permissions `terraform apply` needs for every service `infra/` uses (`scripts/prod/ci-role-policies/deploy.json`), scoped by resource-name prefix where a service supports it. The same reasoning keeps the Clerk secret, the state bucket, and `AWSServiceRoleForEC2Spot` as setup run from a workstation rather than Terraform-managed resources ([Going live](RUNBOOK.md#22-going-live)). Granting broad infrastructure permissions to a CI role is a step this repo keeps out of any automated apply.
 
 ---
 
@@ -383,7 +384,7 @@ A rolled-back *service* deployment does not undo an already-applied migration. R
 
 Three tiers (`.github/workflows/ci.yml`):
 
-- **Unit/component** (every PR): `pytest` + `moto` for `worker/`; Vitest `client` (jsdom) and `server` (Node + real Postgres for rate limits).
+- **Unit/component** (every PR): `pytest` + `moto` for `worker/`; Vitest `client` (jsdom) and `server` (Node + a real Postgres for the database-backed tests).
 - **E2E** (every PR): Playwright without live Clerk. No specs yet (SSR reads DB; `page.route()` can't intercept; no seed — see [State / what's next](AGENTS.md#11-state--whats-next)). Server correctness is the Vitest `server` project.
 - **Real-pipeline** (manual/milestone-gated): real COLMAP + gsplat costs GPU money.
 
@@ -401,8 +402,8 @@ Milestones (`M0`…`M10`) name phases, not a schedule, and they are not built in
 - ~~**M3** — S3 presign/complete against a real bucket.~~
 - ~~**M4** — Local end-to-end: upload → process → result (no cloud orchestration).~~
 - **M5** — EC2 spot launch, worker image, status callback, self-termination (success + induced failure).
-- **M6** — Auth + three rate-limit layers.
+- ~~**M6** — Auth + three rate-limit layers.~~
 - ~~**M7** — Authenticated UI: upload, worker-job polling, splat viewer.~~
-- **M8** — Share links, OG thumbnails.
+- ~~**M8** — Share links, OG thumbnails.~~
 - ~~**M9** — IaC + first real deploy.~~
 - **M10** — time a real worker job on AWS, split by pull, COLMAP and training; revisit a Packer-baked AMI only if fixed overhead still dominates.

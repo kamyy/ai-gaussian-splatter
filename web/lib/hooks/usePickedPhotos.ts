@@ -5,8 +5,8 @@
  * measured as it's added (pixel size, a small JPEG thumbnail, when it was taken, and how sharp it is), because the
  * server stores that size so web/components/splats/PhotoGrid.tsx can lay out its rows before any image loads. A file of
  * a type COLMAP can't read, over the server's size limit, or one this browser can't decode, is turned away with a
- * snackbar (a toast message) instead of failing halfway through an upload. A blurry or low-resolution photo is only flagged, since the visitor may
- * have no better shot of that angle.
+ * snackbar (a toast message) instead of failing halfway through an upload. A blurry or low-resolution photo is only
+ * flagged, since the visitor may have no better shot of that angle.
  */
 
 import { useSnackbar } from "notistack";
@@ -51,9 +51,9 @@ export function findFlagged(photos: PickedPhoto[]): Map<string, PhotoFlag> {
 }
 
 /**
- * The photos come back oldest taken first, with each file at most once. measuring is set while any added batch is still
- * being measured. Submitting waits for it, or those photos would be left out of the upload. flagged marks each blurry or
- * low-resolution photo.
+ * The photos come back oldest taken first, with each file at most once. measuring is set while any added batch is
+ * still being measured. Submitting waits for it, or those photos would be left out of the upload. flagged marks each
+ * blurry or low-resolution photo.
  */
 export function usePickedPhotos() {
   const { enqueueSnackbar } = useSnackbar();

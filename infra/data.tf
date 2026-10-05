@@ -4,10 +4,10 @@
 # splats bucket holds everything the worker produces. The ALB's access-log bucket lives in infra/web.tf, beside the load
 # balancer that writes it.
 #
-# The uploads and splats buckets' CORS rules name local.app_origin rather than "*": the browser talks to S3
-# directly on both legs (presigned PUT on upload, presigned GET in the viewer), so "*" would let another
-# origin's JavaScript read a shared or leaked splat URL cross-origin via fetch/XHR. It does not stop a leaked
-# URL from being opened directly (CORS only gates cross-origin script reads, not navigation).
+# The uploads and splats buckets' CORS rules name local.app_origin rather than "*". The browser talks to S3 directly on
+# both legs, a presigned PUT on upload and a presigned GET in the viewer. A "*" rule would let another origin's
+# JavaScript read a shared or leaked splat URL with fetch. CORS gates only cross-origin script reads, so it does not
+# stop a leaked URL from being opened directly.
 
 # --- Database -------------------------------------------------------------------------
 resource "aws_db_subnet_group" "main" {

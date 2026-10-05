@@ -2,9 +2,9 @@
  * The visitor's answer to the privacy banner: whether Google Analytics may run.
  *
  * The answer is kept in localStorage, so it lasts across visits on this browser. The privacy banner and the site
- * header's Privacy settings entry both use it. A change from either one reaches the other straight away, in this tab and
- * in any other open tab of the site. GDPR requires withdrawing consent to be as easy as giving it, which is why Privacy
- * settings can reopen the banner at any time.
+ * header's Privacy settings entry both use it. A change from either one reaches the other straight away, in this tab
+ * and in any other open tab of the site. GDPR requires withdrawing consent to be as easy as giving it, which is why
+ * Privacy settings can reopen the banner at any time.
  */
 
 "use client";

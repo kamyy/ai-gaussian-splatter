@@ -321,7 +321,7 @@ gh_vars() {
     exit 1
   fi
 
-  ALERT_EMAIL=$(ask "Budget alert email" "$(current_repo_var ALERT_EMAIL)")
+  ALERT_EMAIL=$(ask "Alert email (budget, sweeper and alarms)" "$(current_repo_var ALERT_EMAIL)")
 
   CLERK_PUBLISHABLE_KEY=$(ask "Clerk publishable key (pk_live_...)" "$(current_repo_var CLERK_PUBLISHABLE_KEY)")
   if [[ $CLERK_PUBLISHABLE_KEY != pk_live_* ]]; then
@@ -445,7 +445,7 @@ release_worker() {
 print_manual_steps() {
   echo
   echo "Still to do by hand (RUNBOOK.md, Going live):"
-  echo "  1. Click the subscription link AWS emailed to ALERT_EMAIL, or the sweeper's alerts never arrive."
+  echo "  1. Click the subscription link AWS emailed to ALERT_EMAIL, or the sweeper's and alarms' emails never arrive."
   echo "  2. In the production Clerk dashboard's Legal page, require express consent and set the /terms and /privacy"
   echo "     URLs."
   echo "  3. In the production Clerk dashboard's User & authentication page, turn off Allow users to delete their"

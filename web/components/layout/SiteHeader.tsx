@@ -27,8 +27,8 @@ import { useAnalyticsConsent } from "@/lib/hooks/useAnalyticsConsent";
  * layout reading auth() itself. While Clerk is still loading, neither the signed-in nor the signed-out branch renders.
  *
  * Everything has to fit on one row at a 360px phone width. Below the sm breakpoint a signed-out visitor gets only the
- * Sign in link, since the sign-in page links to sign-up. A signed-in user reaches the privacy banner from Clerk's account
- * menu instead of a header button.
+ * Sign in link, since the sign-in page links to sign-up. A signed-in user reaches the privacy banner from Clerk's
+ * account menu instead of a header button.
  */
 export function SiteHeader() {
   const pathname = usePathname();

@@ -13,7 +13,8 @@
 #   train        (final)    build-train
 #
 # Base images are registry-qualified because podman, unlike docker, doesn't assume Docker Hub for a bare `nvidia/cuda`.
-# Under `short-name-mode = "enforcing"`, a build with no terminal (CI or any script) fails instead of picking a registry.
+# Under `short-name-mode = "enforcing"`, a build with no terminal (CI or any script) fails instead of picking a
+# registry.
 
 # ---------------------------------------------------------------------------
 # colmap
