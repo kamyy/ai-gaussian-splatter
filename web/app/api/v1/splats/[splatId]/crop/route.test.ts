@@ -255,6 +255,30 @@ describe("/api/v1/splats/[splatId]/crop", () => {
       const [target] = cropSplatFilesMock.mock.calls[0].slice(1) as [{ ply: string; spz: string }];
       expect(deleteObjectsMock).toHaveBeenCalledWith([target.ply, target.spz]);
     });
+
+    it("still reports a committed crop when deleting the replaced crop's objects fails", async () => {
+      const { splat, job } = await seed({ cropped: true });
+      deleteObjectsMock.mockRejectedValueOnce(new Error("S3 is down"));
+      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      const res = await POST(cropRequest({ box: BOX }), ctx(splat.id));
+      expect(res.status).toBe(200);
+      expect((await res.json()).cropBox).toEqual(BOX);
+      expect((await reload(splat.id, job.id)).job.croppedResultPlyS3Key).not.toContain("/old/");
+      expect(logged).toHaveBeenCalled();
+      logged.mockRestore();
+    });
+
+    it("returns the error that stopped the crop when its cleanup also fails", async () => {
+      const { splat, job } = await seed();
+      cropSplatFilesMock.mockRejectedValueOnce(new HttpError(422, "The crop box doesn't contain any of the splat"));
+      deleteObjectsMock.mockRejectedValueOnce(new Error("S3 is down"));
+      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      expect((await POST(cropRequest({ box: BOX }), ctx(splat.id))).status).toBe(422);
+      expect((await reload(splat.id, job.id)).job.cropStartedAt).toBeNull();
+      logged.mockRestore();
+    });
   });
 
   describe("DELETE", () => {
@@ -273,6 +297,17 @@ describe("/api/v1/splats/[splatId]/crop", () => {
         `splats/${splat.id}/crops/old/result.ply`,
         `splats/${splat.id}/crops/old/result.spz`,
       ]);
+    });
+
+    it("still reports a committed undo when deleting the crop's objects fails", async () => {
+      const { splat, job } = await seed({ cropped: true });
+      deleteObjectsMock.mockRejectedValueOnce(new Error("S3 is down"));
+      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      expect((await DELETE({} as never, ctx(splat.id))).status).toBe(200);
+      expect((await reload(splat.id, job.id)).job.cropBox).toBeNull();
+      expect(logged).toHaveBeenCalled();
+      logged.mockRestore();
     });
 
     it("succeeds on a splat that isn't cropped", async () => {

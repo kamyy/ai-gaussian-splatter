@@ -51,8 +51,8 @@ import {
 // How many times the object's longest side fits across the shorter side of the view, once an axis view has animated
 // there.
 const AXIS_VIEW_FIT = 1.5;
-// How far an orthographic camera sits from the object, in multiples of the object's size. Distance doesn't change
-// what an orthographic camera shows, so this only has to keep the whole object in front of it.
+// How far an orthographic camera sits from its target, in multiples of the height of the view it shows. Distance
+// doesn't change what an orthographic camera shows, so this only has to keep the whole object in front of it.
 const ORTHOGRAPHIC_DISTANCE = 50;
 // How far, in radians, the visitor has to turn the view before it no longer counts as the front, side or top view.
 // Panning and zooming keep the direction exactly, so this only has to absorb rounding.
@@ -226,6 +226,11 @@ function SplatScene({
   );
 }
 
+// The tangent of half a vertical field of view given in degrees.
+function tanHalfFov(fov: number): number {
+  return Math.tan((fov * Math.PI) / 360);
+}
+
 // How tall a slice of the scene, in world units, the camera shows at the distance of controls' target.
 function visibleHeight(controls: CameraControls, camera: Camera): number | null {
   if (camera instanceof OrthographicCameraImpl) {
@@ -233,7 +238,30 @@ function visibleHeight(controls: CameraControls, camera: Camera): number | null 
   }
 
   if (camera instanceof PerspectiveCameraImpl) {
-    return (2 * controls.distance * Math.tan((camera.fov * Math.PI) / 360)) / camera.zoom;
+    return (2 * controls.distance * tanHalfFov(camera.fov)) / camera.zoom;
+  }
+
+  return null;
+}
+
+// Sets the camera up to show a slice height world units tall at its target, and returns how far from the target to
+// place it. An orthographic camera gets that height from its zoom, and a perspective camera from the distance at zoom
+// 1. Null for any other kind of camera.
+function fitHeight(camera: Camera, controls: CameraControls, height: number, animate: boolean): number | null {
+  if (camera instanceof OrthographicCameraImpl) {
+    const distance = height * ORTHOGRAPHIC_DISTANCE;
+    camera.near = 0;
+    camera.far = distance * 2;
+    camera.updateProjectionMatrix();
+    void controls.zoomTo((camera.top - camera.bottom) / height, animate);
+
+    return distance;
+  }
+
+  if (camera instanceof PerspectiveCameraImpl) {
+    void controls.zoomTo(1, animate);
+
+    return height / (2 * tanHalfFov(camera.fov));
   }
 
   return null;
@@ -268,18 +296,8 @@ function ProjectionHandoff() {
     const target = previous.controls.getTarget(new Vector3(), false);
     const direction = previous.controls.getPosition(new Vector3(), false).sub(target).normalize();
 
-    let distance: number;
-    if (camera instanceof OrthographicCameraImpl) {
-      // Distance changes nothing an orthographic camera shows, so it only has to keep the scene in front of it.
-      distance = height * ORTHOGRAPHIC_DISTANCE;
-      camera.near = 0;
-      camera.far = distance * 2;
-      camera.updateProjectionMatrix();
-      void controls.zoomTo((camera.top - camera.bottom) / height, false);
-    } else if (camera instanceof PerspectiveCameraImpl) {
-      distance = height / (2 * Math.tan((camera.fov * Math.PI) / 360));
-      void controls.zoomTo(1, false);
-    } else {
+    const distance = fitHeight(camera, controls, height, false);
+    if (distance === null) {
       return;
     }
 
@@ -335,25 +353,18 @@ function AxisViewRig({
 
     const { direction, target, up, extent } = axisViewPose(box, view);
     const { width, height } = sizeRef.current;
-    const fitted = extent * AXIS_VIEW_FIT;
+    // The fitted size goes across the narrower side of the view. On a portrait view that is the width, so the height
+    // shown grows by the view's aspect.
+    const fitted = extent * AXIS_VIEW_FIT * Math.max(1, height / width);
 
-    let distance: number;
-    if (camera instanceof OrthographicCameraImpl) {
-      // Distance changes nothing an orthographic camera shows, so the clipping range only has to span the scene.
-      distance = extent * ORTHOGRAPHIC_DISTANCE;
-      camera.near = 0;
-      camera.far = distance * 2;
-      camera.updateProjectionMatrix();
-      void controls.zoomTo(Math.min(width, height) / fitted, true);
-    } else if (camera instanceof PerspectiveCameraImpl) {
-      // A flight may have left the photo's field of view behind. The distance then fits the box across the narrower
-      // of the view's two fields of view.
+    // A flight may have left the photo's field of view behind.
+    if (camera instanceof PerspectiveCameraImpl) {
       camera.fov = DEFAULT_FOV;
       camera.updateProjectionMatrix();
-      void controls.zoomTo(1, true);
-      const halfAngle = Math.tan((DEFAULT_FOV * Math.PI) / 360) * Math.min(1, width / height);
-      distance = fitted / 2 / halfAngle;
-    } else {
+    }
+
+    const distance = fitHeight(camera, controls, fitted, true);
+    if (distance === null) {
       return;
     }
 
@@ -409,7 +420,6 @@ function ViewerSceneManager({
   onError,
   onLoad,
   onSceneLoad,
-  onPointCloudLoad,
 }: {
   mode: ViewMode;
   splatUrl: string | null;
@@ -430,7 +440,6 @@ function ViewerSceneManager({
   onLoad: () => void;
   // Called with each scene's bounding box as it loads.
   onSceneLoad: (box: Box3) => void;
-  onPointCloudLoad: (positions: ArrayLike<number>) => void;
 }) {
   const { sceneUpRef, onFirstLoad } = useSceneFraming(
     framing,
@@ -439,20 +448,13 @@ function ViewerSceneManager({
   );
   useCameraFlight(cameras, selectedCamera, sceneUpRef, framing?.target ?? null, onManualMove);
 
-  // Both stable, like onFirstLoad, because each scene's load effect depends on its callback.
+  // Stable, like onFirstLoad, because each scene's load effect depends on its callback.
   const onSceneFirstLoad = useCallback(
     (box: Box3) => {
       onSceneLoad(box);
       onFirstLoad(box);
     },
     [onSceneLoad, onFirstLoad],
-  );
-  const onPointCloudFirstLoad = useCallback(
-    (box: Box3, positions: ArrayLike<number>) => {
-      onPointCloudLoad(positions);
-      onSceneFirstLoad(box);
-    },
-    [onPointCloudLoad, onSceneFirstLoad],
   );
 
   // Switching mode or splat version renders a component with a different key here, so React unmounts one scene and
@@ -481,7 +483,7 @@ function ViewerSceneManager({
         cropBox={pointsCropBox}
         onError={onError}
         onLoad={onLoad}
-        onFirstLoad={onPointCloudFirstLoad}
+        onFirstLoad={onSceneFirstLoad}
       />
     );
   }
@@ -692,7 +694,6 @@ export function SplatViewer({
           onError={handleError}
           onLoad={handleLoad}
           onSceneLoad={handleSceneLoad}
-          onPointCloudLoad={setPointCloudPositions}
         />
         <ProjectionHandoff />
         <AxisViewRig view={axisView} box={axisViewBox} active={mode === "colmap_points"} onLeave={onLeaveAxisView} />

@@ -8,7 +8,7 @@
 
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect } from "react";
 
 import { PageTitle } from "@/components/layout/PageTitle";
 import { PhotoGrid } from "@/components/splats/PhotoGrid";
@@ -24,7 +24,7 @@ import { usePhotos } from "@/lib/hooks/usePhotos";
 import { useSplat } from "@/lib/hooks/useSplat";
 import { useStageNotification } from "@/lib/hooks/useStageNotification";
 import { splatStage } from "@/lib/splatStage";
-import { JOB_ENDED_STATUSES } from "@/lib/statuses";
+import { JOB_ENDED_STATUSES, SplatStatus } from "@/lib/statuses";
 
 export default function SplatPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -34,9 +34,6 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
   const { data: cameras } = useCameras(id, Boolean(job?.pointCloudS3Key));
 
   const { selection, selectPhoto, clearSelection } = usePhotoSelection(photos, cameras);
-
-  // The photo tile the pointer is over.
-  const [hoveredPhotoId, setHoveredPhotoId] = useState<string | null>(null);
 
   // Only the job is polled, but the worker's callback moves the job row and the splat row in one transaction, so a job
   // that has ended means this splat is stale.
@@ -76,14 +73,7 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
   let photoGrid: React.ReactNode = null;
   if (photos && photos.length > 0) {
     photoGrid = (
-      <PhotoGrid
-        photos={photos}
-        placedPhotoIds={placedPhotoIds}
-        selection={selection}
-        onSelect={selectPhoto}
-        hoveredPhotoId={hoveredPhotoId}
-        onHover={setHoveredPhotoId}
-      />
+      <PhotoGrid photos={photos} placedPhotoIds={placedPhotoIds} selection={selection} onSelect={selectPhoto} />
     );
   }
 
@@ -109,7 +99,7 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
         <SplatStageViewer
           splatId={id}
           job={job}
-          complete={splat.status === "complete"}
+          complete={splat.status === SplatStatus.complete}
           cameras={cameras}
           selection={selection}
           onClearSelection={clearSelection}

@@ -4,8 +4,8 @@
  * The point cloud is the rough cloud of colored points COLMAP (the structure-from-motion tool in worker/) builds from
  * the photos. It's the "shape sketch" the visitor checks before training, and the view the owner fits a crop box in.
  * web/components/viewer/SplatViewer.tsx starts the .ply download as soon as it has a link, so the front, side and top
- * views can fit a crop box before this scene is on screen. This component draws that same download and reports the
- * points. Once a crop is applied, it hides the points outside the box, matching the Gaussians the crop removed.
+ * views can fit a crop box before this scene is on screen. This component draws that same download. Once a crop is
+ * applied, it hides the points outside the box, matching the Gaussians the crop removed.
  */
 
 "use client";
@@ -48,8 +48,7 @@ interface PointCloudSceneProps {
   cropBox: CropBox | null;
   onError: (message: string) => void;
   onLoad: () => void;
-  // positions is the point cloud's interleaved x, y, z, which the viewer fits its first crop box to.
-  onFirstLoad: (box: Box3, positions: ArrayLike<number>) => void;
+  onFirstLoad: (box: Box3) => void;
 }
 
 /** One shared download of the point cloud at url. Each caller keeps it until releasePointCloudGeometry. */
@@ -151,10 +150,9 @@ export function PointCloudScene({
         setGeometry(loaded);
         onLoad();
 
-        const positions = loaded.getAttribute("position").array;
-        const box = trimmedBoundingBox(positions);
+        const box = trimmedBoundingBox(loaded.getAttribute("position").array);
         if (!box.isEmpty()) {
-          onFirstLoad(box, positions);
+          onFirstLoad(box);
         }
       })
       .catch((err: unknown) => {

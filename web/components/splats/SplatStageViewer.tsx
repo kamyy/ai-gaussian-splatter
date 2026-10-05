@@ -20,8 +20,7 @@ import { useSWRConfig } from "swr";
 import { apiFetch } from "@/lib/apiFetch";
 import { usePresignedUrl } from "@/lib/hooks/usePresignedUrl";
 import { requireToken } from "@/lib/requireToken";
-import type { CameraPose, Job } from "@/lib/types";
-import type { PhotoSelection } from "./photoSelection";
+import type { CameraPose, Job, PhotoSelection } from "@/lib/types";
 import { type CropControls, SplatViewerPanel } from "./SplatViewerPanel";
 
 interface SplatStageViewerProps {

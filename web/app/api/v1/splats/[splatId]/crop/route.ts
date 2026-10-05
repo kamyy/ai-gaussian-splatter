@@ -14,6 +14,9 @@
  * place, so an undo that lands during the stream wins and this crop does not. The hourly limit is counted only after
  * that update commits. The claim is cleared in the same update. The claim and the release that drops an uncommitted one
  * are raw updates, so updatedAt, which the viewer uses as its reload key, moves only when a crop or an undo commits.
+ *
+ * Once a crop or an undo commits, it has applied. A step after that, such as counting the crop or deleting the
+ * replaced objects, logs its failure rather than returning one.
  */
 
 import { randomUUID } from "node:crypto";
@@ -123,8 +126,8 @@ async function claimCrop(userId: string, job: Job): Promise<Date> {
       throw new HttpError(409, "A crop is already running. Wait for it to finish.");
     }
 
-    // The timestamp comes back from the row, so the later match uses the value Postgres stored.
-    const claimed = await tx.execute<{ crop_started_at: string }>(sql`
+    // A timestamp column keeps microseconds, so it stores claimedAt's milliseconds exactly and later matches on it.
+    const claimed = await tx.execute(sql`
       update ${jobs}
       set crop_started_at = ${claimedAt.toISOString()}
       where ${and(
@@ -134,22 +137,29 @@ async function claimCrop(userId: string, job: Job): Promise<Date> {
         sameCropKey(jobs.croppedResultSpzS3Key, job.croppedResultSpzS3Key),
         or(isNull(jobs.cropStartedAt), lte(jobs.cropStartedAt, staleBefore)),
       )}
-      returning crop_started_at
     `);
-    const storedAt = claimed.rows[0]?.crop_started_at;
-    if (storedAt === undefined) {
+    if (claimed.rowCount === 0) {
       throw new HttpError(409, "The splat changed while it was being cropped");
     }
 
-    return new Date(storedAt);
+    return claimedAt;
   });
 }
 
 /** Drops a claim this request still holds. A raw update, so it leaves updatedAt where it is. */
 async function releaseCrop(jobId: string, claimedAt: Date): Promise<void> {
   await getDb().execute(
-    sql`update jobs set crop_started_at = null where id = ${jobId} and crop_started_at = ${claimedAt}`,
+    sql`update ${jobs} set crop_started_at = null where ${and(eq(jobs.id, jobId), eq(jobs.cropStartedAt, claimedAt))}`,
   );
+}
+
+/** Runs a step that follows a committed crop or undo, logging its failure instead of throwing it. */
+async function afterCommit(step: string, run: () => Promise<void>): Promise<void> {
+  try {
+    await run();
+  } catch (err) {
+    console.error(`The crop change committed, but couldn't ${step}`, err);
+  }
 }
 
 export const POST = withErrorHandling(
@@ -160,32 +170,32 @@ export const POST = withErrorHandling(
     const { box } = await parseJsonBody(request, cropSchema);
     const claimedAt = await claimCrop(user.id, job);
     const target = splatCropS3Keys(splatId, randomUUID());
-    let committed = false;
+
+    let updated: Partial<Job> | undefined;
     try {
       await assertUserCropCapacity(user.id);
       await cropSplatFiles({ ply: job.resultPlyS3Key, spz: job.resultSpzS3Key }, target, box, request.signal);
-
-      const updated = await setCrop(job, { box, ply: target.ply, spz: target.spz }, claimedAt);
+      updated = await setCrop(job, { box, ply: target.ply, spz: target.spz }, claimedAt);
       if (updated === undefined) {
         throw new HttpError(409, "The splat changed while it was being cropped");
       }
-
-      committed = true;
-      await checkAndIncrementUserCrops(user.id);
-      await deleteSplatsBucketObjects(cropObjectKeys(job));
-
-      return NextResponse.json(updated);
     } catch (err) {
-      if (!committed) {
-        await deleteSplatsBucketObjects([target.ply, target.spz]).catch(deleteErr => {
-          console.error("Couldn't delete the crop that didn't commit", deleteErr);
-        });
-      }
+      // The crop didn't commit, so its objects are deleted and its claim released. A committed crop's update clears
+      // the claim itself. Each cleanup logs its failure, so the caller sees the error that stopped the crop.
+      await deleteSplatsBucketObjects([target.ply, target.spz]).catch(deleteErr => {
+        console.error("Couldn't delete the crop that didn't commit", deleteErr);
+      });
+      await releaseCrop(job.id, claimedAt).catch(releaseErr => {
+        console.error("Couldn't release the claim of the crop that didn't commit", releaseErr);
+      });
 
       throw err;
-    } finally {
-      await releaseCrop(job.id, claimedAt);
     }
+
+    await afterCommit("count it", () => checkAndIncrementUserCrops(user.id));
+    await afterCommit("delete the replaced crop's objects", () => deleteSplatsBucketObjects(cropObjectKeys(job)));
+
+    return NextResponse.json(updated);
   },
 );
 
@@ -200,7 +210,7 @@ export const DELETE = withErrorHandling(
       throw new HttpError(409, "The splat changed while its crop was being undone");
     }
 
-    await deleteSplatsBucketObjects(cropObjectKeys(job));
+    await afterCommit("delete the undone crop's objects", () => deleteSplatsBucketObjects(cropObjectKeys(job)));
 
     return NextResponse.json(updated);
   },

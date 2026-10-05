@@ -1,8 +1,9 @@
 /**
- * Looks up the worker job behind a user's finished splat, for the routes that crop it.
+ * Looks up the worker job behind a user's finished splat, for the owner's routes that serve or crop its result.
  *
  * A splat can have several jobs, and the newest complete one is the one its download, viewers and share page serve.
- * Cropping and undoing a crop act on that same job, so web/app/api/v1/splats/[splatId]/crop/ reads it from here.
+ * Cropping and undoing a crop act on that same job. Each owner route reads it from here, so they all agree on which
+ * job that is.
  */
 
 import { and, desc, eq } from "drizzle-orm";

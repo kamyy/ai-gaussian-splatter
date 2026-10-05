@@ -2,10 +2,9 @@
  * The grid of a splat's photos on its page.
  *
  * Shows the photos in justified rows (each row stretched to fill the width, keeping every photo's shape), a few rows
- * per page. Picking a photo selects its camera in the 3D viewer, and hovering one highlights it there. A photo the
- * pointer rests on is enlarged over its neighbours, so its detail can be made out. A photo COLMAP (the
- * structure-from-motion tool in worker/) couldn't place in 3D is faded, labelled "Not placed" and can't be picked.
- * Arrow keys move between photos.
+ * per page. Picking a photo flies the 3D viewer to where it was taken. A photo the pointer rests on is enlarged over its
+ * neighbours, so its detail can be made out. A photo COLMAP (the structure-from-motion tool in worker/) couldn't place
+ * in 3D is faded, labelled "Not placed" and can't be picked. Arrow keys move between photos.
  */
 
 "use client";
@@ -19,9 +18,8 @@ import { cn } from "@/lib/cn";
 import { type Box, expandedBox } from "@/lib/expandedBox";
 import { useEnlargedTile } from "@/lib/hooks/useEnlargedTile";
 import { useJustifiedPages } from "@/lib/hooks/useJustifiedPages";
-import type { PublicPhoto } from "@/lib/types";
+import type { PhotoSelection, PublicPhoto } from "@/lib/types";
 import { EnlargingPhotoBox } from "./EnlargingPhotoBox";
-import type { PhotoSelection } from "./photoSelection";
 
 // A page is this many whole rows, so every page but the last ends on a full row.
 const ROWS_PER_PAGE = 3;
@@ -40,10 +38,6 @@ interface PhotoGridProps {
   selection: PhotoSelection | null;
   // Offered only for placed photos, since only they have a camera to show.
   onSelect: (photoId: string) => void;
-  // The photo to mark as hovered, whether the pointer is over its tile or over its camera in the 3D view.
-  hoveredPhotoId: string | null;
-  // Reports the placed photo under the pointer, or null once the pointer leaves it.
-  onHover: (photoId: string | null) => void;
 }
 
 // A tile's box in the list's layout. offsetTop and offsetLeft ignore transforms, so a hovered tile's lift doesn't
@@ -84,7 +78,6 @@ function PhotoTile({
   placed,
   unplaced,
   selected,
-  hovered,
   enlargedBox,
   tabbable,
   onSelect,
@@ -98,7 +91,6 @@ function PhotoTile({
   placed: boolean;
   unplaced: boolean;
   selected: boolean;
-  hovered: boolean;
   // Where to draw the photo while it is enlarged, measured from the tile's top-left corner. Null draws it in the tile.
   enlargedBox: Box | null;
   // Whether this tile is the grid's one stop in the tab order.
@@ -165,8 +157,11 @@ function PhotoTile({
         // Not overflow-hidden, so the enlarged photo can leave the tile. The photo rounds its own corners instead.
         "relative z-0 shrink-0 rounded-md bg-muted transition-[translate,box-shadow,opacity,z-index] [transition-duration:150ms,150ms,150ms,0s]",
         unplaced && !enlarged && "opacity-55",
-        // Lifted off the grid. z-1 draws its shadow over the tiles after it, which would otherwise cover it.
-        hovered && !enlarged && "z-1 -translate-y-0.5 shadow-[0_0.375rem_0.875rem_var(--raised-shade)]",
+        // A placed photo under the pointer lifts off the grid, since only it can be picked. z-1 draws its shadow over
+        // the tiles after it, which would otherwise cover it.
+        placed &&
+          !enlarged &&
+          "hover:z-1 hover:-translate-y-0.5 hover:shadow-[0_0.375rem_0.875rem_var(--raised-shade)]",
         // Drawn over every other tile. The tile drops back only once its photo has finished shrinking, or the tiles
         // after it would cut into the photo on its way down.
         enlarged ? "z-2" : "[transition-delay:0s,0s,0s,150ms]",
@@ -183,7 +178,7 @@ function PhotoTile({
   );
 }
 
-export function PhotoGrid({ photos, placedPhotoIds, selection, onSelect, hoveredPhotoId, onHover }: PhotoGridProps) {
+export function PhotoGrid({ photos, placedPhotoIds, selection, onSelect }: PhotoGridProps) {
   const selectedPhotoId = selection?.photoId ?? null;
   const isPlaced = (photo: PublicPhoto) => placedPhotoIds?.has(photo.id) ?? false;
   const isUnplaced = (photo: PublicPhoto) => placedPhotoIds !== null && !placedPhotoIds.has(photo.id);
@@ -220,18 +215,6 @@ export function PhotoGrid({ photos, placedPhotoIds, selection, onSelect, hovered
     turnedForRef.current = selection;
     setPage(selectedPage);
   }, [selection, selectedPage, setPage]);
-
-  // The photo whose tile the pointer is resting on, if any. React fires no pointerleave for a tile removed from under
-  // the pointer, as a page turn does, so a hover the grid reported is cleared once its tile is gone. A hover that came
-  // from the 3D view is left alone, even for a photo on another page.
-  const gridHoverRef = useRef<string | null>(null);
-  useEffect(() => {
-    const id = gridHoverRef.current;
-    if (id !== null && !shownPhotos.some(photo => photo.id === id)) {
-      gridHoverRef.current = null;
-      onHover(null);
-    }
-  });
 
   const {
     enlargedId: enlargedPhotoId,
@@ -349,27 +332,11 @@ export function PhotoGrid({ photos, placedPhotoIds, selection, onSelect, hovered
                 placed={isPlaced(photo)}
                 unplaced={isUnplaced(photo)}
                 selected={photo.id === selectedPhotoId}
-                hovered={photo.id === hoveredPhotoId}
                 enlargedBox={enlargedBox}
                 tabbable={photo.id === tabbableId}
                 onSelect={() => onSelect(photo.id)}
-                onPointerEnter={event => {
-                  // Only a placed photo has a camera for the 3D view to mark.
-                  if (isPlaced(photo)) {
-                    gridHoverRef.current = photo.id;
-                    onHover(photo.id);
-                  }
-
-                  enterEnlarge(photo.id, event);
-                }}
-                onPointerLeave={() => {
-                  if (isPlaced(photo)) {
-                    gridHoverRef.current = null;
-                    onHover(null);
-                  }
-
-                  leaveEnlarge();
-                }}
+                onPointerEnter={event => enterEnlarge(photo.id, event)}
+                onPointerLeave={leaveEnlarge}
               />
             );
           })}
