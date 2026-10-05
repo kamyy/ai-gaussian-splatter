@@ -84,8 +84,8 @@ function ShootingTips() {
         <rect x="32" y="12" width="14" height="18" rx="2" className="fill-primary/15" />
       </Tip>
       <Tip
-        title="Lock focus and exposure"
-        body="Press and hold on the object until your camera app shows a lock, and keep it locked for every shot. Refrain from using zoom or flash."
+        title="Keep the camera settings fixed"
+        body="Don't zoom or use flash. If your camera app can lock exposure and focus, usually by pressing and holding on the object, keep them locked for every shot."
       >
         <path d="M18 16v-6h8M46 10h8v6M54 40v6h-8M26 46h-8v-6" strokeLinecap="round" strokeLinejoin="round" />
         <circle cx="36" cy="28" r="4" className="fill-primary stroke-none" />
