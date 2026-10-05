@@ -409,7 +409,6 @@ function ViewerSceneManager({
   onError,
   onLoad,
   onSceneLoad,
-  onPointCloudLoad,
 }: {
   mode: ViewMode;
   splatUrl: string | null;
@@ -430,7 +429,6 @@ function ViewerSceneManager({
   onLoad: () => void;
   // Called with each scene's bounding box as it loads.
   onSceneLoad: (box: Box3) => void;
-  onPointCloudLoad: (positions: ArrayLike<number>) => void;
 }) {
   const { sceneUpRef, onFirstLoad } = useSceneFraming(
     framing,
@@ -439,20 +437,13 @@ function ViewerSceneManager({
   );
   useCameraFlight(cameras, selectedCamera, sceneUpRef, framing?.target ?? null, onManualMove);
 
-  // Both stable, like onFirstLoad, because each scene's load effect depends on its callback.
+  // Stable, like onFirstLoad, because each scene's load effect depends on its callback.
   const onSceneFirstLoad = useCallback(
     (box: Box3) => {
       onSceneLoad(box);
       onFirstLoad(box);
     },
     [onSceneLoad, onFirstLoad],
-  );
-  const onPointCloudFirstLoad = useCallback(
-    (box: Box3, positions: ArrayLike<number>) => {
-      onPointCloudLoad(positions);
-      onSceneFirstLoad(box);
-    },
-    [onPointCloudLoad, onSceneFirstLoad],
   );
 
   // Switching mode or splat version renders a component with a different key here, so React unmounts one scene and
@@ -481,7 +472,7 @@ function ViewerSceneManager({
         cropBox={pointsCropBox}
         onError={onError}
         onLoad={onLoad}
-        onFirstLoad={onPointCloudFirstLoad}
+        onFirstLoad={onSceneFirstLoad}
       />
     );
   }
@@ -692,7 +683,6 @@ export function SplatViewer({
           onError={handleError}
           onLoad={handleLoad}
           onSceneLoad={handleSceneLoad}
-          onPointCloudLoad={setPointCloudPositions}
         />
         <ProjectionHandoff />
         <AxisViewRig view={axisView} box={axisViewBox} active={mode === "colmap_points"} onLeave={onLeaveAxisView} />
