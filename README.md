@@ -4,8 +4,6 @@ Upload multi-angle photos of a physical object, get back a real-time, interactiv
 
 <img src="images/landing.webp" alt="The AI Gaussian Splatter landing page, headed &quot;Every object, in the round.&quot;, with five example splats (Starbucks mugs, a plant, a child, a Lego figure and a bike) above the three steps of how it works">
 
-> 🚧 **Under construction.** The pipeline has run end to end on a local GPU. The AWS stack has been deployed before for testing, but is currently torn down while development continues. Several gaps remain. See [State / what's next](AGENTS.md#11-state--whats-next).
-
 Built with the help of [Claude Code](https://claude.com/product/claude-code) and Cursor.
 
 - [1. What it does](#1-what-it-does)
