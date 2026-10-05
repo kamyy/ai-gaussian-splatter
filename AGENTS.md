@@ -366,7 +366,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 - **A second ingress rule on `aws_security_group.web` opens a path from the internet.**
   - Tasks are in public subnets with a public IP and no NAT.
   - That group's single rule, `aws_vpc_security_group_ingress_rule.web_from_alb` (`infra/web.tf`), sourced from the ALB security group on `local.container_port`, is the only network control ([Networking](ARCHITECTURE.md#92-networking)).
-  - `infra/tests/network.tftest.hcl` and `web.tftest.hcl` assert this; tripping it is a security change.
+  - `infra/tests/network.tftest.hcl` and `infra/tests/web.tftest.hcl` assert this. Tripping either is a security change.
 - **`KEEP_ALIVE_TIMEOUT` must exceed the ALB idle timeout (300s), or healthy deploys serve intermittent 502s.**
   - Node's default keep-alive is 5s; Next standalone only overrides via `KEEP_ALIVE_TIMEOUT`. ALB then hands requests to sockets the app already closed — no app log entry.
   - `infra/locals.tf` sets the idle timeout to 300s and the keep-alive to 305000 ms. A crop writes no response bytes until it finishes, so the idle timeout is how long that request may run. `web/app/api/v1/splats/[splatId]/crop/route.ts`'s `CROP_DEADLINE_MS` is the same 300s. Raising one without the others reopens the gap.
@@ -405,10 +405,10 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 - **A build input outside `web/` reaches production only through a change under `web/`**, and `gh run rerun` resolves the same tag and so rebuilds nothing. What that covers, and how to map a tag back to a commit, are in [Image tags](ARCHITECTURE.md#111-image-tags).
 - **Two separate image-tag variables, one default.**
   - `web_image_tag` is the Fargate service's own image; `migrate_image_tag` is the migration task definition's, and falls back to `web_image_tag` when left empty (`infra/locals.tf`'s `local.migrate_image_tag`).
-  - Every existing `terraform apply -var web_image_tag=$TAG` invocation with no `migrate_image_tag` keeps deploying one build that serves both roles.
+  - A plan or apply that sets only `web_image_tag`, as `scripts/prod/terraform-plan.sh` does, uses one build for both roles.
   - `.github/workflows/deploy.yml` is the one caller that ever diverges the two — see [Migration ordering](ARCHITECTURE.md#113-migration-ordering) for why.
-  - `ai-gaussian-splatter-migrate` (task family), `ai-gaussian-splatter-migrate-task` (migration task role), and `ai-gaussian-splatter-execution` (execution role) are fixed literal names, for the same reason `CLUSTER_NAME`/`SERVICE_NAME` are.
-    - Rotating the Clerk secret is a write plus `aws ecs update-service --force-new-deployment`, not a `terraform apply`. That command needs names someone can write out literally rather than look up from a Terraform-assigned one.
+  - `ai-gaussian-splatter-migrate` (task family), `ai-gaussian-splatter-migrate-task` (migration task role), and `ai-gaussian-splatter-execution` (execution role) are fixed literal names, because `scripts/prod/ci-role-policies/deploy.json` grants the CI role `ecs:RunTask` and `iam:PassRole` on them by name. Renaming one in `infra/` alone fails the next deploy with `AccessDenied`.
+    - The cluster and service names (`CLUSTER_NAME`/`SERVICE_NAME`) are fixed too. Rotating the Clerk secret is a write plus `aws ecs update-service --force-new-deployment`, not a `terraform apply`, and [Rotating the Clerk secret](RUNBOOK.md#34-rotating-the-clerk-secret) writes those names out literally.
 - **The worker images live in their own ECR repository (`ai-gaussian-splatter-worker`, `infra/registry.tf`), separate from the web ECR repository above, and `var.worker_image_tag` has no default.**
   - No deploy builds them, so this variable only changes when `scripts/prod/worker-push-image.sh` builds and pushes new ones from a workstation ([Releasing a worker change](RUNBOOK.md#23-releasing-a-worker-change)).
   - Their tag is `worker/`'s git tree id on `origin/main`, from `tf_get_worker_image_tag` in `scripts/lib/terraform.sh`, truncated the same way as the web tag. The script builds an extract of `origin/main`, never the checkout, so the tag always names what is in the image.
@@ -487,8 +487,8 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - `infra/web.tf` gives the web task only `DATABASE_USER` as a secret, plus a plain `DATABASE_SECRET_ARN` env var naming (not holding) the RDS secret.
   - `web/lib/server/db/index.ts`'s `getDb()` passes `pg.Pool` a `password` **function** (`web/lib/server/databaseUrl.ts`'s `fetchDatabasePassword`, cached 5 minutes) instead of a string, so it re-fetches on every new physical connection rather than once.
   - A rotation makes that cached copy wrong straight away, so `getDb()` builds a `SecretPasswordPool` that clears the cache and retries once when Postgres rejects the password (`28P01`).
-  - `pg`'s dynamic password only works with `Pool`'s discrete `host`/`port`/`database`/`user`/`password` fields, not a `connectionString`, which is why `getDb()` no longer builds one the way `web/scripts/db-migrate.cjs` still does.
-  - The migration task keeps the old static `DATABASE_PASSWORD` secret unchanged — it runs for seconds and exits, well inside the rotation window, so it has nothing to go stale against, and giving it Secrets Manager read access instead would cost an IAM grant for no benefit.
+  - `pg`'s dynamic password only works with `Pool`'s discrete `host`/`port`/`database`/`user`/`password` fields, not a `connectionString`. That is why `getDb()` builds no connection string, while `web/scripts/db-migrate.cjs` does.
+  - The migration task takes a static `DATABASE_PASSWORD` secret instead. It runs for seconds and exits, well inside the rotation window, so the value can't go stale.
 - **TLS.** RDS forces SSL, and `pg` defaults to no TLS → `no pg_hba.conf entry ... no encryption`.
   - Nothing in `infra/` sets this. RDS's default Postgres parameter group carries `rds.force_ssl = 1`, and `infra/data.tf` declares no parameter group of its own, so attaching one later would have to keep it.
   - `/api/v1/healthz` never hits the DB, so ECS can look healthy while queries 500.
