@@ -4,10 +4,9 @@
 # (separate data centers), with no NAT gateway (ARCHITECTURE.md has the cost reasoning) and no RDS Multi-AZ failover,
 # since this is a low-traffic demo project, not a production-scale service.
 #
-# Everything needing outbound internet (the web tasks, the GPU workers) runs in the public subnets with a
-# public IP and egresses through the internet gateway instead. The security groups, not the absence of a
-# route, are therefore what keep those tasks unreachable from outside. The isolated subnets hold only RDS,
-# which needs no outbound access.
+# Everything needing outbound internet (the web tasks, the GPU workers) runs in the public subnets with a public IP and
+# egresses through the internet gateway instead. The security groups, not the absence of a route, are therefore what
+# keep those tasks unreachable from outside. The isolated subnets hold only RDS, which needs no outbound access.
 
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"

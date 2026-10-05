@@ -27,16 +27,17 @@ locals {
   # added to either allow-list there has to be added here too.
   worker_instance_types = ["g4dn.xlarge", "g5.xlarge", "g6.xlarge", "g6e.xlarge"]
 
-  # All four named explicitly rather than left to a generated name, so `aws ecs update-service
-  # --force-new-deployment` (a Clerk secret rotation still needs one) can be written down literally in
-  # RUNBOOK.md instead of looked up per environment.
+  # All four named explicitly rather than left to a generated name, because each is written out literally elsewhere.
+  # The cluster and service are in RUNBOOK.md's Clerk secret rotation and in .github/workflows/deploy.yml. The two roles
+  # are in the CI role's iam:PassRole grant (scripts/prod/ci-role-policies/deploy.json).
   cluster_name             = "ai-gaussian-splatter"
   service_name             = "ai-gaussian-splatter-web"
   execution_role_name      = "ai-gaussian-splatter-execution"
   migration_task_role_name = "ai-gaussian-splatter-migrate-task"
 
-  # Named for the same reason: RUNBOOK.md and .github/workflows/deploy.yml name this family literally (`aws ecs run-task
-  # --task-definition ai-gaussian-splatter-migrate`) rather than looking it up.
+  # Named for the same reason. .github/workflows/deploy.yml runs it as `aws ecs run-task --task-definition
+  # ai-gaussian-splatter-migrate`, and the CI role's ecs:RunTask grant (scripts/prod/ci-role-policies/deploy.json) names
+  # it too.
   migration_task_family = "ai-gaussian-splatter-migrate"
 
   # --- Network and DNS ----------------------------------------------------------------
@@ -50,17 +51,17 @@ locals {
   app_hostname = "ai-gaussian-splatter.${var.domain_zone_name}"
 
   # Derived from the hostname above rather than passed in separately, so the certificate, the DNS record, and the
-  # origin the worker PATCHes status back to cannot disagree. It carries no trailing slash, because both consumers
-  # append to it. worker/pipeline/status.py would double-slash its callback path. The S3 CORS rules in infra/data.tf
-  # are matched against the browser's Origin header exactly.
+  # origin the worker PATCHes status back to cannot disagree. It carries no trailing slash. worker/pipeline/status.py
+  # appends its callback path to it, and the S3 CORS rules in infra/data.tf are matched against the browser's Origin
+  # header exactly.
   app_origin = "https://${local.app_hostname}"
 
   # --- Container images ---------------------------------------------------------------
   # The registry hostname web/lib/server/workerLauncher.ts's user-data logs into before pulling. It is built from
   # account/region directly rather than parsed out of aws_ecr_repository.worker.repository_url, matching how these
-  # construct the same string for their own docker/podman logins:
+  # construct the same string for their own podman logins:
   # - .github/workflows/deploy.yml
-  # - RUNBOOK.md
+  # - scripts/prod/worker-push-image.sh
   ecr_registry = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com"
   # One repository, two tag suffixes, the same shape infra/web.tf uses for -web and -migrate. The stages run
   # different images: worker/Dockerfile's reconstruct target carries COLMAP and no torch, its train target the

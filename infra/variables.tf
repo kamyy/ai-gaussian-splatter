@@ -6,7 +6,7 @@
 # Editing this default on a live account has an order to it. Tear the stack down first, while the default still names
 # the region the stack is deployed in (AGENTS.md).
 variable "aws_region" {
-  description = "Primary region for every resource except the budgets provider (us-east-1, fixed — see providers.tf)."
+  description = "Primary region for every resource except the budgets provider (us-east-1, fixed in infra/providers.tf)."
   type        = string
   default     = "us-west-2"
 }
@@ -88,9 +88,8 @@ variable "clerk_secret_key_arn" {
 }
 
 # An immutable per-build tag rather than a moving one, so every release is its own task definition and the deployment
-# circuit breaker can roll back to one that still names the image it was deployed with. Rolling back by hand is this
-# same variable with an older tag. .github/workflows/deploy.yml sets it to web/'s git tree id truncated to 12
-# characters, not to a commit SHA (ARCHITECTURE.md).
+# circuit breaker can roll back to one that still names the image it was deployed with. .github/workflows/deploy.yml
+# sets it to web/'s git tree id truncated to 12 characters, not to a commit SHA (ARCHITECTURE.md).
 variable "web_image_tag" {
   description = "Tag identifying the web service's image build, without the -web suffix infra/web.tf appends."
   type        = string
@@ -101,9 +100,9 @@ variable "web_image_tag" {
   }
 }
 
-# Not required like web_image_tag, because it has a safe default: the service's own tag. A `-var web_image_tag=` with no
-# `-var migrate_image_tag=` therefore keeps every manual command in RUNBOOK.md working unchanged.
-# .github/workflows/deploy.yml sets the two to different tags on purpose (ARCHITECTURE.md, Migration ordering).
+# Not required like web_image_tag, because it has a safe default: the service's own tag. scripts/prod/terraform-plan.sh
+# sets only web_image_tag, and .github/workflows/deploy.yml sets the two to different tags on purpose (ARCHITECTURE.md,
+# Migration ordering).
 variable "migrate_image_tag" {
   description = "Tag for the migration task's image build. Empty (the default) mirrors web_image_tag."
   type        = string

@@ -272,7 +272,7 @@ jobs:
           TF_VAR_migrate_image_tag: ${{ env.NEW_TAG }}
         run: terraform apply -auto-approve -input=false
 
-      # /api/v1/healthz never touches the database (RUNBOOK.md), so it can't tell a working deploy from one that will
+      # /api/v1/healthz never touches the database (AGENTS.md), so it can't tell a working deploy from one that will
       # 500 on every real request. A nonexistent splat id still round-trips a real DB query: a working deploy 404s
       # ("no such row"), while a broken DB connection 500s. It waits for the rollout to settle first. On the first
       # deploy no older task answers in the meantime, so the ALB returns 503 until the new task passes health checks.
