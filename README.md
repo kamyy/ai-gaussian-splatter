@@ -2,16 +2,11 @@
 
 Upload multi-angle photos of a physical object, get back a real-time, interactive 3D Gaussian Splat you can view in the browser and share. Photogrammetry places the photos in 3D, and AI training on a CUDA GPU in the cloud turns them into the splat.
 
-> 🚧 **Under construction.** The pipeline has run end to end on a local GPU. The AWS stack has been deployed before for testing, but is currently torn down while development continues. Several gaps remain. See [State / what's next](AGENTS.md#11-state--whats-next).
+<br>
 
-<p>
-  <img src="images/landing.webp" width="24%" alt="The AI Gaussian Splatter landing page">
-  <img src="images/new-splat.webp" width="24%" alt="The new splat page, with a photo drop zone and shooting tips">
-  <img src="images/review.webp" width="24%" alt="The review step: the point cloud of a bike, with the camera positions of the 61 photos drawn above it">
-  <img src="images/splat-ready.webp" width="24%" alt="The finished 3D Gaussian Splat of the same bike, with its share link">
-</p>
+<img src="images/landing.webp" alt="The AI Gaussian Splatter landing page, headed &quot;Every object, in the round.&quot;, with five example splats (Starbucks mugs, a plant, a child, a Lego figure and a bike) above the three steps of how it works">
 
-The landing page, the upload page with its shooting tips, then a splat of a bike built from 61 photos. The third view is the review step: the point cloud reconstructed from the photos, with an orange frame marking where each photo was taken. The last is the finished 3D Gaussian Splat, ready to share.
+<br>
 
 Built with the help of [Claude Code](https://claude.com/product/claude-code) and Cursor.
 
@@ -36,6 +31,18 @@ A 3D Gaussian Splat represents an object as millions of small, semi-transparent,
 4. **Train.** gsplat trains a Gaussian Splat on the photos with its CUDA kernels on an NVIDIA GPU.
 5. **Crop.** Optionally fit a box around the object in the point cloud view, checking it from the front, side or top, to drop the background from the finished splat. Undo brings the original back.
 6. **View and share.** Orbit the splat in the browser, share a public link (with an Open Graph preview image), or download the `.ply` to edit in other splat tools.
+
+<br>
+
+<p>
+  <img src="images/point-cloud.webp" width="32%" alt="Review: the point cloud COLMAP reconstructed from 86 photos of a Lego figure, beside the photo grid and each stage's timings">
+  <img src="images/crop-box.webp" width="32%" alt="Crop: a translucent box with drag handles fitted around the Lego figure in its point cloud">
+  <img src="images/splat.webp" width="32%" alt="View: the finished 3D Gaussian Splat of the Lego figure, beside its share link and photo grid">
+</p>
+
+The same Lego figure at the review, crop and view steps, built from 86 photos in 5 minutes of GPU time.
+
+<br>
 
 The AI training is per-object gradient descent through a differentiable renderer, not a pretrained model ([Pipeline](ARCHITECTURE.md#2-pipeline)).
 
