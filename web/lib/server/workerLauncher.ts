@@ -20,6 +20,7 @@ import {
   TerminateInstancesCommand,
 } from "@aws-sdk/client-ec2";
 
+import { JobStatus } from "@/lib/statuses";
 import { getEnv, LOCAL_APP_ORIGIN } from "./env";
 import type { RuntimeSettings } from "./runtimeSettings";
 
@@ -299,7 +300,7 @@ function reportLocalBuildFailure(params: WorkerLaunch): void {
     method: "PATCH",
     headers: { Authorization: `Bearer ${params.callbackToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      status: "failed",
+      status: JobStatus.failed,
       error_message: `The splat-worker-${params.stage}:dev image didn't build. See worker/jobdir/${params.jobId}/worker.log.`,
     }),
   }).catch(() => {});
@@ -352,7 +353,7 @@ export function launchJobLocal(params: WorkerLaunch): void {
     // Inside the container, "localhost" is the container itself. host.containers.internal is Podman's alias for the
     // host running `next dev`.
     "-e",
-    "APP_ORIGIN=http://host.containers.internal:3000",
+    `APP_ORIGIN=${LOCAL_APP_ORIGIN.replace("localhost", "host.containers.internal")}`,
     "-e",
     `UPLOADS_BUCKET=${env.UPLOADS_BUCKET}`,
     "-e",

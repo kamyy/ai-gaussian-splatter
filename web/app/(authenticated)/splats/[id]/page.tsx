@@ -24,7 +24,7 @@ import { usePhotos } from "@/lib/hooks/usePhotos";
 import { useSplat } from "@/lib/hooks/useSplat";
 import { useStageNotification } from "@/lib/hooks/useStageNotification";
 import { splatStage } from "@/lib/splatStage";
-import { JOB_ENDED_STATUSES } from "@/lib/statuses";
+import { JOB_ENDED_STATUSES, SplatStatus } from "@/lib/statuses";
 
 export default function SplatPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -99,7 +99,7 @@ export default function SplatPage({ params }: { params: Promise<{ id: string }> 
         <SplatStageViewer
           splatId={id}
           job={job}
-          complete={splat.status === "complete"}
+          complete={splat.status === SplatStatus.complete}
           cameras={cameras}
           selection={selection}
           onClearSelection={clearSelection}
