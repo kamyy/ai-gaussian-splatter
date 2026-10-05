@@ -13,19 +13,20 @@
 import { defineConfig } from "drizzle-kit";
 
 import { databaseSsl, resolveDatabaseUrl } from "./lib/server/databaseUrl";
-import { getEnv } from "./lib/server/env";
+import { isLocalDevEnv, LOCAL_DATABASE_ENV } from "./lib/server/env";
 
 /**
  * An empty string rather than a throw when unset, because `drizzle-kit generate` only diffs the schema against the
- * checked-in snapshot and needs no database. Local dev always uses `splat-pg`, so the URL is unset only when NODE_ENV
- * is `production` or `test`.
+ * checked-in snapshot and needs no database. For the same reason the URL comes from the database settings alone, not
+ * getEnv(), which also requires the buckets and AWS keys. Local dev always uses `splat-pg`, so the URL is unset only
+ * when NODE_ENV is `production` or `test` and the DATABASE_* variables are missing.
  */
 export default defineConfig({
   dialect: "postgresql",
   schema: "./lib/server/db/schema.ts",
   out: "./drizzle",
   dbCredentials: {
-    url: resolveDatabaseUrl(getEnv()) ?? "",
+    url: resolveDatabaseUrl(isLocalDevEnv() ? LOCAL_DATABASE_ENV : process.env) ?? "",
     // Dead while `url` is set, which it always is here, because drizzle-kit's CLI driver then ignores a sibling `ssl`
     // (AGENTS.md). `pnpm db:studio` against a TLS-only database therefore fails rather than connecting in plaintext.
     // `pnpm db:migrate` runs web/scripts/db-migrate.cjs, which builds its own pool.
