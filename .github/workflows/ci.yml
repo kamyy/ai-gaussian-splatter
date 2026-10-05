@@ -38,14 +38,38 @@ jobs:
 
   worker:
     runs-on: ubuntu-latest
+    env:
+      # worker:lint and worker:test run through `uv run`, which would otherwise sync worker/.venv back to uv.lock and
+      # reinstall the CUDA torch the step below leaves out.
+      UV_NO_SYNC: "1"
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          # Keeps this job off cache entries saved before it installed CPU-only torch. Those hold the CUDA wheels too,
+          # and their key, a hash of worker/pyproject.toml and worker/uv.lock, would otherwise still match.
+          cache-suffix: cpu-torch
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: package.json
-      - working-directory: worker
-        run: uv sync --group dev
+      # uv.lock pins torch's CUDA 12.9 build, which brings several GB of nvidia-*, cuda-* and triton wheels. This runner
+      # has no GPU and the tests never touch CUDA, so it installs every other locked package and the CPU build of the
+      # same torch version instead. --no-deps keeps the CPU wheel from pulling the CUDA packages back in.
+      # worker/Dockerfile still installs exactly what uv.lock pins.
+      - name: Install worker dependencies with CPU-only torch
+        working-directory: worker
+        run: |
+          reqs=$(uv export --locked --group dev --no-hashes)
+          torch_version=$(sed -n 's/^torch==\([^+]*\)+.*/\1/p' <<<"$reqs")
+          if [[ -z $torch_version ]]; then
+            echo "::error::uv export listed no torch==<version>+<build> pin"
+            exit 1
+          fi
+          uv venv
+          grep -v -E '^(torch==|triton==|nvidia-|cuda-)' <<<"$reqs" > "$RUNNER_TEMP/worker-requirements.txt"
+          uv pip install --no-deps -r "$RUNNER_TEMP/worker-requirements.txt"
+          uv pip install --no-deps "torch==$torch_version+cpu" --index-url https://download.pytorch.org/whl/cpu
+          uv pip check
       # worker:lint and worker:test (root package.json) are pure shell (`uv --directory worker run ...`). No worker
       # node_modules to install, just the pnpm CLI above to parse and run the scripts.
       - run: pnpm run worker:lint
