@@ -103,7 +103,8 @@ interface SplatViewerProps {
 // rethrown.
 function holdSparkSorts(spark: SparkRenderer): () => void {
   let released = false;
-  // updateInternal and driveSort are private. Naming them on SparkRenderer makes this cast never.
+  // updateInternal and driveSort are private. Naming those methods on SparkRenderer would make a direct cast the type
+  // never.
   const runtime = spark as unknown as {
     updateInternal: (args: { scene: Scene; camera: Camera; autoUpdate: boolean }) => Promise<void>;
     driveSort: () => Promise<void>;
@@ -111,8 +112,8 @@ function holdSparkSorts(spark: SparkRenderer): () => void {
   const runUpdate = runtime.updateInternal.bind(runtime);
   const runSort = runtime.driveSort.bind(runtime);
 
-  // The timeout calls these methods on the instance. The returned promise is otherwise uncaught. Replacing the methods
-  // is what that timeout invokes.
+  // Spark's timeout calls updateInternal and driveSort on the instance. The replacements wrap those calls so the
+  // promise they return is caught.
   const guard = (run: () => Promise<void>) =>
     run().catch((err: unknown) => {
       if (!released) {
@@ -194,8 +195,8 @@ function SplatScene({
         onLoad();
 
         // isEmpty() guards a degenerate box (e.g. a training collapse to a single point). Three.js represents an
-        // empty Box3 as min=+Infinity/max=-Infinity, which is truthy, not null. getCenter()/getSize() on one yield
-        // NaN, silently producing a camera pointed nowhere with no error surfaced.
+        // empty Box3 as min=+Infinity/max=-Infinity, which is truthy, not null. getCenter() and getSize() on that empty
+        // box yield NaN, silently producing a camera pointed nowhere with no error surfaced.
         const centers: number[] = [];
         splatMesh.forEachSplat((_index, center) => {
           centers.push(center.x, center.y, center.z);
@@ -239,8 +240,8 @@ function visibleHeight(controls: CameraControls, camera: Camera): number | null 
 }
 
 // Switching between the perspective and orthographic cameras mounts a fresh camera, with fresh controls around it.
-// This carries the outgoing camera's view over to the new one: the same target, direction and up, at the distance or
-// zoom that shows the target at the same size.
+// ProjectionHandoff carries the outgoing camera's view over to the new one: the same target, direction, and up, at
+// the distance or zoom that shows the target at the same size.
 function ProjectionHandoff() {
   const camera = useThree(state => state.camera);
   const controls = useThree(state => state.controls) as CameraControls | null;
@@ -389,8 +390,9 @@ function AxisViewRig({
   return null;
 }
 
-// Lives inside <Canvas>, since web/lib/hooks/useSceneFraming.ts and web/lib/hooks/useCameraFlight.ts both place the
-// camera through useThree(), which SplatViewer itself can't call.
+// Lives inside <Canvas>, because these hooks place the camera through useThree(), which SplatViewer itself can't call:
+// - web/lib/hooks/useCameraFlight.ts
+// - web/lib/hooks/useSceneFraming.ts
 function ViewerSceneManager({
   mode,
   splatUrl,

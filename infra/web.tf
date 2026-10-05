@@ -87,12 +87,12 @@ resource "aws_iam_role_policy" "execution" {
 }
 
 # --- Migration task -------------------------------------------------------------------
-# The migration task runs `node web/scripts/db-migrate.cjs` (web/Dockerfile's `migrator` stage) as a one-off
-# ecs:RunTask before the service's own rollout. See ARCHITECTURE.md for why migrations can't run when a container
-# boots. execution_role is reused as-is, since it already has the ECR pull and DB secret read this container needs to
-# start. The migration task role gets its own fixed name, so RUNBOOK.md can name it literally the same way it names
-# execution_role. That role needs no grants at all, because the container only opens a TCP connection to RDS and makes
-# no AWS API calls.
+# The migration task runs `node web/scripts/db-migrate.cjs` as a one-off ecs:RunTask before the service's own
+# rollout. The image is web/Dockerfile's migrator stage. See ARCHITECTURE.md for why migrations can't run when a
+# container boots. execution_role is reused as-is, since it already has the ECR pull and DB secret read this
+# container needs to start. The migration task role gets its own fixed name, so RUNBOOK.md can name it literally
+# the same way it names execution_role. That role needs no grants at all, because the container only opens a TCP
+# connection to RDS and makes no AWS API calls.
 
 resource "aws_iam_role" "migration_task" {
   name               = local.migration_task_role_name
@@ -181,8 +181,8 @@ resource "aws_iam_role_policy" "task" {
       # instance carries the worker tag (web/lib/server/workerLauncher.ts tags ResourceType "instance"), so
       # aws:RequestTag is absent from the request context for the rest. A single statement conditioned on that
       # key would evaluate false for them and deny the whole call. Hence the split: the tag constrains what can
-      # be launched (the RunInstancesTagged statement below), this statement only names what it is launched from and
-      # into.
+      # be launched (the RunInstancesTagged statement below). This statement names the AMI, the subnet, the security
+      # group, and the network interface, volume, and spot-request types the launch creates.
       {
         Sid    = "RunInstances"
         Effect = "Allow"
@@ -237,7 +237,7 @@ resource "aws_iam_role_policy" "task" {
         Resource  = "*"
         Condition = { StringEquals = { "ec2:ResourceTag/${local.worker_tag_key}" = local.worker_tag_value } }
       },
-      # web/lib/server/reconcileJob.ts looks up a quiet job's instance to tell a slow stage from a dead worker.
+      # web/lib/server/reconcileJob.ts looks up a quiet worker job's instance to tell a slow stage from a dead worker.
       # ec2:DescribeInstances has no resource-level permissions to scope.
       {
         Sid      = "DescribeWorkers"
@@ -416,8 +416,9 @@ resource "aws_lb_target_group" "web" {
     protocol = "HTTP"
   }
 
-  # The default 300s is a floor on how long every deployment takes to retire a task. Nothing here holds a
-  # long-lived request, so draining is only about letting in-flight ones finish.
+  # The default 300s is a floor on how long every deployment takes to retire a task. A crop holds its request,
+  # writing no bytes, until it finishes, and the load balancer idle timeout allows that for 300 seconds. This delay
+  # is 30 seconds, so a deploy stops draining once that shorter wait is up.
   deregistration_delay = 30
 }
 
@@ -526,9 +527,13 @@ resource "aws_ecs_task_definition" "web" {
       }
     }
     environment = concat(local.db_environment, [
-      # Read via getEnv().AWS_REGION by every AWS SDK client the app constructs, in web/lib/server/s3.ts,
-      # web/lib/server/workerLauncher.ts, and web/lib/server/databaseUrl.ts. Without this, each client falls back to
-      # its own default region resolution, which can land somewhere other than where these resources actually live.
+      # web/lib/server/env.ts rejects a missing AWS_REGION before any client is built. These clients read the value
+      # through getEnv():
+      # - web/app/api/v1/internal/jobs/[jobId]/s3-credentials/route.ts
+      # - web/lib/server/databaseUrl.ts
+      # - web/lib/server/runtimeSettings.ts
+      # - web/lib/server/s3.ts
+      # - web/lib/server/workerLauncher.ts
       { name = "AWS_REGION", value = var.aws_region },
       { name = "UPLOADS_BUCKET", value = aws_s3_bucket.uploads.id },
       { name = "SPLATS_BUCKET", value = aws_s3_bucket.splats.id },
@@ -543,7 +548,8 @@ resource "aws_ecs_task_definition" "web" {
       { name = "WORKER_RECONSTRUCT_IMAGE_URI", value = local.worker_reconstruct_image_uri },
       { name = "WORKER_TRAIN_IMAGE_URI", value = local.worker_train_image_uri },
       { name = "ECR_REGISTRY", value = local.ecr_registry },
-      # The app's public origin, which the GPU worker PATCHes job status back to and the sitemap and robots.txt use.
+      # The app's public origin. The GPU worker PATCHes worker-job status back to it. The sitemap and robots.txt use it
+      # too.
       # Passed in rather than read off the load balancer, so it stays the stable custom domain the ALB is aliased to.
       { name = "APP_ORIGIN", value = local.app_origin },
       # Read by Next's standalone server.js to replace Node's 5-second idle-socket timeout, which the ALB's own idle
@@ -601,7 +607,7 @@ resource "aws_ecs_service" "web" {
   }
 
   # The default 50% rounds down to zero healthy tasks when desired_count is 1. ECS could then stop the only running task
-  # before its replacement passes health checks, which means a window of 503s on every deploy.
+  # before its replacement passes health checks, which means a window of HTTP 503 responses on every deploy.
   deployment_minimum_healthy_percent = 100
   deployment_maximum_percent         = 200
 

@@ -6,10 +6,10 @@
 
 # The root package.json's infra:test calls it, from CI's infra job and the root `pnpm test`.
 #
-# .github/workflows/deploy.yml signs its AWS credentials with tf_get_aws_region, so a spelling in infra/variables.tf
-# that this no longer reads breaks a deploy rather than a plan. The check against the real file is shape-only, since
-# asserting the region literally would write it a second time. The fixtures below own their inputs, so those assert
-# exact output. tf_get_app_hostname does not read infra/: it prefixes the zone name with ai-gaussian-splatter.
+# .github/workflows/deploy.yml signs its AWS credentials with tf_get_aws_region, so a scraper that does not read a
+# variable in infra/variables.tf breaks a deploy rather than a plan. The check against the real file is shape-only,
+# since asserting the region literally would write it a second time. The fixtures below own their inputs, so those
+# assert exact output. tf_get_app_hostname does not read infra/: it prefixes the zone name with ai-gaussian-splatter.
 
 set -euo pipefail
 

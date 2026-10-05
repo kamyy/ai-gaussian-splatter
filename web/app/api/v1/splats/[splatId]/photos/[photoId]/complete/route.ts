@@ -46,7 +46,7 @@ export const POST = withErrorHandling(
       throw new HttpError(400, `A photo can be at most ${MAX_PHOTO_BYTES / (1024 * 1024)} MB`);
     }
 
-    // Null only for a photo uploaded before thumbnails existed, which never reaches this route again.
+    // A null thumbnailS3Key skips the thumbnail check. The photo is still marked uploaded.
     if (photo.thumbnailS3Key !== null) {
       const thumbnailSize = await uploadedObjectSize(photo.thumbnailS3Key);
       if (thumbnailSize === null) {

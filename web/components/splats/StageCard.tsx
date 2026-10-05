@@ -31,11 +31,11 @@ const MIN_PERCENT_FOR_ESTIMATE = 5;
 interface StageCardProps {
   splatId: string;
   stage: Stage;
-  // Called once an action has changed the splat's job, so the page refetches it.
+  // Called once an action has changed the splat's worker job, so the page refetches it.
   onJobChanged: () => void;
 }
 
-// For a stage that doesn't report how far along it is: this only shows that something is running.
+// WorkingBar is for a stage that doesn't report how far along it is. WorkingBar only shows that something is running.
 function WorkingBar({ label }: { label: string }) {
   return (
     <div role="progressbar" aria-label={label} className="h-2 overflow-hidden rounded-full bg-divider">

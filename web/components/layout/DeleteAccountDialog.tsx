@@ -38,8 +38,8 @@ export function DeleteAccountDialog({ open, onOpenChange }: { open: boolean; onO
       return;
     }
 
-    // The session ended with the Clerk account, so this only clears it from the browser. pending stays true until the
-    // redirect replaces the page.
+    // The session ended with the Clerk account, so signOut only clears it from the browser. pending stays true until
+    // the redirect replaces the page.
     await signOut({ redirectUrl: "/" });
   }
 

@@ -23,7 +23,7 @@ import { cn } from "@/lib/cn";
 import { useAnalyticsConsent } from "@/lib/hooks/useAnalyticsConsent";
 
 /**
- * The one header every page renders. <Show> resolves the session on the client, so this stays correct without a
+ * The one header every page renders. <Show> resolves the session on the client, so the header stays correct without a
  * layout reading auth() itself. While Clerk is still loading, neither the signed-in nor the signed-out branch renders.
  *
  * Everything has to fit on one row at a 360px phone width. Below the sm breakpoint a signed-out visitor gets only the

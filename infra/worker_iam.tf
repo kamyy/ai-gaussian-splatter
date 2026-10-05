@@ -65,9 +65,10 @@ resource "aws_iam_role_policy" "worker" {
         Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
         Resource = "${aws_cloudwatch_log_group.worker.arn}:*"
       },
-      # What lets worker/run_job.py's finally block terminate its own instance at the end of a stage, scoped by the
-      # same worker-tag convention infra/web.tf's RunInstances grant uses (infra/locals.tf holds the shared tag
-      # key/value).
+      # What lets the stage's finally block terminate its own instance. worker/run_job.py makes the call. The grant is
+      # scoped by the worker tag shared with:
+      # - infra/locals.tf
+      # - infra/web.tf
       {
         Sid       = "SelfTerminate"
         Effect    = "Allow"

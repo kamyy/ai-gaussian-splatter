@@ -213,8 +213,8 @@ same_policy() {
 # The deploy policy in scripts/prod/ci-role-policies/deploy.json grants what a full apply and teardown of infra/ need:
 # - Image push is the web repository only. The worker images are pushed from a workstation by
 #   scripts/prod/worker-push-image.sh.
-# - App S3 ARNs name the three prefixes infra/ creates. ai-gaussian-splatter-* also matches the state bucket. IAM is
-#   additive, so a narrower tfstate statement would not cancel DeleteBucket on that bucket.
+# - App S3 ARNs name the uploads, splats, and access-logs buckets. DeleteBucket is on those names only. The state
+#   bucket's statement is GetObject, ListBucket, PutObject, and DeleteObject.
 # - iam:CreateServiceLinkedRole is for the ECS, ELB, RDS, and Application Auto Scaling roles a first apply creates. The
 #   prereqs step only creates AWSServiceRoleForEC2Spot.
 # - The Lambda, EventBridge and SNS statements cover the worker sweeper (infra/worker_sweeper.tf) by its fixed names.

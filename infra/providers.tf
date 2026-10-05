@@ -4,11 +4,12 @@
 # fixed to us-east-1 for the Budgets API, and stores Terraform's state in an S3 bucket. Every AWS resource the providers
 # create is tagged with the project name.
 
-# The state bucket is created by hand once (RUNBOOK.md, Creating account prerequisites).
+# The state bucket is created once by scripts/prod/bootstrap.sh prereqs (RUNBOOK.md, Going live).
 terraform {
   # Exact, not a floor. A range would let a newer local CLI plan. scripts/lib/terraform.sh's tf_get_required_version
-  # reads this string for local install and for hashicorp/setup-terraform in .github/workflows/ci.yml and
-  # .github/workflows/deploy.yml.
+  # reads this string for the local install and for hashicorp/setup-terraform in:
+  # - .github/workflows/ci.yml
+  # - .github/workflows/deploy.yml
   required_version = "1.16.2"
 
   required_providers {

@@ -150,7 +150,8 @@ export function NewSplatForm() {
   const submitting = phase !== "idle";
   const tooManyPhotos = photos.length > MAX_PHOTOS_PER_SPLAT;
 
-  // An uploaded photo is already on the server, so it can no longer be removed here, and flagging it would only nag.
+  // An uploaded photo is already on the server. The remove button is replaced. The flag is cleared, because flagging
+  // an uploaded photo would only nag.
   const removableFlagged = [...flagged.keys()].filter(key => !uploadedKeys.has(key));
 
   const { getRootProps, getInputProps, open, isDragAccept, isDragReject } = useDropzone({

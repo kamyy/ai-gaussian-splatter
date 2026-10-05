@@ -12,7 +12,7 @@ from .storage import s3_client
 
 def fetch_photos(settings: Settings) -> Path:
     """Download splats/{splat_id}/photos/* into local_workdir/photos and return that directory. Raises if no photos
-    are found. The caller (worker/run_job.py) treats that as a job failure, not a silent no-op.
+    are found. A missing photo set is a worker job failure, and the stage reports it instead of continuing.
     """
     s3 = s3_client(settings)
     prefix = f"splats/{settings.splat_id}/photos/"

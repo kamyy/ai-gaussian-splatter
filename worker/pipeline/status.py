@@ -1,7 +1,7 @@
 """Reports a worker job's progress back to the web app.
 
 Sends PATCH /api/v1/internal/jobs/{id}/status (web/app/api/v1/internal/jobs/[jobId]/status/route.ts), authenticated with
-the job's callback token. The web app updates the job's row from it, which is what the splat's page polls.
+the worker job's callback token. The web app updates the worker job's row from it, which is what the splat's page polls.
 """
 
 import logging
@@ -25,9 +25,9 @@ def report_status(
     training_progress: int | None = None,
     booted_at: int | None = None,
 ) -> None:
-    """PATCH the job's status back to the web app. Best effort: network errors are logged and swallowed rather than
-    raised, because a failed status update must never stop the pipeline from continuing, or from reaching the finally
-    block that terminates the instance. See worker/run_job.py.
+    """PATCH the worker job's status back to the web app. httpx.HTTPError is logged and swallowed. That covers
+    transport failures, and 4xx and 5xx responses. Any other exception still propagates. A swallowed failure lets the
+    pipeline continue, and lets worker/run_job.py reach the finally block that terminates the instance.
     """
     payload: dict[str, str | int] = {"status": status}
     if error_message is not None:
@@ -55,7 +55,7 @@ def report_status(
         )
         response.raise_for_status()
     except httpx.HTTPError as exc:
-        # Warning, not exception(): the traceback of a swallowed error reads like a crash in the job log. The web app
+        # Warning, not exception(): the traceback of a swallowed error reads like a crash in the stage log. The web app
         # being unreachable is also expected during a local pipeline run. %r, not %s: httpx's timeout errors carry an
         # empty message, so %s would log the failure with nothing identifying it after the colon.
         logger.warning("Failed to report status %r for job %s: %r", status, settings.job_id, exc)

@@ -48,11 +48,11 @@ export const LightThemeIcon = LuSun;
 export const DarkThemeIcon = LuMoon;
 
 // --- Privacy settings ----------------------------------------------------------------
-// The site header uses this to reopen the privacy banner.
+// The site header uses PrivacySettingsIcon to reopen the privacy banner.
 export const PrivacySettingsIcon = LuShieldCheck;
 
 // --- Account menu --------------------------------------------------------------------
-// This names the account menu's Delete account item.
+// DeleteAccountIcon names the account menu's Delete account item.
 export const DeleteAccountIcon = LuUserX;
 
 // --- Toast messages ------------------------------------------------------------------
@@ -64,14 +64,16 @@ export const ErrorIcon = LuCircleAlert;
 export const CloseIcon = LuX;
 
 // --- Photo tiles ---------------------------------------------------------------------
-// They appear on the new-splat form, a splat's photo grid, and the pager page that holds the selected photo.
+// PhotoPlaceholderIcon, PhotoUploadedIcon, RemovePhotoIcon, and SelectedPhotoIcon appear on the new-splat form, a
+// splat's photo grid, and the pager page that holds the selected photo.
 export const PhotoPlaceholderIcon = LuImage;
 export const PhotoUploadedIcon = LuCheck;
 export const RemovePhotoIcon = LuTrash2;
 export const SelectedPhotoIcon = PiCameraFill;
 
 // --- Splat library -------------------------------------------------------------------
-// They also mark a splat's progress through the pipeline.
+// StepDoneIcon marks a finished pipeline step. ThumbnailPlaceholderIcon is the empty card. ProcessingPausedIcon is
+// the site-wide pause notice.
 export const ThumbnailPlaceholderIcon = LuImage;
 export const StepDoneIcon = LuCheck;
 export const ProcessingPausedIcon = LuTriangleAlert;
@@ -89,6 +91,6 @@ export const OrthographicCameraIcon = TbSquare;
 export const FrontViewIcon = TbBoxAlignBottom;
 export const SideViewIcon = TbBoxAlignLeft;
 export const TopViewIcon = TbBoxAlignTop;
-// The crop button. The same box as front, side and top, with no face marked, because this one leaves the camera
-// wherever it already is.
+// CropIcon is the crop button. It uses the same box as the front, side, and top views, with no face marked.
+// CropIcon leaves the camera wherever it already is.
 export const CropIcon = TbBox;

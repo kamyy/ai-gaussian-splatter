@@ -87,7 +87,8 @@ function gpuTotal(timings: StageTimings | null): string | null {
 }
 
 /**
- * Each GPU step shows how long it took, split into the instance's start-up and the work itself. Once the splat is
+ * Each GPU step shows how long it took. With boot timestamps the detail line is the boot, the image pull, and the
+ * work. Without them it is the start-up and the work. Once the splat is
  * complete, every step shows as done, and the list stays vertical so those times stay visible. A visitor on the share
  * page gets no Share step, since they are already looking at the shared splat.
  */

@@ -1,10 +1,9 @@
 /**
  * The box a photo tile draws its photo in, which grows over the neighbouring tiles while the photo is enlarged.
  *
- * The splat page's photo grid (web/components/splats/PhotoGrid.tsx) and the new-splat form's previews
- * (web/components/splats/NewSplatForm.tsx) both draw their photos in it. web/lib/hooks/useEnlargedTile.ts picks the
- * enlarged photo, and web/lib/expandedBox.ts works out where it is drawn. The tile itself keeps its place in the row,
- * and has to sit above the other tiles while its photo is enlarged and until the photo has shrunk back.
+ * The tile itself keeps its place in the row, and has to sit above the other tiles while its photo is enlarged and
+ * until the photo has shrunk back. web/lib/expandedBox.ts works out where the enlarged photo is drawn.
+ * web/lib/hooks/useEnlargedTile.ts picks which photo is enlarged.
  */
 
 import { cn } from "@/lib/cn";

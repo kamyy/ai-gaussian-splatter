@@ -211,8 +211,7 @@ export async function deleteSplatObjects(splatId: string): Promise<void> {
 /**
  * The camera poses the reconstruct stage wrote beside the point cloud (worker/pipeline/sparse_export.py), keyed back to
  * photo ids. The worker names each photo after its S3 key's last segment, `<photoId><extension>` (photoS3Key above), so
- * stripping the extension recovers the id. null when the object doesn't exist, which is every job reconstructed before
- * the worker wrote one.
+ * stripping the extension recovers the id. null when cameras.json is missing or the body is empty.
  */
 export async function readSplatCameras(splatId: string): Promise<CameraPose[] | null> {
   let body: string | undefined;

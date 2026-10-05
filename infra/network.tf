@@ -78,7 +78,7 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-# No default route out — isolated in fact, not just in name.
+# The private route table has no default route out. The private subnets are isolated.
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.main.id
 
@@ -112,7 +112,7 @@ resource "aws_security_group" "alb" {
   vpc_id      = aws_vpc.main.id
 }
 
-# The app's only route in from the internet. Port 80 is the redirect listener; it never reaches a task.
+# The app's only route in from the internet is the two rules below.
 resource "aws_vpc_security_group_ingress_rule" "alb_https" {
   security_group_id = aws_security_group.alb.id
   cidr_ipv4         = "0.0.0.0/0"
@@ -122,6 +122,7 @@ resource "aws_vpc_security_group_ingress_rule" "alb_https" {
   description       = "HTTPS from anyone"
 }
 
+# Port 80 is the redirect listener. It never reaches a task.
 resource "aws_vpc_security_group_ingress_rule" "alb_http" {
   security_group_id = aws_security_group.alb.id
   cidr_ipv4         = "0.0.0.0/0"

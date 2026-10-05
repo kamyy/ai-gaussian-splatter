@@ -4,9 +4,9 @@ Simplifications relative to the original paper, made deliberately for a reduced-
 than by oversight:
 - Densification is gsplat's DefaultStrategy with its schedule scaled down from 30k iterations to the run's length (see
   _build_strategy).
-- Camera radial distortion from COLMAP is not undistorted before training (see worker/pipeline/colmap_model.py). That
-  is acceptable for SIMPLE_RADIAL's typically small phone-camera distortion at this quality bar, not for wide-angle
-  lenses.
+- Camera radial distortion from COLMAP is not undistorted before training (see worker/pipeline/colmap_model.py). The
+  approximation holds for SIMPLE_RADIAL's typically small phone-camera distortion at this quality bar. It does not
+  hold for wide-angle lenses.
 """
 
 import logging
@@ -77,7 +77,7 @@ class GaussianModel:
 @dataclass
 class TrainedScene:
     model: GaussianModel
-    canonical_viewmat: torch.Tensor  # (4, 4) — a representative pose, for worker/pipeline/export.py's thumbnail
+    canonical_viewmat: torch.Tensor  # (4, 4). A representative pose, for worker/pipeline/export.py's thumbnail.
     canonical_K: torch.Tensor  # (3, 3)
     canonical_width: int
     canonical_height: int
@@ -173,8 +173,8 @@ def _train_loop(sparse: SparseModel, photos_dir: Path, settings: Settings):
 
         if step % log_every == 0:
             logger.info("iter %d/%d loss=%.4f gaussians=%d", step, iterations, loss.item(), len(params["means"]))
-            # On the log schedule, 20 callbacks a run, for the progress bar on the splat's page. report_status never
-            # raises, so an unreachable web app costs its timeout here and nothing more.
+            # On the log schedule, 20 callbacks a run, for the progress bar on the splat's page. report_status
+            # swallows httpx.HTTPError only. Any other exception from that call still propagates.
             report_status(settings, "training_running", training_progress=step * 100 // iterations)
 
     logger.info("Trained %d iterations in %.0fs", iterations, time.monotonic() - started)
@@ -197,7 +197,9 @@ def _split_views(count: int, eval_holdout: bool) -> tuple[list[int], list[int]]:
 
 def _evaluate(model: GaussianModel, cameras, viewmats, images_tensor, eval_indices: list[int], out_dir: Path) -> None:
     """Logs mean PSNR and SSIM over the held-out views. It also writes a ground-truth-beside-render PNG per view to
-    out_dir, which is worker/jobdir/eval/ on the host, for looking at what the numbers miss.
+    out_dir, for looking at what the numbers miss. out_dir is {local_workdir}/eval, and local_workdir defaults to
+    /tmp/job. A local run bind-mounts worker/jobdir/<jobId> at /tmp/job, so those PNGs land in
+    worker/jobdir/<jobId>/eval on the host. On AWS they stay at /tmp/job/eval on the worker instance.
 
     PSNR (peak signal-to-noise ratio) is in decibels and higher is better. It rewards matching exact pixel values.
     SSIM runs from 0 to 1 and rewards matching local structure, such as edges and texture.
@@ -447,7 +449,7 @@ def _max_gaussians_for_device() -> int:
     point counts) before this budget is computed.
     """
     if not torch.cuda.is_available():
-        return 10**9  # No GPU to run out of, and CPU training is already impractically slow regardless of size.
+        return 10**9  # There is no GPU to run out of. CPU training is already impractically slow regardless of size.
     free_bytes, _total_bytes = torch.cuda.mem_get_info()
     budget_bytes = free_bytes // 2
     return max(1, budget_bytes // 2048)

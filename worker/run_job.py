@@ -1,6 +1,6 @@
 """The worker's entrypoint: runs one stage of a worker job on a GPU instance.
 
-The web app launches an EC2 spot instance (a discounted AWS virtual machine) for each stage and passes the job's
+The web app launches an EC2 spot instance (a discounted AWS virtual machine) for each stage and passes the worker job's
 settings as environment variables. settings.stage picks the stage. "reconstruct" downloads the photos, runs COLMAP to
 work out where each was taken, and saves a point cloud, then pauses so the user can decide whether to train. "train"
 downloads the photos again, trains the Gaussian splat with gsplat, and uploads the results.
@@ -42,8 +42,8 @@ def _run_reconstruct(settings: Settings) -> int:
                 "capture likely has insufficient overlap between angles"
             )
 
-        # Persisted so a later, separate EC2 instance (the train phase) can resume without re-running COLMAP, and so
-        # the browser can show the point cloud and camera positions while the user decides whether to proceed.
+        # Persisted so a later, separate EC2 instance (the train stage) can resume without re-running COLMAP. The
+        # browser can show the point cloud and camera positions while the visitor decides whether to proceed.
         sparse_export.upload_sparse_model(sfm_result.sparse_dir, settings)
         point_cloud_key = sparse_export.export_and_upload_point_cloud(sfm_result.sparse_dir, settings)
         sparse_export.export_and_upload_cameras(sfm_result.sparse_dir, settings)
@@ -51,7 +51,7 @@ def _run_reconstruct(settings: Settings) -> int:
         status.report_status(settings, "awaiting_training", point_cloud_s3_key=point_cloud_key)
         return 0
 
-    except Exception as exc:  # noqa: BLE001 — a job failure must always be reported, not just logged
+    except Exception as exc:  # noqa: BLE001 — a worker job failure must always be reported, not just logged
         logger.exception("Job %s failed during reconstruction", settings.job_id)
         status.report_status(settings, "failed", error_message=str(exc))
         return 1
@@ -70,8 +70,8 @@ def _run_train(settings: Settings) -> int:
 
         # Imported here rather than at module scope because both modules reach torch, which the reconstruct image does
         # not carry (worker/Dockerfile). worker/pipeline/export.py reaches it through worker/pipeline/train.py rather
-        # than directly. Inside the try so that a failed import is still reported and still self-terminates: raised
-        # above it, the worker job would sit at training_running while the instance billed until user-data's shutdown.
+        # than directly. The import stays inside the try, after training_running is reported. An import above the try
+        # fails before that status is sent, and terminate_self() does not run.
         from pipeline import export, train
 
         photos_dir = fetch.fetch_photos(settings)
@@ -96,7 +96,7 @@ def _run_train(settings: Settings) -> int:
         )
         return 0
 
-    except Exception as exc:  # noqa: BLE001 — a job failure must always be reported, not just logged
+    except Exception as exc:  # noqa: BLE001 — a worker job failure must always be reported, not just logged
         logger.exception("Job %s failed during training", settings.job_id)
         status.report_status(settings, "failed", error_message=str(exc))
         return 1
@@ -106,9 +106,9 @@ def _run_train(settings: Settings) -> int:
 
 
 def _verify_referenced_photos_present(sparse: SparseModel, photos_dir: Path) -> None:
-    """The reconstruct and train phases run on separate instances, potentially hours apart at awaiting_training, and
-    nothing blocks photo uploads/deletion for a splat while its job sits paused there. A photo COLMAP referenced but
-    that has since been removed would otherwise surface deep inside train.train() as a raw FileNotFoundError.
+    """Fails the train stage when a photo named by the COLMAP model is missing from disk. A missing file would
+    otherwise surface deep inside train.train() as a raw FileNotFoundError. There is no per-photo delete. Deleting the
+    splat cancels the worker job first.
     """
     missing = [image.name for image in sparse.images.values() if not (photos_dir / image.name).exists()]
     if missing:

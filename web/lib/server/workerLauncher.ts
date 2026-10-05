@@ -145,8 +145,8 @@ function ecrRegistry(): string {
 }
 
 /**
- * A per-job token rather than one shared secret, so a compromised instance can only change the one job it was launched
- * for.
+ * A per-worker-job token rather than one shared secret. A compromised instance can update that worker job's status,
+ * and can read and write that splat's S3 objects.
  *
  * It is the base64url encoding of 32 random bytes, matching Python's secrets.token_urlsafe(32).
  */
@@ -292,7 +292,7 @@ export function stopLocalWorker(jobId: string): void {
 
 /**
  * Fails a local worker job whose image didn't build, through the same status callback the worker itself would have
- * called. Without it the job would sit in progress until web/lib/server/reconcileJob.ts gave up on it.
+ * called. web/lib/server/reconcileJob.ts returns immediately in local dev, so this callback is what marks the failure.
  */
 function reportLocalBuildFailure(params: WorkerLaunch): void {
   fetch(`${LOCAL_APP_ORIGIN}/api/v1/internal/jobs/${params.jobId}/status`, {

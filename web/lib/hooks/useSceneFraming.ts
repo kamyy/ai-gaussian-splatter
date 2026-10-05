@@ -17,9 +17,10 @@ import { type Box3, Vector3 } from "three";
 import type { Framing } from "@/components/viewer/cameraFraming";
 
 /**
- * Places the camera where it starts when no photo is selected, once per viewer: switching the view mode never re-frames.
- * That's what makes "same camera pose across a mode switch" hold with no manual save/restore: both assets share one
- * coordinate frame, since worker/pipeline/train.py seeds Gaussian means directly from COLMAP's points_xyz with no rescale.
+ * Places the camera where it starts when no photo is selected, once per viewer. Switching the view mode never
+ * re-frames. That is what makes "same camera pose across a mode switch" hold with no manual save/restore. Both assets
+ * share one coordinate frame. worker/pipeline/train.py seeds Gaussian means directly from COLMAP's points_xyz with no
+ * rescale.
  *
  * fromCameras is the pose framing the viewer already worked out. Otherwise the first asset to load frames it by its
  * bounding box, which the scene reports through onFirstLoad. The poses arrive separately from either asset, so when

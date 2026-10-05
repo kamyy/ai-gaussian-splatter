@@ -2,7 +2,9 @@
 #
 # Each alarm publishes to aws_sns_topic.alerts (infra/worker_sweeper.tf), the same topic the sweeper uses, so one
 # confirmed email subscription covers them all. The thresholds are first guesses, to be tuned against real traffic.
-# Missing data counts as healthy, because a quiet site reports no 5xx data points at all.
+# treat_missing_data is notBreaching on all four alarms. A quiet site reports no 5xx data points, so that alarm
+# stays healthy. The unhealthy-host, sweeper-error, and RDS-storage alarms use the same setting so a missing metric
+# does not page.
 
 resource "aws_cloudwatch_metric_alarm" "alb_target_5xx" {
   alarm_name          = "ai-gaussian-splatter-alb-target-5xx"

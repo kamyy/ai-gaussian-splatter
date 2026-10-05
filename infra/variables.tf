@@ -47,7 +47,7 @@ variable "alert_email" {
 # ACM certificate, the Route 53 record, the S3 CORS origins, and the worker's callback URL all derive from that
 # one local, so this is the only place the domain is named.
 variable "domain_zone_name" {
-  description = "Public DNS zone the app's hostname sits under, e.g. example.com. The zone itself is never created or destroyed by this config."
+  description = "Public DNS zone the app's hostname sits under, e.g. example.com. The zone itself is never created or destroyed by infra/."
   type        = string
 
   # Catches the empty string CI sends for an unset repository variable (AGENTS.md), and a value pasted with a
@@ -61,7 +61,7 @@ variable "domain_zone_name" {
 # The hosted zone that var.domain_zone_name names. It is referenced for the ALB's alias record and ACM's validation
 # record (see AGENTS.md). `scripts/prod/bootstrap.sh gh-vars` looks the id up from that name.
 variable "hosted_zone_id" {
-  description = "Route 53 hosted zone id for var.domain_zone_name. Only records are added here; the zone itself is never created or destroyed by this config."
+  description = "Route 53 hosted zone id for var.domain_zone_name. Only records are added here; the zone itself is never created or destroyed by infra/."
   type        = string
 
   # Catches the empty string CI sends for an unset repository variable (AGENTS.md), or the `/hostedzone/`-prefixed form
@@ -115,7 +115,9 @@ variable "migrate_image_tag" {
   }
 }
 
-# No deploy builds a worker image, so this changes only when scripts/prod/worker-push-image.sh pushes one (RUNBOOK.md).
+# No deploy builds a worker image. A workstation push is what changes the tag. The script and the steps are:
+# - RUNBOOK.md
+# - scripts/prod/worker-push-image.sh
 # That script tags the images with worker/'s git tree id on main, truncated to 12 characters, and sets the
 # WORKER_IMAGE_TAG repository variable .github/workflows/deploy.yml passes in here.
 variable "worker_image_tag" {

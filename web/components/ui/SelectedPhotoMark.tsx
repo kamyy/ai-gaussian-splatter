@@ -1,10 +1,8 @@
 /**
  * The orange camera pill that marks the selected photo, and the pager page holding it.
  *
- * The photo grid (web/components/splats/PhotoGrid.tsx) draws it on the selected photo, and the pager
- * (web/components/ui/Pager.tsx) draws it on the page button holding that photo. Both show the camera alone. On a photo
- * the pill is orange with a page-colored border, which sets it apart from the photo. On a page button it takes that
- * button's colors, with the color of the page number as its border.
+ * The pill shows the camera alone. On a photo the pill is orange with a page-colored border, which sets it apart from
+ * the photo. On a page button it takes that button's colors, with the color of the page number as its border.
  */
 
 import { SelectedPhotoIcon } from "@/components/ui/icons";

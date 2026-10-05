@@ -2,7 +2,7 @@
  * Page-number navigation for a paged list.
  *
  * Shows previous and next buttons around numbered pages, collapsing long runs into an ellipsis so the pager stays one
- * width. The library, the photo grid and the new-splat form's previews all page with it.
+ * width.
  */
 
 "use client";
