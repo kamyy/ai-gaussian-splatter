@@ -11,8 +11,9 @@
  * credentials requests use snake_case field names. SplatStatus.draft is the string "draft", and the same is true of
  * every member here, so a comparison can name the status.
  *
- * Declaration order of each enum is its Postgres enum order. Adding or moving a member makes drizzle-kit drop and
- * recreate the type around the column that uses it. Follow .claude/skills/db-migration/SKILL.md for that migration.
+ * Declaration order of each enum is its Postgres enum order. Adding a member, at any position, generates a plain
+ * ALTER TYPE … ADD VALUE. Moving or removing one makes drizzle-kit drop and recreate the type around the column that
+ * uses it. Follow .claude/skills/db-migration/SKILL.md for that migration.
  */
 
 /** Where a splat is in capture and processing. */

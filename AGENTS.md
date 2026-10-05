@@ -96,7 +96,7 @@ Monorepo, three independent packages:
 - `worker/` — COLMAP + gsplat pipeline, runs on an EC2 GPU spot instance per worker-job stage.
 - `infra/` — Terraform. Network, registry, data, worker IAM, worker sweeper, web, settings, alarms, and budgets in separate `.tf` files, one state.
 
-Server-only code lives in `web/lib/server/` — never import it from a `"use client"` file. Modules directly under `web/lib/` are client-safe and shared with the server. `web/lib/statuses.ts` holds the status-value tuples that `web/lib/server/db/schema.ts` hands to Drizzle `pgEnum`s, so import runs statuses → schema, never the reverse.
+Server-only code lives in `web/lib/server/` — never import it from a `"use client"` file. Modules directly under `web/lib/` are client-safe and shared with the server. `web/lib/statuses.ts` holds the status enums that `web/lib/server/db/schema.ts` hands to Drizzle `pgEnum`s, so import runs statuses → schema, never the reverse.
 
 ---
 
