@@ -72,6 +72,7 @@ interface UserDataParams {
   ecrRegistry: string;
   awsRegion: string;
   logGroup: string;
+  instanceType: string;
   maxLifetimeMinutes: number;
   trainingIterations?: number;
 }
@@ -95,6 +96,18 @@ shutdown -h +${p.maxLifetimeMinutes} || poweroff -f
 # start-up into boot and image pull (web/lib/stageTimings.ts).
 BOOTED_AT="$(date +%s%3N)"
 
+# Lines in the shape worker/pipeline/timing.py logs, for scripts/prod/logs-timings.sh. They are collected here and sent
+# to the stage's log stream just before docker run. The container terminates this instance when it finishes, so nothing
+# after docker run is sure to run. Echoed as well, which puts them in the instance's console log.
+TIMINGS=/var/log/worker-timings.log
+record() {
+    echo "$1" | tee -a "$TIMINGS"
+}
+
+# /proc/uptime counts from the kernel's start, which splits the boot into EC2's own start-up and the OS's.
+record "timing phase=os_boot ms=$(awk '{ printf "%d", $1 * 1000 }' /proc/uptime)"
+record "context instance_type=${p.instanceType} image=${p.workerImageUri}"
+
 # Plaintext, and EC2 user-data is readable by anyone allowed to describe the instance's attributes. The token is
 # per-job. It authorizes status updates on that one job, and S3 credentials for that one splat's files, which is what
 # bounds this.
@@ -106,8 +119,10 @@ UPLOADS_BUCKET="${p.uploadsBucket}"
 SPLATS_BUCKET="${p.splatsBucket}"
 STAGE="${p.stage}"
 
+LOGIN_STARTED="$(date +%s%3N)"
 $(aws ecr get-login --no-include-email --region ${p.awsRegion}) || \\
     aws ecr get-login-password --region ${p.awsRegion} | docker login --username AWS --password-stdin ${p.ecrRegistry}
+record "timing phase=ecr_login ms=$(( $(date +%s%3N) - LOGIN_STARTED ))"
 
 # Docker refuses to start a container whose awslogs stream it can't create, which would fail the stage with no output
 # and leave this instance idle until the lifetime ceiling. Creating the stream first turns that into a logged error
@@ -116,6 +131,32 @@ $(aws ecr get-login --no-include-email --region ${p.awsRegion}) || \\
 LOG_OPTS=""
 if aws logs create-log-stream --region ${p.awsRegion} --log-group-name ${p.logGroup} --log-stream-name "$JOB_ID-$STAGE"; then
     LOG_OPTS="--log-driver=awslogs --log-opt mode=non-blocking --log-opt awslogs-region=${p.awsRegion} --log-opt awslogs-group=${p.logGroup} --log-opt awslogs-stream=$JOB_ID-$STAGE"
+fi
+
+# Pulled on its own, so its time is separate from the container's start. vmstat samples the pull every 2 seconds. On a
+# 4-vCPU instance, us near 25 means one core is busy unpacking layers. High wa, or bo (KB/s written) flat near the
+# volume's limit, means the disk. Both low means the download itself.
+vmstat -n 2 > /var/log/worker-pull-vmstat.log &
+VMSTAT_PID=$!
+PULL_STARTED="$(date +%s%3N)"
+docker pull ${p.workerImageUri}
+PULL_MS=$(( $(date +%s%3N) - PULL_STARTED ))
+kill "$VMSTAT_PID" || true
+record "timing phase=docker_pull ms=$PULL_MS bytes=$(docker image inspect --format '{{.Size}}' ${p.workerImageUri})"
+# vmstat's first row averages everything since boot, so it is skipped. us, sy, wa are columns 13, 14, 16, and bo is 10.
+awk 'NR > 3 { print "sample phase=docker_pull us=" $13 " sy=" $14 " wa=" $16 " bo=" $10 }' \\
+    /var/log/worker-pull-vmstat.log >> "$TIMINGS"
+
+# Every line gets the same timestamp, because the ms field inside each line is the measurement. The lines hold no quotes
+# or backslashes, so awk writes the JSON without escaping them. A failed send costs only these lines, so it doesn't stop
+# the stage.
+if [ -n "$LOG_OPTS" ]; then
+    EVENTS="$(awk -v ts="$(date +%s%3N)" '
+        BEGIN { printf "[" }
+        { printf "%s{\\"timestamp\\":%s,\\"message\\":\\"%s\\"}", (NR > 1 ? "," : ""), ts, $0 }
+        END { printf "]" }' "$TIMINGS")"
+    aws logs put-log-events --region ${p.awsRegion} --log-group-name ${p.logGroup} \\
+        --log-stream-name "$JOB_ID-$STAGE" --log-events "$EVENTS" || true
 fi
 
 # LOG_OPTS is deliberately unquoted, so its words split into separate docker arguments. None of them holds a space.
@@ -129,6 +170,7 @@ docker run --rm --gpus all \\
     -e SPLATS_BUCKET="$SPLATS_BUCKET" \\
     -e STAGE="$STAGE" \\
     -e BOOTED_AT="$BOOTED_AT" \\
+    -e DOCKER_RUN_AT="$(date +%s%3N)" \\
     -e S3_CREDENTIALS_FROM_APP=true \\
 ${iterationsArg}    ${p.workerImageUri}
 `;
@@ -171,6 +213,9 @@ export async function launchJob(params: WorkerLaunch): Promise<string> {
   // schema still types them optional, because local dev leaves them unset.
   const env = getEnv() as LaunchEnv;
 
+  const instanceType =
+    params.stage === "reconstruct" ? params.settings.reconstructInstanceType : params.settings.trainInstanceType;
+
   const userData = renderUserData({
     callbackToken: params.callbackToken,
     jobId: params.jobId,
@@ -183,6 +228,7 @@ export async function launchJob(params: WorkerLaunch): Promise<string> {
     ecrRegistry: ecrRegistry(),
     awsRegion: env.AWS_REGION,
     logGroup: env.WORKER_LOG_GROUP,
+    instanceType,
     maxLifetimeMinutes: params.settings.workerMaxLifetimeMinutes,
     trainingIterations: params.stage === "train" ? params.settings.trainingIterations : undefined,
   });
@@ -190,9 +236,7 @@ export async function launchJob(params: WorkerLaunch): Promise<string> {
   const response = await ec2Client().send(
     new RunInstancesCommand({
       ImageId: env.WORKER_AMI_ID,
-      InstanceType: (params.stage === "reconstruct"
-        ? params.settings.reconstructInstanceType
-        : params.settings.trainInstanceType) as never,
+      InstanceType: instanceType as never,
       MinCount: 1,
       MaxCount: 1,
       SubnetId: env.WORKER_SUBNET_ID,
