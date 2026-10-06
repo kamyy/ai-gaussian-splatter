@@ -233,6 +233,7 @@ If the `deploy` job's migration step fails for an infra reason rather than a bad
    - **Still running past that ceiling means cloud-init, which runs user-data, never started.** That is a boot failure (a bad AMI, or an instance metadata or networking problem), the one case the scheduled shutdown can't catch.
    - The sweeper (`infra/worker_sweeper.tf`) terminates such an instance within 10 minutes of it passing the ceiling plus 15 minutes, and emails `ALERT_EMAIL` its ID.
 4. `scripts/prod/logs-tail.sh worker` for the actual COLMAP/gsplat stack trace. Each stage writes its own log stream, named `<job_id>-<stage>` ([Reading logs and alarms](#33-reading-logs-and-alarms)). A stage whose container never started has no stream, because the instance failed before `docker run`. Use the system log from step 2 instead.
+5. `scripts/prod/logs-timings.sh 1d <job_id>` lists how long each phase of the job ran, with `ok=false` on the phase that failed. See its `--help`.
 
 ### 3.3 Reading logs and alarms
 

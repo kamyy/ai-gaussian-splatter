@@ -282,6 +282,8 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 - A script that uses the GitHub CLI sources `scripts/lib/github.sh` and calls `gh_require_login` before its first `gh` call. Otherwise a logged-out `gh` reads the same as an unset GitHub repository variable.
 - A script that acts on the deployed account also calls `gh_require_aws_deploy_account`, which checks the signed-in account against the `AWS_ACCOUNT_ID` GitHub repository variable:
   - `scripts/prod/bootstrap.sh` (its `deploy` step)
+  - `scripts/prod/logs-tail.sh`
+  - `scripts/prod/logs-timings.sh`
   - `scripts/prod/ssm.sh`
   - `scripts/prod/teardown.sh`
   - `scripts/prod/terraform-plan.sh`

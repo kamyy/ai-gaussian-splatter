@@ -93,6 +93,10 @@ A worker job's wall clock splits into three parts:
 
 A baked AMI would attack the smaller half — fixed overhead, not training. Training cost is set by the resolution the photos are rasterized at (`MAX_TRAINING_EDGE` in `worker/pipeline/train.py`), not by boot latency. Shrinking the image and precompiling the kernels took most of what an AMI was worth here, so M10 measures the fixed overhead before anyone builds an AMI. Each stage on the splat's page shows its instance's boot, its image pull and its work separately, so the first stage run on AWS gives the split. No stage has run on AWS yet.
 
+That split shows how big each part is, not why. Each stage also logs every phase's duration with CPU, GPU and disk samples beside it, and `scripts/prod/logs-timings.sh` reads them back. The samples tell a pull limited by unpacking from one limited by the disk, and a training loop limited by the CPU from one limited by the GPU, which is what picks the fix. Two places write those lines:
+- `web/lib/server/workerLauncher.ts`, whose user-data times the boot, the ECR login and the image pull
+- `worker/pipeline/timing.py`, which times each pipeline phase
+
 - Not Lambda or Fargate: neither offers GPU.
 - Not hand-rolled ECS orchestration: bin-packing shared instances doesn't fit a one-stage-one-instance model.
 
