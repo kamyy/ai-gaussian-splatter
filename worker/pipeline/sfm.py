@@ -14,6 +14,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from .timing import timed
+
 logger = logging.getLogger(__name__)
 
 
@@ -57,44 +59,47 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
     for p in image_paths:
         (images_dir / p.name).symlink_to(p)
 
-    _run(
-        [
-            "colmap",
-            "feature_extractor",
-            "--database_path",
-            str(database_path),
-            "--image_path",
-            str(images_dir),
-            "--ImageReader.single_camera",
-            "1",
-            "--FeatureExtraction.use_gpu",
-            "1",
-        ]
-    )
+    with timed("colmap_feature_extractor"):
+        _run(
+            [
+                "colmap",
+                "feature_extractor",
+                "--database_path",
+                str(database_path),
+                "--image_path",
+                str(images_dir),
+                "--ImageReader.single_camera",
+                "1",
+                "--FeatureExtraction.use_gpu",
+                "1",
+            ]
+        )
 
-    _run(
-        [
-            "colmap",
-            "exhaustive_matcher",
-            "--database_path",
-            str(database_path),
-            "--FeatureMatching.use_gpu",
-            "1",
-        ]
-    )
+    with timed("colmap_exhaustive_matcher"):
+        _run(
+            [
+                "colmap",
+                "exhaustive_matcher",
+                "--database_path",
+                str(database_path),
+                "--FeatureMatching.use_gpu",
+                "1",
+            ]
+        )
 
-    _run(
-        [
-            "colmap",
-            "mapper",
-            "--database_path",
-            str(database_path),
-            "--image_path",
-            str(images_dir),
-            "--output_path",
-            str(sparse_dir),
-        ]
-    )
+    with timed("colmap_mapper"):
+        _run(
+            [
+                "colmap",
+                "mapper",
+                "--database_path",
+                str(database_path),
+                "--image_path",
+                str(images_dir),
+                "--output_path",
+                str(sparse_dir),
+            ]
+        )
 
     # `mapper` writes one sub-model per connected component (0, 1, 2...) when the photo set doesn't fully connect. Only
     # model 0 is used, and the other components' images are therefore never counted as registered below. So a capture

@@ -1,4 +1,6 @@
+import logging
 import sys
+import time
 from pathlib import Path
 from types import ModuleType
 
@@ -143,3 +145,27 @@ def test_train_reports_its_start_before_loading_torch(monkeypatch, settings, cal
     run_job._run_train(settings.model_copy(update={"booted_at": 1_767_225_660_000}))
 
     assert statuses[0] == ("training_running", {"booted_at": 1_767_225_660_000})
+
+
+def test_main_logs_how_long_the_container_took_to_start(mocker, settings, caplog):
+    caplog.set_level(logging.INFO, logger="pipeline.timing")
+    docker_run_at = round(time.time() * 1000) - 1500
+    mocker.patch.object(
+        run_job, "get_settings", return_value=settings.model_copy(update={"docker_run_at": docker_run_at})
+    )
+    mocker.patch.object(run_job, "_run_reconstruct", return_value=0)
+
+    assert run_job.main() == 0
+
+    [line] = [r.getMessage() for r in caplog.records if "phase=container_start" in r.getMessage()]
+    assert 1500 <= int(line.rsplit("ms=", 1)[1]) < 10_000
+
+
+def test_main_logs_no_container_start_on_a_local_run(mocker, settings, caplog):
+    caplog.set_level(logging.INFO, logger="pipeline.timing")
+    mocker.patch.object(run_job, "get_settings", return_value=settings)
+    mocker.patch.object(run_job, "_run_reconstruct", return_value=0)
+
+    run_job.main()
+
+    assert not [r for r in caplog.records if "phase=container_start" in r.getMessage()]

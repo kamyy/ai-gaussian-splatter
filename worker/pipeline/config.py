@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     # stage's first status so the web app can split the stage's start-up into boot and image pull. Unset on a local run.
     booted_at: int | None = None
 
+    # Epoch milliseconds at which user-data ran `docker run`, so the worker can log how long the container took to
+    # start (worker/pipeline/timing.py). Unset on a local run.
+    docker_run_at: int | None = None
+
 
 def get_settings() -> Settings:
     return Settings()  # type: ignore[call-arg]  # populated from env vars

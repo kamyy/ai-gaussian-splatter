@@ -11,12 +11,14 @@ success and on failure alike, so a worker job never runs up spend past its own e
 
 import logging
 import sys
+import time
 from pathlib import Path
 
 from pipeline import fetch, sfm, sparse_export, status
 from pipeline.colmap_model import SparseModel, read_sparse_model
 from pipeline.config import Settings, get_settings
 from pipeline.instance import terminate_self
+from pipeline.timing import ResourceSampler, log_line, timed
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -25,7 +27,8 @@ logger = logging.getLogger(__name__)
 def _run_reconstruct(settings: Settings) -> int:
     try:
         status.report_status(settings, "reconstruction_running", booted_at=settings.booted_at)
-        photos_dir = fetch.fetch_photos(settings)
+        with timed("fetch_photos"):
+            photos_dir = fetch.fetch_photos(settings)
 
         sfm_result = sfm.run_colmap(photos_dir, Path(settings.local_workdir) / "colmap")
         logger.info(
@@ -44,9 +47,10 @@ def _run_reconstruct(settings: Settings) -> int:
 
         # Persisted so a later, separate EC2 instance (the train stage) can resume without re-running COLMAP. The
         # browser can show the point cloud and camera positions while the visitor decides whether to proceed.
-        sparse_export.upload_sparse_model(sfm_result.sparse_dir, settings)
-        point_cloud_key = sparse_export.export_and_upload_point_cloud(sfm_result.sparse_dir, settings)
-        sparse_export.export_and_upload_cameras(sfm_result.sparse_dir, settings)
+        with timed("upload_outputs"):
+            sparse_export.upload_sparse_model(sfm_result.sparse_dir, settings)
+            point_cloud_key = sparse_export.export_and_upload_point_cloud(sfm_result.sparse_dir, settings)
+            sparse_export.export_and_upload_cameras(sfm_result.sparse_dir, settings)
 
         status.report_status(settings, "awaiting_training", point_cloud_s3_key=point_cloud_key)
         return 0
@@ -72,12 +76,15 @@ def _run_train(settings: Settings) -> int:
         # not carry (worker/Dockerfile). worker/pipeline/export.py reaches it through worker/pipeline/train.py rather
         # than directly. The import stays inside the try, after training_running is reported. An import above the try
         # fails before that status is sent, and terminate_self() does not run.
-        from pipeline import export, train
+        with timed("import_torch"):
+            from pipeline import export, train
 
-        photos_dir = fetch.fetch_photos(settings)
+        with timed("fetch_photos"):
+            photos_dir = fetch.fetch_photos(settings)
 
         sparse_dir = Path(settings.local_workdir) / "colmap_sparse"
-        sparse_export.download_sparse_model(settings, sparse_dir)
+        with timed("download_sparse_model"):
+            sparse_export.download_sparse_model(settings, sparse_dir)
         # Parsed once and handed to train.train() below, rather than letting it re-parse the same files itself.
         sparse = read_sparse_model(sparse_dir)
         _verify_referenced_photos_present(sparse, photos_dir)
@@ -85,7 +92,10 @@ def _run_train(settings: Settings) -> int:
         scene = train.train(sparse_dir, photos_dir, settings, sparse=sparse)
 
         status.report_status(settings, "uploading_result")
-        keys = export.upload_result(export.export_scene(scene, settings), settings)
+        with timed("export_scene"):
+            files = export.export_scene(scene, settings)
+        with timed("upload_result"):
+            keys = export.upload_result(files, settings)
 
         status.report_status(
             settings,
@@ -117,11 +127,17 @@ def _verify_referenced_photos_present(sparse: SparseModel, photos_dir: Path) -> 
 
 def main() -> int:
     settings = get_settings()
+
+    # From user-data's `docker run` to here: the container's start plus this module's own imports.
+    if settings.docker_run_at is not None:
+        log_line("timing", phase="container_start", ms=max(0, round(time.time() * 1000) - settings.docker_run_at))
+
     Path(settings.local_workdir).mkdir(parents=True, exist_ok=True)
 
-    if settings.stage == "reconstruct":
-        return _run_reconstruct(settings)
-    return _run_train(settings)
+    with ResourceSampler():
+        if settings.stage == "reconstruct":
+            return _run_reconstruct(settings)
+        return _run_train(settings)
 
 
 if __name__ == "__main__":

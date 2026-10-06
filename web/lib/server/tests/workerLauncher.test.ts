@@ -204,7 +204,7 @@ describe("launchJob", () => {
     // driver to fail on.
     expect(userData).toContain('LOG_OPTS=""');
     expect(userData.indexOf("LOG_OPTS=", createStream)).toBeGreaterThan(createStream);
-    expect(userData.indexOf("docker run")).toBeGreaterThan(createStream);
+    expect(userData.indexOf("docker run --rm")).toBeGreaterThan(createStream);
   });
 
   it("schedules a shutdown as the first thing user-data does, ahead of docker login/run", async () => {
@@ -232,6 +232,34 @@ describe("launchJob", () => {
     expect(userData).toContain('BOOTED_AT="$(date +%s%3N)"');
     expect(userData.indexOf("BOOTED_AT=")).toBeLessThan(userData.indexOf("docker login --username"));
     expect(userData).toContain('-e BOOTED_AT="$BOOTED_AT" \\\n');
+  });
+
+  it("pulls the image as its own timed step and sends the host's timings before docker run", async () => {
+    vi.stubEnv("WORKER_RECONSTRUCT_IMAGE_URI", "123456789012.dkr.ecr.us-east-1.amazonaws.com/worker:abc-reconstruct");
+    ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
+    await launchJob(params);
+
+    const userData = Buffer.from(runInstancesInput().UserData ?? "", "base64").toString();
+    const pull = userData.indexOf("docker pull 123456789012.dkr.ecr.us-east-1.amazonaws.com/worker:abc-reconstruct");
+    const send = userData.indexOf("aws logs put-log-events");
+    const run = userData.indexOf("docker run --rm");
+    expect(pull).toBeGreaterThan(userData.indexOf("docker login --username"));
+    expect(send).toBeGreaterThan(pull);
+
+    // The container terminates the instance when it finishes, so anything after docker run may never run.
+    expect(run).toBeGreaterThan(send);
+
+    // Sent only into a stream that exists, which is when LOG_OPTS was filled.
+    expect(userData.lastIndexOf('if [ -n "$LOG_OPTS" ]; then', send)).toBeGreaterThan(pull);
+    expect(userData).toContain("context instance_type=g6.xlarge");
+  });
+
+  it("passes the time of docker run to the worker", async () => {
+    ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
+    await launchJob(params);
+
+    const userData = Buffer.from(runInstancesInput().UserData ?? "", "base64").toString();
+    expect(userData).toContain('-e DOCKER_RUN_AT="$(date +%s%3N)" \\\n');
   });
 
   it("throws if EC2 returns no instance", async () => {

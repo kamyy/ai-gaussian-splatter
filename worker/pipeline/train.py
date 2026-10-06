@@ -11,7 +11,6 @@ than by oversight:
 
 import logging
 import shutil
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,6 +21,7 @@ from PIL import Image as PILImage
 from .colmap_model import SparseModel, qvec_to_rotmat, read_sparse_model
 from .config import Settings
 from .status import report_status
+from .timing import timed
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +121,10 @@ def _train_loop(sparse: SparseModel, photos_dir: Path, settings: Settings):
     """Everything train() wraps in a single OutOfMemoryError handler, factored out so that handler wraps one call
     instead of re-indenting this whole body.
     """
-    cameras, viewmats, images_tensor = _load_views(sparse, photos_dir)
+    with timed("load_views") as fields:
+        cameras, viewmats, images_tensor = _load_views(sparse, photos_dir)
+        fields.update(views=len(images_tensor), width=cameras[0][1], height=cameras[0][2])
+
     train_indices, eval_indices = _split_views(len(images_tensor), settings.eval_holdout)
     if settings.eval_holdout:
         np.random.seed(0)
@@ -145,42 +148,48 @@ def _train_loop(sparse: SparseModel, photos_dir: Path, settings: Settings):
     strategy_state = strategy.initialize_state(scene_scale=scene_scale)
     max_points = _max_gaussians_for_device()
 
-    started = time.monotonic()
-    for step in range(iterations):
-        idx = train_indices[np.random.randint(0, len(train_indices))]
-        K, width, height = cameras[idx]
-        viewmat = viewmats[idx]
-        gt_image = images_tensor[idx]
+    with timed("train_loop", iterations=iterations) as fields:
+        for step in range(iterations):
+            idx = train_indices[np.random.randint(0, len(train_indices))]
+            K, width, height = cameras[idx]
+            viewmat = viewmats[idx]
+            gt_image = images_tensor[idx]
 
-        sh_degree = _sh_degree_at(step, iterations)
-        rendered, _alpha, meta = _render(GaussianModel(**params), viewmat, K, width, height, sh_degree)
-        strategy.step_pre_backward(params, optimizers, strategy_state, step, meta)
-        loss = torch.nn.functional.l1_loss(rendered, gt_image)
-        loss.backward()
-        for optimizer in optimizers.values():
-            optimizer.step()
-            optimizer.zero_grad(set_to_none=True)
-        means_lr_decay.step()
+            sh_degree = _sh_degree_at(step, iterations)
+            rendered, _alpha, meta = _render(GaussianModel(**params), viewmat, K, width, height, sh_degree)
+            strategy.step_pre_backward(params, optimizers, strategy_state, step, meta)
+            loss = torch.nn.functional.l1_loss(rendered, gt_image)
+            loss.backward()
+            for optimizer in optimizers.values():
+                optimizer.step()
+                optimizer.zero_grad(set_to_none=True)
+            means_lr_decay.step()
 
-        if len(params["means"]) >= max_points:
-            # No gradient exceeds infinity, so this stops growth while pruning carries on.
-            strategy.grow_grad2d = float("inf")
-        strategy.step_post_backward(params, optimizers, strategy_state, step, meta, packed=True)
-        if _is_opacity_reset_step(step, iterations, strategy.refine_stop_iter):
-            reset_opa(params, optimizers, strategy_state, value=strategy.prune_opa * 2.0)
-        if len(params["means"]) == 0:
-            raise RuntimeError("Every Gaussian's opacity decayed below the prune threshold; the model has collapsed")
+            if len(params["means"]) >= max_points:
+                # No gradient exceeds infinity, so this stops growth while pruning carries on.
+                strategy.grow_grad2d = float("inf")
+            strategy.step_post_backward(params, optimizers, strategy_state, step, meta, packed=True)
+            if _is_opacity_reset_step(step, iterations, strategy.refine_stop_iter):
+                reset_opa(params, optimizers, strategy_state, value=strategy.prune_opa * 2.0)
+            if len(params["means"]) == 0:
+                raise RuntimeError(
+                    "Every Gaussian's opacity decayed below the prune threshold; the model has collapsed"
+                )
 
-        if step % log_every == 0:
-            logger.info("iter %d/%d loss=%.4f gaussians=%d", step, iterations, loss.item(), len(params["means"]))
-            # On the log schedule, 20 callbacks a run, for the progress bar on the splat's page. report_status
-            # swallows httpx.HTTPError only. Any other exception from that call still propagates.
-            report_status(settings, "training_running", training_progress=step * 100 // iterations)
+            if step % log_every == 0:
+                logger.info("iter %d/%d loss=%.4f gaussians=%d", step, iterations, loss.item(), len(params["means"]))
+                # On the log schedule, 20 callbacks a run, for the progress bar on the splat's page. report_status
+                # swallows httpx.HTTPError only. Any other exception from that call still propagates.
+                report_status(settings, "training_running", training_progress=step * 100 // iterations)
 
-    logger.info("Trained %d iterations in %.0fs", iterations, time.monotonic() - started)
+        fields["gaussians"] = len(params["means"])
+        if DEVICE == "cuda":
+            fields["peak_gpu_mb"] = torch.cuda.max_memory_allocated() // 2**20
+
     model = GaussianModel(**params)
     if eval_indices:
-        _evaluate(model, cameras, viewmats, images_tensor, eval_indices, Path(settings.local_workdir) / "eval")
+        with timed("evaluate"):
+            _evaluate(model, cameras, viewmats, images_tensor, eval_indices, Path(settings.local_workdir) / "eval")
     return model, cameras, viewmats, images_tensor
 
 
