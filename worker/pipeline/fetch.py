@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .config import Settings
 from .storage import s3_client
+from .timing import log_line
 
 
 def fetch_photos(settings: Settings) -> Path:
@@ -21,6 +22,7 @@ def fetch_photos(settings: Settings) -> Path:
 
     paginator = s3.get_paginator("list_objects_v2")
     downloaded = 0
+    downloaded_bytes = 0
     for page in paginator.paginate(Bucket=settings.uploads_bucket, Prefix=prefix):
         for obj in page.get("Contents", []):
             key = obj["Key"]
@@ -29,8 +31,11 @@ def fetch_photos(settings: Settings) -> Path:
                 continue
             s3.download_file(settings.uploads_bucket, key, str(dest_dir / filename))
             downloaded += 1
+            downloaded_bytes += obj["Size"]
 
     if downloaded == 0:
         raise RuntimeError(f"No photos found at s3://{settings.uploads_bucket}/{prefix} for splat {settings.splat_id}")
 
+    # Every phase after this one scales with the photo set, so its size goes beside the stage's timings.
+    log_line("context", photos=downloaded, bytes=downloaded_bytes)
     return dest_dir
