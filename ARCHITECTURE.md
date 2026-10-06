@@ -38,6 +38,29 @@ Why the system is shaped this way: decisions, alternatives rejected, costs accep
 
 ## 2. Pipeline
 
+Where each stage reads its input and writes its output. Every key sits under `splats/<splatId>/`, in the uploads bucket for photos and in the splats bucket for everything else.
+
+```mermaid
+flowchart TD
+  photos[("photos/<br/>uploads bucket")]
+  subgraph reconstruct["reconstruct stage"]
+    colmap["COLMAP<br/>worker/pipeline/sfm.py"]
+  end
+  sparse[("colmap_sparse/<br/>point_cloud.ply<br/>cameras.json")]
+  decide{"owner checks the<br/>point cloud"}
+  subgraph train["train stage"]
+    gsplat["gsplat<br/>worker/pipeline/train.py"]
+    export["export<br/>worker/pipeline/export.py"]
+  end
+  results[(".ply, .spz<br/>thumbnail")]
+  crop["crop, optional<br/>web/lib/server/cropSplat.ts"]
+  cropped[("cropped copies<br/>of .ply and .spz")]
+  photos --> colmap --> sparse --> decide
+  decide -->|"build"| gsplat
+  photos --> gsplat
+  gsplat --> export --> results --> crop --> cropped
+```
+
 1. User uploads discrete multi-angle photos of one object — not a panorama, individual stills taken while walking around it.
    - Quality tracks angular coverage and overlap between neighboring views, not raw photo count.
    - Gaps in coverage surface as a low COLMAP registered ratio (step 2, below).
@@ -49,7 +72,7 @@ Why the system is shaped this way: decisions, alternatives rejected, costs accep
    - Single-object, plain-background scenes converge faster, so fewer iterations suffice.
    - Apache 2.0 (INRIA's original is non-commercial).
    - Colors use degree-3 spherical harmonics (SH), so a Gaussian's color changes with the viewing angle and highlights on glossy surfaces move as the camera orbits. The cost is 45 more values per Gaussian. The `.spz` export below still comes out smaller than a degree-0 `.ply`.
-4. **Export** (`worker/pipeline/export.py`): the splat twice, plus a thumbnail from gsplat's own rasterizer, for Open Graph. Using gsplat's rasterizer avoids pulling in an extra dependency just for the thumbnail.
+4. **Export** (`worker/pipeline/export.py`): the splat in two formats, `.ply` and `.spz`, because a download and the viewer need different things from the file. It also writes a thumbnail from gsplat's own rasterizer, for Open Graph. Using gsplat's rasterizer avoids pulling in an extra dependency just for the thumbnail.
    - `.ply` is the Download button's file. It's lossless and every splat tool reads it, which matters to someone who downloads a splat to edit or convert it.
    - `.spz` (Niantic's compressed format, written by `worker/pipeline/spz.py`) is what the viewer loads. It's about a twelfth of the `.ply`'s size, and its quantization isn't visible on screen.
 5. **Crop** (optional, `web/lib/server/cropSplat.ts`): the owner fits a box around the object in the finished splat's point cloud, and the web API writes copies of both files holding only the Gaussians whose centers fall inside it.
@@ -66,6 +89,26 @@ The "AI" here is per-object gradient descent through a differentiable rasterizer
 
 ## 3. Compute
 
+A worker job's `jobs` row moves through `JobStatus` (`web/lib/statuses.ts`). `launching` is shared by both stages. A status in which a worker may be running can move to `failed`, through a worker callback, a failed reconstruct launch or `web/lib/server/reconcileJob.ts`. A refused or failed train launch moves the job back to `awaiting_training` instead, so the owner can try again. Every status that hasn't ended can move to `cancelled`, when the owner cancels or `POST /process` sweeps a stale job.
+
+```mermaid
+stateDiagram-v2
+  [*] --> queued: POST /process
+  state "a worker may be running" as running {
+    queued --> launching: reconstruct<br/>instance launched
+    launching --> reconstruction_running: callback
+    launching --> training_running: callback
+    training_running --> uploading_result: callback
+  }
+  reconstruction_running --> awaiting_training: callback
+  awaiting_training --> launching: POST /train
+  launching --> awaiting_training: train launch<br/>refused or failed
+  uploading_result --> complete: callback
+  running --> failed
+  running --> cancelled
+  awaiting_training --> cancelled
+```
+
 - Each stage of a worker job — reconstruct, then train — gets its own EC2 GPU **spot** instance (`web/lib/server/workerLauncher.ts`). Reconstruct runs on a `g4dn.xlarge` and train on a `g5.xlarge` by default. Both are runtime settings ([Runtime settings](#95-runtime-settings)). Each instance runs the worker container, then self-terminates on success or failure.
 - Reconstruct is mostly COLMAP's CPU-bound `mapper`, so it gets little from the A10G GPU. A `g4dn.xlarge` has the same 4 vCPUs at about half the hourly price, and its T4 GPU still runs COLMAP's feature extraction and matching. Neither stage's instance type has been timed against the other (M10).
 - Fallback if a worker dies without reporting: `web/lib/server/workerLauncher.ts` schedules `shutdown -h` at the instance's lifetime ceiling as the first thing user-data does. The ceiling is the `worker-max-lifetime-minutes` runtime setting at launch, and the instance carries it as a `MaxLifetimeMinutes` tag.
@@ -81,6 +124,29 @@ The "AI" here is per-object gradient descent through a differentiable rasterizer
   - A running instance inside the ceiling is a slow stage, so the job is left alone.
 - No SQS, Batch, or always-on fleet. The global daily cap on worker jobs bounds their volume instead.
 - A queue is only worth the added complexity at higher, decoupled-fleet scale.
+
+What ends a worker instance in each failure case, and what then moves its `jobs` row:
+
+```mermaid
+flowchart TD
+  launch["RunInstances with a<br/>MaxLifetimeMinutes tag"]
+  cloudinit{"cloud-init runs<br/>user-data?"}
+  scheduled["shutdown -h scheduled<br/>at the ceiling"]
+  ends{"the stage's container<br/>reaches its end?"}
+  callback["final status callback<br/>moves the row"]
+  self["terminate_self()<br/>worker/run_job.py"]
+  ceiling["shutdown -h fires<br/>at the ceiling"]
+  sweeper["sweeper terminates it<br/>at the ceiling + 15 minutes<br/>and emails alert_email"]
+  reconcile["reconcileJob fails the row<br/>on a poll after 15 minutes<br/>without a callback"]
+  launch --> cloudinit
+  cloudinit -->|yes| scheduled --> ends
+  cloudinit -->|no| sweeper
+  ends -->|"yes, success or failure"| callback --> self
+  callback -.->|"callback lost"| reconcile
+  ends -->|"no: a hang, a crash<br/>or a failed docker run"| ceiling
+  ceiling --> reconcile
+  sweeper --> reconcile
+```
 
 A worker job's wall clock splits into three parts:
 
@@ -162,6 +228,28 @@ Two fixes were considered:
 - **Scheduled forced redeployment**: an EventBridge Scheduler rule calling `ecs:UpdateService(forceNewDeployment)` on a cadence under 7 days, via a direct "universal target" API call with no Lambda needed. Fully infra-only and cheap. It adds a routine rolling restart as a permanent fixture of the architecture, and it only patches the symptom, since the app still never verifies it's holding a current password between restarts.
 - **Fetch the password at connect time** (chosen): the web service re-fetches the current password from Secrets Manager on every new `pg` connection instead of trusting a cached value. It is then never more than a few minutes stale, whenever RDS rotates. This is also what Secrets Manager rotation is designed around, where the alternative treats an env var as a cache of something meant to be read live.
 
+```mermaid
+%%{init: {"sequence": {"actorMargin": 20, "width": 150}}}%%
+sequenceDiagram
+  participant pool as SecretPasswordPool
+  participant fetch as fetchDatabasePassword
+  participant sm as Secrets Manager
+  participant rds as RDS Postgres
+  pool->>fetch: password for a<br/>new connection
+  alt cached copy under 5 minutes old
+    fetch-->>pool: cached password
+  else no cached copy
+    fetch->>sm: GetSecretValue
+    sm-->>fetch: current password
+    fetch-->>pool: current password
+  end
+  pool->>rds: connect
+  opt rejected with 28P01 after a rotation
+    pool->>fetch: clear the cache
+    pool->>rds: connect again, with a fresh fetch
+  end
+```
+
 The migration task (`web/scripts/db-migrate.cjs`) takes its password as a static env var. It runs for seconds and exits, well inside the 7-day window, so the value can't go stale. Fetching it live would cost its own Secrets Manager IAM grant for no benefit.
 
 ---
@@ -178,17 +266,17 @@ flowchart LR
   rds[("RDS Postgres")]
   up[("S3 uploads")]
   sp[("S3 splats")]
-  worker["GPU spot instance<br/>reconstruct, then train"]
+  worker["GPU spot instance<br/>reconstruct,<br/>then train"]
   ecr["ECR worker repo"]
   browser -->|"1 · pages + API"| alb --> web
   web --> rds
-  browser -->|"2 · presigned PUT photos"| up
+  browser -->|"2 · presigned<br/>PUT photos"| up
   web -->|"3 · RunInstances"| worker
   ecr -->|"4 · pull image"| worker
   up -->|"5 · read photos"| worker
-  worker -->|"6 · write .ply + .spz + thumbnail"| sp
-  worker -->|"7 · status callback over HTTPS"| alb
-  sp -->|"8 · presigned GET .spz"| browser
+  worker -->|"6 · write .ply,<br/>.spz, thumbnail"| sp
+  worker -->|"7 · status callback<br/>over HTTPS"| alb
+  sp -->|"8 · presigned<br/>GET .spz"| browser
 ```
 
 - Infra: **Terraform**. One configuration (`infra/`) holding one state. The S3 bucket that state lives in is created by hand ([Going live](RUNBOOK.md#22-going-live)). `terraform init` needs the bucket before any apply. Managing it inside `infra/` would store state in a bucket `infra/` also owns. A second Terraform module with its own local state was rejected.
@@ -226,20 +314,20 @@ Where each resource sits in the network, and which security group (sg) guards it
 flowchart TB
   user(["Browser"])
   subgraph aws["AWS account · var.aws_region"]
-    r53["Route 53 record + ACM cert"]
+    r53["Route 53 record<br/>+ ACM cert"]
     subgraph vpc["VPC 10.0.0.0/16 · 2 availability zones"]
       igw["Internet gateway"]
       subgraph pub["Public subnets · 0.0.0.0/0 → IGW"]
         alb["ALB · sg alb<br/>443 in, 80 redirects"]
-        web["Fargate Spot service · sg web<br/>1–3 tasks, public IP"]
-        worker["EC2 GPU spot · sg worker<br/>one per stage"]
+        web["Fargate Spot service<br/>sg web · 1–3 tasks<br/>public IP"]
+        worker["EC2 GPU spot<br/>sg worker<br/>one per stage"]
       end
       subgraph priv["Private subnets · no route out"]
         rds[("RDS Postgres · sg db<br/>one availability zone")]
       end
       s3ep["S3 gateway endpoint"]
     end
-    s3[("S3<br/>uploads, splats, ALB logs")]
+    s3[("S3<br/>uploads, splats<br/>ALB logs")]
     ecr["ECR<br/>web repo, worker repo"]
     sm["Secrets Manager<br/>Clerk key, RDS login"]
   end
@@ -248,8 +336,8 @@ flowchart TB
   web -->|":5432 only"| rds
   web -.->|RunInstances| worker
   web --> s3ep
-  worker -->|"photos, splats, image layers"| s3ep --> s3
-  worker -->|"ECR login + manifest via IGW"| ecr
+  worker -->|"photos, splats,<br/>image layers"| s3ep --> s3
+  worker -->|"ECR login + manifest<br/>via IGW"| ecr
   web -->|via IGW| sm
 ```
 
@@ -305,7 +393,43 @@ The daily cap bounds how many worker instances launch, not how long each one run
 
 A crop streams a whole splat through the web task, so `MAX_CROPS_PER_HOUR` (`web/lib/server/rateLimit.ts`) caps each user's crops. The cap is a constant rather than a runtime setting, because a crop costs no GPU time.
 
+Which limit each route checks before it spends anything:
+
+```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 400}}}%%
+flowchart TD
+  presign["photos/presign<br/>MAX_PHOTOS_PER_SPLAT<br/>MAX_PHOTO_BYTES<br/>MAX_THUMBNAIL_BYTES<br/>per-IP limit<br/>per-user limit"]
+  put["S3 upload<br/>size signed<br/>into the URL"]
+  complete["photos/[photoId]/<br/>complete<br/>stored sizes<br/>checked again"]
+  process["process<br/>processing-enabled<br/>min-photos-per-splat<br/>MAX_PHOTOS_PER_SPLAT<br/>daily cap"]
+  trainroute["train<br/>processing-enabled<br/>daily cap"]
+  recon["reconstruct instance"]
+  traininst["train instance"]
+  crop["crop<br/>MAX_CROPS_PER_HOUR"]
+  presign --> put --> complete --> process --> recon
+  recon -.->|"owner builds"| trainroute --> traininst
+  traininst -.->|"owner crops"| crop
+```
+
 A worker instance runs COLMAP and gsplat on files anyone can upload, so the design assumes one could be taken over and limits what that reaches. The presign route accepts only JPEG and PNG, the two formats `worker/pipeline/sfm.py` hands to COLMAP, and names each S3 key's extension after the type rather than the uploaded filename. The instance's own IAM role has no S3 access. The worker trades its callback token for credentials from `web/app/api/v1/internal/jobs/[jobId]/s3-credentials/route.ts`, which assumes a role with a session policy naming only that splat's keys. Per-object presigned URLs were rejected for two reasons. A splat's photo count would push them past EC2's 16 KB user-data limit. Replacing boto3's transfers with hand-written HTTP requests would also lose its multipart upload of large results. The status callback also refuses any result key outside the splat's own prefix, since the share page presigns those keys for anyone with the link.
+
+```mermaid
+%%{init: {"sequence": {"actorMargin": 20, "width": 150}}}%%
+sequenceDiagram
+  participant worker as worker instance
+  participant route as s3-credentials route
+  participant sts as STS
+  participant s3 as S3
+  loop before each batch of transfers
+    worker->>route: POST with its callback token
+    Note over route: refuses a job that has ended
+    route->>sts: AssumeRole on the<br/>worker data role, with a<br/>session policy for this splat
+    sts-->>route: credentials for one hour
+    route-->>worker: credentials
+    worker->>s3: read photos, write results
+  end
+  Note over worker,s3: anything outside splats/#lt;splatId#gt;/ is denied
+```
 
 Ops fallbacks: the `processing-enabled` runtime setting pauses every GPU launch site-wide, and an AWS Budget (`infra/budgets.tf`) alerts on spend the request path never sees.
 
