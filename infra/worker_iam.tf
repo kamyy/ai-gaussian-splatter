@@ -12,6 +12,7 @@
 # the one-time setup.
 
 resource "aws_iam_role" "worker" {
+  # A fixed name, because the CI role's iam:PassRole grant names it (AGENTS.md, section 9.4).
   name        = "ai-gaussian-splatter-worker"
   description = "GPU spot worker instance role: ECR pull, log writes, terminate instances tagged Role=worker"
   assume_role_policy = jsonencode({

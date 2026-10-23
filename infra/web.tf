@@ -130,6 +130,7 @@ resource "aws_ecs_task_definition" "migration" {
 
 # --- Task role ------------------------------------------------------------------------
 resource "aws_iam_role" "task" {
+  # A fixed name, because the CI role's iam:PassRole grant names it (AGENTS.md, section 9.4).
   name               = "ai-gaussian-splatter-task"
   assume_role_policy = local.ecs_tasks_assume_role_policy
 }
