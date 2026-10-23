@@ -90,7 +90,7 @@ locals {
   # --- Database wiring ----------------------------------------------------------------
   database_name = "ai_gaussian_splatter"
 
-  # Where web/Dockerfile downloads Amazon's RDS global CA bundle, in both of its stages. Must match that path.
+  # Where web/Dockerfile puts Amazon's RDS global CA bundle in both of its stages. Must match that path.
   rds_ca_bundle_path = "/app/certs/rds-global-bundle.pem"
 
   # Shared by both containers in infra/web.tf that talk to Postgres, the web service and the migration task. Defined
