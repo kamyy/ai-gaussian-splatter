@@ -215,6 +215,7 @@ That split shows how big each part is, not why. Each stage also logs every phase
 - TLS is required only where RDS enforces it, not by `web/lib/server/databaseUrl.ts`.
 - That enforcement is RDS's own: its default Postgres parameter group sets `rds.force_ssl = 1`. `infra/data.tf` declares no parameter group, so grepping `infra/` for the setting finds nothing.
 - `databaseSsl()`/`resolveDatabaseUrl()` (`web/lib/server/databaseUrl.ts`) make TLS conditional on `DATABASE_SSL_CA` being set.
+- Amazon's RDS certificate authority (CA) bundle is committed to the repo, not downloaded during the image build. Amazon republishes the bundle whenever it adds a region, so a build that pins the download's checksum breaks each time. The committed copy needs a refresh only for a region move or a root CA rotation ([Refreshing the RDS CA bundle](RUNBOOK.md#35-refreshing-the-rds-ca-bundle)).
 - Local dev and CI run a plain, un-TLS'd Postgres.
 - CI's Postgres starts as a plain `podman run` step (`.github/workflows/ci.yml`'s `web` job), not GitHub Actions' declarative `services:` block. The migrator-image test ([CI/CD](#11-cicd), below) needs to reach it by container name from a sibling podman container, and a Docker-managed `services:` container isn't reachable that way.
 - It runs on a dedicated podman network, not `--network host`, because host networking doesn't behave as true loopback under rootless podman on GitHub's runner.

@@ -81,21 +81,16 @@ COPY --chown=app:app lib/server/databaseUrl.ts ./lib/server/databaseUrl.ts
 COPY --chown=app:app lib/server/env.ts ./lib/server/env.ts
 COPY --chown=app:app scripts/db-migrate.cjs ./scripts/db-migrate.cjs
 
-# RDS certificates chain to Amazon's own certificate authority (CA), which isn't in Node's trust store. This path must
-# stay in step with local.rds_ca_bundle_path (infra/locals.tf), which sets DATABASE_SSL_CA to it in the task definition.
-# sha256sum -c pins the download by hand rather than ADD's --checksum flag, which needs a newer buildah than the one
-# bundled with the CI runner's podman package. If AWS updates the bundle this fails and prints the digest to paste in
-# here.
+# RDS certificates chain to Amazon's own certificate authority (CA), which isn't in Node's trust store, so the image
+# carries Amazon's CA bundle. The bundle is committed at web/certs/rds-global-bundle.pem rather than downloaded, because
+# Amazon republishes it whenever it adds a region. This path must stay in step with local.rds_ca_bundle_path
+# (infra/locals.tf), which sets DATABASE_SSL_CA to it in the task definition.
 #
 # Deliberately not paired with `ENV DATABASE_SSL_CA=...` here. That would make every run of this image demand TLS,
 # breaking CI's migrator test against a plain Postgres with "The server does not support SSL connections". Using the
 # bundle is a deployment decision, so infra/locals.tf sets DATABASE_SSL_CA. Keep the two in step if /app/certs ever
 # moves.
-RUN mkdir -p /app/certs \
-  && wget -qO /app/certs/rds-global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
-  && echo "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b  /app/certs/rds-global-bundle.pem" \
-       | sha256sum -c - \
-  && chown app:app /app/certs/rds-global-bundle.pem
+COPY --chown=app:app certs/rds-global-bundle.pem /app/certs/rds-global-bundle.pem
 
 USER app
 
@@ -119,14 +114,10 @@ EXPOSE 8000
 
 RUN addgroup -g 1001 -S app && adduser -u 1001 -S app -G app
 
-# As in migrator, this downloads Amazon's RDS CA bundle to a path that must stay in step with local.rds_ca_bundle_path
-# (infra/locals.tf). It isn't paired with an unconditional ENV DATABASE_SSL_CA here, and sha256sum -c verifies the
-# download by hand rather than ADD --checksum. The migrator stage above explains both.
-RUN mkdir -p /app/certs \
-  && wget -qO /app/certs/rds-global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
-  && echo "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b  /app/certs/rds-global-bundle.pem" \
-       | sha256sum -c - \
-  && chown app:app /app/certs/rds-global-bundle.pem
+# As in migrator, this copies Amazon's RDS CA bundle to a path that must stay in step with local.rds_ca_bundle_path
+# (infra/locals.tf). It isn't paired with an unconditional ENV DATABASE_SSL_CA here. The migrator stage above explains
+# why.
+COPY --chown=app:app certs/rds-global-bundle.pem /app/certs/rds-global-bundle.pem
 
 COPY --from=builder --chown=app:app /app/.next/standalone ./
 COPY --from=builder --chown=app:app /app/.next/static ./.next/static

@@ -43,5 +43,7 @@ playwright.config.ts
 **/id_rsa*
 **/*.key
 **/*.p12
-# Local CA/certs (the RDS bundle is ADDed in the Dockerfile, not copied from the host).
+# Certificates and keys. The one exception is Amazon's public RDS CA bundle, which web/Dockerfile copies into both
+# images. It is named file by file so a key dropped into certs/ still stays out.
 **/*.pem
+!certs/rds-global-bundle.pem

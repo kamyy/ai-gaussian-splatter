@@ -31,6 +31,8 @@ infra/**/*.tfvars
 .env.*
 !.env.example
 *.pem
+# Amazon's public RDS CA bundle, which web/Dockerfile copies into both images.
+!web/certs/rds-global-bundle.pem
 
 # Frontend (Vitest/Playwright output, Vercel CLI, TS incremental builds)
 coverage/
