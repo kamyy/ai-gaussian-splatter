@@ -307,6 +307,18 @@ resource "aws_acm_certificate_validation" "web" {
   validation_record_fqdns = [aws_route53_record.cert_validation[0].fqdn]
 }
 
+# allow_overwrite takes over a record already at one of these names, such as one added by hand while setting up Clerk.
+resource "aws_route53_record" "clerk" {
+  for_each = local.clerk_cnames
+
+  zone_id         = var.hosted_zone_id
+  name            = "${each.key}.${local.app_hostname}"
+  type            = "CNAME"
+  ttl             = 300
+  records         = [each.value]
+  allow_overwrite = true
+}
+
 # --- Load balancer --------------------------------------------------------------------
 # Without this bucket the app's own logs would be the only record of who called, and those cover only requests its
 # handlers actually received, not the requests the ALB rejected or redirected first. 90 days is how far back an abuse

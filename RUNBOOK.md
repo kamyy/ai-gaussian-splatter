@@ -274,7 +274,7 @@ The script doesn't ask for `WORKER_IMAGE_TAG`. When it is unset, the script sets
 
 The CI role's policy, `scripts/prod/ci-role-policies/deploy.json`, is a reasonable starting point, not an exhaustively verified minimal policy, so expect `AccessDenied` during the first deploy. Add the missing action to that file, run `scripts/prod/bootstrap.sh ci-role`, then rerun the `deploy` job (`gh run rerun <run-id> --failed-jobs`).
 
-Four things have no API the script could call, so do them by hand once it finishes:
+Five things have no API the script could call, so do them by hand once it finishes:
 
 1. Click the subscription link AWS emails to `ALERT_EMAIL`, or the sweeper's and the alarms' emails are never delivered ([Compute](ARCHITECTURE.md#3-compute)). A subscription that still reads `PendingConfirmation` after the email should have arrived usually means a typo'd address:
    ```bash
@@ -282,8 +282,9 @@ Four things have no API the script could call, so do them by hand once it finish
      --query "Subscriptions[?ends_with(TopicArn, ':ai-gaussian-splatter-alerts')].SubscriptionArn"
    ```
 2. In the production Clerk instance's dashboard, open the Legal page, turn on **Require express consent to legal documents**, and set the terms of service and privacy policy URLs to the app's `/terms` and `/privacy` pages. Clerk's sign-up form then requires a checkbox.
-3. On the same dashboard's **User & authentication** page, in the **User model** section, turn off **Allow users to delete their accounts**. Users delete their accounts through the app's own account menu item instead, which also deletes their splats.
-4. Check that the web service can read its runtime settings. `scripts/prod/ssm.sh` should list every setting, and the new-splat page should show no "Processing is paused" notice. The notice with every setting present means the task role can't read them ([Runtime settings](ARCHITECTURE.md#95-runtime-settings)).
+3. On the same dashboard's [Domains page](https://dashboard.clerk.com/last-active?path=domains), press **Deploy certificates** once every record shows as verified. The deploy creates those records from `local.clerk_cnames` in `infra/locals.tf`, whose targets belong to this Clerk production instance. If the instance is ever replaced, copy the new targets from its Domains page into `local.clerk_cnames` first.
+4. On the same dashboard's **User & authentication** page, in the **User model** section, turn off **Allow users to delete their accounts**. Users delete their accounts through the app's own account menu item instead, which also deletes their splats.
+5. Check that the web service can read its runtime settings. `scripts/prod/ssm.sh` should list every setting, and the new-splat page should show no "Processing is paused" notice. The notice with every setting present means the task role can't read them ([Runtime settings](ARCHITECTURE.md#95-runtime-settings)).
 
 If a new image fails its health checks, the circuit breaker rolls back to the previous task definition. To roll back by hand, revert the change and push. A schema change gets a corrective migration instead ([Fixing a bad migration](#31-fixing-a-bad-migration)).
 
