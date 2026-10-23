@@ -20,6 +20,7 @@ Most procedures below run a script from `scripts/dev/` or `scripts/prod/`, and e
   - [3.2 Debugging a failed worker job](#32-debugging-a-failed-worker-job)
   - [3.3 Reading logs and alarms](#33-reading-logs-and-alarms)
   - [3.4 Rotating the Clerk secret](#34-rotating-the-clerk-secret)
+  - [3.5 Refreshing the RDS CA bundle](#35-refreshing-the-rds-ca-bundle)
 - [4. Tearing down](#4-tearing-down)
 
 ---
@@ -449,6 +450,33 @@ aws ecs update-service --region "$(source scripts/lib/terraform.sh && tf_get_aws
 ```
 
 ECS only resolves secrets at task start, so the running tasks keep the old value until that new deployment replaces them.
+
+### 3.5 Refreshing the RDS CA bundle
+
+The web service and the migration task trust RDS's TLS certificate through `web/certs/rds-global-bundle.pem`, Amazon's RDS certificate authority (CA) bundle. Refresh it before moving the app to a region the bundle has no root CA for, or when Amazon rotates its RDS root CAs. A connection that fails with `UNABLE_TO_VERIFY_LEAF_SIGNATURE` points to a stale bundle.
+
+```bash
+curl -sSfo web/certs/rds-global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+```
+
+The download is only as trustworthy as curl's HTTPS check of `truststore.pki.rds.amazonaws.com`, so never fetch it with `-k` or over plain HTTP.
+
+Before opening the PR, compare the certificates in the new file against the committed ones. This prints one line per certificate that was added or removed, with its subject and SHA-256 fingerprint:
+
+```bash
+list_certs() {
+  local dir f
+  dir=$(mktemp -d)
+  awk -v d="$dir" '/BEGIN CERT/{n++} {print > (d "/" n ".pem")}'
+  for f in "$dir"/*.pem; do
+    openssl x509 -in "$f" -noout -subject -fingerprint -sha256 | paste -sd ' '
+  done | sort
+  rm -r "$dir"
+}
+diff <(git show HEAD:web/certs/rds-global-bundle.pem | list_certs) <(list_certs < web/certs/rds-global-bundle.pem)
+```
+
+Every line should be an added `OU=Amazon RDS` root CA for a region or rotation you expected. A removed or changed root for the region the app runs in, or any subject outside `OU=Amazon RDS`, means the download is wrong. Don't commit it.
 
 ---
 
