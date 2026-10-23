@@ -94,6 +94,16 @@ gh_run_deploy() {
   fi
 
   echo "Deploying through $url"
+
+  # The jobs API can answer 404 for a few seconds after a dispatch, and `gh run watch` gives up on the first one.
+  local _
+  for _ in {1..12}; do
+    if gh run view "${url##*/}" --json jobs >/dev/null 2>&1; then
+      break
+    fi
+    sleep 5
+  done
+
   if ! gh run watch "${url##*/}" --compact --exit-status; then
     echo "The run failed: $url" >&2
     exit 1
