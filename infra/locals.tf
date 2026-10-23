@@ -56,6 +56,17 @@ locals {
   # header exactly.
   app_origin = "https://${local.app_hostname}"
 
+  # The CNAME records the production Clerk instance's Domains page lists, keyed by the label each one adds in front of
+  # local.app_hostname. The browser loads Clerk's sign-in UI from clerk.<app hostname>, and Clerk issues that host's
+  # certificate only once all five verify. The targets belong to that one Clerk instance (RUNBOOK.md, Going live).
+  clerk_cnames = {
+    "clerk"           = "frontend-api.clerk.services"
+    "accounts"        = "accounts.clerk.services"
+    "clkmail"         = "mail.kr0oa9rrkpxu.clerk.services"
+    "clk._domainkey"  = "dkim1.kr0oa9rrkpxu.clerk.services"
+    "clk2._domainkey" = "dkim2.kr0oa9rrkpxu.clerk.services"
+  }
+
   # --- Container images ---------------------------------------------------------------
   # The registry hostname web/lib/server/workerLauncher.ts's user-data logs into before pulling. It is built from
   # account/region directly rather than parsed out of aws_ecr_repository.worker.repository_url, matching how these

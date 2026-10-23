@@ -366,6 +366,23 @@ run "hostnames_follow_the_zone_variable" {
   }
 }
 
+run "clerk_records_match_the_domains_page" {
+  command = apply
+
+  assert {
+    condition = {
+      for k, r in aws_route53_record.clerk : r.name => one(r.records)
+      } == {
+      "clerk.ai-gaussian-splatter.example.com"           = "frontend-api.clerk.services"
+      "accounts.ai-gaussian-splatter.example.com"        = "accounts.clerk.services"
+      "clkmail.ai-gaussian-splatter.example.com"         = "mail.kr0oa9rrkpxu.clerk.services"
+      "clk._domainkey.ai-gaussian-splatter.example.com"  = "dkim1.kr0oa9rrkpxu.clerk.services"
+      "clk2._domainkey.ai-gaussian-splatter.example.com" = "dkim2.kr0oa9rrkpxu.clerk.services"
+    }
+    error_message = "the Clerk CNAMEs must be exactly the five hosts and targets the Clerk Domains page lists"
+  }
+}
+
 run "web_service_reads_the_runtime_settings" {
   command = apply
 
