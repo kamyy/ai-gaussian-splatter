@@ -221,6 +221,9 @@ same_policy() {
 #   The sns:Subscribe and sns:Unsubscribe grants end in a wildcard because a subscription's ARN carries a generated
 #   suffix. iam:PassRole on the sweeper's role is limited to Lambda, so the CI role can't hand that role to another
 #   service.
+# - iam:PassRole on the worker role is for adding it to its instance profile, which IAM authorizes as passing the role.
+#   The CI role has no ec2:RunInstances, so it can't launch an instance with that profile.
+# - ec2:DescribeAccountAttributes is for CreateLoadBalancer, which makes that call with the caller's permissions.
 # - cloudwatch:DescribeAlarms, logs:DescribeLogGroups and ssm:DescribeParameters are list APIs and ignore a resource
 #   ARN.
 # - The SSM grants cover the runtime settings infra/settings.tf creates. PutParameter only runs when Terraform creates a
