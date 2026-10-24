@@ -36,6 +36,15 @@ const LIFETIME_TAG_KEY = "MaxLifetimeMinutes";
  */
 const stoppedLocalJobs = new Set<string>();
 
+// What a visitor sees when RunInstances refuses for lack of GPU capacity, by EC2 error name. The two cases get different
+// advice because only one of them clears by itself. MaxSpotInstanceCountExceeded is the account's GPU spot vCPU quota,
+// which starts at 0 and stays there until the site owner raises it (RUNBOOK.md, Going live).
+const NO_CAPACITY_MESSAGES: Record<string, string> = {
+  InsufficientInstanceCapacity: "No GPU capacity is available right now. Try again later.",
+  MaxSpotInstanceCountExceeded:
+    "GPU processing isn't available on this site yet. Retrying won't help until the site owner raises the AWS limit.",
+};
+
 type WorkerStage = "reconstruct" | "train";
 
 /**
@@ -207,8 +216,26 @@ export function generateCallbackToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
-/** Launches the spot worker instance and returns its instance ID. */
+/**
+ * Launches the spot worker instance and returns its instance ID.
+ *
+ * The splat's page shows a launch failure's message as the worker job's error, so a capacity refusal gets wording a
+ * visitor can act on. The original error stays as its `cause`, which Next logs for the operator.
+ */
 export async function launchJob(params: WorkerLaunch): Promise<string> {
+  try {
+    return await runInstance(params);
+  } catch (err) {
+    const message = err instanceof Error ? NO_CAPACITY_MESSAGES[err.name] : undefined;
+    if (message !== undefined) {
+      throw new Error(message, { cause: err });
+    }
+
+    throw err;
+  }
+}
+
+async function runInstance(params: WorkerLaunch): Promise<string> {
   // launchJob runs only outside local dev, where getEnv() has already required every worker instance setting. The
   // schema still types them optional, because local dev leaves them unset.
   const env = getEnv() as LaunchEnv;

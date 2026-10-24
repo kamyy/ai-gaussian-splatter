@@ -266,6 +266,22 @@ describe("launchJob", () => {
     ec2Mock.on(RunInstancesCommand).resolves({ Instances: [] });
     await expect(launchJob(params)).rejects.toThrow("no instance ID");
   });
+
+  it.each([
+    ["InsufficientInstanceCapacity", "Try again later."],
+    ["MaxSpotInstanceCountExceeded", "Retrying won't help"],
+  ])("explains a %s refusal without EC2's wording", async (name, advice) => {
+    ec2Mock.on(RunInstancesCommand).rejects(Object.assign(new Error("EC2's own wording"), { name }));
+    await expect(launchJob(params)).rejects.toMatchObject({
+      message: expect.stringContaining(advice),
+      cause: expect.objectContaining({ name }),
+    });
+  });
+
+  it("surfaces any other launch failure unchanged", async () => {
+    ec2Mock.on(RunInstancesCommand).rejects(Object.assign(new Error("not allowed"), { name: "UnauthorizedOperation" }));
+    await expect(launchJob(params)).rejects.toThrow("not allowed");
+  });
 });
 
 describe("launchJobLocal", () => {
