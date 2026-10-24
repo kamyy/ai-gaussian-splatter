@@ -72,7 +72,7 @@ const awsEnv = z.object({
 // reads none of these, so the superRefine below requires them only outside local dev.
 const WORKER_INSTANCE_ENV_VARS = [
   "WORKER_AMI_ID",
-  "WORKER_SUBNET_ID",
+  "WORKER_SUBNET_IDS",
   "WORKER_SECURITY_GROUP_ID",
   "WORKER_INSTANCE_PROFILE_ARN",
   "WORKER_LOG_GROUP",
@@ -81,7 +81,8 @@ const WORKER_INSTANCE_ENV_VARS = [
 
 const workerInstanceEnv = z.object({
   WORKER_AMI_ID: z.string().min(1).optional(),
-  WORKER_SUBNET_ID: z.string().min(1).optional(),
+  // Comma-separated subnet IDs, one per availability zone. web/lib/server/workerLauncher.ts tries them in order.
+  WORKER_SUBNET_IDS: z.string().min(1).optional(),
   WORKER_SECURITY_GROUP_ID: z.string().min(1).optional(),
   WORKER_INSTANCE_PROFILE_ARN: z.string().min(1).optional(),
   WORKER_LOG_GROUP: z.string().min(1).optional(),

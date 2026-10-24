@@ -63,7 +63,7 @@ export interface WorkerLaunch {
 type LaunchEnv = ReturnType<typeof getEnv> & {
   [K in
     | "WORKER_AMI_ID"
-    | "WORKER_SUBNET_ID"
+    | "WORKER_SUBNET_IDS"
     | "WORKER_SECURITY_GROUP_ID"
     | "WORKER_INSTANCE_PROFILE_ARN"
     | "WORKER_LOG_GROUP"]: string;
@@ -216,28 +216,50 @@ export function generateCallbackToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
+// Gives a capacity refusal wording a visitor can act on, and keeps the original error as its `cause` for the operator's
+// logs. Any other error comes back unchanged.
+function explainLaunchError(err: unknown): unknown {
+  const message = err instanceof Error ? NO_CAPACITY_MESSAGES[err.name] : undefined;
+
+  return message === undefined ? err : new Error(message, { cause: err });
+}
+
 /**
  * Launches the spot worker instance and returns its instance ID.
  *
- * The splat's page shows a launch failure's message as the worker job's error, so a capacity refusal gets wording a
- * visitor can act on. The original error stays as its `cause`, which Next logs for the operator.
+ * A zone with no GPU spot capacity (InsufficientInstanceCapacity) moves on to the next subnet in WORKER_SUBNET_IDS,
+ * since each one is in its own availability zone. Any other error stops the loop at once. That includes the GPU spot
+ * quota, which is account-wide, so another zone can't help. The splat's page shows the failure's message as the worker
+ * job's error.
  */
 export async function launchJob(params: WorkerLaunch): Promise<string> {
-  try {
-    return await runInstance(params);
-  } catch (err) {
-    const message = err instanceof Error ? NO_CAPACITY_MESSAGES[err.name] : undefined;
-    if (message !== undefined) {
-      throw new Error(message, { cause: err });
-    }
-
-    throw err;
-  }
-}
-
-async function runInstance(params: WorkerLaunch): Promise<string> {
   // launchJob runs only outside local dev, where getEnv() has already required every worker instance setting. The
   // schema still types them optional, because local dev leaves them unset.
+  const env = getEnv() as LaunchEnv;
+
+  const subnetIds = env.WORKER_SUBNET_IDS.split(",")
+    .map(id => id.trim())
+    .filter(id => id !== "");
+  if (subnetIds.length === 0) {
+    throw new Error("WORKER_SUBNET_IDS names no subnet");
+  }
+
+  let lastError: unknown;
+  for (const subnetId of subnetIds) {
+    try {
+      return await runInstance(params, subnetId);
+    } catch (err) {
+      lastError = err;
+      if (!(err instanceof Error) || err.name !== "InsufficientInstanceCapacity") {
+        break;
+      }
+    }
+  }
+
+  throw explainLaunchError(lastError);
+}
+
+async function runInstance(params: WorkerLaunch, subnetId: string): Promise<string> {
   const env = getEnv() as LaunchEnv;
 
   const instanceType =
@@ -266,7 +288,7 @@ async function runInstance(params: WorkerLaunch): Promise<string> {
       InstanceType: instanceType as never,
       MinCount: 1,
       MaxCount: 1,
-      SubnetId: env.WORKER_SUBNET_ID,
+      SubnetId: subnetId,
       SecurityGroupIds: [env.WORKER_SECURITY_GROUP_ID],
       IamInstanceProfile: { Arn: env.WORKER_INSTANCE_PROFILE_ARN },
       // The pipeline runs in a container on default bridge networking, one hop further from IMDS than the host. At
