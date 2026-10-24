@@ -210,7 +210,7 @@ export function StageCard({ splatId, stage, onJobChanged }: StageCardProps) {
       return null;
     case "failed": {
       let reshootHint: React.ReactNode = null;
-      if (stage.step === "cameras") {
+      if (stage.step === "cameras" && stage.workerStarted) {
         reshootHint = (
           <p>
             If placing the cameras fails again, the photos probably need more overlap. Start a new splat and re-shoot.

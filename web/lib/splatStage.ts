@@ -32,7 +32,9 @@ export type Stage =
   // progress is 0-100, and startedAt the training stage's start. Both are null until the worker first reports.
   | { kind: "building"; progress: number | null; startedAt: string | null }
   | { kind: "complete" }
-  | { kind: "failed"; step: StepKey; message: string | null }
+  // workerStarted is false when the worker never reported in. worker/run_job.py reports before it fetches the photos,
+  // so the photos can't have caused that failure.
+  | { kind: "failed"; step: StepKey; message: string | null; workerStarted: boolean }
   | { kind: "cancelled"; step: StepKey };
 
 export function splatStage(job: Job | undefined, photoCount: number): Stage {
@@ -62,7 +64,12 @@ export function splatStage(job: Job | undefined, photoCount: number): Stage {
     // The job keeps no record of which stage it ended in. Reconstruction is what writes the point cloud, so a job
     // that has one got past placing the cameras. "launching" above goes by the same test.
     case JobStatus.failed:
-      return { kind: "failed", step: job.pointCloudS3Key ? "build" : "cameras", message: job.errorMessage };
+      return {
+        kind: "failed",
+        step: job.pointCloudS3Key ? "build" : "cameras",
+        message: job.errorMessage,
+        workerStarted: job.colmapStartedAt !== null,
+      };
     case JobStatus.cancelled:
       return { kind: "cancelled", step: job.pointCloudS3Key ? "build" : "cameras" };
   }

@@ -54,7 +54,7 @@ describe("StageCard", () => {
   });
 
   it.each([
-    ["Try again", { kind: "failed", step: "cameras", message: null }],
+    ["Try again", { kind: "failed", step: "cameras", message: null, workerStarted: true }],
     ["Start again", { kind: "cancelled", step: "cameras" }],
   ] as const)("disables %s while processing is paused", (label, stage) => {
     processingPausedMock.mockReturnValue(true);
@@ -88,13 +88,25 @@ describe("StageCard", () => {
     render(
       <StageCard
         splatId="splat-1"
-        stage={{ kind: "failed", step: "cameras", message: "Only 5% of photos registered" }}
+        stage={{ kind: "failed", step: "cameras", message: "Only 5% of photos registered", workerStarted: true }}
         onJobChanged={vi.fn()}
       />,
     );
     expect(screen.getByText("Only 5% of photos registered")).toBeInTheDocument();
     expect(screen.getByText(/re-shoot/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+  });
+
+  it("leaves out the re-shoot advice when the worker never started", () => {
+    render(
+      <StageCard
+        splatId="splat-1"
+        stage={{ kind: "failed", step: "cameras", message: "No GPU capacity", workerStarted: false }}
+        onJobChanged={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("No GPU capacity")).toBeInTheDocument();
+    expect(screen.queryByText(/re-shoot/)).not.toBeInTheDocument();
   });
 
   it("offers only Stop and Discard while a stage is running", () => {
