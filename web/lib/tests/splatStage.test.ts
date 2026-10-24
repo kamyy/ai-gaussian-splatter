@@ -68,6 +68,10 @@ describe("splatStage", () => {
       kind: "failed",
       step: "cameras",
       message: "too few",
+      workerStarted: false,
+    });
+    expect(splatStage(job({ status: JobStatus.failed, colmapStartedAt: "2026-01-01T00:00:00Z" }), 30)).toMatchObject({
+      workerStarted: true,
     });
     expect(splatStage(job({ status: JobStatus.failed, pointCloudS3Key: "pc.ply" }), 30)).toMatchObject({
       step: "build",
@@ -85,7 +89,7 @@ describe("currentStep", () => {
     expect(currentStep({ kind: "ready" })).toBe("cameras");
     expect(currentStep({ kind: "check" })).toBe("check");
     expect(currentStep({ kind: "building", progress: null, startedAt: null })).toBe("build");
-    expect(currentStep({ kind: "failed", step: "build", message: null })).toBe("build");
+    expect(currentStep({ kind: "failed", step: "build", message: null, workerStarted: true })).toBe("build");
     expect(currentStep({ kind: "complete" })).toBeNull();
   });
 });

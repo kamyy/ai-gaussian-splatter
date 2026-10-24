@@ -40,7 +40,7 @@ describe("useStageNotification", () => {
     expect(document.title).toBe("Your 3D splat is ready · Vase");
 
     rerender({ stage: { kind: "placing_cameras" } });
-    rerender({ stage: { kind: "failed", step: "cameras", message: null } });
+    rerender({ stage: { kind: "failed", step: "cameras", message: null, workerStarted: true } });
     expect(document.title).toBe("Processing failed · Vase");
   });
 
