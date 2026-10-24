@@ -186,14 +186,14 @@ resource "aws_iam_role_policy" "task" {
         Sid    = "RunInstances"
         Effect = "Allow"
         Action = "ec2:RunInstances"
-        Resource = [
+        Resource = flatten([
           # Only the worker AMI, so a compromised web task can't boot an image of its own choosing. AMIs are not
           # account-scoped, hence the empty account segment.
           "arn:aws:ec2:${var.aws_region}::image/${var.worker_ami_id}",
-          # The worker only ever launches into one subnet and one security group (both passed as env
-          # vars by web/lib/server/workerLauncher.ts), so both are scoped to the exact resource rather than every
-          # subnet or security group in the account.
-          local.worker_subnet.arn,
+          # The worker only launches into the subnets in local.worker_subnets and one security group (both passed as
+          # env vars to web/lib/server/workerLauncher.ts), so they are scoped to those exact resources rather than
+          # every subnet or security group in the account.
+          [for subnet in local.worker_subnets : subnet.arn],
           aws_security_group.worker.arn,
           # The ENI and root volume RunInstances creates don't exist yet at authorization time, so neither can
           # be scoped past the resource type.
@@ -202,7 +202,7 @@ resource "aws_iam_role_policy" "task" {
           # IAM checks every Spot RunInstances call against this resource type too, tagged or not. Leaving it out fails
           # every launch, with nothing in the request that points to the cause.
           "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:spot-instances-request/*",
-        ]
+        ])
       },
       {
         Sid      = "RunInstancesTagged"
@@ -549,7 +549,7 @@ resource "aws_ecs_task_definition" "web" {
       { name = "UPLOADS_BUCKET", value = aws_s3_bucket.uploads.id },
       { name = "SPLATS_BUCKET", value = aws_s3_bucket.splats.id },
       { name = "WORKER_AMI_ID", value = var.worker_ami_id },
-      { name = "WORKER_SUBNET_ID", value = local.worker_subnet.id },
+      { name = "WORKER_SUBNET_IDS", value = join(",", [for subnet in local.worker_subnets : subnet.id]) },
       { name = "WORKER_SECURITY_GROUP_ID", value = aws_security_group.worker.id },
       { name = "WORKER_INSTANCE_PROFILE_ARN", value = aws_iam_instance_profile.worker.arn },
       { name = "WORKER_LOG_GROUP", value = aws_cloudwatch_log_group.worker.name },
