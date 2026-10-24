@@ -10,6 +10,11 @@
 # shellcheck disable=SC2034 # Each repository variable's value is read back through ${!repo_var} in gh_vars.
 set -euo pipefail
 
+# "All G and VT Spot Instance Requests". Enough vCPUs for one g4dn.xlarge reconstruct stage and one g5.xlarge train
+# stage at a time, 4 vCPUs each.
+GPU_SPOT_QUOTA_CODE=L-3819A6DF
+GPU_SPOT_VCPUS=8
+
 usage() {
   echo "Usage: scripts/prod/bootstrap.sh [STEP]"
   echo
@@ -19,6 +24,10 @@ usage() {
   echo "  prereqs   Creates what infra/ can't: the Clerk secret ai-gaussian-splatter/clerk-secret-key (prompts for its"
   echo "            sk_live_ value), the AWSServiceRoleForEC2Spot role, and the ai-gaussian-splatter-tfstate-<account>"
   echo "            Terraform state bucket. Never overwrites an existing secret's value."
+  echo "  quota     Requests a GPU spot vCPU quota of $GPU_SPOT_VCPUS, unless the account has that many or a request is"
+  echo "            pending. A new account starts at 0, which fails every worker job at launch. Approval takes hours to"
+  echo "            days, so a full run asks before the first deploy and lets it overlap. In a full run, declining or a"
+  echo "            failed request is reported and the run carries on. Run alone, it stops."
   echo "  ci-role   Creates GitHub's OIDC provider and the ai-gaussian-splatter-ci-deploy role the deploy job"
   echo "            assumes, or rewrites the role's policies from scripts/prod/ci-role-policies/. Run it alone after"
   echo "            adding a missing action to scripts/prod/ci-role-policies/deploy.json when the deploy job fails"
@@ -44,7 +53,7 @@ fi
 
 STEP=${1-}
 case $STEP in
-  "" | prereqs | ci-role | gh-vars | enable | deploy | worker) ;;
+  "" | prereqs | quota | ci-role | gh-vars | enable | deploy | worker) ;;
   *)
     usage >&2
     exit 1
@@ -193,6 +202,57 @@ prereqs() {
   # Replaces the bucket's whole tag set. This bucket only carries Project.
   aws s3api put-bucket-tagging --bucket "$bucket" --region "$REGION" \
     --tagging "{\"TagSet\":[{\"Key\":\"Project\",\"Value\":\"$PROJECT_TAG\"}]}"
+}
+
+# Returns 1 rather than exiting when it can't finish, so a full run can carry on to the deploy without it. The caller
+# runs it in a subshell and a failed call can't stop it with set -e there, so each AWS call is checked by hand.
+quota() {
+  local current pending
+  if ! current=$(aws service-quotas get-service-quota --region "$REGION" --service-code ec2 \
+    --quota-code "$GPU_SPOT_QUOTA_CODE" --query Quota.Value --output text); then
+    echo "quota: could not read the quota. The signed-in identity needs service-quotas:GetServiceQuota." >&2
+    return 1
+  fi
+  # The value prints as a float, such as 0.0, and bash arithmetic takes integers only.
+  if [[ ! $current =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    echo "quota: expected a number for the current quota, got '$current'." >&2
+    return 1
+  fi
+  if ((${current%.*} >= GPU_SPOT_VCPUS)); then
+    echo "quota: the GPU spot quota is already $current vCPUs."
+    return 0
+  fi
+
+  if ! pending=$(aws service-quotas list-requested-service-quota-change-history-by-quota --region "$REGION" \
+    --service-code ec2 --quota-code "$GPU_SPOT_QUOTA_CODE" \
+    --query "RequestedQuotas[?Status=='PENDING'||Status=='CASE_OPENED'].DesiredValue | [0]" --output text); then
+    echo "quota: could not list quota requests. The signed-in identity needs" >&2
+    echo "service-quotas:ListRequestedServiceQuotaChangeHistoryByQuota." >&2
+    return 1
+  fi
+  # A pending request for fewer vCPUs than this step wants, such as one filed by hand, doesn't count as done.
+  if [[ $pending =~ ^[0-9]+(\.[0-9]+)?$ ]] && ((${pending%.*} >= GPU_SPOT_VCPUS)); then
+    echo "quota: a request for $pending vCPUs is already pending, and the quota is still $current."
+    echo "AWS emails when it is decided."
+    return 0
+  fi
+
+  confirm "Request a GPU spot quota of $GPU_SPOT_VCPUS vCPUs in $REGION? It is $current now."
+  if ! aws service-quotas request-service-quota-increase --region "$REGION" --service-code ec2 \
+    --quota-code "$GPU_SPOT_QUOTA_CODE" --desired-value "$GPU_SPOT_VCPUS" >/dev/null; then
+    echo "quota: the request failed. The signed-in identity needs service-quotas:RequestServiceQuotaIncrease." >&2
+    return 1
+  fi
+  echo "Requested $GPU_SPOT_VCPUS vCPUs. Worker jobs fail at launch until AWS approves it, which takes hours to days."
+}
+
+# The quota request has nothing to do with deploying, so a full run keeps going when it is declined or fails. The
+# deploy itself works without the quota. Only worker jobs fail until it is raised.
+quota_optional() {
+  if ! (quota); then
+    echo "quota: skipped. Run scripts/prod/bootstrap.sh quota before the first worker job, or every one fails at" >&2
+    echo "launch with no GPU capacity." >&2
+  fi
 }
 
 # Prints one of scripts/prod/ci-role-policies/ with this deploy's values filled in. Only the named variables are
@@ -450,9 +510,11 @@ print_manual_steps() {
   echo "  1. Click the subscription link AWS emailed to ALERT_EMAIL, or the sweeper's and alarms' emails never arrive."
   echo "  2. In the production Clerk dashboard's Legal page, require express consent and set the /terms and /privacy"
   echo "     URLs."
-  echo "  3. In the production Clerk dashboard's User & authentication page, turn off Allow users to delete their"
-  echo "     accounts."
-  echo "  4. Run scripts/prod/ssm.sh and check every runtime setting is listed."
+  echo "  3. In the Clerk dashboard's Domains page, press Deploy certificates once every record is verified."
+  echo "  4. In the Clerk dashboard's User & authentication page, turn off Allow users to delete their accounts."
+  echo "  5. Run scripts/prod/ssm.sh and check every runtime setting is listed."
+  echo "  6. Give Clerk's Google connection its own Google OAuth client ID and secret, or Google sign-in fails."
+  echo "  7. Wait for AWS to approve the GPU spot quota request, or every worker job fails at launch."
 }
 
 aws_require_login
@@ -460,6 +522,7 @@ gh_require_login
 
 case $STEP in
   prereqs) prereqs ;;
+  quota) quota ;;
   ci-role) ci_role ;;
   gh-vars) gh_vars ;;
   enable) enable_deploys ;;
@@ -467,6 +530,7 @@ case $STEP in
   worker) release_worker ;;
   "")
     prereqs
+    quota_optional
     ci_role
     gh_vars
     enable_deploys

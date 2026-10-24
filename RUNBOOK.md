@@ -15,6 +15,7 @@ Most procedures below run a script from `scripts/dev/` or `scripts/prod/`, and e
   - [2.4 Running Terraform locally](#24-running-terraform-locally)
   - [2.5 Choosing the landing page's examples](#25-choosing-the-landing-pages-examples)
   - [2.6 Tuning runtime settings](#26-tuning-runtime-settings)
+  - [2.7 Setting up Google sign-in](#27-setting-up-google-sign-in)
 - [3. Troubleshooting](#3-troubleshooting)
   - [3.1 Fixing a bad migration](#31-fixing-a-bad-migration)
   - [3.2 Debugging a failed worker job](#32-debugging-a-failed-worker-job)
@@ -125,7 +126,7 @@ Several of the web tests need Postgres. They use `TEST_DATABASE_URL`, which `web
 1. [Signing in to AWS](#21-signing-in-to-aws)
 2. [Going live](#22-going-live), once per account
 
-After that, a human only releases worker changes ([Releasing a worker change](#23-releasing-a-worker-change)), previews a plan ([Running Terraform locally](#24-running-terraform-locally)), picks the landing page's examples ([Choosing the landing page's examples](#25-choosing-the-landing-pages-examples)), and tunes the runtime settings ([Tuning runtime settings](#26-tuning-runtime-settings)).
+After that, a human only releases worker changes ([Releasing a worker change](#23-releasing-a-worker-change)), previews a plan ([Running Terraform locally](#24-running-terraform-locally)), picks the landing page's examples ([Choosing the landing page's examples](#25-choosing-the-landing-pages-examples)), and tunes the runtime settings ([Tuning runtime settings](#26-tuning-runtime-settings)). Going live's Google sign-in step has its own section ([Setting up Google sign-in](#27-setting-up-google-sign-in)).
 
 CI's `deploy` job (`.github/workflows/deploy.yml`) does every deploy, including the first one into an empty account. It runs on a push to `main` that changes more than just `.md` files or `LICENSE`, and on a run started by hand on `main`, but only while the `DEPLOY_ENABLED` GitHub repository variable is `true`.
 
@@ -209,11 +210,12 @@ aws login # Needed again only after the session expires, up to 12 hours later.
 `scripts/prod/bootstrap.sh` takes a fresh account to a live deploy. Its `--help` lists each step and what it creates. Run with no arguments, it runs them all, in order:
 
 1. Creates what `infra/` never manages: the Clerk secret `ai-gaussian-splatter/clerk-secret-key` (it prompts for the `sk_live_...` value), the account-wide `AWSServiceRoleForEC2Spot` role, and the Terraform state bucket `ai-gaussian-splatter-tfstate-<account-id>`.
-2. Creates GitHub's OIDC provider and the `ai-gaussian-splatter-ci-deploy` role the `deploy` job assumes.
-3. Sets the GitHub repository variables `.github/workflows/deploy.yml` reads.
-4. Turns the `deploy` job on.
-5. Runs the first deploy and waits for it, which takes around 20 minutes, most of it ACM certificate validation.
-6. Builds and pushes the worker images ([Releasing a worker change](#23-releasing-a-worker-change)).
+2. Requests a GPU spot vCPU quota of 8, because a new account's is 0 and every worker job fails at launch until AWS raises it. It asks before the first deploy so the approval overlaps the deploy's wait. Declining, or a failed request, doesn't stop the run.
+3. Creates GitHub's OIDC provider and the `ai-gaussian-splatter-ci-deploy` role the `deploy` job assumes.
+4. Sets the GitHub repository variables `.github/workflows/deploy.yml` reads.
+5. Turns the `deploy` job on.
+6. Runs the first deploy and waits for it, which takes around 20 minutes, most of it ACM certificate validation.
+7. Builds and pushes the worker images ([Releasing a worker change](#23-releasing-a-worker-change)).
 
 ```bash
 scripts/prod/bootstrap.sh
@@ -225,6 +227,7 @@ What each step creates, and what reads it afterwards:
 flowchart LR
   subgraph bootstrap["scripts/prod/bootstrap.sh"]
     prereqs["prereqs"]
+    quotastep["quota"]
     cirole["ci-role"]
     ghvars["gh-vars"]
     enable["enable"]
@@ -233,6 +236,7 @@ flowchart LR
   end
   secret[("ai-gaussian-splatter/<br/>clerk-secret-key")]
   spotrole["AWSServiceRole<br/>ForEC2Spot"]
+  quotareq["GPU spot vCPU<br/>quota request"]
   state[("ai-gaussian-splatter-<br/>tfstate-#lt;account-id#gt;")]
   oidc["GitHub OIDC<br/>provider"]
   role["ai-gaussian-splatter-<br/>ci-deploy"]
@@ -244,12 +248,14 @@ flowchart LR
   webtask["web task"]
   spot["worker instances"]
   prereqs --> secret & spotrole & state
+  quotastep --> quotareq
   cirole --> oidc & role
   ghvars --> vars
   enable --> flag
   workerstep --> images & tag
   secret -->|"read at start"| webtask
   spotrole -->|"needed by"| spot
+  quotareq -->|"allows"| spot
   images -->|"pulled by"| spot
   state -->|"terraform init"| deployjob
   oidc -->|"signs in"| deployjob
@@ -270,21 +276,23 @@ It looks up `AWS_ACCOUNT_ID`, `HOSTED_ZONE_ID` and `CLERK_SECRET_KEY_ARN`. The h
 - `GA_MEASUREMENT_ID` is the Google Analytics 4 measurement ID (`G-...`) and is optional. Leaving it empty builds the app without Google Analytics or its privacy banner. An empty answer keeps the current value, so turning analytics off is `gh variable delete GA_MEASUREMENT_ID`.
 - `WORKER_AMI_ID` is the AMI every worker instance boots. The image must already carry Docker, the NVIDIA driver and container toolkit, and the AWS CLI. AWS's Deep Learning Base GPU AMIs do, and the script lists the newest five before asking.
 
-The script doesn't ask for `WORKER_IMAGE_TAG`. When it is unset, the script sets it to the tag step 6 pushes the worker images under, which is `worker/`'s git tree id on `origin/main`. After that, only [Releasing a worker change](#23-releasing-a-worker-change) changes it.
+The script doesn't ask for `WORKER_IMAGE_TAG`. When it is unset, the script sets it to the tag step 7 pushes the worker images under, which is `worker/`'s git tree id on `origin/main`. After that, only [Releasing a worker change](#23-releasing-a-worker-change) changes it.
 
 The CI role's policy, `scripts/prod/ci-role-policies/deploy.json`, is a reasonable starting point, not an exhaustively verified minimal policy, so expect `AccessDenied` during the first deploy. Add the missing action to that file, run `scripts/prod/bootstrap.sh ci-role`, then rerun the `deploy` job (`gh run rerun <run-id> --failed-jobs`).
 
-Five things have no API the script could call, so do them by hand once it finishes:
+Seven things are left for you once the script finishes:
 
-1. Click the subscription link AWS emails to `ALERT_EMAIL`, or the sweeper's and the alarms' emails are never delivered ([Compute](ARCHITECTURE.md#3-compute)). A subscription that still reads `PendingConfirmation` after the email should have arrived usually means a typo'd address:
+1. Click the subscription link AWS emails to `ALERT_EMAIL`, or the sweeper's and the alarms' emails are never delivered ([Compute](ARCHITECTURE.md#3-compute)). A subscription still reading `PendingConfirmation` after the email should have arrived usually means a typo'd address:
    ```bash
    aws sns list-subscriptions --region "$(source scripts/lib/terraform.sh && tf_get_aws_region)" \
      --query "Subscriptions[?ends_with(TopicArn, ':ai-gaussian-splatter-alerts')].SubscriptionArn"
    ```
-2. In the production Clerk instance's dashboard, open the Legal page, turn on **Require express consent to legal documents**, and set the terms of service and privacy policy URLs to the app's `/terms` and `/privacy` pages. Clerk's sign-up form then requires a checkbox.
-3. On the same dashboard's [Domains page](https://dashboard.clerk.com/last-active?path=domains), press **Deploy certificates** once every record shows as verified. The deploy creates those records from `local.clerk_cnames` in `infra/locals.tf`, whose targets belong to this Clerk production instance. If the instance is ever replaced, copy the new targets from its Domains page into `local.clerk_cnames` first.
-4. On the same dashboard's **User & authentication** page, in the **User model** section, turn off **Allow users to delete their accounts**. Users delete their accounts through the app's own account menu item instead, which also deletes their splats.
-5. Check that the web service can read its runtime settings. `scripts/prod/ssm.sh` should list every setting, and the new-splat page should show no "Processing is paused" notice. The notice with every setting present means the task role can't read them ([Runtime settings](ARCHITECTURE.md#95-runtime-settings)).
+2. In the production Clerk dashboard's Legal page, turn on **Require express consent to legal documents** and set the terms and privacy policy URLs to the app's `/terms` and `/privacy` pages.
+3. On Clerk's [Domains page](https://dashboard.clerk.com/last-active?path=domains), press **Deploy certificates** once every record shows as verified. The deploy creates those records from `local.clerk_cnames` in `infra/locals.tf`. If the Clerk production instance is ever replaced, copy its new targets into `local.clerk_cnames` first.
+4. On Clerk's **User & authentication** page, turn off **Allow users to delete their accounts**. Users delete their accounts through the app's own account menu item instead, which also deletes their splats.
+5. Run `scripts/prod/ssm.sh` and check it lists every runtime setting. The new-splat page showing "Processing is paused" with every setting present means the task role can't read them ([Runtime settings](ARCHITECTURE.md#95-runtime-settings)).
+6. Set up Google sign-in ([Setting up Google sign-in](#27-setting-up-google-sign-in)).
+7. Wait for AWS to approve the GPU spot quota request from step 2, which takes hours to a couple of days. Until then every worker job fails at launch with "GPU processing isn't available on this site yet". `scripts/prod/bootstrap.sh quota` reports whether the request is still pending.
 
 If a new image fails its health checks, the circuit breaker rolls back to the previous task definition. To roll back by hand, revert the change and push. A schema change gets a corrective migration instead ([Fixing a bad migration](#31-fixing-a-bad-migration)).
 
@@ -369,6 +377,17 @@ scripts/prod/ssm.sh processing-enabled false   # changes one
 - **A new train instance type** must be one whose GPU `worker/Dockerfile` compiles gsplat's kernels for, so the script accepts only those.
 
 For local dev, each setting except the lifetime ceiling and the two instance types is an env var in `web/.env` named after it, such as `MAX_JOBS_PER_DAY` (`web/.env.example`). Those three only an EC2 launch reads, and `pnpm dev` never makes one.
+
+### 2.7 Setting up Google sign-in
+
+A production Clerk instance has no shared Google client. Without its own credentials, the sign-in button fails at Google with "Missing required parameter: client_id". Keep the Clerk tab open throughout, because step 1 produces a value step 4 needs.
+
+1. In the production Clerk dashboard's [SSO connections page](https://dashboard.clerk.com/last-active?path=user-authentication/sso-connections), add Google for all users, or open it if it is listed. Turn on **Enable for sign-up and sign-in** and **Use custom credentials**, then copy the **Authorized Redirect URI** Clerk shows.
+2. In the [Google Cloud Console](https://console.cloud.google.com/), pick or create a project. Any project works, since only the OAuth client lives there. Under **APIs & Services**, open **OAuth consent screen**. If it offers **Get started**, press it, enter the app name and your support email, choose **External** as the audience, and add a contact email.
+3. On the consent screen, set the publishing status to **In production**. **Testing** lets only listed test users sign in, up to 100. Google may ask to verify the app name, logo and scopes first.
+4. Under **APIs & Services**, then **Credentials**, create an **OAuth client ID** of type **Web application**. Add `https://ai-gaussian-splatter.<DOMAIN_ZONE_NAME>` as an authorized JavaScript origin, using the `DOMAIN_ZONE_NAME` value from the script. Add the redirect URI from step 1 as an authorized redirect URI.
+5. Copy the **Client ID** and **Client secret** from the dialog Google shows. The secret is hard to find again later. Paste both into the Google connection in Clerk and press **Save**.
+6. Check it: in a private window, open the app's sign-in page and press **Continue with Google**. Google's account chooser should appear. If an error appears instead, look for an `oauth_callback.failed` event in Clerk's Application Logs.
 
 ---
 
