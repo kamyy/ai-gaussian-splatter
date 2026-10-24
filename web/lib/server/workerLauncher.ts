@@ -45,6 +45,10 @@ const NO_CAPACITY_MESSAGES: Record<string, string> = {
     "GPU processing isn't available on this site yet. Retrying won't help until the site owner raises the AWS limit.",
 };
 
+// RunInstances error names that only one availability zone can cause, so the next subnet may still work. Unsupported
+// is an instance type the zone doesn't offer. The GPU types are not in every zone.
+const ZONE_ERROR_NAMES = new Set(["InsufficientInstanceCapacity", "Unsupported"]);
+
 type WorkerStage = "reconstruct" | "train";
 
 /**
@@ -227,8 +231,9 @@ function explainLaunchError(err: unknown): unknown {
 /**
  * Launches the spot worker instance and returns its instance ID.
  *
- * A zone with no GPU spot capacity (InsufficientInstanceCapacity) moves on to the next subnet in WORKER_SUBNET_IDS,
- * since each one is in its own availability zone. Any other error stops the loop at once. That includes the GPU spot
+ * An error only one availability zone can cause (ZONE_ERROR_NAMES) moves on to the next subnet in
+ * WORKER_SUBNET_IDS, since each one is in its own zone. Each skipped subnet is logged. Any other error stops the loop at
+ * once. That includes the GPU spot
  * quota, which is account-wide, so another zone can't help. The splat's page shows the failure's message as the worker
  * job's error.
  */
@@ -247,21 +252,21 @@ export async function launchJob(params: WorkerLaunch): Promise<string> {
   let lastError: unknown;
   for (const subnetId of subnetIds) {
     try {
-      return await runInstance(params, subnetId);
+      return await runInstance(params, env, subnetId);
     } catch (err) {
       lastError = err;
-      if (!(err instanceof Error) || err.name !== "InsufficientInstanceCapacity") {
+      if (!(err instanceof Error) || !ZONE_ERROR_NAMES.has(err.name)) {
         break;
       }
+
+      console.warn(`RunInstances in ${subnetId} failed with ${err.name}: ${err.message}`);
     }
   }
 
   throw explainLaunchError(lastError);
 }
 
-async function runInstance(params: WorkerLaunch, subnetId: string): Promise<string> {
-  const env = getEnv() as LaunchEnv;
-
+async function runInstance(params: WorkerLaunch, env: LaunchEnv, subnetId: string): Promise<string> {
   const instanceType =
     params.stage === "reconstruct" ? params.settings.reconstructInstanceType : params.settings.trainInstanceType;
 
