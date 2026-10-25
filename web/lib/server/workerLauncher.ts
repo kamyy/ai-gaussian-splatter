@@ -231,11 +231,14 @@ function explainLaunchError(err: unknown): unknown {
 /**
  * Launches the spot worker instance and returns its instance ID.
  *
- * An error only one availability zone can cause (ZONE_ERROR_NAMES) moves on to the next subnet in
- * WORKER_SUBNET_IDS, since each one is in its own zone. Each skipped subnet is logged. Any other error stops the loop at
- * once. That includes the GPU spot
- * quota, which is account-wide, so another zone can't help. The splat's page shows the failure's message as the worker
- * job's error.
+ * An error only one availability zone can cause (ZONE_ERROR_NAMES) moves on to the next subnet in WORKER_SUBNET_IDS,
+ * since each subnet is in its own zone. Each skipped subnet is logged.
+ *
+ * Any other error stops the loop at once. The GPU spot quota is one of those, because it is account-wide and another
+ * zone can't help.
+ *
+ * The splat's page shows the failure's message as the worker job's error. When every zone fails, a zone that had no
+ * capacity decides the message, even if a later zone failed with a different zone error.
  */
 export async function launchJob(params: WorkerLaunch): Promise<string> {
   // launchJob runs only outside local dev, where getEnv() has already required every worker instance setting. The
@@ -249,21 +252,25 @@ export async function launchJob(params: WorkerLaunch): Promise<string> {
     throw new Error("WORKER_SUBNET_IDS names no subnet");
   }
 
-  let lastError: unknown;
+  let firstCapacityError: Error | undefined;
+  let lastError: Error | undefined;
   for (const subnetId of subnetIds) {
     try {
       return await runInstance(params, env, subnetId);
     } catch (err) {
-      lastError = err;
       if (!(err instanceof Error) || !ZONE_ERROR_NAMES.has(err.name)) {
-        break;
+        throw explainLaunchError(err);
       }
 
       console.warn(`RunInstances in ${subnetId} failed with ${err.name}: ${err.message}`);
+      lastError = err;
+      if (err.name in NO_CAPACITY_MESSAGES) {
+        firstCapacityError ??= err;
+      }
     }
   }
 
-  throw explainLaunchError(lastError);
+  throw explainLaunchError(firstCapacityError ?? lastError);
 }
 
 async function runInstance(params: WorkerLaunch, env: LaunchEnv, subnetId: string): Promise<string> {

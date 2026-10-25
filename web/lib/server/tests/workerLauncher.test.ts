@@ -327,6 +327,18 @@ describe("launchJob", () => {
       await expect(launchJob(params)).resolves.toBe("i-0second");
     });
 
+    it("explains the capacity refusal when a later zone fails with a different zone error", async () => {
+      ec2Mock
+        .on(RunInstancesCommand)
+        .rejectsOnce(refusal("InsufficientInstanceCapacity"))
+        .rejects(refusal("Unsupported"));
+
+      await expect(launchJob(params)).rejects.toMatchObject({
+        message: expect.stringContaining("Try again later."),
+        cause: expect.objectContaining({ name: "InsufficientInstanceCapacity" }),
+      });
+    });
+
     it("stops at the quota refusal after a first subnet with no capacity", async () => {
       ec2Mock
         .on(RunInstancesCommand)
