@@ -105,9 +105,15 @@ set -euo pipefail
 # and no ceiling, billing until someone notices. -f skips systemd, in case systemd is why shutdown failed.
 shutdown -h +${p.maxLifetimeMinutes} || poweroff -f
 
-# Epoch milliseconds. User-data starts once the instance has booted, so the worker reports this to split the stage's
-# start-up into boot and image pull (web/lib/stageTimings.ts).
-BOOTED_AT="$(date +%s%3N)"
+# Epoch milliseconds. Ubuntu 26.04's date (uutils) ignores a width on %N, so %s%3N prints all nine nanosecond digits
+# there. Dividing %s%N by a million works on any date that supports %N.
+now_ms() {
+    echo $(( $(date +%s%N) / 1000000 ))
+}
+
+# User-data starts once the instance has booted, so the worker reports this to split the stage's start-up into boot and
+# image pull (web/lib/stageTimings.ts).
+BOOTED_AT="$(now_ms)"
 
 # Lines in the shape worker/pipeline/timing.py logs, for scripts/prod/logs-timings.sh. They are collected here and sent
 # to the stage's log stream just before docker run. The container terminates this instance when it finishes, so nothing
@@ -132,10 +138,9 @@ UPLOADS_BUCKET="${p.uploadsBucket}"
 SPLATS_BUCKET="${p.splatsBucket}"
 STAGE="${p.stage}"
 
-LOGIN_STARTED="$(date +%s%3N)"
-$(aws ecr get-login --no-include-email --region ${p.awsRegion}) || \\
-    aws ecr get-login-password --region ${p.awsRegion} | docker login --username AWS --password-stdin ${p.ecrRegistry}
-record "timing phase=ecr_login ms=$(( $(date +%s%3N) - LOGIN_STARTED ))"
+LOGIN_STARTED="$(now_ms)"
+aws ecr get-login-password --region ${p.awsRegion} | docker login --username AWS --password-stdin ${p.ecrRegistry}
+record "timing phase=ecr_login ms=$(( $(now_ms) - LOGIN_STARTED ))"
 
 # Docker refuses to start a container whose awslogs stream it can't create, which would fail the stage with no output
 # and leave this instance idle until the lifetime ceiling. Creating the stream first turns that into a logged error
@@ -151,9 +156,9 @@ fi
 # volume's limit, means the disk. Both low means the download itself.
 vmstat -n 2 > /var/log/worker-pull-vmstat.log &
 VMSTAT_PID=$!
-PULL_STARTED="$(date +%s%3N)"
+PULL_STARTED="$(now_ms)"
 docker pull ${p.workerImageUri}
-PULL_MS=$(( $(date +%s%3N) - PULL_STARTED ))
+PULL_MS=$(( $(now_ms) - PULL_STARTED ))
 kill "$VMSTAT_PID" || true
 record "timing phase=docker_pull ms=$PULL_MS bytes=$(docker image inspect --format '{{.Size}}' ${p.workerImageUri})"
 # vmstat's first row averages everything since boot, so it is skipped. us, sy, wa are columns 13, 14, 16, and bo is 10.
@@ -164,7 +169,7 @@ awk 'NR > 3 { print "sample phase=docker_pull us=" $13 " sy=" $14 " wa=" $16 " b
 # or backslashes, so awk writes the JSON without escaping them. A failed send costs only these lines, so it doesn't stop
 # the stage.
 if [ -n "$LOG_OPTS" ]; then
-    EVENTS="$(awk -v ts="$(date +%s%3N)" '
+    EVENTS="$(awk -v ts="$(now_ms)" '
         BEGIN { printf "[" }
         { printf "%s{\\"timestamp\\":%s,\\"message\\":\\"%s\\"}", (NR > 1 ? "," : ""), ts, $0 }
         END { printf "]" }' "$TIMINGS")"
@@ -183,7 +188,7 @@ docker run --rm --gpus all \\
     -e SPLATS_BUCKET="$SPLATS_BUCKET" \\
     -e STAGE="$STAGE" \\
     -e BOOTED_AT="$BOOTED_AT" \\
-    -e DOCKER_RUN_AT="$(date +%s%3N)" \\
+    -e DOCKER_RUN_AT="$(now_ms)" \\
     -e S3_CREDENTIALS_FROM_APP=true \\
 ${iterationsArg}    ${p.workerImageUri}
 `;

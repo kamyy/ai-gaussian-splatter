@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import {
   DescribeInstancesCommand,
   EC2Client,
@@ -223,13 +225,38 @@ describe("launchJob", () => {
     expect(userData).toContain("shutdown -h +45 || poweroff -f");
   });
 
+  it("prints epoch milliseconds from a date that ignores the width on %N", async () => {
+    ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
+    await launchJob(params);
+
+    const userData = Buffer.from(runInstancesInput().UserData ?? "", "base64").toString();
+    const nowMs = userData.match(/^now_ms\(\) \{\n[\s\S]*?\n\}$/m)?.[0];
+    expect(nowMs).toBeDefined();
+
+    // This file mocks node:child_process and node:fs, so running the shell needs the real modules. The fake date
+    // prints every nanosecond digit whatever width it is asked for, as Ubuntu 26.04's uutils date does.
+    const { execFileSync } = await vi.importActual<typeof import("node:child_process")>("node:child_process");
+    const fs = await vi.importActual<typeof import("node:fs")>("node:fs");
+    const os = await vi.importActual<typeof import("node:os")>("node:os");
+    const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "fake-date-"));
+    try {
+      fs.writeFileSync(path.join(binDir, "date"), "#!/bin/sh\necho 1761000000123456789\n", { mode: 0o755 });
+      const out = execFileSync("bash", ["-c", `${nowMs}\nnow_ms`], {
+        env: { ...process.env, PATH: `${binDir}:${process.env.PATH}` },
+      });
+      expect(out.toString().trim()).toBe("1761000000123");
+    } finally {
+      fs.rmSync(binDir, { recursive: true, force: true });
+    }
+  });
+
   it("stamps the boot time once user-data starts and passes it to the worker", async () => {
     ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
     await launchJob(params);
 
     // Stamped before docker login, so the gap from it to the worker's first callback is the image pull alone.
     const userData = Buffer.from(runInstancesInput().UserData ?? "", "base64").toString();
-    expect(userData).toContain('BOOTED_AT="$(date +%s%3N)"');
+    expect(userData).toContain('BOOTED_AT="$(now_ms)"');
     expect(userData.indexOf("BOOTED_AT=")).toBeLessThan(userData.indexOf("docker login --username"));
     expect(userData).toContain('-e BOOTED_AT="$BOOTED_AT" \\\n');
   });
@@ -259,7 +286,7 @@ describe("launchJob", () => {
     await launchJob(params);
 
     const userData = Buffer.from(runInstancesInput().UserData ?? "", "base64").toString();
-    expect(userData).toContain('-e DOCKER_RUN_AT="$(date +%s%3N)" \\\n');
+    expect(userData).toContain('-e DOCKER_RUN_AT="$(now_ms)" \\\n');
   });
 
   it("throws if EC2 returns no instance", async () => {

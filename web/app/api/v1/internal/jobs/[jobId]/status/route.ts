@@ -22,6 +22,11 @@ import { jobs, splats } from "@/lib/server/db/schema";
 import { HttpError, parseJsonBody, withErrorHandling } from "@/lib/server/httpError";
 import { JOB_ENDED_STATUSES, JobStatus, SplatStatus } from "@/lib/statuses";
 
+// How far a reported boot time may sit from this callback's arrival. A stage's first callback comes minutes after boot,
+// so a day back covers any lifetime ceiling. The few minutes ahead allow for clock skew between the instance and here.
+const BOOTED_AT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const BOOTED_AT_MAX_LEAD_MS = 5 * 60 * 1000;
+
 const workerStatusSchema = z.object({
   status: z.enum(JobStatus),
   error_message: z.string().nullish(),
@@ -30,9 +35,31 @@ const workerStatusSchema = z.object({
   thumbnail_s3_key: z.string().nullish(),
   point_cloud_s3_key: z.string().nullish(),
   training_progress: z.number().int().min(0).max(100).nullish(),
-  // Epoch milliseconds, sent with each stage's first callback. Absent on a local run.
-  booted_at: z.number().int().positive().nullish(),
+  // Epoch milliseconds, sent with each stage's first callback. Absent on a local run. Any number is accepted here, and
+  // bootTime() drops one in the wrong unit, so a bad timestamp can't cost the callback its status.
+  booted_at: z.number().nullish(),
 });
+
+/**
+ * The boot time to record, or null when the worker reported none or one that isn't epoch milliseconds near now. A
+ * dropped value only leaves the stage's boot/pull split unknown.
+ */
+function bootTime(bootedAt: number | null | undefined, now: Date): Date | null {
+  if (bootedAt == null) {
+    return null;
+  }
+
+  if (
+    !Number.isInteger(bootedAt) ||
+    bootedAt < now.getTime() - BOOTED_AT_MAX_AGE_MS ||
+    bootedAt > now.getTime() + BOOTED_AT_MAX_LEAD_MS
+  ) {
+    console.warn(`Ignoring booted_at ${bootedAt}, which is not epoch milliseconds near ${now.toISOString()}`);
+    return null;
+  }
+
+  return new Date(bootedAt);
+}
 
 /**
  * Throws 400 unless every key sits under this splat's own prefix. The app presigns these keys for the splat's owner and
@@ -108,7 +135,7 @@ export const PATCH = withErrorHandling(
     // callback: worker/pipeline/status.py swallows a failed PATCH, so that callback can simply go missing. Without
     // the fallback, colmapFinishedAt would stay null for the life of the job.
     const now = new Date();
-    const bootedAt = body.booted_at == null ? null : new Date(body.booted_at);
+    const bootedAt = bootTime(body.booted_at, now);
     if (status === JobStatus.reconstruction_running && job.colmapStartedAt === null) {
       jobData.colmapStartedAt = now;
       jobData.colmapBootedAt = job.colmapBootedAt ?? bootedAt;
