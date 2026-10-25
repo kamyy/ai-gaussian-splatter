@@ -282,6 +282,82 @@ describe("launchJob", () => {
     ec2Mock.on(RunInstancesCommand).rejects(Object.assign(new Error("not allowed"), { name: "UnauthorizedOperation" }));
     await expect(launchJob(params)).rejects.toThrow("not allowed");
   });
+
+  describe("across subnets", () => {
+    function refusal(name: string) {
+      return Object.assign(new Error("EC2's own wording"), { name });
+    }
+
+    it("launches into the first subnet when it has capacity", async () => {
+      ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
+      await launchJob(params);
+
+      expect(runInstancesInput().SubnetId).toBe("subnet-0123456789");
+    });
+
+    it("tries the next subnet when the first has no capacity", async () => {
+      ec2Mock
+        .on(RunInstancesCommand)
+        .rejectsOnce(refusal("InsufficientInstanceCapacity"))
+        .resolves({ Instances: [{ InstanceId: "i-0second" }] });
+
+      await expect(launchJob(params)).resolves.toBe("i-0second");
+      expect(ec2Mock.commandCalls(RunInstancesCommand).map(call => call.args[0].input.SubnetId)).toEqual([
+        "subnet-0123456789",
+        "subnet-9876543210",
+      ]);
+    });
+
+    it("explains the refusal once every subnet has no capacity", async () => {
+      ec2Mock.on(RunInstancesCommand).rejects(refusal("InsufficientInstanceCapacity"));
+
+      await expect(launchJob(params)).rejects.toMatchObject({
+        message: expect.stringContaining("Try again later."),
+        cause: expect.objectContaining({ name: "InsufficientInstanceCapacity" }),
+      });
+      expect(ec2Mock.commandCalls(RunInstancesCommand)).toHaveLength(2);
+    });
+
+    it("tries the next subnet when the instance type is unsupported in the first zone", async () => {
+      ec2Mock
+        .on(RunInstancesCommand)
+        .rejectsOnce(refusal("Unsupported"))
+        .resolves({ Instances: [{ InstanceId: "i-0second" }] });
+
+      await expect(launchJob(params)).resolves.toBe("i-0second");
+    });
+
+    it("explains the capacity refusal when a later zone fails with a different zone error", async () => {
+      ec2Mock
+        .on(RunInstancesCommand)
+        .rejectsOnce(refusal("InsufficientInstanceCapacity"))
+        .rejects(refusal("Unsupported"));
+
+      await expect(launchJob(params)).rejects.toMatchObject({
+        message: expect.stringContaining("Try again later."),
+        cause: expect.objectContaining({ name: "InsufficientInstanceCapacity" }),
+      });
+    });
+
+    it("stops at the quota refusal after a first subnet with no capacity", async () => {
+      ec2Mock
+        .on(RunInstancesCommand)
+        .rejectsOnce(refusal("InsufficientInstanceCapacity"))
+        .rejects(refusal("MaxSpotInstanceCountExceeded"));
+
+      await expect(launchJob(params)).rejects.toMatchObject({
+        message: expect.stringContaining("Retrying won't help"),
+      });
+      expect(ec2Mock.commandCalls(RunInstancesCommand)).toHaveLength(2);
+    });
+
+    it.each(["MaxSpotInstanceCountExceeded", "UnauthorizedOperation"])("stops at once on %s", async name => {
+      ec2Mock.on(RunInstancesCommand).rejects(refusal(name));
+
+      await expect(launchJob(params)).rejects.toThrow();
+      expect(ec2Mock.commandCalls(RunInstancesCommand)).toHaveLength(1);
+    });
+  });
 });
 
 describe("launchJobLocal", () => {

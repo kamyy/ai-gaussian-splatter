@@ -20,7 +20,7 @@ const defaults: Record<string, string> = {
   AWS_ACCESS_KEY_ID: "testing",
   AWS_SECRET_ACCESS_KEY: "testing",
   WORKER_AMI_ID: "ami-0123456789",
-  WORKER_SUBNET_ID: "subnet-0123456789",
+  WORKER_SUBNET_IDS: "subnet-0123456789,subnet-9876543210",
   WORKER_SECURITY_GROUP_ID: "sg-0123456789",
   WORKER_INSTANCE_PROFILE_ARN: "arn:aws:iam::123456789012:instance-profile/worker",
   WORKER_LOG_GROUP: "/ai-gaussian-splatter/worker",

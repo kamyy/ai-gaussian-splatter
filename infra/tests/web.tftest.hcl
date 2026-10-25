@@ -72,6 +72,25 @@ run "run_instances_statements_stay_split" {
     error_message = "the unconditioned RunInstances statement must exist and must not carry aws:RequestTag — that's the separate RunInstancesTagged statement"
   }
 
+  # The launcher retries the next subnet when one has no GPU capacity, so the grant and the env var must cover every
+  # public subnet. The mock provider's ARNs aren't ARN-shaped, so the grant is checked for the subnets it must hold
+  # rather than for the absence of others.
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.task.policy).Statement :
+      s.Sid == "RunInstances" && alltrue([for subnet in values(aws_subnet.public) : contains(s.Resource, subnet.arn)])
+    ])
+    error_message = "RunInstances must name every public subnet"
+  }
+
+  assert {
+    condition = anytrue([
+      for e in jsondecode(aws_ecs_task_definition.web.container_definitions)[0].environment :
+      e.name == "WORKER_SUBNET_IDS" && toset(split(",", e.value)) == toset([for subnet in values(aws_subnet.public) : subnet.id])
+    ])
+    error_message = "WORKER_SUBNET_IDS must list every public subnet"
+  }
+
   assert {
     condition = anytrue([
       for s in jsondecode(aws_iam_role_policy.task.policy).Statement :

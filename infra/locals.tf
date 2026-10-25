@@ -43,10 +43,10 @@ locals {
   # --- Network and DNS ----------------------------------------------------------------
   availability_zones = [for suffix in ["a", "b"] : "${var.aws_region}${suffix}"]
 
-  # The one subnet the worker's spot instance ever launches into (web/lib/server/workerLauncher.ts's SubnetId). A
-  # single local keeps infra/web.tf's WORKER_SUBNET_ID env var and its RunInstances IAM grant from naming two different
-  # subnets.
-  worker_subnet = values(aws_subnet.public)[0]
+  # Every subnet the worker's spot instance may launch into, which web/lib/server/workerLauncher.ts tries in this order
+  # until one has GPU capacity. A single local keeps infra/web.tf's WORKER_SUBNET_IDS env var and its RunInstances IAM
+  # grant from naming different subnets.
+  worker_subnets = values(aws_subnet.public)
 
   app_hostname = "ai-gaussian-splatter.${var.domain_zone_name}"
 

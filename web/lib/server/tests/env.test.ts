@@ -63,7 +63,7 @@ describe("getEnv", () => {
   // launch.
   it.each([
     "WORKER_AMI_ID",
-    "WORKER_SUBNET_ID",
+    "WORKER_SUBNET_IDS",
     "WORKER_SECURITY_GROUP_ID",
     "WORKER_INSTANCE_PROFILE_ARN",
     "WORKER_LOG_GROUP",
