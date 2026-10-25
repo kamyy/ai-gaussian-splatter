@@ -87,7 +87,7 @@ describe("worker status callback", () => {
 
   it("records each stage's boot time from its first callback, and never overwrites it", async () => {
     const { job } = await seed();
-    const booted = Date.parse("2026-01-01T00:01:00Z");
+    const booted = Date.now() - 120_000;
 
     await PATCH(req("tok", { status: "reconstruction_running", booted_at: booted }), ctx(job.id));
     await PATCH(req("tok", { status: "reconstruction_running", booted_at: booted + 5000 }), ctx(job.id));
@@ -96,6 +96,19 @@ describe("worker status callback", () => {
     const [updated] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
     expect(updated.colmapBootedAt).toEqual(new Date(booted));
     expect(updated.trainingBootedAt).toEqual(new Date(booted + 60_000));
+  });
+
+  it.each([
+    ["nanosecond digits", Number("1761000000123456789")],
+    ["seconds", Math.floor(Date.now() / 1000)],
+  ])("records the status but drops a boot time in %s", async (_unit, bootedAt) => {
+    const { job } = await seed();
+    const res = await PATCH(req("tok", { status: "reconstruction_running", booted_at: bootedAt }), ctx(job.id));
+    expect(res.status).toBe(204);
+
+    const [updated] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
+    expect(updated.status).toBe("reconstruction_running");
+    expect(updated.colmapBootedAt).toBeNull();
   });
 
   it("leaves the boot time null for a local run that reports none", async () => {
