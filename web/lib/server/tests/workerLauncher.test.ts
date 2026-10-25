@@ -149,8 +149,8 @@ describe("launchJob", () => {
 
     // The pipeline runs in a container, so the instance metadata service (IMDS) is one network hop further away than it
     // is from the host. At EC2's default hop limit of 1, the token PUT in worker/pipeline/instance.py never gets a
-    // reply and terminate_self() does nothing. The GPU instance then bills until someone stops it by hand, and the only
-    // log line is an INFO message that looks exactly like a normal local run.
+    // reply and terminate_self() does nothing. The GPU instance then bills until its lifetime ceiling, and the only log
+    // line is an INFO message that looks exactly like a normal local run.
     const metadata = runInstancesInput().MetadataOptions;
     expect(metadata?.HttpPutResponseHopLimit).toBe(2);
 
