@@ -177,9 +177,12 @@ if [ -n "$LOG_OPTS" ]; then
         --log-stream-name "$JOB_ID-$STAGE" --log-events "$EVENTS" || true
 fi
 
-# LOG_OPTS is deliberately unquoted, so its words split into separate docker arguments. None of them holds a space.
+# Two of the flags below need explaining. LOG_OPTS is deliberately unquoted, so its words split into separate docker
+# arguments, none of which holds a space. AWS_DEFAULT_REGION is for worker/pipeline/instance.py's EC2 client, which
+# can't terminate this instance without one.
 docker run --rm --gpus all \\
     $LOG_OPTS \\
+    -e AWS_DEFAULT_REGION=${p.awsRegion} \\
     -e JOB_ID="$JOB_ID" \\
     -e SPLAT_ID="$SPLAT_ID" \\
     -e CALLBACK_TOKEN="$CALLBACK_TOKEN" \\
