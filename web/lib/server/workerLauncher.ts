@@ -139,8 +139,7 @@ SPLATS_BUCKET="${p.splatsBucket}"
 STAGE="${p.stage}"
 
 LOGIN_STARTED="$(now_ms)"
-$(aws ecr get-login --no-include-email --region ${p.awsRegion}) || \\
-    aws ecr get-login-password --region ${p.awsRegion} | docker login --username AWS --password-stdin ${p.ecrRegistry}
+aws ecr get-login-password --region ${p.awsRegion} | docker login --username AWS --password-stdin ${p.ecrRegistry}
 record "timing phase=ecr_login ms=$(( $(now_ms) - LOGIN_STARTED ))"
 
 # Docker refuses to start a container whose awslogs stream it can't create, which would fail the stage with no output
