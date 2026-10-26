@@ -60,12 +60,22 @@ function errorResponse(status: number, detail: string): NextResponse {
   return NextResponse.json({ detail }, { status });
 }
 
+/**
+ * Wraps a Route Handler so a thrown HttpError becomes its JSON error response. Each one but a 404 is logged first.
+ * Otherwise a rejected sign-in or a rate limit would leave no trace in the web logs, only in the load balancer's
+ * access logs. A 404 is left out because scanners probing for paths produce a steady stream of them.
+ */
 export function withErrorHandling<Args extends unknown[]>(handler: Handler<Args>): Handler<Args> {
   return async (...args: Args) => {
     try {
       return await handler(...args);
     } catch (error) {
       if (error instanceof HttpError) {
+        const [request] = args;
+        if (error.status !== 404 && request instanceof Request) {
+          console.warn(`${error.status} ${request.method} ${new URL(request.url).pathname}: ${error.message}`);
+        }
+
         return errorResponse(error.status, error.message);
       }
 
