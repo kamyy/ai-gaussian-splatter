@@ -110,7 +110,7 @@ stateDiagram-v2
 ```
 
 - Each stage of a worker job — reconstruct, then train — gets its own EC2 GPU **spot** instance (`web/lib/server/workerLauncher.ts`). Reconstruct runs on a `g4dn.xlarge` and train on a `g5.xlarge` by default. Both are runtime settings ([Runtime settings](#95-runtime-settings)). Each instance runs the worker container, then self-terminates on success or failure.
-- Reconstruct is mostly COLMAP's CPU-bound `mapper`, so it gets little from the A10G GPU. A `g4dn.xlarge` has the same 4 vCPUs at about half the hourly price, and its T4 GPU still runs COLMAP's feature extraction and matching. Neither stage's instance type has been timed against the other (M10).
+- Reconstruct is mostly CPU-bound COLMAP work, so it gets little from the A10G GPU. On a `g4dn.xlarge`, feature extraction and `mapper` both ran at full CPU with the GPU near idle. A `g4dn.xlarge` has the same 4 vCPUs at about half the hourly price. Neither stage's instance type has been timed against the other (M10).
 - Fallback if a worker dies without reporting: `web/lib/server/workerLauncher.ts` schedules `shutdown -h` at the instance's lifetime ceiling as the first thing user-data does. The ceiling is the `worker-max-lifetime-minutes` runtime setting at launch, and the instance carries it as a `MaxLifetimeMinutes` tag.
   - It runs before the failure-prone steps (ECR login, `docker run`) that could otherwise leave `worker/pipeline/instance.py`'s own self-terminate unreached.
   - `InstanceInitiatedShutdownBehavior = "terminate"` on the launch makes that shutdown terminate the instance rather than stop it.
@@ -148,16 +148,16 @@ flowchart TD
   sweeper --> reconcile
 ```
 
-A worker job's wall clock splits into three parts:
+A worker job's wall clock splits into three parts. The times are from one 56-photo worker job on AWS.
 
-- **Fixed overhead**: pulling and extracting the stage's image before its GPU does anything — ~1.9 GB for reconstruct, ~8.0 GB for train.
+- **Fixed overhead**: booting the instance, then pulling and extracting the stage's image before its GPU does anything. Reconstruct's took ~1.7 minutes with its ~1.9 GB image. Train's took ~2.7 minutes with its ~8.0 GB image, 90 seconds of that the pull.
   - `worker/Dockerfile` builds one target per stage carrying only what that stage runs. It compiles gsplat's CUDA kernels in, so no stage compiles them at run time.
   - Reconstruct gets much the smaller image and runs more often, since every upload reconstructs while only some go on to train.
   - Reconstruct needs no CUDA library beyond cudart, so it starts from a `-base` image where train needs `-runtime`.
-- **COLMAP**: a few minutes, CPU-bound by `mapper`'s incremental bundle adjustment.
-- **Training**: the majority of wall clock.
+- **COLMAP**: ~6.7 minutes, the largest part. Feature extraction took ~3 minutes, exhaustive matching ~1.3 and `mapper`'s incremental bundle adjustment ~2.5.
+- **Training**: ~3 minutes, ~2.7 of them the training loop.
 
-A baked AMI would attack the smaller half — fixed overhead, not training. Training cost is set by the resolution the photos are rasterized at (`MAX_TRAINING_EDGE` in `worker/pipeline/train.py`), not by boot latency. Shrinking the image and precompiling the kernels took most of what an AMI was worth here, so M10 measures the fixed overhead before anyone builds an AMI. Each stage on the splat's page shows its instance's boot, its image pull and its work separately, so the first stage run on AWS gives the split. No stage has run on AWS yet.
+A baked AMI would attack only the fixed overhead. That is about a third of the worker job's wall clock, and nearly half of the train stage's. Training cost is set by the resolution the photos are rasterized at (`MAX_TRAINING_EDGE` in `worker/pipeline/train.py`), not by boot latency. Shrinking the image and precompiling the kernels took most of what an AMI was worth here. Each stage on the splat's page shows its instance's boot, its image pull and its work separately.
 
 That split shows how big each part is, not why. Each stage also logs every phase's duration with CPU, GPU and disk samples beside it, and `scripts/prod/logs-timings.sh` reads them back. The samples tell a pull limited by unpacking from one limited by the disk, and a training loop limited by the CPU from one limited by the GPU, which is what picks the fix. Two places write those lines:
 - `web/lib/server/workerLauncher.ts`, whose user-data times the boot, the ECR login and the image pull
