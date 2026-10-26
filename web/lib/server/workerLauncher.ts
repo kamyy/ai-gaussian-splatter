@@ -37,17 +37,26 @@ const LIFETIME_TAG_KEY = "MaxLifetimeMinutes";
  */
 const stoppedLocalJobs = new Set<string>();
 
-// What a visitor sees when RunInstances refuses for lack of GPU capacity, by EC2 error name. The two cases get different
-// advice because only one of them clears by itself. MaxSpotInstanceCountExceeded is the account's GPU spot vCPU quota,
-// which starts at 0 and stays there until the site owner raises it (RUNBOOK.md, Going live).
-const NO_CAPACITY_MESSAGES: Record<string, string> = {
-  InsufficientInstanceCapacity: "No GPU capacity is available right now. Try again later.",
-  MaxSpotInstanceCountExceeded:
-    "GPU processing isn't available on this site yet. Retrying won't help until the site owner raises the AWS limit.",
+// What a visitor sees when RunInstances refuses for lack of capacity, by stage and EC2 error name. Reconstruct runs on
+// a CPU instance and train on a GPU one, so each stage's messages name its own kind. The two cases get different
+// advice because only one of them clears by itself. MaxSpotInstanceCountExceeded is the account's spot vCPU quota for
+// the stage's instance family, the standard quota for reconstruct and the GPU quota for train. Either stays where it is
+// until the site owner raises it (RUNBOOK.md, Going live).
+const NO_CAPACITY_MESSAGES: Record<WorkerStage, Record<string, string>> = {
+  reconstruct: {
+    InsufficientInstanceCapacity: "No CPU capacity is available right now. Try again later.",
+    MaxSpotInstanceCountExceeded:
+      "CPU processing isn't available on this site yet. Retrying won't help until the site owner raises the AWS limit.",
+  },
+  train: {
+    InsufficientInstanceCapacity: "No GPU capacity is available right now. Try again later.",
+    MaxSpotInstanceCountExceeded:
+      "GPU processing isn't available on this site yet. Retrying won't help until the site owner raises the AWS limit.",
+  },
 };
 
 // RunInstances error names that only one availability zone can cause, so the next subnet may still work. Unsupported
-// is an instance type the zone doesn't offer. The GPU types are not in every zone.
+// is an instance type the zone doesn't offer. A zone can lack a type, such as g5.xlarge in zone d.
 const ZONE_ERROR_NAMES = new Set(["InsufficientInstanceCapacity", "Unsupported"]);
 
 type WorkerStage = "reconstruct" | "train";
@@ -235,8 +244,8 @@ export function generateCallbackToken(): string {
 // Turns a capacity refusal into a 503 with wording a visitor can act on, and keeps the original error as its `cause` for
 // the operator's logs. A 503 reaches the browser as a JSON `detail`, where a plain Error would be an opaque 500. Any
 // other error comes back unchanged.
-function explainLaunchError(err: unknown): unknown {
-  const message = err instanceof Error ? NO_CAPACITY_MESSAGES[err.name] : undefined;
+function explainLaunchError(err: unknown, stage: WorkerStage): unknown {
+  const message = err instanceof Error ? NO_CAPACITY_MESSAGES[stage][err.name] : undefined;
 
   return message === undefined ? err : new HttpError(503, message, { cause: err });
 }
@@ -288,19 +297,19 @@ export async function launchJob(params: WorkerLaunch): Promise<string> {
         return await runInstance(params, env, subnetId, instanceType);
       } catch (err) {
         if (!(err instanceof Error) || !ZONE_ERROR_NAMES.has(err.name)) {
-          throw explainLaunchError(err);
+          throw explainLaunchError(err, params.stage);
         }
 
         console.warn(`RunInstances of ${instanceType} in ${subnetId} failed with ${err.name}: ${err.message}`);
         lastError = err;
-        if (err.name in NO_CAPACITY_MESSAGES) {
+        if (err.name in NO_CAPACITY_MESSAGES[params.stage]) {
           firstCapacityError ??= err;
         }
       }
     }
   }
 
-  throw explainLaunchError(firstCapacityError ?? lastError);
+  throw explainLaunchError(firstCapacityError ?? lastError, params.stage);
 }
 
 async function runInstance(

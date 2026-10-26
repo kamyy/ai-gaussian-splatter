@@ -317,16 +317,29 @@ describe("launchJob", () => {
     await expect(launchJob(params)).rejects.toThrow("no instance ID");
   });
 
+  // Reconstruct runs on a CPU instance and train on a GPU one, so a refusal names the kind the stage asked for.
   it.each([
-    ["InsufficientInstanceCapacity", "Try again later."],
-    ["MaxSpotInstanceCountExceeded", "Retrying won't help"],
-  ])("explains a %s refusal without EC2's wording", async (name, advice) => {
+    ["reconstruct", "InsufficientInstanceCapacity", "No CPU capacity is available right now. Try again later.", "GPU"],
+    [
+      "reconstruct",
+      "MaxSpotInstanceCountExceeded",
+      "CPU processing isn't available on this site yet. Retrying won't help until the site owner raises the AWS limit.",
+      "GPU",
+    ],
+    ["train", "InsufficientInstanceCapacity", "No GPU capacity is available right now. Try again later.", "CPU"],
+    [
+      "train",
+      "MaxSpotInstanceCountExceeded",
+      "GPU processing isn't available on this site yet. Retrying won't help until the site owner raises the AWS limit.",
+      "CPU",
+    ],
+  ] as const)("explains a %s stage's %s refusal in its own words", async (stage, name, message, otherKind) => {
     ec2Mock.on(RunInstancesCommand).rejects(Object.assign(new Error("EC2's own wording"), { name }));
-    await expect(launchJob(params)).rejects.toMatchObject({
-      status: 503,
-      message: expect.stringContaining(advice),
-      cause: expect.objectContaining({ name }),
-    });
+
+    const error = await launchJob({ ...params, stage }).catch((err: unknown) => err);
+
+    expect(error).toMatchObject({ status: 503, message, cause: expect.objectContaining({ name }) });
+    expect((error as Error).message).not.toContain(otherKind);
   });
 
   it("surfaces any other launch failure unchanged", async () => {

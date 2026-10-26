@@ -325,7 +325,7 @@ Seven things are left for you once the script finishes:
 4. On Clerk's **User & authentication** page, turn off **Allow users to delete their accounts**. Users delete their accounts through the app's own account menu item instead, which also deletes their splats.
 5. Run `scripts/prod/ssm.sh` and check it lists every runtime setting. The new-splat page showing "Processing is paused" with every setting present means the task role can't read them ([Runtime settings](ARCHITECTURE.md#95-runtime-settings)).
 6. Set up Google sign-in ([Setting up Google sign-in](#27-setting-up-google-sign-in)).
-7. Wait for AWS to approve the quota requests from step 2, which takes hours to a couple of days. Until then every worker job fails at launch with "GPU processing isn't available on this site yet". `scripts/prod/bootstrap.sh quota` reports whether the request is still pending.
+7. Wait for AWS to approve the quota requests from step 2, which takes hours to a couple of days. Until then a reconstruct launch fails with "CPU processing isn't available on this site yet" and a train launch with "GPU processing isn't available on this site yet". `scripts/prod/bootstrap.sh quota` reports whether the request is still pending.
 
 If a new image fails its health checks, the circuit breaker rolls back to the previous task definition. To roll back by hand, revert the change and push. A schema change gets a corrective migration instead ([Fixing a bad migration](#31-fixing-a-bad-migration)).
 
