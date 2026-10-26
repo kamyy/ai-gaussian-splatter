@@ -76,7 +76,7 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
   - A plain quoted or bolded name silently goes stale the moment the target heading is renamed; a broken link is easier to spot in review.
 - **A bare mention of one of the other root docs (`AGENTS.md`, `RUNBOOK.md`, `ARCHITECTURE.md`, `README.md`) gets linked to the file too** — `` [`AGENTS.md`](AGENTS.md) ``, not just backtick text.
   - This doesn't extend to code file paths: those stay as inline code per the rule above, since linking every one would be churn for no navigational benefit.
-- **A reply includes a Mermaid diagram when it turns on order, ownership, or how parts connect.** The diagram is part of the reply, so the chat renders it with the answer.
+- **A reply includes a plain-text diagram when it turns on order, ownership, or how parts connect.** Draw it with box-drawing characters in a `text` code block, the way the diagrams in [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`RUNBOOK.md`](RUNBOOK.md) are drawn. Don't use Mermaid, because the Claude Code VS Code extension's chat panel shows it as raw source.
   - A plan.
   - An answer to a question about the codebase.
   - The actions the agent is about to take.
@@ -85,6 +85,9 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
   - A question a few sentences already answer stays prose.
   - Each box uses the same name the code uses.
   - The diagram shows a relationship the sentences beside it do not already state.
+- **Diagrams in the docs are plain text in `text` code blocks, never Mermaid.** Plain text renders the same in GitHub, VS Code and the terminal.
+  - Draw arrowheads with `►`, `◄`, `▲` and `▼`. The solid triangles `▶` and `◀` come out wider than the surrounding text in many fonts, which pushes the box sides on that row out of line.
+  - Write a file's path on one line, even when that makes a column wider, because a path split across two lines can't be grepped.
 
 ---
 
