@@ -79,11 +79,18 @@ describe("POST /api/v1/splats/[splatId]/photos/[photoId]/presign", () => {
     expect(res.status).toBe(422);
   });
 
-  it("refuses a photo that is already uploaded, so a worker job's input is never overwritten", async () => {
+  it("gives no new links for a photo that is already uploaded", async () => {
     const { splatId, photoId } = await seedPhoto({ uploadStatus: PhotoUploadStatus.uploaded });
 
     const res = await POST(presignRequest(), ctx(splatId, photoId));
     expect(res.status).toBe(409);
+  });
+
+  it("refuses a reservation more than an hour old, so one rate-limited batch can't be re-signed forever", async () => {
+    const { splatId, photoId } = await seedPhoto({ createdAt: new Date(Date.now() - 61 * 60 * 1000) });
+
+    const res = await POST(presignRequest(), ctx(splatId, photoId));
+    expect(res.status).toBe(410);
   });
 
   it("refuses a row the reserve route didn't create", async () => {
