@@ -262,7 +262,9 @@ aws login # Needed again only after the session expires, up to 12 hours later.
 `scripts/prod/bootstrap.sh` takes a fresh account to a live deploy. Its `--help` lists each step and what it creates. Run with no arguments, it runs them all, in order:
 
 1. Creates what `infra/` never manages: the Clerk secret `ai-gaussian-splatter/clerk-secret-key` (it prompts for the `sk_live_...` value), the account-wide `AWSServiceRoleForEC2Spot` role, and the Terraform state bucket `ai-gaussian-splatter-tfstate-<account-id>`.
-2. Requests a GPU spot vCPU quota of 8, because a new account's is 0 and every worker job fails at launch until AWS raises it. It asks before the first deploy so the approval overlaps the deploy's wait. Declining, or a failed request, doesn't stop the run.
+2. Requests a GPU spot vCPU quota of 8, because a new account's is 0 and every train stage fails at launch until AWS raises it. It asks before the first deploy so the approval overlaps the deploy's wait. Declining, or a failed request, doesn't stop the run.
+   - The reconstruct stage's CPU instance draws on a different quota, "All Standard Spot Instance Requests" (`L-34B43A08`), which this step doesn't request. Its value must be at least the vCPUs of the reconstruct instance type, 32 for `c7i.8xlarge`.
+   - Read it with `aws service-quotas get-service-quota --service-code ec2 --quota-code L-34B43A08`, and ask AWS to raise it when it is lower.
 3. Creates GitHub's OIDC provider and the `ai-gaussian-splatter-ci-deploy` role the `deploy` job assumes.
 4. Sets the GitHub repository variables `.github/workflows/deploy.yml` reads.
 5. Turns the `deploy` job on.
@@ -305,7 +307,7 @@ It looks up `AWS_ACCOUNT_ID`, `HOSTED_ZONE_ID` and `CLERK_SECRET_KEY_ARN`. The h
 - `ALERT_EMAIL` is where the AWS Budget (`infra/budgets.tf`) sends spend alerts, and where the worker sweeper (`infra/worker_sweeper.tf`) and the alarms send theirs.
 - `CLERK_PUBLISHABLE_KEY` is the `pk_live_...` key, not the secret one. `web/Dockerfile` compiles it into the browser bundle, so a later change to it reaches users on the next deploy that changes `web/` ([Image tags](ARCHITECTURE.md#111-image-tags)).
 - `GA_MEASUREMENT_ID` is the Google Analytics 4 measurement ID (`G-...`) and is optional. Leaving it empty builds the app without Google Analytics or its privacy banner. An empty answer keeps the current value, so turning analytics off is `gh variable delete GA_MEASUREMENT_ID`.
-- `WORKER_AMI_ID` is the AMI every worker instance boots. The image must already carry Docker, the NVIDIA driver and container toolkit, and the AWS CLI. AWS's Deep Learning Base GPU AMIs do, and the script lists the newest five before asking.
+- `WORKER_AMI_ID` is the AMI every worker instance boots. The image must already carry Docker, the NVIDIA driver and container toolkit, and the AWS CLI. AWS's Deep Learning Base GPU AMIs do, and the script lists the newest five before asking. The driver is for the train stage. The reconstruct stage's CPU instance boots the same AMI and leaves the driver unused.
 
 The script doesn't ask for `WORKER_IMAGE_TAG`. When it is unset, the script sets it to the tag step 7 pushes the worker images under, which is `worker/`'s git tree id on `origin/main`. After that, only [Releasing a worker change](#23-releasing-a-worker-change) changes it.
 
@@ -323,7 +325,7 @@ Seven things are left for you once the script finishes:
 4. On Clerk's **User & authentication** page, turn off **Allow users to delete their accounts**. Users delete their accounts through the app's own account menu item instead, which also deletes their splats.
 5. Run `scripts/prod/ssm.sh` and check it lists every runtime setting. The new-splat page showing "Processing is paused" with every setting present means the task role can't read them ([Runtime settings](ARCHITECTURE.md#95-runtime-settings)).
 6. Set up Google sign-in ([Setting up Google sign-in](#27-setting-up-google-sign-in)).
-7. Wait for AWS to approve the GPU spot quota request from step 2, which takes hours to a couple of days. Until then every worker job fails at launch with "GPU processing isn't available on this site yet". `scripts/prod/bootstrap.sh quota` reports whether the request is still pending.
+7. Wait for AWS to approve the GPU spot quota request from step 2, which takes hours to a couple of days. Until then reconstruct runs, and every train launch fails with "GPU processing isn't available on this site yet". `scripts/prod/bootstrap.sh quota` reports whether the request is still pending.
 
 If a new image fails its health checks, the circuit breaker rolls back to the previous task definition. To roll back by hand, revert the change and push. A schema change gets a corrective migration instead ([Fixing a bad migration](#31-fixing-a-bad-migration)).
 
@@ -427,6 +429,7 @@ scripts/prod/ssm.sh processing-enabled false   # changes one
 - **Pausing processing** stops new reconstruct and train launches only. Stages already running finish, and the new-splat page and the splat page tell visitors processing is paused.
 - **A new lifetime ceiling** applies to instances launched after the change. Each running instance keeps the ceiling it launched with.
 - **A new train instance type** must be one whose GPU `worker/Dockerfile` compiles gsplat's kernels for, so the script accepts only those.
+- **A new reconstruct instance type** can be a CPU or a GPU type, because COLMAP runs on either. The script accepts only the types `web/lib/server/runtimeSettings.ts` lists.
 
 For local dev, each setting except the lifetime ceiling and the two instance types is an env var in `web/.env` named after it, such as `MAX_JOBS_PER_DAY` (`web/.env.example`). Those three only an EC2 launch reads, and `pnpm dev` never makes one.
 

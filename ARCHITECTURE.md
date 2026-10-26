@@ -155,8 +155,13 @@ A worker job's `jobs` row moves through `JobStatus` (`web/lib/statuses.ts`). `la
   awaiting_training ─────────────────────────► cancelled
 ```
 
-- Each stage of a worker job — reconstruct, then train — gets its own EC2 GPU **spot** instance (`web/lib/server/workerLauncher.ts`). Reconstruct runs on a `g4dn.xlarge` and train on a `g5.xlarge` by default. Both are runtime settings ([Runtime settings](#95-runtime-settings)). Each instance runs the worker container, then self-terminates on success or failure.
-- Reconstruct is mostly CPU-bound COLMAP work, so it gets little from the A10G GPU. On a `g4dn.xlarge`, feature extraction and `mapper` both ran at full CPU with the GPU near idle. A `g4dn.xlarge` has the same 4 vCPUs at about half the hourly price. Neither stage's instance type has been timed against the other (M10).
+- Each stage of a worker job — reconstruct, then train — gets its own EC2 **spot** instance (`web/lib/server/workerLauncher.ts`). Reconstruct runs on a CPU instance, a `c7i.8xlarge` with 32 vCPUs, and train on a GPU instance, a `g5.xlarge`, by default. Both are runtime settings ([Runtime settings](#95-runtime-settings)). Each instance runs the worker container, then self-terminates on success or failure.
+- Reconstruct gets no GPU because COLMAP's phases are limited by CPU. On a 100-photo capture of 12.5-megapixel photos on a `g4dn.xlarge` (4 vCPUs and a T4 GPU), feature extraction took 5.4 minutes at 99% CPU and 1% GPU, and exhaustive matching 4.5 minutes at 99% CPU and 38% GPU. The `mapper`'s incremental bundle adjustment took 6.9 minutes using about 2.3 of the 4 cores and no GPU.
+  - GPU spot capacity is the other reason. `g4dn.xlarge` and `g5.xlarge` ran out in every availability zone several times in one day, and CPU spot pools are deeper.
+  - A GPU instance draws on the "All G and VT Spot" vCPU quota and a CPU instance on the "All Standard Spot" one. A CPU reconstruct stage therefore leaves the small GPU quota (8 vCPUs, two `xlarge` instances) to train.
+  - One container runs on either kind of instance. The user-data in `web/lib/server/workerLauncher.ts` passes `--gpus all` only where `nvidia-smi` works, and `worker/pipeline/sfm.py` sets COLMAP's `use_gpu` from whether the container has `nvidia-smi`.
+  - The GPU types stay in the reconstruct allow-list. `scripts/prod/ssm.sh` switches back to one with no deploy.
+  - A `c7i.8xlarge` spot costs about $0.56–0.66 an hour against about $0.25 for a `g4dn.xlarge`, so the stage has to finish in under half the time to cost less. On a 16-thread desktop CPU, COLMAP registered all 86 photos of one capture in 3.2 minutes with no GPU, against 2.0 minutes with one. Its `mapper` took 53 seconds either way. The stage's time and cost on a `c7i.8xlarge` have not been measured yet.
 - Fallback if a worker dies without reporting: `web/lib/server/workerLauncher.ts` schedules `shutdown -h` at the instance's lifetime ceiling as the first thing user-data does. The ceiling is the `worker-max-lifetime-minutes` runtime setting at launch, and the instance carries it as a `MaxLifetimeMinutes` tag.
   - It runs before the failure-prone steps (ECR login, `docker run`) that could otherwise leave `worker/pipeline/instance.py`'s own self-terminate unreached.
   - `InstanceInitiatedShutdownBehavior = "terminate"` on the launch makes that shutdown terminate the instance rather than stop it.
@@ -202,7 +207,7 @@ cloud-init runs user-data?
 
 A worker job's wall clock splits into three parts. The times are from one 56-photo worker job on AWS.
 
-- **Fixed overhead**: booting the instance, then pulling and extracting the stage's image before its GPU does anything. Reconstruct's took ~1.7 minutes with its ~1.9 GB image. Train's took ~2.7 minutes with its ~8.0 GB image, 90 seconds of that the pull.
+- **Fixed overhead**: booting the instance, then pulling and extracting the stage's image before the stage's work starts. Reconstruct's took ~1.7 minutes with its ~1.9 GB image. Train's took ~2.7 minutes with its ~8.0 GB image, 90 seconds of that the pull.
   - `worker/Dockerfile` builds one target per stage carrying only what that stage runs. It compiles gsplat's CUDA kernels in, so no stage compiles them at run time.
   - Reconstruct gets much the smaller image and runs more often, since every upload reconstructs while only some go on to train.
   - Reconstruct needs no CUDA library beyond cudart, so it starts from a `-base` image where train needs `-runtime`.
@@ -336,7 +341,7 @@ How a photo set moves through AWS, from upload to viewing the finished splat. Th
    │                │     GET .spz          │ callback    │
    │                │                       │ over HTTPS  ▼
    │                │                       │          ┌───────────────────┐    ┌─────────────────┐
-   │                │                       └──────────┤ GPU spot instance │◄───┤ ECR worker repo │
+   │                │                       └──────────┤ Worker instance   │◄───┤ ECR worker repo │
    │                │                                  │ reconstruct,      │    └─────────────────┘
    │                │                                  │ then train        │    4 · pull image
    │                │                                  └──┬─────────────▲──┘
@@ -359,7 +364,7 @@ How a photo set moves through AWS, from upload to viewing the finished splat. Th
   - **network** — VPC, subnets, security groups.
   - **data** — RDS, S3.
   - **registry** — ECR alone, so the image can push before the service exists.
-  - **worker_iam** — IAM for the GPU worker instances.
+  - **worker_iam** — IAM for the worker instances.
   - **worker_sweeper** — the scheduled Lambda that terminates overdue worker instances, and its alert topic.
   - **web** — ALB + Fargate.
   - **settings** — the SSM parameters behind the runtime settings ([Runtime settings](#95-runtime-settings)).
@@ -411,7 +416,7 @@ Where each resource sits in the network, and which security group (sg) guards it
 │ │ │ └────────────────────────┘                │ public IP                 │ │ │ │
 │ │ │                                           └─────────────┬─────────────┘ │ │ │
 │ │ │ ┌──────────────────────────┐                            │               │ │ │
-│ │ │ │ EC2 GPU spot · sg worker │                            │ :5432 only    │ │ │
+│ │ │ │ EC2 spot · sg worker     │                            │ :5432 only    │ │ │
 │ │ │ │ one per stage            │                            │               │ │ │
 │ │ │ └──────────────────────────┘                            │               │ │ │
 │ │ └─────────────────────────────────────────────────────────┼───────────────┘ │ │
@@ -434,10 +439,10 @@ Where each resource sits in the network, and which security group (sg) guards it
 └─────────────────────────────────────────────────────────────────────────────────┘
 
 Other connections:
-  Fargate Spot service ┄┄ RunInstances ┄┄► EC2 GPU spot
+  Fargate Spot service ┄┄ RunInstances ┄┄► EC2 spot
   Fargate Spot service ──► S3 gateway endpoint ──► S3
-  EC2 GPU spot ──► S3 gateway endpoint ──► S3   photos, splats, image layers
-  EC2 GPU spot ──► Internet gateway ──► ECR     ECR login + manifest
+  EC2 spot ──► S3 gateway endpoint ──► S3   photos, splats, image layers
+  EC2 spot ──► Internet gateway ──► ECR     ECR login + manifest
   Fargate Spot service ──► Internet gateway ──► Secrets Manager
 ```
 

@@ -327,6 +327,10 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - The sweeper never waits longer than `worker_max_lifetime_upper_bound_minutes` (`infra/locals.tf`) plus 15 minutes, whatever the tag says. Keep that local at or above the largest ceiling `web/lib/server/runtimeSettings.ts` accepts, or the sweeper kills healthy stages the setting allows.
 - **A train instance type needs a GPU that `worker/Dockerfile`'s `TORCH_CUDA_ARCH_LIST` covers.** Adding one to the `train-instance-type` allow-list in `web/lib/server/runtimeSettings.ts` means checking that list, then adding it to `scripts/prod/ssm.sh` too.
 - **Every instance type either allow-list in `web/lib/server/runtimeSettings.ts` accepts must also be in `local.worker_instance_types` (`infra/locals.tf`).** The web task's `RunInstances` grant refuses any other type. A type missing there passes `scripts/prod/ssm.sh` and then fails every launch with an IAM denial.
+- **`web/lib/server/workerLauncher.ts` and `worker/pipeline/sfm.py` both decide GPU or CPU from `nvidia-smi`, and the two must agree.** The user-data passes `--gpus all` to `docker run` only when `nvidia-smi -L` works on the instance, because Docker refuses to start a container with `--gpus all` on an instance with no NVIDIA device.
+  - The container then has `nvidia-smi` only when it got a GPU, and `worker/pipeline/sfm.py` runs COLMAP on the GPU only then.
+  - The reconstruct stage's default instance type, `c7i.8xlarge`, has no GPU ([Compute](ARCHITECTURE.md#3-compute)).
+  - Release the worker image with `scripts/prod/worker-push-image.sh` before setting `reconstruct-instance-type` to a CPU type. An older image passes `use_gpu 1` and fails every reconstruct stage on a CPU instance.
 - **Every S3 call in `worker/` gets its client from `s3_client()` in `worker/pipeline/storage.py`, never `boto3.client("s3")`.** A worker instance's role has no S3 access, so a bare client works in a local run and fails with `AccessDenied` on AWS ([Abuse protection](ARCHITECTURE.md#10-abuse-protection)).
   - The credentials it returns cover one splat's keys only. A new object the worker writes has to sit under `splats/<splatId>/` in the splats bucket, and `web/app/api/v1/internal/jobs/[jobId]/s3-credentials/route.ts`'s session policy has to allow the action.
   - A listing outside that prefix, or a `HeadObject` of a missing key, can come back as 403 rather than 404.
@@ -515,8 +519,9 @@ Scaffolding (three packages + CI) is in place. Host-run `next dev` can 500 with 
 Known gaps, priority order:
 
 1. **No E2E coverage.** `web/e2e/` has no specs; share/view pages SSR from the DB with no seeded test DB to run against. Seed one and add a spec.
-2. **The worker's lifetime ceiling has been measured against one capture only.** The `worker-max-lifetime-minutes` setting defaults to 30 minutes. A 56-photo worker job on AWS took about 8.5 minutes for reconstruct and 6 minutes for train, each counted from instance boot to upload. `scripts/prod/logs-timings.sh` prints the per-phase split.
-   - No 100-photo capture has been timed. Exhaustive matching grows with the square of the photo count, so reconstruct is the stage that nears the ceiling first.
+2. **The worker's lifetime ceiling has been measured against two captures only.** The `worker-max-lifetime-minutes` setting defaults to 30 minutes. A 56-photo worker job on AWS took about 8.5 minutes for reconstruct and 6 minutes for train, each counted from instance boot to upload. `scripts/prod/logs-timings.sh` prints the per-phase split.
+   - A 100-photo capture took about 17 minutes for reconstruct on a `g4dn.xlarge`: 5.4 for feature extraction, 4.5 for exhaustive matching and 6.9 for `mapper`.
+   - Reconstruct now defaults to a CPU instance, and its timings are not measured yet. Exhaustive matching grows with the square of the photo count, so it is the phase most likely to near the ceiling on a CPU.
    - A legitimately slow stage that runs past it is terminated and failed exactly like a hang.
    - When the instance's own shutdown fires, no one is emailed. The sweeper only emails about instances whose own shutdown never fired ([Compute](ARCHITECTURE.md#3-compute)).
 3. **A well-formed but wrong `alert_email` still deploys green.**
