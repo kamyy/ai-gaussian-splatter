@@ -25,7 +25,7 @@ locals {
   # Every instance type the reconstruct-instance-type and train-instance-type runtime settings accept
   # (web/lib/server/runtimeSettings.ts). The web task's RunInstances grant (infra/web.tf) refuses any other, so a type
   # added to either allow-list there has to be added here too.
-  worker_instance_types = ["g4dn.xlarge", "g5.xlarge", "g6.xlarge", "g6e.xlarge"]
+  worker_instance_types = ["c6i.8xlarge", "c7a.8xlarge", "c7i.8xlarge", "g5.xlarge", "g6.xlarge", "g6e.xlarge"]
 
   # All four named explicitly rather than left to a generated name, because each is written out literally elsewhere.
   # The cluster and service are in RUNBOOK.md's Clerk secret rotation and in .github/workflows/deploy.yml. The two roles
@@ -44,12 +44,13 @@ locals {
   # RDS's isolated subnets span these two zones.
   availability_zones = [for suffix in ["a", "b"] : "${var.aws_region}${suffix}"]
 
-  # The public subnets span one more zone, so a worker launch has a third place to find GPU spot capacity. Zone d is
-  # left out because it offers neither default worker instance type (g4dn.xlarge, g5.xlarge).
-  public_availability_zones = concat(local.availability_zones, ["${var.aws_region}c"])
+  # The public subnets span two more zones, so a worker launch has more places to find spot capacity. Zone d doesn't
+  # offer g5.xlarge, the default train instance type, so a train launch skips it. Every reconstruct instance type is
+  # offered there.
+  public_availability_zones = concat(local.availability_zones, ["${var.aws_region}c", "${var.aws_region}d"])
 
   # Every subnet the worker's spot instance may launch into, which web/lib/server/workerLauncher.ts tries in this order
-  # until one has GPU capacity. A single local keeps infra/web.tf's WORKER_SUBNET_IDS env var and its RunInstances IAM
+  # until one has capacity. A single local keeps infra/web.tf's WORKER_SUBNET_IDS env var and its RunInstances IAM
   # grant from naming different subnets.
   worker_subnets = values(aws_subnet.public)
 
@@ -146,7 +147,7 @@ locals {
     "uploads-per-user-per-day"    = "10"
     "min-photos-per-splat"        = "20"
     "worker-max-lifetime-minutes" = "30"
-    "reconstruct-instance-type"   = "g4dn.xlarge"
+    "reconstruct-instance-type"   = "c7i.8xlarge"
     "train-instance-type"         = "g5.xlarge"
     "training-iterations"         = "10000"
     # SSM refuses an empty value, so "none" stands for no showcase account.

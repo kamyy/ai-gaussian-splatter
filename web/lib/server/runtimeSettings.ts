@@ -24,8 +24,10 @@ const CACHE_TTL_MS = 60 * 1000;
 // infra/locals.tf's worker_instance_types lists every type in both arrays below. The web task's RunInstances grant
 // refuses any type missing from it, so a type added here has to be added there too.
 //
-// Reconstruct runs COLMAP, which works on any of these GPUs.
-const RECONSTRUCT_INSTANCE_TYPES = ["g4dn.xlarge", "g5.xlarge", "g6.xlarge"];
+// Reconstruct runs COLMAP on the CPU, because its phases are limited by CPU. Its allow-list holds CPU types only, since
+// worker/pipeline/sfm.py never uses a GPU and the instance's container is not given one. The three are 32-vCPU types from
+// different families, so one family's spot capacity running out leaves the others to switch to with scripts/prod/ssm.sh.
+export const RECONSTRUCT_INSTANCE_TYPES = ["c7i.8xlarge", "c7a.8xlarge", "c6i.8xlarge"];
 
 // Train runs gsplat kernels compiled for the GPUs in worker/Dockerfile's TORCH_CUDA_ARCH_LIST: the A10G (g5), L4 (g6)
 // and L40S (g6e). A type outside that list fails every train stage.
@@ -118,7 +120,7 @@ const SETTINGS: { [K in keyof RuntimeSettings]: Setting<RuntimeSettings[K]> } = 
   },
   reconstructInstanceType: {
     name: "reconstruct-instance-type",
-    fallback: "g4dn.xlarge",
+    fallback: "c7i.8xlarge",
     parse: oneOf(RECONSTRUCT_INSTANCE_TYPES),
   },
   trainInstanceType: { name: "train-instance-type", fallback: "g5.xlarge", parse: oneOf(TRAIN_INSTANCE_TYPES) },

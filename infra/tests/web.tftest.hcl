@@ -114,7 +114,14 @@ run "run_instances_statements_stay_split" {
     condition = anytrue([
       for s in jsondecode(aws_iam_role_policy.task.policy).Statement :
       s.Sid == "RunInstancesTagged" &&
-      toset(try(s.Condition.StringEquals["ec2:InstanceType"], [])) == toset(["g4dn.xlarge", "g5.xlarge", "g6.xlarge", "g6e.xlarge"])
+      toset(try(s.Condition.StringEquals["ec2:InstanceType"], [])) == toset([
+        "c6i.8xlarge",
+        "c7a.8xlarge",
+        "c7i.8xlarge",
+        "g5.xlarge",
+        "g6.xlarge",
+        "g6e.xlarge",
+      ])
     ])
     error_message = "the tagged RunInstances statement must limit ec2:InstanceType to the worker instance types"
   }

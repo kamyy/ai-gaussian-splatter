@@ -10,10 +10,14 @@
 # shellcheck disable=SC2034 # Each repository variable's value is read back through ${!repo_var} in gh_vars.
 set -euo pipefail
 
-# "All G and VT Spot Instance Requests". Enough vCPUs for one g4dn.xlarge reconstruct stage and one g5.xlarge train
-# stage at a time, 4 vCPUs each.
+# "All G and VT Spot Instance Requests". Enough vCPUs for two g5.xlarge train stages at a time, 4 vCPUs each.
 GPU_SPOT_QUOTA_CODE=L-3819A6DF
 GPU_SPOT_VCPUS=8
+
+# "All Standard (A, C, D, H, I, M, R, T, Z) Spot Instance Requests". Enough vCPUs for two 32-vCPU reconstruct stages at
+# a time, on any of the CPU types web/lib/server/runtimeSettings.ts allows.
+STANDARD_SPOT_QUOTA_CODE=L-34B43A08
+STANDARD_SPOT_VCPUS=64
 
 usage() {
   echo "Usage: scripts/prod/bootstrap.sh [STEP]"
@@ -24,10 +28,12 @@ usage() {
   echo "  prereqs   Creates what infra/ can't: the Clerk secret ai-gaussian-splatter/clerk-secret-key (prompts for its"
   echo "            sk_live_ value), the AWSServiceRoleForEC2Spot role, and the ai-gaussian-splatter-tfstate-<account>"
   echo "            Terraform state bucket. Never overwrites an existing secret's value."
-  echo "  quota     Requests a GPU spot vCPU quota of $GPU_SPOT_VCPUS, unless the account has that many or a request is"
-  echo "            pending. A new account starts at 0, which fails every worker job at launch. Approval takes hours to"
-  echo "            days, so a full run asks before the first deploy and lets it overlap. In a full run, declining or a"
-  echo "            failed request is reported and the run carries on. Run alone, it stops."
+  echo "  quota     Requests two spot vCPU quotas, each unless the account has that many or a request is pending:"
+  echo "            $GPU_SPOT_VCPUS for GPU instances, which the train stage uses, and $STANDARD_SPOT_VCPUS for standard instances, which the"
+  echo "            reconstruct stage uses. A new account's GPU quota starts at 0 and its standard quota can be below"
+  echo "            one reconstruct instance's 32 vCPUs, which fails every worker job at launch. Approval takes hours"
+  echo "            to days, so a full run asks before the first deploy and lets it overlap. In a full run, declining"
+  echo "            or a failed request is reported and the run carries on. Run alone, it stops."
   echo "  ci-role   Creates GitHub's OIDC provider and the ai-gaussian-splatter-ci-deploy role the deploy job"
   echo "            assumes, or rewrites the role's policies from scripts/prod/ci-role-policies/. Run it alone after"
   echo "            adding a missing action to scripts/prod/ci-role-policies/deploy.json when the deploy job fails"
@@ -206,44 +212,55 @@ prereqs() {
 
 # Returns 1 rather than exiting when it can't finish, so a full run can carry on to the deploy without it. The caller
 # runs it in a subshell and a failed call can't stop it with set -e there, so each AWS call is checked by hand.
-quota() {
+request_quota() {
+  local quota_code=$1 vcpus=$2 label=$3
   local current pending
   if ! current=$(aws service-quotas get-service-quota --region "$REGION" --service-code ec2 \
-    --quota-code "$GPU_SPOT_QUOTA_CODE" --query Quota.Value --output text); then
-    echo "quota: could not read the quota. The signed-in identity needs service-quotas:GetServiceQuota." >&2
+    --quota-code "$quota_code" --query Quota.Value --output text); then
+    echo "quota: could not read the $label quota. The signed-in identity needs service-quotas:GetServiceQuota." >&2
     return 1
   fi
   # The value prints as a float, such as 0.0, and bash arithmetic takes integers only.
   if [[ ! $current =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-    echo "quota: expected a number for the current quota, got '$current'." >&2
+    echo "quota: expected a number for the current $label quota, got '$current'." >&2
     return 1
   fi
-  if ((${current%.*} >= GPU_SPOT_VCPUS)); then
-    echo "quota: the GPU spot quota is already $current vCPUs."
+  if ((${current%.*} >= vcpus)); then
+    echo "quota: the $label quota is already $current vCPUs."
     return 0
   fi
 
   if ! pending=$(aws service-quotas list-requested-service-quota-change-history-by-quota --region "$REGION" \
-    --service-code ec2 --quota-code "$GPU_SPOT_QUOTA_CODE" \
+    --service-code ec2 --quota-code "$quota_code" \
     --query "RequestedQuotas[?Status=='PENDING'||Status=='CASE_OPENED'].DesiredValue | [0]" --output text); then
     echo "quota: could not list quota requests. The signed-in identity needs" >&2
     echo "service-quotas:ListRequestedServiceQuotaChangeHistoryByQuota." >&2
     return 1
   fi
   # A pending request for fewer vCPUs than this step wants, such as one filed by hand, doesn't count as done.
-  if [[ $pending =~ ^[0-9]+(\.[0-9]+)?$ ]] && ((${pending%.*} >= GPU_SPOT_VCPUS)); then
-    echo "quota: a request for $pending vCPUs is already pending, and the quota is still $current."
+  if [[ $pending =~ ^[0-9]+(\.[0-9]+)?$ ]] && ((${pending%.*} >= vcpus)); then
+    echo "quota: a request for $pending vCPUs is already pending for the $label quota, and it is still $current."
     echo "AWS emails when it is decided."
     return 0
   fi
 
-  confirm "Request a GPU spot quota of $GPU_SPOT_VCPUS vCPUs in $REGION? It is $current now."
+  confirm "Request a $label quota of $vcpus vCPUs in $REGION? It is $current now."
   if ! aws service-quotas request-service-quota-increase --region "$REGION" --service-code ec2 \
-    --quota-code "$GPU_SPOT_QUOTA_CODE" --desired-value "$GPU_SPOT_VCPUS" >/dev/null; then
+    --quota-code "$quota_code" --desired-value "$vcpus" >/dev/null; then
     echo "quota: the request failed. The signed-in identity needs service-quotas:RequestServiceQuotaIncrease." >&2
     return 1
   fi
-  echo "Requested $GPU_SPOT_VCPUS vCPUs. Worker jobs fail at launch until AWS approves it, which takes hours to days."
+  echo "Requested $vcpus vCPUs of the $label quota. Worker jobs fail at launch until AWS approves it, which takes hours to days."
+}
+
+# Each quota runs in its own subshell, because declining the confirm exits the shell it runs in. Declining the first
+# request then still lets the second one ask.
+quota() {
+  local status=0
+  (request_quota "$GPU_SPOT_QUOTA_CODE" "$GPU_SPOT_VCPUS" "GPU spot") || status=1
+  (request_quota "$STANDARD_SPOT_QUOTA_CODE" "$STANDARD_SPOT_VCPUS" "standard spot") || status=1
+
+  return "$status"
 }
 
 # The quota request has nothing to do with deploying, so a full run keeps going when it is declined or fails. The
@@ -251,7 +268,7 @@ quota() {
 quota_optional() {
   if ! (quota); then
     echo "quota: skipped. Run scripts/prod/bootstrap.sh quota before the first worker job, or every one fails at" >&2
-    echo "launch with no GPU capacity." >&2
+    echo "launch." >&2
   fi
 }
 
@@ -514,7 +531,7 @@ print_manual_steps() {
   echo "  4. In the Clerk dashboard's User & authentication page, turn off Allow users to delete their accounts."
   echo "  5. Run scripts/prod/ssm.sh and check every runtime setting is listed."
   echo "  6. Give Clerk's Google connection its own Google OAuth client ID and secret, or Google sign-in fails."
-  echo "  7. Wait for AWS to approve the GPU spot quota request, or every worker job fails at launch."
+  echo "  7. Wait for AWS to approve the spot quota requests, or every worker job fails at launch."
 }
 
 aws_require_login

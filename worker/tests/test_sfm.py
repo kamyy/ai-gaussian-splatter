@@ -68,3 +68,28 @@ def test_run_colmap_excludes_non_image_files_from_image_path(monkeypatch, tmp_pa
     assert sorted(p.name for p in images_dir.iterdir()) == ["a.jpg", "b.jpg"]
     assert seen_image_paths == [str(images_dir)] * len(seen_image_paths)
     assert result.num_images_input == 2
+
+
+def test_run_colmap_runs_extraction_and_matching_on_the_cpu(monkeypatch, tmp_path):
+    """The reconstruct stage's instance has no GPU, so a use_gpu of 1 would abort COLMAP."""
+    photos_dir = tmp_path / "photos"
+    photos_dir.mkdir()
+    (photos_dir / "a.jpg").write_bytes(b"fake")
+
+    workdir = tmp_path / "colmap"
+    commands = []
+
+    def fake_run(cmd, capture=False):
+        commands.append(cmd)
+        if cmd[1] == "mapper":
+            (workdir / "sparse" / "0").mkdir(parents=True, exist_ok=True)
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("pipeline.sfm._run", fake_run)
+    monkeypatch.setattr("pipeline.sfm._count_registered_images", lambda model_dir: 1)
+
+    run_colmap(photos_dir, workdir)
+
+    extractor, matcher = commands[0], commands[1]
+    assert extractor[extractor.index("--FeatureExtraction.use_gpu") + 1] == "0"
+    assert matcher[matcher.index("--FeatureMatching.use_gpu") + 1] == "0"

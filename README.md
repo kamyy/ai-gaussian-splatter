@@ -62,7 +62,7 @@ The AI training is per-object gradient descent through a differentiable renderer
      │                             ┌───┴────────────┐  ┌────────────┴───┐
      │                             │ Reconstruct    │  │ Train          │
      │                             │ COLMAP         │  │ gsplat         │
-     │                             │ EC2 GPU spot   │  │ EC2 GPU spot   │
+     │                             │ EC2 CPU spot   │  │ EC2 GPU spot   │
      │                             └───────▲────────┘  └───────▲────────┘
      │ presigned upload,                   │                   │
      │ splat download                      │                   │
@@ -74,7 +74,7 @@ The AI training is per-object gradient descent through a differentiable renderer
 
 - **One Next.js app serves both the pages and the REST API**, so there is one deploy and one TypeScript codebase ([API design](ARCHITECTURE.md#4-api-design)).
 - **Photos go straight from the browser to S3** through presigned upload URLs, so large uploads never pass through the web server.
-- **Each worker stage gets its own short-lived GPU spot instance.** The web app launches it, the instance runs the stage's container, reports back through a callback route, and terminates itself ([Compute](ARCHITECTURE.md#3-compute)).
+- **Each worker stage gets its own short-lived spot instance**, a CPU one for reconstruct and a GPU one for train. The web app launches it, the instance runs the stage's container, reports back through a callback route, and terminates itself ([Compute](ARCHITECTURE.md#3-compute)).
 - **The viewer loads a compressed `.spz` file**, about a twelfth the size of the `.ply` offered for download.
 
 ---
@@ -99,7 +99,7 @@ The app is public, and every splat costs real GPU time, so spending is bounded a
 | Frontend | Next.js (App Router) · Tailwind CSS · Radix UI · SWR · React Three Fiber · Spark (splat rendering) |
 | Backend | Next.js Route Handlers · Drizzle ORM · Postgres (RDS) · Clerk (auth) |
 | Worker | Python · COLMAP · gsplat · CUDA, in Podman/Docker containers |
-| Infra | Terraform · ECS Fargate (Spot) behind an ALB · EC2 GPU spot · S3 · ECR · Lambda · Route 53 / ACM |
+| Infra | Terraform · ECS Fargate (Spot) behind an ALB · EC2 spot · S3 · ECR · Lambda · Route 53 / ACM |
 | CI/CD | GitHub Actions, signing in to AWS through OIDC (no stored keys) |
 | Tooling | pnpm · uv · Biome · Ruff · mypy · Vitest · Playwright |
 

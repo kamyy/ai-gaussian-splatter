@@ -23,7 +23,7 @@ import {
 import { JobStatus } from "@/lib/statuses";
 import { getEnv, LOCAL_APP_ORIGIN } from "./env";
 import { HttpError } from "./httpError";
-import type { RuntimeSettings } from "./runtimeSettings";
+import { RECONSTRUCT_INSTANCE_TYPES, type RuntimeSettings } from "./runtimeSettings";
 
 /**
  * The tag each worker instance carries its own lifetime ceiling in. infra/lambda/worker_sweeper.py reads the same key,
@@ -37,17 +37,26 @@ const LIFETIME_TAG_KEY = "MaxLifetimeMinutes";
  */
 const stoppedLocalJobs = new Set<string>();
 
-// What a visitor sees when RunInstances refuses for lack of GPU capacity, by EC2 error name. The two cases get different
-// advice because only one of them clears by itself. MaxSpotInstanceCountExceeded is the account's GPU spot vCPU quota,
-// which starts at 0 and stays there until the site owner raises it (RUNBOOK.md, Going live).
-const NO_CAPACITY_MESSAGES: Record<string, string> = {
-  InsufficientInstanceCapacity: "No GPU capacity is available right now. Try again later.",
-  MaxSpotInstanceCountExceeded:
-    "GPU processing isn't available on this site yet. Retrying won't help until the site owner raises the AWS limit.",
+// What a visitor sees when RunInstances refuses for lack of capacity, by stage and EC2 error name. Reconstruct runs on
+// a CPU instance and train on a GPU one, so each stage's messages name its own kind. The two cases get different
+// advice because only one of them clears by itself. MaxSpotInstanceCountExceeded is the account's spot vCPU quota for
+// the stage's instance family, the standard quota for reconstruct and the GPU quota for train. Either stays where it is
+// until the site owner raises it (RUNBOOK.md, Going live).
+const NO_CAPACITY_MESSAGES: Record<WorkerStage, Record<string, string>> = {
+  reconstruct: {
+    InsufficientInstanceCapacity: "No CPU capacity is available right now. Try again later.",
+    MaxSpotInstanceCountExceeded:
+      "CPU processing isn't available on this site yet. Retrying won't help until the site owner raises the AWS limit.",
+  },
+  train: {
+    InsufficientInstanceCapacity: "No GPU capacity is available right now. Try again later.",
+    MaxSpotInstanceCountExceeded:
+      "GPU processing isn't available on this site yet. Retrying won't help until the site owner raises the AWS limit.",
+  },
 };
 
 // RunInstances error names that only one availability zone can cause, so the next subnet may still work. Unsupported
-// is an instance type the zone doesn't offer. The GPU types are not in every zone.
+// is an instance type the zone doesn't offer. A zone can lack a type, such as g5.xlarge in zone d.
 const ZONE_ERROR_NAMES = new Set(["InsufficientInstanceCapacity", "Unsupported"]);
 
 type WorkerStage = "reconstruct" | "train";
@@ -93,6 +102,9 @@ interface UserDataParams {
 
 function renderUserData(p: UserDataParams): string {
   const iterationsArg = p.trainingIterations ? `    -e TRAINING_ITERATIONS=${p.trainingIterations} \\\n` : "";
+  // Only the train stage has a GPU. The reconstruct stage runs on a CPU instance, where --gpus all makes docker refuse
+  // to start the container.
+  const gpuArg = p.stage === "train" ? "    --gpus all \\\n" : "";
 
   return `#!/bin/bash
 set -euo pipefail
@@ -181,8 +193,8 @@ fi
 # Two of the flags below need explaining. LOG_OPTS is deliberately unquoted, so its words split into separate docker
 # arguments, none of which holds a space. AWS_DEFAULT_REGION is for worker/pipeline/instance.py's EC2 client, which
 # can't terminate this instance without one.
-docker run --rm --gpus all \\
-    $LOG_OPTS \\
+docker run --rm \\
+${gpuArg}    $LOG_OPTS \\
     -e AWS_DEFAULT_REGION=${p.awsRegion} \\
     -e JOB_ID="$JOB_ID" \\
     -e SPLAT_ID="$SPLAT_ID" \\
@@ -232,23 +244,38 @@ export function generateCallbackToken(): string {
 // Turns a capacity refusal into a 503 with wording a visitor can act on, and keeps the original error as its `cause` for
 // the operator's logs. A 503 reaches the browser as a JSON `detail`, where a plain Error would be an opaque 500. Any
 // other error comes back unchanged.
-function explainLaunchError(err: unknown): unknown {
-  const message = err instanceof Error ? NO_CAPACITY_MESSAGES[err.name] : undefined;
+function explainLaunchError(err: unknown, stage: WorkerStage): unknown {
+  const message = err instanceof Error ? NO_CAPACITY_MESSAGES[stage][err.name] : undefined;
 
   return message === undefined ? err : new HttpError(503, message, { cause: err });
+}
+
+// The instance types a launch tries, in order. Reconstruct runs on the CPU, where the allow-listed types are
+// interchangeable 32-vCPU instances from different families, so one family's spot capacity running out moves the launch
+// to the next. The setting's own type goes first. Train has no such fallback, because its GPU types differ a good deal
+// in price.
+function instanceTypesToTry(params: WorkerLaunch): string[] {
+  if (params.stage === "train") {
+    return [params.settings.trainInstanceType];
+  }
+
+  const preferred = params.settings.reconstructInstanceType;
+
+  return [preferred, ...RECONSTRUCT_INSTANCE_TYPES.filter(type => type !== preferred)];
 }
 
 /**
  * Launches the spot worker instance and returns its instance ID.
  *
- * An error only one availability zone can cause (ZONE_ERROR_NAMES) moves on to the next subnet in WORKER_SUBNET_IDS,
- * since each subnet is in its own zone. Each skipped subnet is logged.
+ * An error only one instance type in one availability zone can cause (ZONE_ERROR_NAMES) moves on to the next subnet in
+ * WORKER_SUBNET_IDS, since each subnet is in its own zone. After the last subnet it moves on to the next instance type
+ * from instanceTypesToTry() and starts the subnets again. Each skipped attempt is logged.
  *
- * Any other error stops the loop at once. The GPU spot quota is one of those, because it is account-wide and another
- * zone can't help.
+ * Any other error stops the loop at once. The spot quota is one of those, because it is account-wide and covers every
+ * type in the same family group, so another zone or type can't help.
  *
- * The splat's page shows the failure's message as the worker job's error. When every zone fails, a zone that had no
- * capacity decides the message, even if a later zone failed with a different zone error.
+ * The splat's page shows the failure's message as the worker job's error. When every attempt fails, one that had no
+ * capacity decides the message, even if a later one failed with a different zone error.
  */
 export async function launchJob(params: WorkerLaunch): Promise<string> {
   // launchJob runs only outside local dev, where getEnv() has already required every worker instance setting. The
@@ -264,29 +291,33 @@ export async function launchJob(params: WorkerLaunch): Promise<string> {
 
   let firstCapacityError: Error | undefined;
   let lastError: Error | undefined;
-  for (const subnetId of subnetIds) {
-    try {
-      return await runInstance(params, env, subnetId);
-    } catch (err) {
-      if (!(err instanceof Error) || !ZONE_ERROR_NAMES.has(err.name)) {
-        throw explainLaunchError(err);
-      }
+  for (const instanceType of instanceTypesToTry(params)) {
+    for (const subnetId of subnetIds) {
+      try {
+        return await runInstance(params, env, subnetId, instanceType);
+      } catch (err) {
+        if (!(err instanceof Error) || !ZONE_ERROR_NAMES.has(err.name)) {
+          throw explainLaunchError(err, params.stage);
+        }
 
-      console.warn(`RunInstances in ${subnetId} failed with ${err.name}: ${err.message}`);
-      lastError = err;
-      if (err.name in NO_CAPACITY_MESSAGES) {
-        firstCapacityError ??= err;
+        console.warn(`RunInstances of ${instanceType} in ${subnetId} failed with ${err.name}: ${err.message}`);
+        lastError = err;
+        if (err.name in NO_CAPACITY_MESSAGES[params.stage]) {
+          firstCapacityError ??= err;
+        }
       }
     }
   }
 
-  throw explainLaunchError(firstCapacityError ?? lastError);
+  throw explainLaunchError(firstCapacityError ?? lastError, params.stage);
 }
 
-async function runInstance(params: WorkerLaunch, env: LaunchEnv, subnetId: string): Promise<string> {
-  const instanceType =
-    params.stage === "reconstruct" ? params.settings.reconstructInstanceType : params.settings.trainInstanceType;
-
+async function runInstance(
+  params: WorkerLaunch,
+  env: LaunchEnv,
+  subnetId: string,
+  instanceType: string,
+): Promise<string> {
   const userData = renderUserData({
     callbackToken: params.callbackToken,
     jobId: params.jobId,
@@ -463,8 +494,8 @@ export function launchJobLocal(params: WorkerLaunch): void {
     "--name",
     localContainerName(params.jobId),
     "--security-opt=label=disable",
-    "--device",
-    "nvidia.com/gpu=all",
+    // Only the train stage uses the GPU. The reconstruct stage runs COLMAP on the CPU.
+    ...(params.stage === "train" ? ["--device", "nvidia.com/gpu=all"] : []),
     "-e",
     `JOB_ID=${params.jobId}`,
     "-e",

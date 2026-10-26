@@ -6,6 +6,9 @@ favouring accuracy over speed for a small object-centric photo set.
 
 Requires the `colmap` CLI on PATH, which `worker/Dockerfile` installs. It is not a pip package, hence subprocess rather
 than pycolmap.
+
+Every phase runs on the CPU. They are limited by CPU even where a GPU exists, so the reconstruct stage's instance has
+no GPU.
 """
 
 import logging
@@ -71,7 +74,7 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
                 "--ImageReader.single_camera",
                 "1",
                 "--FeatureExtraction.use_gpu",
-                "1",
+                "0",
             ]
         )
 
@@ -83,7 +86,7 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
                 "--database_path",
                 str(database_path),
                 "--FeatureMatching.use_gpu",
-                "1",
+                "0",
             ]
         )
 

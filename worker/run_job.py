@@ -1,4 +1,4 @@
-"""The worker's entrypoint: runs one stage of a worker job on a GPU instance.
+"""The worker's entrypoint: runs one stage of a worker job on its own EC2 instance.
 
 The web app launches an EC2 spot instance (a discounted AWS virtual machine) for each stage and passes the worker job's
 settings as environment variables. settings.stage picks the stage. "reconstruct" downloads the photos, runs COLMAP to

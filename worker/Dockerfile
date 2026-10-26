@@ -24,7 +24,7 @@
 # the mesa/LLVM stack libgl1 and libglew2.2 drag in about 296 MB, and OpenImageIO's OpenVDB/GDAL/DCMTK tree another
 # 100 MB or so, against roughly twenty minutes on any build that misses the cache. Upstream also tracks the dependency
 # list across releases, which moves, and builds for all major CUDA architectures, so one binary runs on the
-# reconstruct stage's T4 (g4dn.xlarge) and on Ada-generation dev GPUs.
+# reconstruct stage's CPU instance and on Ada-generation dev GPUs.
 #
 # Pinned by digest because upstream's CI names tags `$(date +%Y%m%d).$GITHUB_RUN_NUMBER`, a build number rather than a
 # version. If the pin moves, check what it holds with `colmap --version` against COLMAP_VERSION on main: a `.dev0`
@@ -140,10 +140,10 @@ RUN cd .venv/lib/python3.*/site-packages && \
 # Ubuntu and CUDA match COLMAP's own image so the binary copied out of it finds the ABI it was linked against: its
 # runtime libraries are Ubuntu 24.04 `t64` builds with no 22.04 equivalent.
 #
-# -base, not the -runtime the train target uses. CUDA is needed at run time, because worker/pipeline/sfm.py passes
-# --FeatureExtraction.use_gpu 1 and --FeatureMatching.use_gpu 1, but libcudart is the only CUDA library anywhere in
-# the colmap binary's transitive link chain. -runtime would add 3.46 GB of cuBLAS, cuSPARSE, cuSOLVER, cuFFT, cuRAND
-# and NPP that nothing here loads, extraction, matching and Ceres bundle adjustment included. The 300 MB
+# -base, not the -runtime the train target uses. The reconstruct stage runs on a CPU instance and never uses a GPU,
+# but the colmap binary is a CUDA build that links libcudart, so this base supplies it. Libcudart is the only CUDA
+# library anywhere in the binary's transitive link chain. -runtime would add 3.46 GB of cuBLAS, cuSPARSE, cuSOLVER,
+# cuFFT, cuRAND and NPP that nothing here loads, extraction, matching and Ceres bundle adjustment included. The 300 MB
 # cuda-compat-12-9 is in -base either way, so it is not part of that saving.
 FROM docker.io/nvidia/cuda:12.9.1-base-ubuntu24.04 AS reconstruct
 

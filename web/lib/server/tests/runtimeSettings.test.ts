@@ -24,7 +24,7 @@ const ALL_SET = {
   "uploads-per-user-per-day": "2",
   "min-photos-per-splat": "25",
   "worker-max-lifetime-minutes": "60",
-  "reconstruct-instance-type": "g5.xlarge",
+  "reconstruct-instance-type": "c7i.8xlarge",
   "train-instance-type": "g6e.xlarge",
   "training-iterations": "15000",
   "showcase-clerk-user-id": "user_abc",
@@ -93,7 +93,7 @@ describe("getRuntimeSettings", () => {
         uploadsPerUserPerDay: 2,
         minPhotosPerSplat: 25,
         workerMaxLifetimeMinutes: 60,
-        reconstructInstanceType: "g5.xlarge",
+        reconstructInstanceType: "c7i.8xlarge",
         trainInstanceType: "g6e.xlarge",
         trainingIterations: 15000,
         showcaseClerkUserId: "user_abc",
@@ -152,17 +152,24 @@ describe("getRuntimeSettings", () => {
       expect(console.error).toHaveBeenCalledWith(expect.stringContaining("so processing is off until they are fixed"));
     });
 
+    it.each(["c7a.8xlarge", "c6i.8xlarge"])("accepts %s as a reconstruct instance type", async type => {
+      ssmMock.on(GetParametersByPathCommand).resolves(parameters({ ...ALL_SET, "reconstruct-instance-type": type }));
+
+      expect((await getRuntimeSettings()).reconstructInstanceType).toBe(type);
+    });
+
     it("rejects an instance type outside each stage's allow-list", async () => {
       ssmMock
         .on(GetParametersByPathCommand)
         .resolves(
-          parameters({ ...ALL_SET, "reconstruct-instance-type": "p5.48xlarge", "train-instance-type": "g4dn.xlarge" }),
+          parameters({ ...ALL_SET, "reconstruct-instance-type": "g4dn.xlarge", "train-instance-type": "c7i.8xlarge" }),
         );
 
       const settings = await getRuntimeSettings();
 
-      expect(settings.reconstructInstanceType).toBe("g4dn.xlarge");
-      // The train image's kernels aren't compiled for the g4dn's T4.
+      // Reconstruct runs on the CPU, so a GPU type is refused.
+      expect(settings.reconstructInstanceType).toBe("c7i.8xlarge");
+      // The train stage needs a GPU whose architecture worker/Dockerfile's gsplat kernels cover.
       expect(settings.trainInstanceType).toBe("g5.xlarge");
     });
 

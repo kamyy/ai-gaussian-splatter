@@ -219,12 +219,12 @@ describe("POST /api/v1/splats/[splatId]/process", () => {
 
   it("answers 503 with the capacity message and still fails the job when no GPU is available", async () => {
     const { splat } = await seed();
-    launchJobMock.mockRejectedValueOnce(new HttpError(503, "No GPU capacity is available right now. Try again later."));
+    launchJobMock.mockRejectedValueOnce(new HttpError(503, "No CPU capacity is available right now. Try again later."));
 
     const res = await POST({} as never, ctx(splat.id));
 
     expect(res.status).toBe(503);
-    expect(await res.json()).toEqual({ detail: "No GPU capacity is available right now. Try again later." });
+    expect(await res.json()).toEqual({ detail: "No CPU capacity is available right now. Try again later." });
     const [job] = await getDb().select().from(jobs).where(eq(jobs.splatId, splat.id));
     expect(job.status).toBe("failed");
     expect(job.errorMessage).toContain("Try again later.");
