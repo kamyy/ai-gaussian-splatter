@@ -46,4 +46,4 @@ def terminate_self() -> None:
         boto3.client("ec2").terminate_instances(InstanceIds=[instance_id])
         logger.info("Termination requested for %s", instance_id)
     except Exception:
-        logger.exception("Failed to terminate self (%s) — it keeps running until stopped by hand", instance_id)
+        logger.exception("Failed to terminate self (%s). It keeps running until its lifetime ceiling", instance_id)

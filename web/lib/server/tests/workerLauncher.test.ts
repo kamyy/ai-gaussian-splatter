@@ -149,8 +149,8 @@ describe("launchJob", () => {
 
     // The pipeline runs in a container, so the instance metadata service (IMDS) is one network hop further away than it
     // is from the host. At EC2's default hop limit of 1, the token PUT in worker/pipeline/instance.py never gets a
-    // reply and terminate_self() does nothing. The GPU instance then bills until someone stops it by hand, and the only
-    // log line is an INFO message that looks exactly like a normal local run.
+    // reply and terminate_self() does nothing. The GPU instance then bills until its lifetime ceiling, and the only log
+    // line is an INFO message that looks exactly like a normal local run.
     const metadata = runInstancesInput().MetadataOptions;
     expect(metadata?.HttpPutResponseHopLimit).toBe(2);
 
@@ -180,6 +180,16 @@ describe("launchJob", () => {
 
     const userData = Buffer.from(runInstancesInput().UserData ?? "", "base64").toString();
     expect(userData).toContain("-e S3_CREDENTIALS_FROM_APP=true \\\n");
+  });
+
+  // worker/pipeline/instance.py's EC2 client has no other source of a region, so without it the instance never
+  // terminates itself.
+  it("gives the worker container the region", async () => {
+    ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
+    await launchJob(params);
+
+    const userData = Buffer.from(runInstancesInput().UserData ?? "", "base64").toString();
+    expect(userData).toContain(`-e AWS_DEFAULT_REGION=${process.env.AWS_REGION} \\\n`);
   });
 
   it("ships the container's output to the worker log group, one stream per worker job stage", async () => {
