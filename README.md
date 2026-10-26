@@ -50,24 +50,26 @@ The AI training is per-object gradient descent through a differentiable renderer
 
 ## 2. How it works
 
-```mermaid
-flowchart LR
-    browser[Browser]
-    web["Next.js app<br/>(pages + REST API)<br/>ECS Fargate"]
-    db[(Postgres<br/>RDS)]
-    s3[(S3<br/>photos + splats)]
-    recon["Reconstruct<br/>COLMAP<br/>EC2 GPU spot"]
-    train["Train<br/>gsplat<br/>EC2 GPU spot"]
-
-    browser -- "pages, API" --> web
-    browser -- "presigned upload / splat download" --> s3
-    web --- db
-    web -- "launch per stage" --> recon
-    web -- "launch per stage" --> train
-    recon <--> s3
-    train <--> s3
-    recon -- "status callback" --> web
-    train -- "status callback" --> web
+```text
+┌─────────┐       pages, API       ┌────────────────────────────────────┐     ╭──────────╮
+│ Browser ├───────────────────────►│ Next.js app                        ├─────┤ Postgres │
+└────▲────┘                        │ pages + REST API, ECS Fargate      │     │ RDS      │
+     │                             └───▲──────────────┬─────────────▲───┘     ╰──────────╯
+     │                       status    │              │ launch      │ status
+     │                       callback  │              │ per stage   │ callback
+     │                                 │      ┌───────┴───────┐     │
+     │                                 │      ▼               ▼     │
+     │                             ┌───┴────────────┐  ┌────────────┴───┐
+     │                             │ Reconstruct    │  │ Train          │
+     │                             │ COLMAP         │  │ gsplat         │
+     │                             │ EC2 GPU spot   │  │ EC2 GPU spot   │
+     │                             └───────▲────────┘  └───────▲────────┘
+     │ presigned upload,                   │                   │
+     │ splat download                      │                   │
+     ▼                                     ▼                   ▼
+╭──────────────────────────────────────────────────────────────────────╮
+│ S3: photos + splats                                                  │
+╰──────────────────────────────────────────────────────────────────────╯
 ```
 
 - **One Next.js app serves both the pages and the REST API**, so there is one deploy and one TypeScript codebase ([API design](ARCHITECTURE.md#4-api-design)).

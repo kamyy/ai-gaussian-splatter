@@ -40,25 +40,50 @@ Why the system is shaped this way: decisions, alternatives rejected, costs accep
 
 Where each stage reads its input and writes its output. Every key sits under `splats/<splatId>/`, in the uploads bucket for photos and in the splats bucket for everything else.
 
-```mermaid
-flowchart TD
-  photos[("photos/<br/>uploads bucket")]
-  subgraph reconstruct["reconstruct stage"]
-    colmap["COLMAP<br/>worker/pipeline/sfm.py"]
-  end
-  sparse[("colmap_sparse/<br/>point_cloud.ply<br/>cameras.json")]
-  decide{"owner checks the<br/>point cloud"}
-  subgraph train["train stage"]
-    gsplat["gsplat<br/>worker/pipeline/train.py"]
-    export["export<br/>worker/pipeline/export.py"]
-  end
-  results[(".ply, .spz<br/>thumbnail")]
-  crop["crop, optional<br/>web/lib/server/cropSplat.ts"]
-  cropped[("cropped copies<br/>of .ply and .spz")]
-  photos --> colmap --> sparse --> decide
-  decide -->|"build"| gsplat
-  photos --> gsplat
-  gsplat --> export --> results --> crop --> cropped
+```text
+╭─────────────────────────╮
+│ uploads bucket          │
+│ photos/                 │
+╰────────────┬────────────╯
+             ├──────────────────────────────────┐
+             ▼                                  │
+┌─ reconstruct stage ───────────┐               │
+│ COLMAP                        │               │
+│ worker/pipeline/sfm.py        │               │
+└────────────┬──────────────────┘               │
+             ▼                                  │
+╭─────────────────────────╮                     │
+│ colmap_sparse/          │                     │
+│ point_cloud.ply         │                     │
+│ cameras.json            │                     │
+╰────────────┬────────────╯                     │
+             ▼                                  │
+┌───────────────────────────────┐               │
+│ owner checks the point cloud  │               │
+└────────────┬──────────────────┘               │
+             │ build                            │
+             ▼                                  ▼
+┌─ train stage ────────────────────────────────────────┐
+│ gsplat     worker/pipeline/train.py                  │
+│   │                                                  │
+│   ▼                                                  │
+│ export     worker/pipeline/export.py                 │
+└────────────┬─────────────────────────────────────────┘
+             ▼
+╭─────────────────────────╮
+│ .ply, .spz              │
+│ thumbnail               │
+╰────────────┬────────────╯
+             ▼
+┌───────────────────────────────┐
+│ crop, optional                │
+│ web/lib/server/cropSplat.ts   │
+└────────────┬──────────────────┘
+             ▼
+╭─────────────────────────╮
+│ cropped copies          │
+│ of .ply and .spz        │
+╰─────────────────────────╯
 ```
 
 1. User uploads discrete multi-angle photos of one object — not a panorama, individual stills taken while walking around it.
@@ -91,22 +116,43 @@ The "AI" here is per-object gradient descent through a differentiable rasterizer
 
 A worker job's `jobs` row moves through `JobStatus` (`web/lib/statuses.ts`). `launching` is shared by both stages. A status in which a worker may be running can move to `failed`, through a worker callback, a failed reconstruct launch or `web/lib/server/reconcileJob.ts`. A refused or failed train launch moves the job back to `awaiting_training` instead, so the owner can try again. Every status that hasn't ended can move to `cancelled`, when the owner cancels or `POST /process` sweeps a stale job.
 
-```mermaid
-stateDiagram-v2
-  [*] --> queued: POST /process
-  state "a worker may be running" as running {
-    queued --> launching: reconstruct<br/>instance launched
-    launching --> reconstruction_running: callback
-    launching --> training_running: callback
-    training_running --> uploading_result: callback
-  }
-  reconstruction_running --> awaiting_training: callback
-  awaiting_training --> launching: POST /train
-  launching --> awaiting_training: train launch<br/>refused or failed
-  uploading_result --> complete: callback
-  running --> failed
-  running --> cancelled
-  awaiting_training --> cancelled
+```text
+  POST /process
+        │
+        ▼
+  ┌───────────┐
+  │  queued   │
+  └─────┬─────┘
+        │ reconstruct instance launched
+        ▼
+  ┌───────────┐  train launch refused or failed  ┌───────────────────┐
+  │           ├─────────────────────────────────►│                   │
+  │ launching │                                  │ awaiting_training │
+  │           │◄─────────── POST /train ─────────┤                   │
+  └──┬─────┬──┘                                  └───────────────────┘
+     │     │                                               ▲
+     │     │ callback  ┌────────────────────────┐ callback │
+     │     └──────────►│ reconstruction_running ├──────────┘
+     │ callback        └────────────────────────┘
+     ▼
+  ┌──────────────────┐
+  │ training_running │
+  └────────┬─────────┘
+           │ callback
+           ▼
+  ┌──────────────────┐
+  │ uploading_result │
+  └────────┬─────────┘
+           │ callback
+           ▼
+  ┌──────────────────┐
+  │     complete     │
+  └──────────────────┘
+
+  queued, launching, reconstruction_running,
+  training_running or uploading_result ──────► failed or cancelled
+
+  awaiting_training ─────────────────────────► cancelled
 ```
 
 - Each stage of a worker job — reconstruct, then train — gets its own EC2 GPU **spot** instance (`web/lib/server/workerLauncher.ts`). Reconstruct runs on a `g4dn.xlarge` and train on a `g5.xlarge` by default. Both are runtime settings ([Runtime settings](#95-runtime-settings)). Each instance runs the worker container, then self-terminates on success or failure.
@@ -127,25 +173,31 @@ stateDiagram-v2
 
 What ends a worker instance in each failure case, and what then moves its `jobs` row:
 
-```mermaid
-flowchart TD
-  launch["RunInstances with a<br/>MaxLifetimeMinutes tag"]
-  cloudinit{"cloud-init runs<br/>user-data?"}
-  scheduled["shutdown -h scheduled<br/>at the ceiling"]
-  ends{"the stage's container<br/>reaches its end?"}
-  callback["final status callback<br/>moves the row"]
-  self["terminate_self()<br/>worker/run_job.py"]
-  ceiling["shutdown -h fires<br/>at the ceiling"]
-  sweeper["sweeper terminates it<br/>at the ceiling + 15 minutes<br/>and emails alert_email"]
-  reconcile["reconcileJob fails the row<br/>on a poll after 15 minutes<br/>without a callback"]
-  launch --> cloudinit
-  cloudinit -->|yes| scheduled --> ends
-  cloudinit -->|no| sweeper
-  ends -->|"yes, success or failure"| callback --> self
-  callback -.->|"callback lost"| reconcile
-  ends -->|"no: a hang, a crash<br/>or a failed docker run"| ceiling
-  ceiling --> reconcile
-  sweeper --> reconcile
+```text
+RunInstances with a MaxLifetimeMinutes tag
+ │
+ ▼
+cloud-init runs user-data?
+ ├─ no ──► the sweeper terminates it at the ceiling + 15 minutes
+ │         and emails alert_email ─────────────────────────────────┐
+ └─ yes ─► shutdown -h scheduled at the ceiling                    │
+            │                                                      │
+            ▼                                                      │
+           the stage's container reaches its end?                  │
+            ├─ yes, success or failure                             │
+            │   │                                                  │
+            │   ▼                                                  │
+            │  final status callback moves the row ┄ if lost ┄┄┄┄┄┄┤
+            │   │                                                  │
+            │   ▼                                                  │
+            │  terminate_self() in worker/run_job.py               │
+            │                                                      │
+            └─ no: a hang, a crash or a failed docker run          │
+                │                                                  │
+                ▼                                                  │
+               shutdown -h fires at the ceiling ───────────────────┤
+                                                                   ▼
+                  reconcileJob fails the row on a poll after 15 minutes without a callback
 ```
 
 A worker job's wall clock splits into three parts. The times are from one 56-photo worker job on AWS.
@@ -229,26 +281,42 @@ Two fixes were considered:
 - **Scheduled forced redeployment**: an EventBridge Scheduler rule calling `ecs:UpdateService(forceNewDeployment)` on a cadence under 7 days, via a direct "universal target" API call with no Lambda needed. Fully infra-only and cheap. It adds a routine rolling restart as a permanent fixture of the architecture, and it only patches the symptom, since the app still never verifies it's holding a current password between restarts.
 - **Fetch the password at connect time** (chosen): the web service re-fetches the current password from Secrets Manager on every new `pg` connection instead of trusting a cached value. It is then never more than a few minutes stale, whenever RDS rotates. This is also what Secrets Manager rotation is designed around, where the alternative treats an env var as a cache of something meant to be read live.
 
-```mermaid
-%%{init: {"sequence": {"actorMargin": 20, "width": 150}}}%%
-sequenceDiagram
-  participant pool as SecretPasswordPool
-  participant fetch as fetchDatabasePassword
-  participant sm as Secrets Manager
-  participant rds as RDS Postgres
-  pool->>fetch: password for a<br/>new connection
-  alt cached copy under 5 minutes old
-    fetch-->>pool: cached password
-  else no cached copy
-    fetch->>sm: GetSecretValue
-    sm-->>fetch: current password
-    fetch-->>pool: current password
-  end
-  pool->>rds: connect
-  opt rejected with 28P01 after a rotation
-    pool->>fetch: clear the cache
-    pool->>rds: connect again, with a fresh fetch
-  end
+```text
+SecretPasswordPool     fetchDatabasePassword    Secrets Manager      RDS Postgres
+         │                       │                     │                   │
+         │ password for a new    │                     │                   │
+         │ connection            │                     │                   │
+         ├──────────────────────►│                     │                   │
+         │                       │                     │                   │
+      ┌─ cached copy under 5 minutes old ──────────────┼───────────────────┼──┐
+      │  │ cached password       │                     │                   │  │
+      │  │◄──────────────────────┤                     │                   │  │
+      │  │                       │                     │                   │  │
+      ├─ no cached copy ─────────┼─────────────────────┼───────────────────┼──┤
+      │  │                       │ GetSecretValue      │                   │  │
+      │  │                       ├────────────────────►│                   │  │
+      │  │                       │                     │                   │  │
+      │  │                       │ current password    │                   │  │
+      │  │                       │◄────────────────────┤                   │  │
+      │  │                       │                     │                   │  │
+      │  │ current password      │                     │                   │  │
+      │  │◄──────────────────────┤                     │                   │  │
+      │  │                       │                     │                   │  │
+      └──┼───────────────────────┼─────────────────────┼───────────────────┼──┘
+         │                       │                     │                   │
+         │ connect               │                     │                   │
+         ├───────────────────────┼─────────────────────┼──────────────────►│
+         │                       │                     │                   │
+      ┌─ rejected with 28P01 after a rotation ─────────┼───────────────────┼──┐
+      │  │ clear the cache       │                     │                   │  │
+      │  ├──────────────────────►│                     │                   │  │
+      │  │                       │                     │                   │  │
+      │  │ connect again, with a │                     │                   │  │
+      │  │ fresh fetch           │                     │                   │  │
+      │  ├───────────────────────┼─────────────────────┼──────────────────►│  │
+      │  │                       │                     │                   │  │
+      └──┼───────────────────────┼─────────────────────┼───────────────────┼──┘
+         │                       │                     │                   │
 ```
 
 The migration task (`web/scripts/db-migrate.cjs`) takes its password as a static env var. It runs for seconds and exits, well inside the 7-day window, so the value can't go stale. Fetching it live would cost its own Secrets Manager IAM grant for no benefit.
@@ -259,25 +327,31 @@ The migration task (`web/scripts/db-migrate.cjs`) takes its password as a static
 
 How a photo set moves through AWS, from upload to viewing the finished splat. The ALB is the Application Load Balancer in front of the web app. A presigned URL is a short-lived link the API signs so the browser can read or write one S3 object directly, without the bytes passing through the web app.
 
-```mermaid
-flowchart LR
-  browser(["Browser"])
-  alb["ALB"]
-  web["Next.js<br/>Fargate Spot"]
-  rds[("RDS Postgres")]
-  up[("S3 uploads")]
-  sp[("S3 splats")]
-  worker["GPU spot instance<br/>reconstruct,<br/>then train"]
-  ecr["ECR worker repo"]
-  browser -->|"1 · pages + API"| alb --> web
-  web --> rds
-  browser -->|"2 · presigned<br/>PUT photos"| up
-  web -->|"3 · RunInstances"| worker
-  ecr -->|"4 · pull image"| worker
-  up -->|"5 · read photos"| worker
-  worker -->|"6 · write .ply,<br/>.spz, thumbnail"| sp
-  worker -->|"7 · status callback<br/>over HTTPS"| alb
-  sp -->|"8 · presigned<br/>GET .spz"| browser
+```text
+┌──────────────────────┐ 1 · pages + API ┌─────┐   ┌──────────────┐   ╭──────────────╮
+│ Browser              ├────────────────►│ ALB ├──►│ Next.js      ├──►│ RDS Postgres │
+└──┬────────────────▲──┘                 └──▲──┘   │ Fargate Spot │   ╰──────────────╯
+   │                │                       │      └──────┬───────┘
+   │                │ 8 · presigned         │ 7 · status  │ 3 · RunInstances
+   │                │     GET .spz          │ callback    │
+   │                │                       │ over HTTPS  ▼
+   │                │                       │          ┌───────────────────┐    ┌─────────────────┐
+   │                │                       └──────────┤ GPU spot instance │◄───┤ ECR worker repo │
+   │                │                                  │ reconstruct,      │    └─────────────────┘
+   │                │                                  │ then train        │    4 · pull image
+   │                │                                  └──┬─────────────▲──┘
+   │                │                                     │             │
+   │ 2 · presigned  │                                     │ 6 · write   │ 5 · read photos
+   │     PUT photos │                                     │ .ply, .spz, │
+   │                │                                     │ thumbnail   │
+   │      ╭─────────┴──╮                                  │             │
+   │      │ S3 splats  │◄─────────────────────────────────┘             │
+   │      ╰────────────╯                                                │
+   │                                                                    │
+   ▼                                                                    │
+╭────────────╮                                                          │
+│ S3 uploads ├──────────────────────────────────────────────────────────┘
+╰────────────╯
 ```
 
 - Infra: **Terraform**. One configuration (`infra/`) holding one state. The S3 bucket that state lives in is created by hand ([Going live](RUNBOOK.md#22-going-live)). `terraform init` needs the bucket before any apply. Managing it inside `infra/` would store state in a bucket `infra/` also owns. A second Terraform module with its own local state was rejected.
@@ -311,35 +385,60 @@ The web app runs on **Fargate** behind an **Application Load Balancer** (`infra/
 
 Where each resource sits in the network, and which security group (sg) guards it.
 
-```mermaid
-flowchart TB
-  user(["Browser"])
-  subgraph aws["AWS account · var.aws_region"]
-    r53["Route 53 record<br/>+ ACM cert"]
-    subgraph vpc["VPC 10.0.0.0/16"]
-      igw["Internet gateway"]
-      subgraph pub["Public subnets · 3 availability zones<br/>0.0.0.0/0 → IGW"]
-        alb["ALB · sg alb<br/>443 in, 80 redirects"]
-        web["Fargate Spot service<br/>sg web · 1–3 tasks<br/>public IP"]
-        worker["EC2 GPU spot<br/>sg worker<br/>one per stage"]
-      end
-      subgraph priv["Private subnets · 2 availability zones<br/>no route out"]
-        rds[("RDS Postgres · sg db<br/>one availability zone")]
-      end
-      s3ep["S3 gateway endpoint"]
-    end
-    s3[("S3<br/>uploads, splats<br/>ALB logs")]
-    ecr["ECR<br/>web repo, worker repo"]
-    sm["Secrets Manager<br/>Clerk key, RDS login"]
-  end
-  user -->|DNS| r53
-  user -->|HTTPS| igw --> alb -->|":8000 only"| web
-  web -->|":5432 only"| rds
-  web -.->|RunInstances| worker
-  web --> s3ep
-  worker -->|"photos, splats,<br/>image layers"| s3ep --> s3
-  worker -->|"ECR login + manifest<br/>via IGW"| ecr
-  web -->|via IGW| sm
+```text
+     ┌─────────┐
+     │ Browser │
+     └──┬────┬─┘
+  HTTPS │    │ DNS
+┌───────┼────┼───────────────────────────────────── AWS account · var.aws_region ─┐
+│       │    │                                                                    │
+│       │    ▼                                                                    │
+│       │  ┌───────────────────┐                                                  │
+│       │  │ Route 53 record   │                                                  │
+│       │  │ + ACM cert        │                                                  │
+│       │  └───────────────────┘                                                  │
+│       │                                                                         │
+│ ┌─────┼───────────────────────────────────────────────────── VPC 10.0.0.0/16 ─┐ │
+│ │     ▼                                                                       │ │
+│ │ ┌──────────────────┐                                                        │ │
+│ │ │ Internet gateway │                                                        │ │
+│ │ └───┬──────────────┘                                                        │ │
+│ │ ┌───┼─────────── Public subnets · 3 availability zones · 0.0.0.0/0 → IGW ─┐ │ │
+│ │ │   ▼                                                                     │ │ │
+│ │ │ ┌────────────────────────┐  :8000 only    ┌───────────────────────────┐ │ │ │
+│ │ │ │ ALB · sg alb           ├───────────────►│ Fargate Spot service      │ │ │ │
+│ │ │ │ 443 in, 80 redirects   │                │ sg web · 1–3 tasks        │ │ │ │
+│ │ │ └────────────────────────┘                │ public IP                 │ │ │ │
+│ │ │                                           └─────────────┬─────────────┘ │ │ │
+│ │ │ ┌──────────────────────────┐                            │               │ │ │
+│ │ │ │ EC2 GPU spot · sg worker │                            │ :5432 only    │ │ │
+│ │ │ │ one per stage            │                            │               │ │ │
+│ │ │ └──────────────────────────┘                            │               │ │ │
+│ │ └─────────────────────────────────────────────────────────┼───────────────┘ │ │
+│ │ ┌─ Private subnets · 2 availability zones · no route out ─┼───────────────┐ │ │
+│ │ │                                                         ▼               │ │ │
+│ │ │                                           ╭───────────────────────────╮ │ │ │
+│ │ │                                           │ RDS Postgres · sg db      │ │ │ │
+│ │ │                                           │ one availability zone     │ │ │ │
+│ │ │                                           ╰───────────────────────────╯ │ │ │
+│ │ └─────────────────────────────────────────────────────────────────────────┘ │ │
+│ │ ┌──────────────────────┐                                                    │ │
+│ │ │ S3 gateway endpoint  │                                                    │ │
+│ │ └──────────────────────┘                                                    │ │
+│ └─────────────────────────────────────────────────────────────────────────────┘ │
+│ ╭───────────────────────╮ ┌─────────────────────┐ ┌───────────────────────────┐ │
+│ │ S3                    │ │ ECR                 │ │ Secrets Manager           │ │
+│ │ uploads, splats,      │ │ web repo,           │ │ Clerk key, RDS login      │ │
+│ │ ALB logs              │ │ worker repo         │ │                           │ │
+│ ╰───────────────────────╯ └─────────────────────┘ └───────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+Other connections:
+  Fargate Spot service ┄┄ RunInstances ┄┄► EC2 GPU spot
+  Fargate Spot service ──► S3 gateway endpoint ──► S3
+  EC2 GPU spot ──► S3 gateway endpoint ──► S3   photos, splats, image layers
+  EC2 GPU spot ──► Internet gateway ──► ECR     ECR login + manifest
+  Fargate Spot service ──► Internet gateway ──► Secrets Manager
 ```
 
 - Tasks share public subnets with the ALB and have a public IP, so they can reach the EC2 API through the internet gateway (IGW). S3 calls go through a gateway VPC endpoint instead (free, no IGW hop).
@@ -396,41 +495,70 @@ A crop streams a whole splat through the web task, so `MAX_CROPS_PER_HOUR` (`web
 
 Which limit each route checks before it spends anything:
 
-```mermaid
-%%{init: {"flowchart": {"wrappingWidth": 400}}}%%
-flowchart TD
-  reserve["photos/reserve<br/>MAX_PHOTOS_PER_SPLAT<br/>MAX_PHOTO_BYTES<br/>per-IP limit<br/>per-user limit"]
-  presign["photos/[photoId]/<br/>presign<br/>pending row only<br/>MAX_THUMBNAIL_BYTES"]
-  put["S3 upload<br/>size signed<br/>into the URL"]
-  complete["photos/[photoId]/<br/>complete<br/>stored sizes<br/>checked again"]
-  process["process<br/>processing-enabled<br/>min-photos-per-splat<br/>MAX_PHOTOS_PER_SPLAT<br/>daily cap"]
-  trainroute["train<br/>processing-enabled<br/>daily cap"]
-  recon["reconstruct instance"]
-  traininst["train instance"]
-  crop["crop<br/>MAX_CROPS_PER_HOUR"]
-  reserve --> presign --> put --> complete --> process --> recon
-  recon -.->|"owner builds"| trainroute --> traininst
-  traininst -.->|"owner crops"| crop
+```text
+┌─────────────────────────────┐          ┌─────────────────────────────┐
+│ photos/reserve              │     ┌───►│ process                     │
+│   MAX_PHOTOS_PER_SPLAT      │     │    │   processing-enabled        │
+│   MAX_PHOTO_BYTES           │     │    │   min-photos-per-splat      │
+│   per-IP limit              │     │    │   MAX_PHOTOS_PER_SPLAT      │
+│   per-user limit            │     │    │   daily cap                 │
+└──────────────┬──────────────┘     │    └──────────────┬──────────────┘
+               ▼                    │                   ▼
+┌─────────────────────────────┐     │    ┌─────────────────────────────┐
+│ photos/[photoId]/presign    │     │    │ reconstruct instance        │
+│   pending row only          │     │    └──────────────┬──────────────┘
+│   MAX_THUMBNAIL_BYTES       │     │                   ┆ owner builds
+└──────────────┬──────────────┘     │                   ▼
+               ▼                    │    ┌─────────────────────────────┐
+┌─────────────────────────────┐     │    │ train                       │
+│ S3 upload                   │     │    │   processing-enabled        │
+│   size signed into the URL  │     │    │   daily cap                 │
+└──────────────┬──────────────┘     │    └──────────────┬──────────────┘
+               ▼                    │                   ▼
+┌─────────────────────────────┐     │    ┌─────────────────────────────┐
+│ photos/[photoId]/complete   │     │    │ train instance              │
+│   stored sizes checked      ├─────┘    └──────────────┬──────────────┘
+│   again                     │                         ┆ owner crops
+└─────────────────────────────┘                         ▼
+                                         ┌─────────────────────────────┐
+                                         │ crop                        │
+                                         │   MAX_CROPS_PER_HOUR        │
+                                         └─────────────────────────────┘
 ```
 
 A worker instance runs COLMAP and gsplat on files anyone can upload, so the design assumes one could be taken over and limits what that reaches. The reserve route accepts only JPEG and PNG, the two formats `worker/pipeline/sfm.py` hands to COLMAP, and names each S3 key's extension after the type rather than the uploaded filename. The instance's own IAM role has no S3 access. The worker trades its callback token for credentials from `web/app/api/v1/internal/jobs/[jobId]/s3-credentials/route.ts`, which assumes a role with a session policy naming only that splat's keys. Per-object presigned URLs were rejected for two reasons. A splat's photo count would push them past EC2's 16 KB user-data limit. Replacing boto3's transfers with hand-written HTTP requests would also lose its multipart upload of large results. The status callback also refuses any result key outside the splat's own prefix, since the share page presigns those keys for anyone with the link.
 
-```mermaid
-%%{init: {"sequence": {"actorMargin": 20, "width": 150}}}%%
-sequenceDiagram
-  participant worker as worker instance
-  participant route as s3-credentials route
-  participant sts as STS
-  participant s3 as S3
-  loop before each batch of transfers
-    worker->>route: POST with its callback token
-    Note over route: refuses a job that has ended
-    route->>sts: AssumeRole on the<br/>worker data role, with a<br/>session policy for this splat
-    sts-->>route: credentials for one hour
-    route-->>worker: credentials
-    worker->>s3: read photos, write results
-  end
-  Note over worker,s3: anything outside splats/#lt;splatId#gt;/ is denied
+```text
+ worker instance        s3-credentials route               STS               S3
+        │                         │                         │                 │
+     ┌─ loop: before each batch of transfers ───────────────┼─────────────────┼──┐
+     │  │ POST with its callback  │                         │                 │  │
+     │  │ token                   │                         │                 │  │
+     │  ├────────────────────────►│                         │                 │  │
+     │  │                         │                         │                 │  │
+     │  │                         │ refuses a job that has  │                 │  │
+     │  │                         │ ended                   │                 │  │
+     │  │                         │                         │                 │  │
+     │  │                         │ AssumeRole on the       │                 │  │
+     │  │                         │ worker data role, with  │                 │  │
+     │  │                         │ a session policy for    │                 │  │
+     │  │                         │ this splat              │                 │  │
+     │  │                         ├────────────────────────►│                 │  │
+     │  │                         │                         │                 │  │
+     │  │                         │ credentials for one     │                 │  │
+     │  │                         │ hour                    │                 │  │
+     │  │                         │◄────────────────────────┤                 │  │
+     │  │                         │                         │                 │  │
+     │  │ credentials             │                         │                 │  │
+     │  │◄────────────────────────┤                         │                 │  │
+     │  │                         │                         │                 │  │
+     │  │ read photos, write      │                         │                 │  │
+     │  │ results                 │                         │                 │  │
+     │  ├─────────────────────────┼─────────────────────────┼────────────────►│  │
+     │  │                         │                         │                 │  │
+     └──┼─────────────────────────┼─────────────────────────┼─────────────────┼──┘
+        │                         │                         │                 │
+Anything outside splats/<splatId>/ is denied.
 ```
 
 Ops fallbacks: the `processing-enabled` runtime setting pauses every GPU launch site-wide, and an AWS Budget (`infra/budgets.tf`) alerts on spend the request path never sees.
