@@ -310,6 +310,7 @@ describe("launchJob", () => {
   ])("explains a %s refusal without EC2's wording", async (name, advice) => {
     ec2Mock.on(RunInstancesCommand).rejects(Object.assign(new Error("EC2's own wording"), { name }));
     await expect(launchJob(params)).rejects.toMatchObject({
+      status: 503,
       message: expect.stringContaining(advice),
       cause: expect.objectContaining({ name }),
     });

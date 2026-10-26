@@ -22,6 +22,7 @@ import {
 
 import { JobStatus } from "@/lib/statuses";
 import { getEnv, LOCAL_APP_ORIGIN } from "./env";
+import { HttpError } from "./httpError";
 import type { RuntimeSettings } from "./runtimeSettings";
 
 /**
@@ -228,12 +229,13 @@ export function generateCallbackToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
-// Gives a capacity refusal wording a visitor can act on, and keeps the original error as its `cause` for the operator's
-// logs. Any other error comes back unchanged.
+// Turns a capacity refusal into a 503 with wording a visitor can act on, and keeps the original error as its `cause` for
+// the operator's logs. A 503 reaches the browser as a JSON `detail`, where a plain Error would be an opaque 500. Any
+// other error comes back unchanged.
 function explainLaunchError(err: unknown): unknown {
   const message = err instanceof Error ? NO_CAPACITY_MESSAGES[err.name] : undefined;
 
-  return message === undefined ? err : new Error(message, { cause: err });
+  return message === undefined ? err : new HttpError(503, message, { cause: err });
 }
 
 /**
