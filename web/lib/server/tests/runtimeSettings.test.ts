@@ -184,7 +184,7 @@ describe("getRuntimeSettings", () => {
 
       expect(settings.processingEnabled).toBe(false);
       expect(settings.maxJobsPerDay).toBe(20);
-      expect(settings.uploadsPerUserPerDay).toBe(3);
+      expect(settings.uploadsPerUserPerDay).toBe(10);
 
       // Cached like a good read, so an outage costs one call a minute.
       await getRuntimeSettings();

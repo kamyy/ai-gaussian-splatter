@@ -138,7 +138,7 @@ locals {
     "processing-enabled"          = "true"
     "max-jobs-per-day"            = "20"
     "uploads-per-ip-per-hour"     = "5"
-    "uploads-per-user-per-day"    = "3"
+    "uploads-per-user-per-day"    = "10"
     "min-photos-per-splat"        = "20"
     "worker-max-lifetime-minutes" = "30"
     "reconstruct-instance-type"   = "g4dn.xlarge"
