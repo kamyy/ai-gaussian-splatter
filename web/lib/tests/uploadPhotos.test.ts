@@ -3,11 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }));
 vi.mock("@/lib/apiFetch", () => ({ apiFetch: apiFetchMock }));
 
-import type { PickedPhoto } from "../measurePhoto";
-import { uploadPhotos } from "../uploadPhotos";
+import { fileKey, type PickedPhoto } from "../measurePhoto";
+import { type UploadProgress, uploadPhotos } from "../uploadPhotos";
 
 async function getToken() {
   return "token";
+}
+
+function progress(reservedIds: ReadonlyMap<string, string> = new Map()): UploadProgress {
+  return { reservedIds, onReserved: vi.fn(), onReservationLost: vi.fn(), onUploaded: vi.fn() };
 }
 
 function picked(name: string, overrides: Partial<PickedPhoto> = {}): PickedPhoto {
@@ -63,7 +67,7 @@ describe("uploadPhotos", () => {
         }),
       ],
       getToken,
-      vi.fn(),
+      progress(),
     );
 
     expect(apiFetchMock).toHaveBeenCalledWith("/api/v1/splats/splat-1/photos/reserve", "POST", "token", [
@@ -87,7 +91,7 @@ describe("uploadPhotos", () => {
   });
 
   it("asks for each photo's links with its thumbnail's size", async () => {
-    await uploadPhotos("splat-1", [picked("a.jpg", { thumbnail: new Blob(["small"]) })], getToken, vi.fn());
+    await uploadPhotos("splat-1", [picked("a.jpg", { thumbnail: new Blob(["small"]) })], getToken, progress());
 
     expect(apiFetchMock).toHaveBeenCalledWith("/api/v1/splats/splat-1/photos/photo-1/presign", "POST", "token", {
       thumbnailSize: 5,
@@ -96,7 +100,7 @@ describe("uploadPhotos", () => {
 
   it("uploads each photo and its thumbnail before marking the photo uploaded", async () => {
     const small = new Blob(["a-small"]);
-    await uploadPhotos("splat-1", [picked("a.jpg", { thumbnail: small })], getToken, vi.fn());
+    await uploadPhotos("splat-1", [picked("a.jpg", { thumbnail: small })], getToken, progress());
 
     const puts = vi.mocked(fetch).mock.calls.map(([url, init]) => [url, init?.body]);
     expect(puts).toContainEqual(["https://s3.example.com/1-small", small]);
@@ -108,7 +112,7 @@ describe("uploadPhotos", () => {
     const tokens = ["first", "second", "third"];
     const nextToken = vi.fn(async () => tokens.shift() ?? null);
 
-    await uploadPhotos("splat-1", [picked("a.jpg")], nextToken, vi.fn());
+    await uploadPhotos("splat-1", [picked("a.jpg")], nextToken, progress());
 
     expect(apiFetchMock).toHaveBeenCalledWith(
       "/api/v1/splats/splat-1/photos/reserve",
@@ -142,7 +146,7 @@ describe("uploadPhotos", () => {
       "splat-1",
       ["a", "b", "c", "d"].map(name => picked(`${name}.jpg`)),
       getToken,
-      vi.fn(),
+      progress(),
     );
 
     await vi.waitFor(() => expect(pending).toHaveLength(6));
@@ -170,25 +174,86 @@ describe("uploadPhotos", () => {
     );
     const a = picked("a.jpg");
     const b = picked("b.jpg");
-    const onUploaded = vi.fn();
+    const batch = progress();
 
-    await expect(uploadPhotos("splat-1", [a, b], getToken, onUploaded)).rejects.toThrow("1 of 2 photo uploads failed");
-    expect(onUploaded.mock.calls).toEqual([[a]]);
+    await expect(uploadPhotos("splat-1", [a, b], getToken, batch)).rejects.toThrow("1 of 2 photo uploads failed");
+    expect(vi.mocked(batch.onUploaded).mock.calls).toEqual([[a]]);
   });
 
   it("stops with the sign-in error, not a failed photo, when the session ends partway through", async () => {
     const tokens = ["reserve", "presign"];
     const signedOutAfterTwo = vi.fn(async () => tokens.shift() ?? null);
-    const onUploaded = vi.fn();
+    const batch = progress();
 
-    await expect(uploadPhotos("splat-1", [picked("a.jpg")], signedOutAfterTwo, onUploaded)).rejects.toThrow(
-      "Not signed in",
+    await expect(uploadPhotos("splat-1", [picked("a.jpg")], signedOutAfterTwo, batch)).rejects.toThrow("Not signed in");
+    expect(batch.onUploaded).not.toHaveBeenCalled();
+  });
+
+  it("starts no more photos after a lost session, and rejects only once the ones in flight finish", async () => {
+    // Null once, as Clerk's getToken can be for a moment. The other lanes still get tokens afterwards.
+    let calls = 0;
+    const sessionToken = vi.fn(async () => {
+      calls += 1;
+      return calls === 5 ? null : "token";
+    });
+    const pending: (() => void)[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise<Response>(resolve => {
+            pending.push(() => resolve(new Response(null)));
+          }),
+      ),
     );
-    expect(onUploaded).not.toHaveBeenCalled();
+    const batch = progress();
+    let settled = false;
+
+    const upload = uploadPhotos(
+      "splat-1",
+      ["a", "b", "c", "d"].map(name => picked(`${name}.jpg`)),
+      sessionToken,
+      batch,
+    ).finally(() => {
+      settled = true;
+    });
+    await vi.waitFor(() => expect(pending).toHaveLength(6));
+
+    for (const release of pending.splice(0)) {
+      release();
+    }
+
+    await expect(upload).rejects.toThrow("Not signed in");
+    expect(settled).toBe(true);
+    const presigned = apiFetchMock.mock.calls.filter(([url]) => String(url).endsWith("/presign"));
+    expect(presigned).toHaveLength(3);
+    expect(batch.onUploaded).toHaveBeenCalledTimes(2);
+  });
+
+  it("reuses a retry's reservations and reserves only the photos without one", async () => {
+    const a = picked("a.jpg");
+    const b = picked("b.jpg");
+    const batch = progress(new Map([[fileKey(a.file), "photo-9"]]));
+
+    await uploadPhotos("splat-1", [a, b], getToken, batch);
+
+    const reserveBodies = apiFetchMock.mock.calls.filter(([url]) => String(url).endsWith("/reserve")).map(c => c[3]);
+    expect(reserveBodies).toEqual([[expect.objectContaining({ filename: "b.jpg" })]]);
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/v1/splats/splat-1/photos/photo-9/complete", "POST", "token");
+    expect(batch.onReserved).toHaveBeenCalledWith(b, "photo-1");
+  });
+
+  it("drops a reused reservation the API won't sign, so the next retry reserves it again", async () => {
+    apiFetchMock.mockRejectedValueOnce(new Error("This photo's upload reservation has expired"));
+    const a = picked("a.jpg");
+    const batch = progress(new Map([[fileKey(a.file), "photo-9"]]));
+
+    await expect(uploadPhotos("splat-1", [a], getToken, batch)).rejects.toThrow("1 of 1 photo upload failed");
+    expect(batch.onReservationLost).toHaveBeenCalledWith(a);
   });
 
   it("sends nothing when there are no photos left to upload", async () => {
-    await uploadPhotos("splat-1", [], getToken, vi.fn());
+    await uploadPhotos("splat-1", [], getToken, progress());
     expect(apiFetchMock).not.toHaveBeenCalled();
   });
 
@@ -200,7 +265,7 @@ describe("uploadPhotos", () => {
       ),
     );
 
-    await expect(uploadPhotos("splat-1", [picked("a.jpg")], getToken, vi.fn())).rejects.toThrow(
+    await expect(uploadPhotos("splat-1", [picked("a.jpg")], getToken, progress())).rejects.toThrow(
       "1 of 1 photo upload failed",
     );
     expect(apiFetchMock).not.toHaveBeenCalledWith("/api/v1/splats/splat-1/photos/photo-1/complete", "POST", "token");

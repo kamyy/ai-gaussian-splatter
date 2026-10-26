@@ -148,6 +148,9 @@ export function NewSplatForm() {
   // Keyed by fileKey. A retry uploads only the photos not in here, because every photo the server already has would
   // otherwise be stored again and go to COLMAP twice.
   const [uploadedKeys, setUploadedKeys] = useState<ReadonlySet<string>>(new Set());
+  // The photo id each reserved photo was given, keyed by fileKey. A retry reuses these rather than reserving the
+  // photos again, since each reservation spends one of the account's daily upload batches.
+  const [reservedIds, setReservedIds] = useState<ReadonlyMap<string, string>>(new Map());
   const submitting = phase !== "idle";
   const tooManyPhotos = photos.length > MAX_PHOTOS_PER_SPLAT;
 
@@ -223,8 +226,21 @@ export function NewSplatForm() {
     setPhase("uploading");
     const remaining = photos.filter(photo => !uploadedKeys.has(fileKey(photo.file)));
     try {
-      await uploadPhotos(splat.id, remaining, getToken, photo => {
-        setUploadedKeys(current => new Set(current).add(fileKey(photo.file)));
+      await uploadPhotos(splat.id, remaining, getToken, {
+        reservedIds,
+        onReserved: (photo, photoId) => {
+          setReservedIds(current => new Map(current).set(fileKey(photo.file), photoId));
+        },
+        onReservationLost: photo => {
+          setReservedIds(current => {
+            const updated = new Map(current);
+            updated.delete(fileKey(photo.file));
+            return updated;
+          });
+        },
+        onUploaded: photo => {
+          setUploadedKeys(current => new Set(current).add(fileKey(photo.file)));
+        },
       });
     } catch (err) {
       enqueueSnackbar("Photo upload failed", {
