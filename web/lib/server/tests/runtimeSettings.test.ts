@@ -152,6 +152,12 @@ describe("getRuntimeSettings", () => {
       expect(console.error).toHaveBeenCalledWith(expect.stringContaining("so processing is off until they are fixed"));
     });
 
+    it.each(["c7a.8xlarge", "c6i.8xlarge"])("accepts %s as a reconstruct instance type", async type => {
+      ssmMock.on(GetParametersByPathCommand).resolves(parameters({ ...ALL_SET, "reconstruct-instance-type": type }));
+
+      expect((await getRuntimeSettings()).reconstructInstanceType).toBe(type);
+    });
+
     it("rejects an instance type outside each stage's allow-list", async () => {
       ssmMock
         .on(GetParametersByPathCommand)

@@ -25,7 +25,7 @@ locals {
   # Every instance type the reconstruct-instance-type and train-instance-type runtime settings accept
   # (web/lib/server/runtimeSettings.ts). The web task's RunInstances grant (infra/web.tf) refuses any other, so a type
   # added to either allow-list there has to be added here too.
-  worker_instance_types = ["c7i.8xlarge", "g5.xlarge", "g6.xlarge", "g6e.xlarge"]
+  worker_instance_types = ["c6i.8xlarge", "c7a.8xlarge", "c7i.8xlarge", "g5.xlarge", "g6.xlarge", "g6e.xlarge"]
 
   # All four named explicitly rather than left to a generated name, because each is written out literally elsewhere.
   # The cluster and service are in RUNBOOK.md's Clerk secret rotation and in .github/workflows/deploy.yml. The two roles

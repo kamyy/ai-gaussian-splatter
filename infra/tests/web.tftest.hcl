@@ -115,6 +115,8 @@ run "run_instances_statements_stay_split" {
       for s in jsondecode(aws_iam_role_policy.task.policy).Statement :
       s.Sid == "RunInstancesTagged" &&
       toset(try(s.Condition.StringEquals["ec2:InstanceType"], [])) == toset([
+        "c6i.8xlarge",
+        "c7a.8xlarge",
         "c7i.8xlarge",
         "g5.xlarge",
         "g6.xlarge",
