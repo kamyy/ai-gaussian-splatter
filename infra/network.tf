@@ -1,8 +1,8 @@
 # The network the app runs in: the VPC, its subnets, and the security groups.
 #
 # A VPC is a private network inside AWS. This one has public subnets across three availability zones (separate data
-# centers) and isolated subnets across two of them, with no NAT gateway (ARCHITECTURE.md has the cost reasoning) and no RDS Multi-AZ failover,
-# since this is a low-traffic demo project, not a production-scale service.
+# centers) and isolated subnets across two of them, with no NAT gateway (ARCHITECTURE.md has the cost reasoning) and
+# no RDS Multi-AZ failover, since this is a low-traffic demo project, not a production-scale service.
 #
 # Everything needing outbound internet (the web tasks, the GPU workers) runs in the public subnets with a public IP and
 # egresses through the internet gateway instead. The security groups, not the absence of a route, are therefore what
