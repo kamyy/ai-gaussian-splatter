@@ -4,7 +4,7 @@
  * requireUser() and requireClerkUserId() are how each authenticated Route Handler checks for a Clerk session.
  * requireUser() also creates the user's own database row on their first request, once Clerk confirms the user exists.
  * getJobForCallbackToken() checks the per-worker-job bearer token a worker instance sends in place of a Clerk session.
- * requireOwnedSplat() checks that a splat in the URL belongs to the caller. getClientIp() reads the caller's IP address
+ * requireOwnedSplat() and requireOwnedPhoto() check that a splat or photo in the URL belongs to the caller. getClientIp() reads the caller's IP address
  * for rate limiting.
  */
 
@@ -13,7 +13,7 @@ import { and, eq } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 
 import { getDb } from "./db";
-import { type Job, jobs, splats, type User, users } from "./db/schema";
+import { type Job, jobs, type Photo, photos, splats, type User, users } from "./db/schema";
 import { HttpError, requireUuid } from "./httpError";
 
 /** Throws 401 unless the request carries a valid Clerk session. */
@@ -91,6 +91,27 @@ export async function requireOwnedSplat(splatId: string, userId: string): Promis
   if (splat === undefined) {
     throw new HttpError(404, "Splat not found");
   }
+}
+
+/**
+ * The photo, when both ids are valid UUIDs and the photo is in a splat the user owns. Throws 404 otherwise, the same
+ * way requireOwnedSplat does.
+ */
+export async function requireOwnedPhoto(splatId: string, photoId: string, userId: string): Promise<Photo> {
+  requireUuid(splatId, 404, "Photo not found");
+  requireUuid(photoId, 404, "Photo not found");
+
+  const [row] = await getDb()
+    .select({ photo: photos })
+    .from(photos)
+    .innerJoin(splats, eq(photos.splatId, splats.id))
+    .where(and(eq(photos.id, photoId), eq(photos.splatId, splatId), eq(splats.userId, userId)))
+    .limit(1);
+  if (row === undefined) {
+    throw new HttpError(404, "Photo not found");
+  }
+
+  return row.photo;
 }
 
 /**
