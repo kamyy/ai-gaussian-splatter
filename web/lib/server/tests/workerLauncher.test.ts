@@ -404,14 +404,53 @@ describe("launchJob", () => {
       ]);
     });
 
-    it("tries a train stage's one instance type only", async () => {
+    it("tries a train stage's setting first, then its other GPU types", async () => {
       ec2Mock.on(RunInstancesCommand).rejects(refusal("InsufficientInstanceCapacity"));
 
       await expect(launchJob({ ...params, stage: "train" })).rejects.toThrow("Try again later.");
       expect(ec2Mock.commandCalls(RunInstancesCommand).map(call => call.args[0].input.InstanceType)).toEqual([
         "g6e.xlarge",
         "g6e.xlarge",
+        "g5.xlarge",
+        "g5.xlarge",
+        "g6.xlarge",
+        "g6.xlarge",
       ]);
+    });
+
+    it("launches a train stage on the next GPU type once the setting's type has no capacity anywhere", async () => {
+      ec2Mock
+        .on(RunInstancesCommand)
+        .rejectsOnce(refusal("InsufficientInstanceCapacity"))
+        .rejectsOnce(refusal("InsufficientInstanceCapacity"))
+        .resolves({ Instances: [{ InstanceId: "i-0fallback" }] });
+
+      await expect(
+        launchJob({ ...params, stage: "train", settings: { ...settings, trainInstanceType: "g5.xlarge" } }),
+      ).resolves.toBe("i-0fallback");
+
+      const calls = ec2Mock.commandCalls(RunInstancesCommand);
+      expect(calls.map(call => call.args[0].input.InstanceType)).toEqual(["g5.xlarge", "g5.xlarge", "g6.xlarge"]);
+      const userData = Buffer.from(calls[2].args[0].input.UserData ?? "", "base64").toString();
+      expect(userData).toContain("context instance_type=g6.xlarge");
+      expect(userData).toContain("    --gpus all \\\n");
+    });
+
+    it("logs a launch on a type other than the setting's, and says nothing otherwise", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
+      await launchJob(params);
+      expect(warn).not.toHaveBeenCalled();
+
+      ec2Mock.reset();
+      ec2Mock
+        .on(RunInstancesCommand)
+        .rejectsOnce(refusal("InsufficientInstanceCapacity"))
+        .rejectsOnce(refusal("InsufficientInstanceCapacity"))
+        .resolves({ Instances: [{ InstanceId: "i-0third" }] });
+      await launchJob(params);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("instead of the setting's type"));
+      warn.mockRestore();
     });
 
     it("gives the user-data the instance type that launched", async () => {

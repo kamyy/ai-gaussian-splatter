@@ -23,7 +23,7 @@ import {
 import { JobStatus } from "@/lib/statuses";
 import { getEnv, LOCAL_APP_ORIGIN } from "./env";
 import { HttpError } from "./httpError";
-import { RECONSTRUCT_INSTANCE_TYPES, type RuntimeSettings } from "./runtimeSettings";
+import { RECONSTRUCT_INSTANCE_TYPES, type RuntimeSettings, TRAIN_INSTANCE_TYPES } from "./runtimeSettings";
 
 /**
  * The tag each worker instance carries its own lifetime ceiling in. infra/lambda/worker_sweeper.py reads the same key,
@@ -250,18 +250,16 @@ function explainLaunchError(err: unknown, stage: WorkerStage): unknown {
   return message === undefined ? err : new HttpError(503, message, { cause: err });
 }
 
-// The instance types a launch tries, in order. Reconstruct runs on the CPU, where the allow-listed types are
-// interchangeable 32-vCPU instances from different families, so one family's spot capacity running out moves the launch
-// to the next. The setting's own type goes first. Train has no such fallback, because its GPU types differ a good deal
-// in price.
+// The instance types a launch tries, in order. The setting's own type goes first. Each stage's allow-list holds types
+// that do the same work, so one family's spot capacity running out moves the launch to the next. Train's types differ in
+// price, and its launch can land on a dearer one than the setting names.
 function instanceTypesToTry(params: WorkerLaunch): string[] {
-  if (params.stage === "train") {
-    return [params.settings.trainInstanceType];
-  }
+  const [preferred, allowed] =
+    params.stage === "train"
+      ? [params.settings.trainInstanceType, TRAIN_INSTANCE_TYPES]
+      : [params.settings.reconstructInstanceType, RECONSTRUCT_INSTANCE_TYPES];
 
-  const preferred = params.settings.reconstructInstanceType;
-
-  return [preferred, ...RECONSTRUCT_INSTANCE_TYPES.filter(type => type !== preferred)];
+  return [preferred, ...allowed.filter(type => type !== preferred)];
 }
 
 /**
@@ -294,7 +292,12 @@ export async function launchJob(params: WorkerLaunch): Promise<string> {
   for (const instanceType of instanceTypesToTry(params)) {
     for (const subnetId of subnetIds) {
       try {
-        return await runInstance(params, env, subnetId, instanceType);
+        const instanceId = await runInstance(params, env, subnetId, instanceType);
+        if (instanceType !== instanceTypesToTry(params)[0]) {
+          console.warn(`Launched ${params.stage} on ${instanceType} instead of the setting's type, in ${subnetId}`);
+        }
+
+        return instanceId;
       } catch (err) {
         if (!(err instanceof Error) || !ZONE_ERROR_NAMES.has(err.name)) {
           throw explainLaunchError(err, params.stage);
