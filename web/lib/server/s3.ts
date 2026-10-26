@@ -32,10 +32,15 @@ const PRESIGN_EXPIRY_SECONDS = 15 * 60;
  */
 export const MAX_THUMBNAIL_BYTES = 1024 * 1024;
 
+// One client for the process. Each new client fetches its own credentials from the ECS task's credential endpoint, so
+// a burst of uploads confirming at once would queue behind that endpoint.
+let sharedClient: S3Client | undefined;
+
 type WorkerCamera = Omit<CameraPose, "photoId"> & { name: string };
 
 function s3Client(): S3Client {
-  return new S3Client({ region: getEnv().AWS_REGION });
+  sharedClient ??= new S3Client({ region: getEnv().AWS_REGION });
+  return sharedClient;
 }
 
 export function photoS3Key(splatId: string, photoId: string, extension: string): string {
