@@ -57,4 +57,12 @@ describe("apiFetch", () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 502, statusText: "Bad Gateway" }));
     await expect(apiFetch("/api/v1/splats/s1", "GET", "tok")).rejects.toThrow("Bad Gateway");
   });
+
+  it("names the status when the response has neither a body nor a status text", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 500 }));
+
+    await expect(apiFetch("/api/v1/splats/s1/train", "POST", "tok")).rejects.toThrow(
+      "Something went wrong on the server (500). Try again in a moment.",
+    );
+  });
 });

@@ -48,5 +48,10 @@ export async function apiFetch<T>(
   }
 
   const txt = await resp.text().catch(() => "");
-  throw new Error(errorDetail(txt) || resp.statusText);
+  // An unhandled server error has no body, and HTTP/2 has no status text, so the status code is the last thing to name.
+  throw new Error(
+    errorDetail(txt) ||
+      resp.statusText ||
+      `Something went wrong on the server (${resp.status}). Try again in a moment.`,
+  );
 }
