@@ -172,6 +172,17 @@ describe("launchJob", () => {
     expect(userData).toContain("123456789012.dkr.ecr.us-east-1.amazonaws.com/worker:abc-reconstruct");
   });
 
+  // A CPU instance has no NVIDIA device, so a hard-coded --gpus all would stop its container from starting.
+  it("passes --gpus all to the container only where the instance has a GPU", async () => {
+    ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
+    await launchJob(params);
+
+    const userData = Buffer.from(runInstancesInput().UserData ?? "", "base64").toString();
+    expect(userData).toContain('if nvidia-smi -L > /dev/null 2>&1; then\n    GPU_ARGS="--gpus all"');
+    expect(userData).toContain("docker run --rm $GPU_ARGS \\\n");
+    expect(userData).not.toContain("docker run --rm --gpus all");
+  });
+
   // The instance role has no S3 access (infra/worker_iam.tf), so a worker left on its default credentials fails every
   // download.
   it("tells the worker to fetch its S3 credentials from the app", async () => {
