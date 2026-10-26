@@ -59,7 +59,7 @@ export const POST = withErrorHandling(
       throw new HttpError(400, `Need at least ${settings.minPhotosPerSplat} uploaded photos, have ${uploaded.n}`);
     }
 
-    // The presign route enforces this too, but two concurrent presign batches can each pass it. This is the check that
+    // The reserve route enforces this too, but two concurrent reserved batches can each pass it. This is the check that
     // stands between an oversized photo set and a GPU instance.
     if (uploaded.n > MAX_PHOTOS_PER_SPLAT) {
       throw new HttpError(400, `A splat can have at most ${MAX_PHOTOS_PER_SPLAT} photos, has ${uploaded.n}`);
@@ -107,8 +107,8 @@ export const POST = withErrorHandling(
       throw err;
     }
 
-    // The hard backstop on total GPU spend. The per-IP and per-user limits sit earlier in the flow, on the presign
-    // route (web/app/api/v1/splats/[splatId]/photos/presign/route.ts), so most abuse is screened before a splat has
+    // The hard backstop on total GPU spend. The per-IP and per-user limits sit earlier in the flow, on the reserve
+    // route (web/app/api/v1/splats/[splatId]/photos/reserve/route.ts), so most abuse is screened before a splat has
     // enough photos to reach this route at all. The claimed row is deleted rather than marked failed when the cap
     // rejects: nothing has run for it, and leaving a failed job behind would make the next attempt report a failure
     // that never happened.

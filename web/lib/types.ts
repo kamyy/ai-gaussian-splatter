@@ -31,10 +31,12 @@ export interface SplatListItem extends Splat {
   thumbnailHeight: number | null;
 }
 
-export interface PhotoPresignItem {
+export interface PhotoReservation {
   photoId: string;
-  presignedPutUrl: string;
-  s3Key: string;
+}
+
+export interface PhotoUploadUrls {
+  photoPutUrl: string;
   thumbnailPutUrl: string;
 }
 

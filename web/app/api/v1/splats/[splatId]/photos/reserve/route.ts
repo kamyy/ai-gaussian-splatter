@@ -1,10 +1,10 @@
 /**
- * POST /api/v1/splats/[splatId]/photos/presign: permission to upload a batch of photos.
+ * POST /api/v1/splats/[splatId]/photos/reserve: permission to upload a batch of photos.
  *
- * Creates a pending row for each photo and returns presigned URLs (time-limited links that let the browser upload
- * straight to S3, AWS's file storage) for the photo and its thumbnail. It is also where upload abuse is stopped: the
- * per-photo size limits, the per-splat photo limit, and the per-IP and per-user rate limits all apply here, before any
- * storage is used.
+ * Creates a pending row for each photo and returns their ids. The browser then asks
+ * web/app/api/v1/splats/[splatId]/photos/[photoId]/presign/route.ts for each photo's upload links just before
+ * uploading it, so a long batch never outlasts them. This route is where upload abuse is stopped: the per-photo size
+ * limit, the per-splat photo limit, and the per-IP and per-user rate limits all apply here, before any storage is used.
  */
 
 import { randomUUID } from "node:crypto";
@@ -18,17 +18,16 @@ import { type NewPhoto, photos } from "@/lib/server/db/schema";
 import { HttpError, parseJsonBody, withErrorHandling } from "@/lib/server/httpError";
 import { checkAndIncrementIp, checkAndIncrementUser } from "@/lib/server/rateLimit";
 import { getRuntimeSettings } from "@/lib/server/runtimeSettings";
-import { MAX_THUMBNAIL_BYTES, presignPhotoThumbnailUpload, presignPhotoUpload } from "@/lib/server/s3";
+import { photoS3Key, photoThumbnailS3Key } from "@/lib/server/s3";
 import { PhotoUploadStatus } from "@/lib/statuses";
-import type { PhotoPresignItem } from "@/lib/types";
+import type { PhotoReservation } from "@/lib/types";
 
-const presignSchema = z
+const reserveSchema = z
   .array(
     z.object({
       filename: z.string().min(1),
       contentType: z.string().refine(type => Object.hasOwn(PHOTO_EXTENSIONS, type), "Unsupported photo type"),
       size: z.number().int().positive().max(MAX_PHOTO_BYTES),
-      thumbnailSize: z.number().int().positive().max(MAX_THUMBNAIL_BYTES),
       width: z.number().int().positive(),
       height: z.number().int().positive(),
       takenAt: z.iso.datetime(),
@@ -37,12 +36,12 @@ const presignSchema = z
   .min(1);
 
 export const POST = withErrorHandling(
-  async (request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/photos/presign">) => {
+  async (request: NextRequest, ctx: RouteContext<"/api/v1/splats/[splatId]/photos/reserve">) => {
     const user = await requireUser();
     const { splatId } = await ctx.params;
     await requireOwnedSplat(splatId, user.id);
 
-    const batch = await parseJsonBody(request, presignSchema);
+    const batch = await parseJsonBody(request, reserveSchema);
 
     // Checked before the rate limits below, so a batch this rejects doesn't spend the caller's quota. Only uploaded
     // photos count, because a failed batch's pending rows are never uploaded and so never reach the worker.
@@ -54,38 +53,35 @@ export const POST = withErrorHandling(
       throw new HttpError(400, `A splat can have at most ${MAX_PHOTOS_PER_SPLAT} photos`);
     }
 
-    // Both checks run before any S3 URL is issued. The per-IP limit is the real defense against one person using many
-    // accounts, and the per-user limit is a quota on top of it.
+    // Both checks run before any photo row exists, and the presign route only signs URLs for an existing row. The
+    // per-IP limit is the real defense against one person using many accounts, and the per-user limit is a quota on
+    // top of it.
     const { uploadsPerIpPerHour, uploadsPerUserPerDay } = await getRuntimeSettings();
     await checkAndIncrementIp(getClientIp(request), uploadsPerIpPerHour);
     await checkAndIncrementUser(user.id, uploadsPerUserPerDay);
 
-    const items: PhotoPresignItem[] = [];
+    const items: PhotoReservation[] = [];
     const rows: NewPhoto[] = [];
     for (const item of batch) {
       const photoId = randomUUID();
-      const extension = PHOTO_EXTENSIONS[item.contentType];
-      const { key, url } = await presignPhotoUpload(splatId, photoId, extension, item.contentType, item.size);
-      const thumbnail = await presignPhotoThumbnailUpload(splatId, photoId, item.thumbnailSize);
-
       rows.push({
         id: photoId,
         splatId,
-        s3Key: key,
+        s3Key: photoS3Key(splatId, photoId, PHOTO_EXTENSIONS[item.contentType]),
         originalFilename: item.filename,
         contentType: item.contentType,
         sizeBytes: item.size,
         width: item.width,
         height: item.height,
-        thumbnailS3Key: thumbnail.key,
+        thumbnailS3Key: photoThumbnailS3Key(splatId, photoId),
         takenAt: new Date(item.takenAt),
         uploadStatus: PhotoUploadStatus.pending,
       });
-      items.push({ photoId, presignedPutUrl: url, s3Key: key, thumbnailPutUrl: thumbnail.url });
+      items.push({ photoId });
     }
 
-    // One insert, not one per photo: a mid-loop failure would otherwise leave a partial batch of pending rows behind,
-    // with the caller holding no ids to retry against and the rate-limit increment already spent.
+    // One insert, not one per photo, so a failure can't leave a partial batch of pending rows behind with the caller
+    // holding no ids to retry against.
     await getDb().insert(photos).values(rows);
 
     return NextResponse.json(items);

@@ -51,52 +51,36 @@ export function photoS3Key(splatId: string, photoId: string, extension: string):
  * A photo's thumbnail sits beside, not under, photos/. The worker downloads everything under splats/<splatId>/photos/
  * (worker/pipeline/fetch.py) and hands it to COLMAP, which would treat a thumbnail as another photo.
  */
-function photoThumbnailS3Key(splatId: string, photoId: string): string {
+export function photoThumbnailS3Key(splatId: string, photoId: string): string {
   return `splats/${splatId}/photo-thumbnails/${photoId}.jpg`;
 }
 
 /**
- * Returns the S3 key alongside the presigned PUT URL. contentLength is signed into the URL, so S3 rejects a body of
- * any other size. That is what makes the presign route's size check binding on the upload itself.
+ * A presigned PUT URL for the photo at key. contentLength is signed into the URL, so S3 rejects a body of any other
+ * size. That is what makes the reserve route's size check binding on the upload itself.
  */
-export async function presignPhotoUpload(
-  splatId: string,
-  photoId: string,
-  extension: string,
-  contentType: string,
-  contentLength: number,
-): Promise<{ key: string; url: string }> {
-  const env = getEnv();
-  const key = photoS3Key(splatId, photoId, extension);
+export async function presignPhotoUpload(key: string, contentType: string, contentLength: number): Promise<string> {
   const command = new PutObjectCommand({
-    Bucket: env.UPLOADS_BUCKET,
+    Bucket: getEnv().UPLOADS_BUCKET,
     Key: key,
     ContentType: contentType,
     ContentLength: contentLength,
   });
-  const url = await getSignedUrl(s3Client(), command, { expiresIn: PRESIGN_EXPIRY_SECONDS });
-  return { key, url };
+  return getSignedUrl(s3Client(), command, { expiresIn: PRESIGN_EXPIRY_SECONDS });
 }
 
 /**
  * A thumbnail is always a JPEG, drawn in the browser by web/lib/measurePhoto.ts. contentLength is signed into the URL
  * for the same reason as presignPhotoUpload's.
  */
-export async function presignPhotoThumbnailUpload(
-  splatId: string,
-  photoId: string,
-  contentLength: number,
-): Promise<{ key: string; url: string }> {
-  const env = getEnv();
-  const key = photoThumbnailS3Key(splatId, photoId);
+export async function presignPhotoThumbnailUpload(key: string, contentLength: number): Promise<string> {
   const command = new PutObjectCommand({
-    Bucket: env.UPLOADS_BUCKET,
+    Bucket: getEnv().UPLOADS_BUCKET,
     Key: key,
     ContentType: "image/jpeg",
     ContentLength: contentLength,
   });
-  const url = await getSignedUrl(s3Client(), command, { expiresIn: PRESIGN_EXPIRY_SECONDS });
-  return { key, url };
+  return getSignedUrl(s3Client(), command, { expiresIn: PRESIGN_EXPIRY_SECONDS });
 }
 
 /** The size in bytes of an object in UPLOADS_BUCKET, or null when there is no object at that key. */

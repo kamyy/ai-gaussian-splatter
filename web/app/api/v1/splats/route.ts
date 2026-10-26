@@ -1,7 +1,7 @@
 /**
  * POST and GET /api/v1/splats: create a splat, and list the signed-in user's splats.
  *
- * POST creates an empty splat row from a name. Photos are added afterwards through the presign route beside this one.
+ * POST creates an empty splat row from a name. Photos are added afterwards through web/app/api/v1/splats/[splatId]/photos/reserve/route.ts.
  * GET returns the user's library, newest first, with each splat's cover photo and latest job status, which is what the
  * cards on the library page (web/app/(authenticated)/splats/page.tsx) show.
  */
