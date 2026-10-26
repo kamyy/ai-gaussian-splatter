@@ -70,7 +70,8 @@ def test_run_colmap_excludes_non_image_files_from_image_path(monkeypatch, tmp_pa
     assert result.num_images_input == 2
 
 
-def _run_colmap_recording_commands(monkeypatch, tmp_path, nvidia_smi):
+def test_run_colmap_runs_extraction_and_matching_on_the_cpu(monkeypatch, tmp_path):
+    """The reconstruct stage's instance has no GPU, so a use_gpu of 1 would abort COLMAP."""
     photos_dir = tmp_path / "photos"
     photos_dir.mkdir()
     (photos_dir / "a.jpg").write_bytes(b"fake")
@@ -86,28 +87,9 @@ def _run_colmap_recording_commands(monkeypatch, tmp_path, nvidia_smi):
 
     monkeypatch.setattr("pipeline.sfm._run", fake_run)
     monkeypatch.setattr("pipeline.sfm._count_registered_images", lambda model_dir: 1)
-    monkeypatch.setattr("pipeline.sfm.shutil.which", lambda name: nvidia_smi)
 
     run_colmap(photos_dir, workdir)
 
-    return commands
-
-
-def _flag_value(cmd, flag):
-    return cmd[cmd.index(flag) + 1]
-
-
-def test_run_colmap_uses_the_gpu_when_the_container_has_one(monkeypatch, tmp_path):
-    commands = _run_colmap_recording_commands(monkeypatch, tmp_path, "/usr/bin/nvidia-smi")
-
     extractor, matcher = commands[0], commands[1]
-    assert _flag_value(extractor, "--FeatureExtraction.use_gpu") == "1"
-    assert _flag_value(matcher, "--FeatureMatching.use_gpu") == "1"
-
-
-def test_run_colmap_runs_on_the_cpu_when_the_container_has_no_gpu(monkeypatch, tmp_path):
-    commands = _run_colmap_recording_commands(monkeypatch, tmp_path, None)
-
-    extractor, matcher = commands[0], commands[1]
-    assert _flag_value(extractor, "--FeatureExtraction.use_gpu") == "0"
-    assert _flag_value(matcher, "--FeatureMatching.use_gpu") == "0"
+    assert extractor[extractor.index("--FeatureExtraction.use_gpu") + 1] == "0"
+    assert matcher[matcher.index("--FeatureMatching.use_gpu") + 1] == "0"
