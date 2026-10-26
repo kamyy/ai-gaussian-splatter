@@ -302,6 +302,7 @@
         "elasticloadbalancing:ModifyLoadBalancerAttributes",
         "elasticloadbalancing:ModifyTargetGroup",
         "elasticloadbalancing:ModifyTargetGroupAttributes",
+        "elasticloadbalancing:SetSubnets",
         "elasticloadbalancing:DeleteListener",
         "elasticloadbalancing:DeleteLoadBalancer",
         "elasticloadbalancing:DeleteTargetGroup"
