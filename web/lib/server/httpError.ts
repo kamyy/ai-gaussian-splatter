@@ -20,8 +20,8 @@ type Handler<Args extends unknown[]> = (...args: Args) => Promise<NextResponse>;
 export class HttpError extends Error {
   readonly status: number;
 
-  constructor(status: number, message: string) {
-    super(message);
+  constructor(status: number, message: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = "HttpError";
     this.status = status;
   }
@@ -64,6 +64,8 @@ function errorResponse(status: number, detail: string): NextResponse {
  * Wraps a Route Handler so a thrown HttpError becomes its JSON error response. Each one but a 404 is logged first.
  * Otherwise a rejected sign-in or a rate limit would leave no trace in the web logs, only in the load balancer's
  * access logs. A 404 is left out because scanners probing for paths produce a steady stream of them.
+ *
+ * An error with an Error `cause` logs that too, since the response only carries the visitor-facing message.
  */
 export function withErrorHandling<Args extends unknown[]>(handler: Handler<Args>): Handler<Args> {
   return async (...args: Args) => {
@@ -73,7 +75,8 @@ export function withErrorHandling<Args extends unknown[]>(handler: Handler<Args>
       if (error instanceof HttpError) {
         const [request] = args;
         if (error.status !== 404 && request instanceof Request) {
-          console.warn(`${error.status} ${request.method} ${new URL(request.url).pathname}: ${error.message}`);
+          const cause = error.cause instanceof Error ? ` (cause ${error.cause.name}: ${error.cause.message})` : "";
+          console.warn(`${error.status} ${request.method} ${new URL(request.url).pathname}: ${error.message}${cause}`);
         }
 
         return errorResponse(error.status, error.message);

@@ -18,6 +18,7 @@ vi.mock("@/lib/server/workerLauncher", async importOriginal => {
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { globalJobCounters, jobs, splats, users } from "@/lib/server/db/schema";
+import { HttpError } from "@/lib/server/httpError";
 import { JobStatus } from "@/lib/statuses";
 import { POST } from "./route";
 
@@ -117,6 +118,16 @@ describe("POST /api/v1/splats/[splatId]/train", () => {
     const [updated] = await getDb().select().from(jobs).where(eq(jobs.id, job.id));
     expect(updated.status).toBe("awaiting_training");
     expect(updated.trainingLaunchedAt).toBeNull();
+  });
+
+  it("answers 503 with the capacity message when no GPU is available", async () => {
+    const { splat } = await seed();
+    launchJobMock.mockRejectedValueOnce(new HttpError(503, "No GPU capacity is available right now. Try again later."));
+
+    const response = await POST(trainRequest(), ctx(splat.id));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ detail: "No GPU capacity is available right now. Try again later." });
   });
 
   it("clears the launch time when the daily cap rejects the build", async () => {

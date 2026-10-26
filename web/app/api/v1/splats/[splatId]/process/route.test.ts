@@ -19,6 +19,7 @@ import { MAX_PHOTOS_PER_SPLAT } from "@/lib/limits";
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { globalJobCounters, jobs, photos, splats, users } from "@/lib/server/db/schema";
+import { HttpError } from "@/lib/server/httpError";
 import { getRuntimeSettings } from "@/lib/server/runtimeSettings";
 import { JobStatus, PhotoUploadStatus } from "@/lib/statuses";
 import { POST } from "./route";
@@ -214,6 +215,19 @@ describe("POST /api/v1/splats/[splatId]/process", () => {
     const res = await POST({} as never, ctx(splat.id));
     expect(res.status).toBe(409);
     expect(launchJobMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("answers 503 with the capacity message and still fails the job when no GPU is available", async () => {
+    const { splat } = await seed();
+    launchJobMock.mockRejectedValueOnce(new HttpError(503, "No GPU capacity is available right now. Try again later."));
+
+    const res = await POST({} as never, ctx(splat.id));
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ detail: "No GPU capacity is available right now. Try again later." });
+    const [job] = await getDb().select().from(jobs).where(eq(jobs.splatId, splat.id));
+    expect(job.status).toBe("failed");
+    expect(job.errorMessage).toContain("Try again later.");
   });
 
   it("marks the job and splat failed, not stuck, when the launch itself throws", async () => {

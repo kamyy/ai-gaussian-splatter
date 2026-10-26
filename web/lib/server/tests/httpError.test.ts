@@ -34,6 +34,22 @@ describe("withErrorHandling", () => {
     expect(warn.mock.calls).toEqual([["401 POST /api/v1/splats/s1/photos/p1/complete: Missing bearer token"]]);
   });
 
+  it("logs the cause's name and message after the error's own", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const handler = withErrorHandling(async (_request: NextRequest) => {
+      throw new HttpError(503, "Try again later.", {
+        cause: Object.assign(new Error("EC2's own wording"), { name: "InsufficientInstanceCapacity" }),
+      });
+    });
+
+    const res = await handler(new NextRequest("http://localhost/api/v1/splats/s1/train", { method: "POST" }));
+
+    expect(warn.mock.calls).toEqual([
+      ["503 POST /api/v1/splats/s1/train: Try again later. (cause InsufficientInstanceCapacity: EC2's own wording)"],
+    ]);
+    expect(await res.json()).toEqual({ detail: "Try again later." });
+  });
+
   it("leaves a 404 out of the log", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
