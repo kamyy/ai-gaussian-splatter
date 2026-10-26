@@ -75,7 +75,7 @@ const settings = {
   uploadsPerUserPerDay: 3,
   minPhotosPerSplat: 20,
   workerMaxLifetimeMinutes: 45,
-  reconstructInstanceType: "g6.xlarge",
+  reconstructInstanceType: "c7i.8xlarge",
   trainInstanceType: "g6e.xlarge",
   trainingIterations: 7000,
   showcaseClerkUserId: null,
@@ -128,7 +128,7 @@ describe("launchJob", () => {
     await launchJob({ ...params, stage: "train" });
 
     const calls = ec2Mock.commandCalls(RunInstancesCommand);
-    expect(calls.map(call => call.args[0].input.InstanceType)).toEqual(["g6.xlarge", "g6e.xlarge"]);
+    expect(calls.map(call => call.args[0].input.InstanceType)).toEqual(["c7i.8xlarge", "g6e.xlarge"]);
   });
 
   it("passes the training iterations to a train stage only", async () => {
@@ -172,15 +172,17 @@ describe("launchJob", () => {
     expect(userData).toContain("123456789012.dkr.ecr.us-east-1.amazonaws.com/worker:abc-reconstruct");
   });
 
-  // A CPU instance has no NVIDIA device, so a hard-coded --gpus all would stop its container from starting.
-  it("passes --gpus all to the container only where the instance has a GPU", async () => {
+  // A CPU instance has no NVIDIA device, so --gpus all there would stop the container from starting.
+  it("passes --gpus all to a train stage's container only", async () => {
     ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-0abc123" }] });
     await launchJob(params);
+    await launchJob({ ...params, stage: "train" });
 
-    const userData = Buffer.from(runInstancesInput().UserData ?? "", "base64").toString();
-    expect(userData).toContain('if nvidia-smi -L > /dev/null 2>&1; then\n    GPU_ARGS="--gpus all"');
-    expect(userData).toContain("docker run --rm $GPU_ARGS \\\n");
-    expect(userData).not.toContain("docker run --rm --gpus all");
+    const [reconstruct, train] = ec2Mock
+      .commandCalls(RunInstancesCommand)
+      .map(call => Buffer.from(call.args[0].input.UserData ?? "", "base64").toString());
+    expect(reconstruct).not.toContain("--gpus");
+    expect(train).toContain("    --gpus all \\\n");
   });
 
   // The instance role has no S3 access (infra/worker_iam.tf), so a worker left on its default credentials fails every
@@ -299,7 +301,7 @@ describe("launchJob", () => {
 
     // Sent only into a stream that exists, which is when LOG_OPTS was filled.
     expect(userData.lastIndexOf('if [ -n "$LOG_OPTS" ]; then', send)).toBeGreaterThan(pull);
-    expect(userData).toContain("context instance_type=g6.xlarge");
+    expect(userData).toContain("context instance_type=c7i.8xlarge");
   });
 
   it("passes the time of docker run to the worker", async () => {
@@ -456,6 +458,14 @@ describe("launchJobLocal", () => {
     // Podman's alias for the host running `next dev`, since `localhost` inside the container is the container itself.
     expect(args).toEqual(expect.arrayContaining(["-e", "APP_ORIGIN=http://host.containers.internal:3000"]));
     expect(options).toMatchObject({ detached: true });
+  });
+
+  it("gives the GPU to a train stage's container only", () => {
+    launchJobLocal(params);
+    expect(runArgs()).toEqual(expect.arrayContaining(["--device", "nvidia.com/gpu=all"]));
+
+    launchJobLocal({ ...params, stage: "reconstruct" });
+    expect(runArgs(1)).not.toContain("--device");
   });
 
   it("runs the reconstruct image for a reconstruct stage", () => {

@@ -93,6 +93,9 @@ interface UserDataParams {
 
 function renderUserData(p: UserDataParams): string {
   const iterationsArg = p.trainingIterations ? `    -e TRAINING_ITERATIONS=${p.trainingIterations} \\\n` : "";
+  // Only the train stage has a GPU. The reconstruct stage runs on a CPU instance, where --gpus all makes docker refuse
+  // to start the container.
+  const gpuArg = p.stage === "train" ? "    --gpus all \\\n" : "";
 
   return `#!/bin/bash
 set -euo pipefail
@@ -127,16 +130,6 @@ record() {
 # /proc/uptime counts from the kernel's start, which splits the boot into EC2's own start-up and the OS's.
 record "timing phase=os_boot ms=$(awk '{ printf "%d", $1 * 1000 }' /proc/uptime)"
 record "context instance_type=${p.instanceType} image=${p.workerImageUri}"
-
-# A CPU instance has no NVIDIA device, so --gpus all there makes docker refuse to start the container. The container
-# then has no nvidia-smi, which is how worker/pipeline/sfm.py knows to run COLMAP on the CPU.
-if nvidia-smi -L > /dev/null 2>&1; then
-    GPU_ARGS="--gpus all"
-    record "context gpu=yes"
-else
-    GPU_ARGS=""
-    record "context gpu=no"
-fi
 
 # Plaintext, and EC2 user-data is readable by anyone allowed to describe the instance's attributes. The token is
 # per-job. It authorizes status updates on that one job, and S3 credentials for that one splat's files, which is what
@@ -188,11 +181,11 @@ if [ -n "$LOG_OPTS" ]; then
         --log-stream-name "$JOB_ID-$STAGE" --log-events "$EVENTS" || true
 fi
 
-# Three of the arguments below need explaining. GPU_ARGS and LOG_OPTS are deliberately unquoted, so their words split
-# into separate docker arguments, none of which holds a space. AWS_DEFAULT_REGION is for worker/pipeline/instance.py's
-# EC2 client, which can't terminate this instance without one.
-docker run --rm $GPU_ARGS \\
-    $LOG_OPTS \\
+# Two of the flags below need explaining. LOG_OPTS is deliberately unquoted, so its words split into separate docker
+# arguments, none of which holds a space. AWS_DEFAULT_REGION is for worker/pipeline/instance.py's EC2 client, which
+# can't terminate this instance without one.
+docker run --rm \\
+${gpuArg}    $LOG_OPTS \\
     -e AWS_DEFAULT_REGION=${p.awsRegion} \\
     -e JOB_ID="$JOB_ID" \\
     -e SPLAT_ID="$SPLAT_ID" \\
@@ -473,8 +466,8 @@ export function launchJobLocal(params: WorkerLaunch): void {
     "--name",
     localContainerName(params.jobId),
     "--security-opt=label=disable",
-    "--device",
-    "nvidia.com/gpu=all",
+    // Only the train stage uses the GPU. The reconstruct stage runs COLMAP on the CPU.
+    ...(params.stage === "train" ? ["--device", "nvidia.com/gpu=all"] : []),
     "-e",
     `JOB_ID=${params.jobId}`,
     "-e",
