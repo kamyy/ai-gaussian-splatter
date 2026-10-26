@@ -65,4 +65,18 @@ describe("apiFetch", () => {
       "Something went wrong on the server (500). Try again in a moment.",
     );
   });
+
+  it("does not tell the visitor to retry a client error that has nothing to say", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 403 }));
+
+    await expect(apiFetch("/api/v1/splats/s1/train", "POST", "tok")).rejects.toThrow("The request failed (403).");
+  });
+
+  it("treats a body of only whitespace as no body", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("\n", { status: 502 }));
+
+    await expect(apiFetch("/api/v1/splats/s1/train", "POST", "tok")).rejects.toThrow(
+      "Something went wrong on the server (502). Try again in a moment.",
+    );
+  });
 });

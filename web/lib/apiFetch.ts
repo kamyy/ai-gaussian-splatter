@@ -22,6 +22,15 @@ function errorDetail(body: string): string {
   return body;
 }
 
+// What the visitor reads when an error response has no body and no status text. Only a server error is worth retrying.
+function statusMessage(status: number): string {
+  if (status >= 500) {
+    return `Something went wrong on the server (${status}). Try again in a moment.`;
+  }
+
+  return `The request failed (${status}).`;
+}
+
 export async function apiFetch<T>(
   path: string,
   method: "GET" | "POST" | "PUT" | "DELETE",
@@ -49,9 +58,6 @@ export async function apiFetch<T>(
 
   const txt = await resp.text().catch(() => "");
   // An unhandled server error has no body, and HTTP/2 has no status text, so the status code is the last thing to name.
-  throw new Error(
-    errorDetail(txt) ||
-      resp.statusText ||
-      `Something went wrong on the server (${resp.status}). Try again in a moment.`,
-  );
+  // A body of only whitespace counts as no body.
+  throw new Error(errorDetail(txt.trim()) || resp.statusText || statusMessage(resp.status));
 }
