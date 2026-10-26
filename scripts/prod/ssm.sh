@@ -21,7 +21,7 @@ usage() {
   echo "  uploads-per-user-per-day     upload batches per account per UTC day, 1 or more"
   echo "  min-photos-per-splat         3 to 100"
   echo "  worker-max-lifetime-minutes  5 to 240. Applies to instances launched after the change."
-  echo "  reconstruct-instance-type    c7i.8xlarge (no GPU), g4dn.xlarge, g5.xlarge or g6.xlarge"
+  echo "  reconstruct-instance-type    c7i.8xlarge"
   echo "  train-instance-type          g5.xlarge, g6.xlarge or g6e.xlarge"
   echo "  training-iterations          1000 to 30000"
   echo "  showcase-clerk-user-id       a production Clerk user ID (user_...), or none"
@@ -80,8 +80,8 @@ check_value() {
       integer_in "$value" 5 240
       ;;
     reconstruct-instance-type)
-      echo "c7i.8xlarge, g4dn.xlarge, g5.xlarge or g6.xlarge"
-      [[ $value =~ ^(c7i\.8xlarge|(g4dn|g5|g6)\.xlarge)$ ]]
+      echo "c7i.8xlarge"
+      [[ $value == c7i.8xlarge ]]
       ;;
     train-instance-type)
       echo "g5.xlarge, g6.xlarge or g6e.xlarge"

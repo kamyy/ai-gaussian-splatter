@@ -25,7 +25,7 @@ locals {
   # Every instance type the reconstruct-instance-type and train-instance-type runtime settings accept
   # (web/lib/server/runtimeSettings.ts). The web task's RunInstances grant (infra/web.tf) refuses any other, so a type
   # added to either allow-list there has to be added here too.
-  worker_instance_types = ["c7i.8xlarge", "g4dn.xlarge", "g5.xlarge", "g6.xlarge", "g6e.xlarge"]
+  worker_instance_types = ["c7i.8xlarge", "g5.xlarge", "g6.xlarge", "g6e.xlarge"]
 
   # All four named explicitly rather than left to a generated name, because each is written out literally elsewhere.
   # The cluster and service are in RUNBOOK.md's Clerk secret rotation and in .github/workflows/deploy.yml. The two roles
@@ -45,7 +45,7 @@ locals {
   availability_zones = [for suffix in ["a", "b"] : "${var.aws_region}${suffix}"]
 
   # The public subnets span one more zone, so a worker launch has a third place to find spot capacity. Zone d is
-  # left out because it offers neither g4dn.xlarge nor g5.xlarge.
+  # left out because it doesn't offer g5.xlarge, the default train instance type.
   public_availability_zones = concat(local.availability_zones, ["${var.aws_region}c"])
 
   # Every subnet the worker's spot instance may launch into, which web/lib/server/workerLauncher.ts tries in this order

@@ -10,9 +10,8 @@
 # shellcheck disable=SC2034 # Each repository variable's value is read back through ${!repo_var} in gh_vars.
 set -euo pipefail
 
-# "All G and VT Spot Instance Requests". Enough vCPUs for one g5.xlarge train stage at a time, plus a g4dn.xlarge
-# reconstruct stage when the reconstruct-instance-type setting names a GPU type instead of its CPU default, 4 vCPUs
-# each.
+# "All G and VT Spot Instance Requests". Enough vCPUs for two g5.xlarge train stages at a time, 4 vCPUs each. The
+# reconstruct stage's CPU instance draws on a different quota that this script doesn't request.
 GPU_SPOT_QUOTA_CODE=L-3819A6DF
 GPU_SPOT_VCPUS=8
 

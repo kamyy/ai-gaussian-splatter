@@ -116,7 +116,6 @@ run "run_instances_statements_stay_split" {
       s.Sid == "RunInstancesTagged" &&
       toset(try(s.Condition.StringEquals["ec2:InstanceType"], [])) == toset([
         "c7i.8xlarge",
-        "g4dn.xlarge",
         "g5.xlarge",
         "g6.xlarge",
         "g6e.xlarge",
