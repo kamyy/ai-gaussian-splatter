@@ -1,6 +1,6 @@
 import subprocess
 
-from pipeline.sfm import SfmResult, _count_registered_images, run_colmap
+from pipeline.sfm import SfmResult, _count_registered_images, _extraction_threads, run_colmap
 
 FAKE_ANALYZER_OUTPUT = "Cameras: 1\nImages: 50\nRegistered images: 47\nPoints: 12345\n"
 
@@ -70,8 +70,7 @@ def test_run_colmap_excludes_non_image_files_from_image_path(monkeypatch, tmp_pa
     assert result.num_images_input == 2
 
 
-def test_run_colmap_runs_extraction_and_matching_on_the_cpu(monkeypatch, tmp_path):
-    """The reconstruct stage's instance has no GPU, so a use_gpu of 1 would abort COLMAP."""
+def _run_recording_commands(monkeypatch, tmp_path):
     photos_dir = tmp_path / "photos"
     photos_dir.mkdir()
     (photos_dir / "a.jpg").write_bytes(b"fake")
@@ -90,6 +89,49 @@ def test_run_colmap_runs_extraction_and_matching_on_the_cpu(monkeypatch, tmp_pat
 
     run_colmap(photos_dir, workdir)
 
+    return commands
+
+
+def _machine(monkeypatch, cpus, memory_gib):
+    page_size = 4096
+    monkeypatch.setattr("pipeline.sfm.os.cpu_count", lambda: cpus)
+    monkeypatch.setattr(
+        "pipeline.sfm.os.sysconf",
+        lambda name: page_size if name == "SC_PAGE_SIZE" else memory_gib * 2**30 // page_size,
+    )
+
+
+def test_run_colmap_runs_extraction_and_matching_on_the_cpu(monkeypatch, tmp_path):
+    """The reconstruct stage's instance has no GPU, so a use_gpu of 1 would abort COLMAP."""
+    commands = _run_recording_commands(monkeypatch, tmp_path)
+
     extractor, matcher = commands[0], commands[1]
     assert extractor[extractor.index("--FeatureExtraction.use_gpu") + 1] == "0"
     assert matcher[matcher.index("--FeatureMatching.use_gpu") + 1] == "0"
+
+
+def test_run_colmap_limits_the_extraction_threads(monkeypatch, tmp_path):
+    _machine(monkeypatch, cpus=32, memory_gib=64)
+    commands = _run_recording_commands(monkeypatch, tmp_path)
+
+    extractor = commands[0]
+    assert extractor[extractor.index("--FeatureExtraction.num_threads") + 1] == "16"
+
+
+def test_extraction_threads_fit_the_memory_of_a_32_vcpu_64_gib_instance(monkeypatch):
+    """Thirty-two threads at about 2.2 GiB each is more than 64 GiB, which got the process killed on a c7i.8xlarge."""
+    _machine(monkeypatch, cpus=32, memory_gib=64)
+
+    assert _extraction_threads() == 16
+
+
+def test_extraction_threads_never_exceed_the_vcpus(monkeypatch):
+    _machine(monkeypatch, cpus=4, memory_gib=64)
+
+    assert _extraction_threads() == 4
+
+
+def test_extraction_threads_are_at_least_one(monkeypatch):
+    _machine(monkeypatch, cpus=32, memory_gib=2)
+
+    assert _extraction_threads() == 1
