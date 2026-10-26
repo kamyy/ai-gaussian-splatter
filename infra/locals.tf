@@ -44,9 +44,10 @@ locals {
   # RDS's isolated subnets span these two zones.
   availability_zones = [for suffix in ["a", "b"] : "${var.aws_region}${suffix}"]
 
-  # The public subnets span one more zone, so a worker launch has a third place to find spot capacity. Zone d is
-  # left out because it doesn't offer g5.xlarge, the default train instance type.
-  public_availability_zones = concat(local.availability_zones, ["${var.aws_region}c"])
+  # The public subnets span two more zones, so a worker launch has more places to find spot capacity. Zone d doesn't
+  # offer g5.xlarge, the default train instance type, so a train launch skips it. Every reconstruct instance type is
+  # offered there.
+  public_availability_zones = concat(local.availability_zones, ["${var.aws_region}c", "${var.aws_region}d"])
 
   # Every subnet the worker's spot instance may launch into, which web/lib/server/workerLauncher.ts tries in this order
   # until one has capacity. A single local keeps infra/web.tf's WORKER_SUBNET_IDS env var and its RunInstances IAM

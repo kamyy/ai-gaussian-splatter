@@ -191,7 +191,11 @@ run "subnets_keep_their_cidrs_as_zones_are_added" {
   }
 
   assert {
-    condition     = aws_subnet.public["us-west-2c"].cidr_block == "10.0.4.0/24" && length(aws_subnet.private) == 2
-    error_message = "the third zone gets a public subnet only, on the next free /24"
+    condition = (
+      aws_subnet.public["us-west-2c"].cidr_block == "10.0.4.0/24" &&
+      aws_subnet.public["us-west-2d"].cidr_block == "10.0.5.0/24" &&
+      length(aws_subnet.private) == 2
+    )
+    error_message = "the third and fourth zones get a public subnet only, each on the next free /24"
   }
 }
