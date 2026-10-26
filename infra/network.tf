@@ -1,7 +1,7 @@
 # The network the app runs in: the VPC, its subnets, and the security groups.
 #
-# A VPC is a private network inside AWS. This one has public and isolated subnets across two availability zones
-# (separate data centers), with no NAT gateway (ARCHITECTURE.md has the cost reasoning) and no RDS Multi-AZ failover,
+# A VPC is a private network inside AWS. This one has public subnets across three availability zones (separate data
+# centers) and isolated subnets across two of them, with no NAT gateway (ARCHITECTURE.md has the cost reasoning) and no RDS Multi-AZ failover,
 # since this is a low-traffic demo project, not a production-scale service.
 #
 # Everything needing outbound internet (the web tasks, the GPU workers) runs in the public subnets with a public IP and
@@ -29,11 +29,17 @@ resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 }
 
+# The isolated subnets take the /24s numbered right after the first two zones'. A public subnet past those two skips
+# over them, so adding a zone never renumbers an existing subnet, which would replace it.
 resource "aws_subnet" "public" {
-  for_each = { for idx, az in local.availability_zones : az => idx }
+  for_each = { for idx, az in local.public_availability_zones : az => idx }
 
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = cidrsubnet(aws_vpc.main.cidr_block, 8, each.value)
+  vpc_id = aws_vpc.main.id
+  cidr_block = cidrsubnet(
+    aws_vpc.main.cidr_block,
+    8,
+    each.value < length(local.availability_zones) ? each.value : each.value + length(local.availability_zones),
+  )
   availability_zone       = each.key
   map_public_ip_on_launch = true
 

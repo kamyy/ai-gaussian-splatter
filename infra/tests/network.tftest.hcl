@@ -175,3 +175,23 @@ override_resource {
     arn = "arn:aws:events:us-west-2:000000000000:rule/ai-gaussian-splatter-worker-sweeper"
   }
 }
+
+run "subnets_keep_their_cidrs_as_zones_are_added" {
+  command = plan
+
+  # A changed cidr_block replaces the subnet, and RDS and the web tasks can't leave a subnet that is being replaced.
+  assert {
+    condition = (
+      aws_subnet.public["us-west-2a"].cidr_block == "10.0.0.0/24" &&
+      aws_subnet.public["us-west-2b"].cidr_block == "10.0.1.0/24" &&
+      aws_subnet.private["us-west-2a"].cidr_block == "10.0.2.0/24" &&
+      aws_subnet.private["us-west-2b"].cidr_block == "10.0.3.0/24"
+    )
+    error_message = "the first two zones' subnets must keep the CIDRs they were created with"
+  }
+
+  assert {
+    condition     = aws_subnet.public["us-west-2c"].cidr_block == "10.0.4.0/24" && length(aws_subnet.private) == 2
+    error_message = "the third zone gets a public subnet only, on the next free /24"
+  }
+}
