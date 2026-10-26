@@ -262,9 +262,9 @@ aws login # Needed again only after the session expires, up to 12 hours later.
 `scripts/prod/bootstrap.sh` takes a fresh account to a live deploy. Its `--help` lists each step and what it creates. Run with no arguments, it runs them all, in order:
 
 1. Creates what `infra/` never manages: the Clerk secret `ai-gaussian-splatter/clerk-secret-key` (it prompts for the `sk_live_...` value), the account-wide `AWSServiceRoleForEC2Spot` role, and the Terraform state bucket `ai-gaussian-splatter-tfstate-<account-id>`.
-2. Requests a GPU spot vCPU quota of 8, because a new account's is 0 and every train stage fails at launch until AWS raises it. It asks before the first deploy so the approval overlaps the deploy's wait. Declining, or a failed request, doesn't stop the run.
-   - The reconstruct stage's CPU instance draws on a different quota, "All Standard Spot Instance Requests" (`L-34B43A08`), which this step doesn't request. Its value must be at least the vCPUs of the reconstruct instance type, 32 for `c7i.8xlarge`.
-   - Read it with `aws service-quotas get-service-quota --service-code ec2 --quota-code L-34B43A08`, and ask AWS to raise it when it is lower.
+2. Requests two spot vCPU quotas, because a new account's GPU quota is 0 and its standard quota can be lower than one reconstruct instance needs. It asks before the first deploy so the approval overlaps the deploy's wait. Declining, or a failed request, doesn't stop the run.
+   - A GPU quota of 8 ("All G and VT Spot Instance Requests") lets two train stages run at once. Until AWS raises it, every train launch fails.
+   - A standard quota of 64 ("All Standard Spot Instance Requests") lets two reconstruct stages run at once, since each reconstruct instance has 32 vCPUs. Until AWS raises it, every reconstruct launch fails.
 3. Creates GitHub's OIDC provider and the `ai-gaussian-splatter-ci-deploy` role the `deploy` job assumes.
 4. Sets the GitHub repository variables `.github/workflows/deploy.yml` reads.
 5. Turns the `deploy` job on.
@@ -284,7 +284,7 @@ scripts/prod/bootstrap.sh
  │           ├─► AWSServiceRoleForEC2Spot ────────────────── needed by ───────► worker instances
  │           └─► ai-gaussian-splatter-tfstate-<account-id> ─ terraform init ──► deploy job
  │
- ├─ quota ─────► GPU spot vCPU quota request ─────────────── allows ──────────► worker instances
+ ├─ quota ─────► GPU and standard spot vCPU quota requests ── allow ───────────► worker instances
  │
  ├─ ci-role ─┬─► GitHub OIDC provider ────────────────────── signs in ────────► deploy job
  │           └─► ai-gaussian-splatter-ci-deploy ──────────── assumed by ──────► deploy job
@@ -325,7 +325,7 @@ Seven things are left for you once the script finishes:
 4. On Clerk's **User & authentication** page, turn off **Allow users to delete their accounts**. Users delete their accounts through the app's own account menu item instead, which also deletes their splats.
 5. Run `scripts/prod/ssm.sh` and check it lists every runtime setting. The new-splat page showing "Processing is paused" with every setting present means the task role can't read them ([Runtime settings](ARCHITECTURE.md#95-runtime-settings)).
 6. Set up Google sign-in ([Setting up Google sign-in](#27-setting-up-google-sign-in)).
-7. Wait for AWS to approve the GPU spot quota request from step 2, which takes hours to a couple of days. Until then reconstruct runs, and every train launch fails with "GPU processing isn't available on this site yet". `scripts/prod/bootstrap.sh quota` reports whether the request is still pending.
+7. Wait for AWS to approve the quota requests from step 2, which takes hours to a couple of days. Until then every worker job fails at launch with "GPU processing isn't available on this site yet". `scripts/prod/bootstrap.sh quota` reports whether the request is still pending.
 
 If a new image fails its health checks, the circuit breaker rolls back to the previous task definition. To roll back by hand, revert the change and push. A schema change gets a corrective migration instead ([Fixing a bad migration](#31-fixing-a-bad-migration)).
 
