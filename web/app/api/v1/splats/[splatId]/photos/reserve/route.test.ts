@@ -10,7 +10,6 @@ import { MAX_PHOTO_BYTES, MAX_PHOTOS_PER_SPLAT } from "@/lib/limits";
 import { getOrCreateUser } from "@/lib/server/auth";
 import { closeDb, getDb } from "@/lib/server/db";
 import { photos, rateLimitCounters, splats, users } from "@/lib/server/db/schema";
-import { MAX_THUMBNAIL_BYTES } from "@/lib/server/s3";
 import { PhotoUploadStatus } from "@/lib/statuses";
 import { POST } from "./route";
 
@@ -18,12 +17,12 @@ function ctx(splatId: string) {
   return { params: Promise.resolve({ splatId }) } as never;
 }
 
-function presignRequest(body: unknown) {
-  return new NextRequest("http://localhost/api/v1/splats/presign", { method: "POST", body: JSON.stringify(body) });
+function reserveRequest(body: unknown) {
+  return new NextRequest("http://localhost/api/v1/splats/reserve", { method: "POST", body: JSON.stringify(body) });
 }
 
-// Requires a real Postgres (TEST_DATABASE_URL). Signing an S3 URL is local, so nothing reaches AWS.
-describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
+// Requires a real Postgres (TEST_DATABASE_URL). Nothing reaches AWS.
+describe("POST /api/v1/splats/[splatId]/photos/reserve", () => {
   beforeEach(async () => {
     await getDb().delete(photos);
     await getDb().delete(splats);
@@ -48,16 +47,15 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
       filename: "a.jpg",
       contentType: "image/jpeg",
       size: 4_000_000,
-      thumbnailSize: 100_000,
       width: 3024,
       height: 4032,
       takenAt: "2026-01-01T10:00:00.000Z",
     };
     process.env.UPLOADS_PER_USER_PER_DAY = "1";
     try {
-      expect((await POST(presignRequest([photo]), ctx(splat.id))).status).toBe(200);
+      expect((await POST(reserveRequest([photo]), ctx(splat.id))).status).toBe(200);
 
-      const res = await POST(presignRequest([photo]), ctx(splat.id));
+      const res = await POST(reserveRequest([photo]), ctx(splat.id));
 
       expect(res.status).toBe(429);
       expect((await res.json()).detail).toMatch(/all 1 of today's uploads for your account/);
@@ -70,12 +68,11 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
     const splat = await seedSplat();
 
     const res = await POST(
-      presignRequest([
+      reserveRequest([
         {
           filename: "a.jpg",
           contentType: "image/jpeg",
           size: 4_000_000,
-          thumbnailSize: 100_000,
           width: 3024,
           height: 4032,
           takenAt: "2026-01-01T10:00:00.000Z",
@@ -84,7 +81,6 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
           filename: "b.jpg",
           contentType: "image/jpeg",
           size: 3_000_000,
-          thumbnailSize: 100_000,
           width: 4032,
           height: 3024,
           takenAt: "2026-01-01T10:00:05.000Z",
@@ -122,12 +118,11 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
     ]);
   });
 
-  function photoItem(filename: string, size = 4_000_000, thumbnailSize = 100_000) {
+  function photoItem(filename: string, size = 4_000_000) {
     return {
       filename,
       contentType: "image/jpeg",
       size,
-      thumbnailSize,
       width: 3024,
       height: 4032,
       takenAt: "2026-01-01T10:00:00.000Z",
@@ -137,11 +132,11 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
   it("rejects a photo over MAX_PHOTO_BYTES, without spending the rate limit", async () => {
     const splat = await seedSplat();
 
-    const res = await POST(presignRequest([photoItem("a.jpg", MAX_PHOTO_BYTES + 1)]), ctx(splat.id));
+    const res = await POST(reserveRequest([photoItem("a.jpg", MAX_PHOTO_BYTES + 1)]), ctx(splat.id));
     expect(res.status).toBe(422);
     expect(await getDb().select().from(rateLimitCounters)).toEqual([]);
 
-    const atCap = await POST(presignRequest([photoItem("a.jpg", MAX_PHOTO_BYTES)]), ctx(splat.id));
+    const atCap = await POST(reserveRequest([photoItem("a.jpg", MAX_PHOTO_BYTES)]), ctx(splat.id));
     expect(atCap.status).toBe(200);
   });
 
@@ -153,7 +148,7 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
   ])("rejects %s, without spending the rate limit", async (_label, filename, contentType) => {
     const splat = await seedSplat();
 
-    const res = await POST(presignRequest([{ ...photoItem(filename), contentType }]), ctx(splat.id));
+    const res = await POST(reserveRequest([{ ...photoItem(filename), contentType }]), ctx(splat.id));
     expect(res.status).toBe(422);
     expect(await getDb().select().from(rateLimitCounters)).toEqual([]);
   });
@@ -161,27 +156,11 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
   it("names the S3 key after the declared type, not the uploaded filename", async () => {
     const splat = await seedSplat();
 
-    const res = await POST(presignRequest([{ ...photoItem("a.html"), contentType: "image/png" }]), ctx(splat.id));
+    const res = await POST(reserveRequest([{ ...photoItem("a.html"), contentType: "image/png" }]), ctx(splat.id));
     const [item] = await res.json();
 
-    expect(item.s3Key).toBe(`splats/${splat.id}/photos/${item.photoId}.png`);
-  });
-
-  it("rejects a thumbnail over MAX_THUMBNAIL_BYTES", async () => {
-    const splat = await seedSplat();
-
-    const res = await POST(presignRequest([photoItem("a.jpg", 4_000_000, MAX_THUMBNAIL_BYTES + 1)]), ctx(splat.id));
-    expect(res.status).toBe(422);
-  });
-
-  it("signs each photo's and thumbnail's declared size into its upload URL", async () => {
-    const splat = await seedSplat();
-
-    const res = await POST(presignRequest([photoItem("a.jpg", 1234)]), ctx(splat.id));
-    const [item] = await res.json();
-
-    expect(new URL(item.presignedPutUrl).searchParams.get("X-Amz-SignedHeaders")).toContain("content-length");
-    expect(new URL(item.thumbnailPutUrl).searchParams.get("X-Amz-SignedHeaders")).toContain("content-length");
+    const [row] = await getDb().select({ s3Key: photos.s3Key }).from(photos);
+    expect(row.s3Key).toBe(`splats/${splat.id}/photos/${item.photoId}.png`);
   });
 
   async function seedPhotos(splatId: string, n: number, uploadStatus: PhotoUploadStatus) {
@@ -205,11 +184,11 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
     const splat = await seedSplat();
     await seedPhotos(splat.id, MAX_PHOTOS_PER_SPLAT - 1, PhotoUploadStatus.uploaded);
 
-    const res = await POST(presignRequest([photoItem("a.jpg"), photoItem("b.jpg")]), ctx(splat.id));
+    const res = await POST(reserveRequest([photoItem("a.jpg"), photoItem("b.jpg")]), ctx(splat.id));
     expect(res.status).toBe(400);
     expect(await getDb().select().from(rateLimitCounters)).toEqual([]);
 
-    const last = await POST(presignRequest([photoItem("a.jpg")]), ctx(splat.id));
+    const last = await POST(reserveRequest([photoItem("a.jpg")]), ctx(splat.id));
     expect(last.status).toBe(200);
   });
 
@@ -217,19 +196,18 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
     const splat = await seedSplat();
     await seedPhotos(splat.id, MAX_PHOTOS_PER_SPLAT, PhotoUploadStatus.pending);
 
-    const res = await POST(presignRequest([photoItem("a.jpg")]), ctx(splat.id));
+    const res = await POST(reserveRequest([photoItem("a.jpg")]), ctx(splat.id));
     expect(res.status).toBe(200);
   });
 
-  it("issues a thumbnail upload URL beside each photo's, outside the folder the worker downloads", async () => {
+  it("keys each photo's thumbnail beside it, outside the folder the worker downloads", async () => {
     const splat = await seedSplat();
 
-    const res = await POST(presignRequest([photoItem("a.jpg")]), ctx(splat.id));
+    const res = await POST(reserveRequest([photoItem("a.jpg")]), ctx(splat.id));
     const [item] = await res.json();
 
     const [row] = await getDb().select({ thumbnailS3Key: photos.thumbnailS3Key }).from(photos);
     expect(row.thumbnailS3Key).toBe(`splats/${splat.id}/photo-thumbnails/${item.photoId}.jpg`);
-    expect(item.thumbnailPutUrl).toContain(`splats/${splat.id}/photo-thumbnails/${item.photoId}.jpg`);
   });
 
   it.each([
@@ -240,7 +218,7 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
   ])("rejects a photo sent %s", async (_label, override) => {
     const splat = await seedSplat();
 
-    const res = await POST(presignRequest([{ ...photoItem("a.jpg"), ...override }]), ctx(splat.id));
+    const res = await POST(reserveRequest([{ ...photoItem("a.jpg"), ...override }]), ctx(splat.id));
     expect(res.status).toBe(422);
     expect(await getDb().select().from(photos)).toEqual([]);
   });
@@ -249,7 +227,7 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
     const otherUser = await getOrCreateUser("clerk-user-2");
     const [splat] = await getDb().insert(splats).values({ userId: otherUser.id, name: "not mine" }).returning();
 
-    const res = await POST(presignRequest([photoItem("a.jpg")]), ctx(splat.id));
+    const res = await POST(reserveRequest([photoItem("a.jpg")]), ctx(splat.id));
     expect(res.status).toBe(404);
     expect(await getDb().select().from(rateLimitCounters)).toEqual([]);
     expect(await getDb().select().from(photos)).toEqual([]);
@@ -257,7 +235,7 @@ describe("POST /api/v1/splats/[splatId]/photos/presign", () => {
 
   it("charges the per-IP limit to the ALB-appended address and the per-user limit to the caller", async () => {
     const splat = await seedSplat();
-    const request = new NextRequest("http://localhost/api/v1/splats/presign", {
+    const request = new NextRequest("http://localhost/api/v1/splats/reserve", {
       method: "POST",
       body: JSON.stringify([photoItem("a.jpg")]),
       headers: { "X-Forwarded-For": "1.1.1.1, 198.51.100.7" },

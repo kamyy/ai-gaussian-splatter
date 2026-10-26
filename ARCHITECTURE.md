@@ -382,15 +382,15 @@ flowchart TB
 
 Three request-path layers (`web/lib/server/rateLimit.ts`), each limit a runtime setting ([Runtime settings](#95-runtime-settings)). A per-user quota alone doesn't stop multi-accounting:
 
-1. Per-IP (the real defense against one person using many accounts), on the photo presign route (`web/app/api/v1/splats/[splatId]/photos/presign/route.ts`).
+1. Per-IP (the real defense against one person using many accounts), on the photo reserve route (`web/app/api/v1/splats/[splatId]/photos/reserve/route.ts`).
    - **IP is the _last_ `X-Forwarded-For` hop.** ALB appends the address it saw; trusting the first lets clients spoof.
    - Assumes one trusted proxy. Adding CloudFront in front would move that.
 2. Per-user, alongside it.
 3. A global daily cap on worker jobs, charged only when a worker instance launches, on the `process` and `train` routes. It bounds worst-case GPU spend whoever the caller is.
 
-The daily cap bounds how many worker instances launch, not how long each one runs. `MAX_PHOTOS_PER_SPLAT` (`web/lib/limits.ts`) bounds the second, since COLMAP's exhaustive matching compares every pair of photos. The presign route rejects a batch past it, and the `process` route rejects a splat past it before charging the daily cap.
+The daily cap bounds how many worker instances launch, not how long each one runs. `MAX_PHOTOS_PER_SPLAT` (`web/lib/limits.ts`) bounds the second, since COLMAP's exhaustive matching compares every pair of photos. The reserve route rejects a batch past it, and the `process` route rejects a splat past it before charging the daily cap.
 
-`MAX_PHOTO_BYTES` (`web/lib/limits.ts`) bounds one photo's storage and worker download cost. `MAX_THUMBNAIL_BYTES` (`web/lib/server/s3.ts`) bounds its thumbnail, which the browser draws and so could send at any size. The presign route signs each declared size into its upload URL, so S3 itself refuses a body of any other size. The `complete` route checks both stored objects' sizes again, so a client that skipped the form still can't get an oversized upload marked uploaded.
+`MAX_PHOTO_BYTES` (`web/lib/limits.ts`) bounds one photo's storage and worker download cost. `MAX_THUMBNAIL_BYTES` (`web/lib/server/s3.ts`) bounds its thumbnail, which the browser draws and so could send at any size. The reserve route checks the photo's declared size and the per-photo presign route the thumbnail's. The presign route signs each size into its upload URL, so S3 itself refuses a body of any other size. It signs only for a photo row the reserve route created within the last hour and that isn't uploaded yet. A retry reuses those rows, so it doesn't spend another upload batch. The `complete` route checks both stored objects' sizes again, so a client that skipped the form still can't get an oversized upload marked uploaded.
 
 A crop streams a whole splat through the web task, so `MAX_CROPS_PER_HOUR` (`web/lib/server/rateLimit.ts`) caps each user's crops. The cap is a constant rather than a runtime setting, because a crop costs no GPU time.
 
@@ -399,7 +399,8 @@ Which limit each route checks before it spends anything:
 ```mermaid
 %%{init: {"flowchart": {"wrappingWidth": 400}}}%%
 flowchart TD
-  presign["photos/presign<br/>MAX_PHOTOS_PER_SPLAT<br/>MAX_PHOTO_BYTES<br/>MAX_THUMBNAIL_BYTES<br/>per-IP limit<br/>per-user limit"]
+  reserve["photos/reserve<br/>MAX_PHOTOS_PER_SPLAT<br/>MAX_PHOTO_BYTES<br/>per-IP limit<br/>per-user limit"]
+  presign["photos/[photoId]/<br/>presign<br/>pending row only<br/>MAX_THUMBNAIL_BYTES"]
   put["S3 upload<br/>size signed<br/>into the URL"]
   complete["photos/[photoId]/<br/>complete<br/>stored sizes<br/>checked again"]
   process["process<br/>processing-enabled<br/>min-photos-per-splat<br/>MAX_PHOTOS_PER_SPLAT<br/>daily cap"]
@@ -407,12 +408,12 @@ flowchart TD
   recon["reconstruct instance"]
   traininst["train instance"]
   crop["crop<br/>MAX_CROPS_PER_HOUR"]
-  presign --> put --> complete --> process --> recon
+  reserve --> presign --> put --> complete --> process --> recon
   recon -.->|"owner builds"| trainroute --> traininst
   traininst -.->|"owner crops"| crop
 ```
 
-A worker instance runs COLMAP and gsplat on files anyone can upload, so the design assumes one could be taken over and limits what that reaches. The presign route accepts only JPEG and PNG, the two formats `worker/pipeline/sfm.py` hands to COLMAP, and names each S3 key's extension after the type rather than the uploaded filename. The instance's own IAM role has no S3 access. The worker trades its callback token for credentials from `web/app/api/v1/internal/jobs/[jobId]/s3-credentials/route.ts`, which assumes a role with a session policy naming only that splat's keys. Per-object presigned URLs were rejected for two reasons. A splat's photo count would push them past EC2's 16 KB user-data limit. Replacing boto3's transfers with hand-written HTTP requests would also lose its multipart upload of large results. The status callback also refuses any result key outside the splat's own prefix, since the share page presigns those keys for anyone with the link.
+A worker instance runs COLMAP and gsplat on files anyone can upload, so the design assumes one could be taken over and limits what that reaches. The reserve route accepts only JPEG and PNG, the two formats `worker/pipeline/sfm.py` hands to COLMAP, and names each S3 key's extension after the type rather than the uploaded filename. The instance's own IAM role has no S3 access. The worker trades its callback token for credentials from `web/app/api/v1/internal/jobs/[jobId]/s3-credentials/route.ts`, which assumes a role with a session policy naming only that splat's keys. Per-object presigned URLs were rejected for two reasons. A splat's photo count would push them past EC2's 16 KB user-data limit. Replacing boto3's transfers with hand-written HTTP requests would also lose its multipart upload of large results. The status callback also refuses any result key outside the splat's own prefix, since the share page presigns those keys for anyone with the link.
 
 ```mermaid
 %%{init: {"sequence": {"actorMargin": 20, "width": 150}}}%%

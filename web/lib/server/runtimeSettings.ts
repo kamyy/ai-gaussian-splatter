@@ -105,7 +105,11 @@ const SETTINGS: { [K in keyof RuntimeSettings]: Setting<RuntimeSettings[K]> } = 
   processingEnabled: { name: "processing-enabled", fallback: false, parse: parseBoolean },
   maxJobsPerDay: { name: "max-jobs-per-day", fallback: 20, parse: integerIn(0, Number.MAX_SAFE_INTEGER) },
   uploadsPerIpPerHour: { name: "uploads-per-ip-per-hour", fallback: 5, parse: integerIn(1, Number.MAX_SAFE_INTEGER) },
-  uploadsPerUserPerDay: { name: "uploads-per-user-per-day", fallback: 3, parse: integerIn(1, Number.MAX_SAFE_INTEGER) },
+  uploadsPerUserPerDay: {
+    name: "uploads-per-user-per-day",
+    fallback: 10,
+    parse: integerIn(1, Number.MAX_SAFE_INTEGER),
+  },
   minPhotosPerSplat: { name: "min-photos-per-splat", fallback: 20, parse: integerIn(3, MAX_PHOTOS_PER_SPLAT) },
   workerMaxLifetimeMinutes: {
     name: "worker-max-lifetime-minutes",

@@ -121,7 +121,12 @@ describe("NewSplatForm", () => {
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/splats/new-splat-1"));
     expect(apiFetchMock).toHaveBeenCalledWith("/api/v1/splats", "POST", "test-token", { name: "Coffee mug" });
-    expect(uploadPhotosMock).toHaveBeenCalledWith("new-splat-1", expect.any(Array), "test-token", expect.any(Function));
+    expect(uploadPhotosMock).toHaveBeenCalledWith(
+      "new-splat-1",
+      expect.any(Array),
+      expect.any(Function),
+      expect.objectContaining({ reservedIds: new Map() }),
+    );
     expect(uploadPhotosMock.mock.calls[0][1]).toEqual([
       expect.objectContaining({ width: 4032, height: 3024 }),
       expect.objectContaining({ width: 4032, height: 3024 }),
@@ -166,6 +171,19 @@ describe("NewSplatForm", () => {
 
     await waitFor(() => expect(screen.getByText("1 photo added")).toBeInTheDocument());
     expect(measurePhotosMock).toHaveBeenCalledWith([expect.objectContaining({ name: "a.jpg" })]);
+  });
+
+  it("starts processing with a token fetched after the upload, which can outlast the first one", async () => {
+    uploadPhotosMock.mockImplementationOnce(async () => {
+      getTokenMock.mockResolvedValue("after-upload-token");
+    });
+    render(<NewSplatForm />);
+    fillName("Coffee mug");
+    await addPhotos("a.jpg");
+    fireEvent.click(submitButton());
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/splats/new-splat-1"));
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/v1/splats/new-splat-1/process", "POST", "after-upload-token");
   });
 
   it("shows the button busy as soon as it's clicked, before the session token arrives", async () => {
@@ -353,8 +371,8 @@ describe("NewSplatForm", () => {
   });
 
   it("retries only the photos that didn't upload", async () => {
-    uploadPhotosMock.mockImplementationOnce(async (_splatId, photos, _token, onUploaded) => {
-      onUploaded(photos[0]);
+    uploadPhotosMock.mockImplementationOnce(async (_splatId, photos, _getToken, progress) => {
+      progress.onUploaded(photos[0]);
       throw new Error("1 of 2 photo uploads failed");
     });
     render(<NewSplatForm />);
@@ -375,6 +393,25 @@ describe("NewSplatForm", () => {
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/splats/new-splat-1"));
     const retried = uploadPhotosMock.mock.calls[1][1] as { file: File }[];
     expect(retried.map(photo => photo.file.name)).toEqual(["b.jpg"]);
+  });
+
+  it("hands a retry the reservations the failed attempt made, less any the API refused", async () => {
+    uploadPhotosMock.mockImplementationOnce(async (_splatId, photos, _getToken, progress) => {
+      progress.onReserved(photos[0], "photo-a");
+      progress.onReserved(photos[1], "photo-b");
+      progress.onReservationLost(photos[1]);
+      throw new Error("2 of 2 photo uploads failed");
+    });
+    render(<NewSplatForm />);
+    fillName("Coffee mug");
+    await addPhotos("a.jpg", "b.jpg");
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(submitButton()).toBeEnabled());
+
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(uploadPhotosMock).toHaveBeenCalledTimes(2));
+    const [, photos, , progress] = uploadPhotosMock.mock.calls[1];
+    expect(progress.reservedIds).toEqual(new Map([[`a.jpg:${photos[0].file.size}`, "photo-a"]]));
   });
 
   it("still navigates to the splat when starting processing fails", async () => {

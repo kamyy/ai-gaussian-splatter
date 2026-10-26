@@ -31,6 +31,7 @@ import { type PhotoFlag, usePickedPhotos } from "@/lib/hooks/usePickedPhotos";
 import { useProcessingPaused } from "@/lib/hooks/useProcessingPaused";
 import { MAX_PHOTOS_PER_SPLAT, MIN_SHARP_PHOTO_EDGE, PHOTO_EXTENSIONS } from "@/lib/limits";
 import { fileKey } from "@/lib/measurePhoto";
+import { requireToken } from "@/lib/requireToken";
 import type { Job, Splat } from "@/lib/types";
 import { uploadPhotos } from "@/lib/uploadPhotos";
 import { EnlargingPhotoBox } from "./EnlargingPhotoBox";
@@ -58,7 +59,7 @@ const FLAG_LABELS: Record<PhotoFlag, string> = {
   low_res: `Low resolution (under ${MIN_SHARP_PHOTO_EDGE}px)`,
 };
 
-// The types the presign route accepts. The file picker offers only these. A dropped file of another type still reaches
+// The types the reserve route accepts. The file picker offers only these. A dropped file of another type still reaches
 // addFiles, which names it in a snackbar, rather than vanishing without a word.
 const ACCEPTED_PHOTO_TYPES = Object.fromEntries(Object.keys(PHOTO_EXTENSIONS).map(type => [type, []]));
 
@@ -147,6 +148,9 @@ export function NewSplatForm() {
   // Keyed by fileKey. A retry uploads only the photos not in here, because every photo the server already has would
   // otherwise be stored again and go to COLMAP twice.
   const [uploadedKeys, setUploadedKeys] = useState<ReadonlySet<string>>(new Set());
+  // The photo id each reserved photo was given, keyed by fileKey. A retry reuses these rather than reserving the
+  // photos again, since each reservation spends one of the account's daily upload batches.
+  const [reservedIds, setReservedIds] = useState<ReadonlyMap<string, string>>(new Map());
   const submitting = phase !== "idle";
   const tooManyPhotos = photos.length > MAX_PHOTOS_PER_SPLAT;
 
@@ -193,9 +197,9 @@ export function NewSplatForm() {
     }
 
     // Set before the token fetch, which can take a moment, so the button shows its spinner as soon as it's clicked.
+    // Each request below fetches its own token, because the upload can outlast any one of them.
     setPhase(createdSplat ? "uploading" : "creating");
-    const token = await getToken();
-    if (!token) {
+    if (!(await getToken())) {
       enqueueSnackbar("Not signed in", { variant: "error", persist: true });
       setPhase("idle");
       return;
@@ -204,7 +208,7 @@ export function NewSplatForm() {
     let splat = createdSplat;
     if (!splat) {
       try {
-        splat = await apiFetch<Splat>("/api/v1/splats", "POST", token, { name: trimmedName });
+        splat = await apiFetch<Splat>("/api/v1/splats", "POST", await requireToken(getToken), { name: trimmedName });
       } catch (err) {
         enqueueSnackbar("Couldn't create the splat", {
           variant: "error",
@@ -222,8 +226,21 @@ export function NewSplatForm() {
     setPhase("uploading");
     const remaining = photos.filter(photo => !uploadedKeys.has(fileKey(photo.file)));
     try {
-      await uploadPhotos(splat.id, remaining, token, photo => {
-        setUploadedKeys(current => new Set(current).add(fileKey(photo.file)));
+      await uploadPhotos(splat.id, remaining, getToken, {
+        reservedIds,
+        onReserved: (photo, photoId) => {
+          setReservedIds(current => new Map(current).set(fileKey(photo.file), photoId));
+        },
+        onReservationLost: photo => {
+          setReservedIds(current => {
+            const updated = new Map(current);
+            updated.delete(fileKey(photo.file));
+            return updated;
+          });
+        },
+        onUploaded: photo => {
+          setUploadedKeys(current => new Set(current).add(fileKey(photo.file)));
+        },
       });
     } catch (err) {
       enqueueSnackbar("Photo upload failed", {
@@ -241,7 +258,7 @@ export function NewSplatForm() {
     if (!processingPaused) {
       setPhase("starting");
       try {
-        await apiFetch<Job>(`/api/v1/splats/${splat.id}/process`, "POST", token);
+        await apiFetch<Job>(`/api/v1/splats/${splat.id}/process`, "POST", await requireToken(getToken));
       } catch (err) {
         enqueueSnackbar("Couldn't start processing", {
           variant: "error",
