@@ -161,8 +161,21 @@ describe("getRuntimeSettings", () => {
 
       const settings = await getRuntimeSettings();
 
-      expect(settings.reconstructInstanceType).toBe("g4dn.xlarge");
+      expect(settings.reconstructInstanceType).toBe("c7i.8xlarge");
       // The train image's kernels aren't compiled for the g4dn's T4.
+      expect(settings.trainInstanceType).toBe("g5.xlarge");
+    });
+
+    it("accepts a CPU instance type for reconstruct but not for train", async () => {
+      ssmMock
+        .on(GetParametersByPathCommand)
+        .resolves(
+          parameters({ ...ALL_SET, "reconstruct-instance-type": "c7i.8xlarge", "train-instance-type": "c7i.8xlarge" }),
+        );
+
+      const settings = await getRuntimeSettings();
+
+      expect(settings.reconstructInstanceType).toBe("c7i.8xlarge");
       expect(settings.trainInstanceType).toBe("g5.xlarge");
     });
 
