@@ -507,17 +507,17 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 
 Scaffolding (three packages + CI) is in place. Host-run `next dev` can 500 with `ECONNREFUSED ::1` in sandboxes that block loopback to the Next proxy process. That is a sandbox limit, not an app bug.
 
-- **The AWS account is torn down.** Nothing the `deploy` job deploys to exists: no state bucket, no CI role, no stack.
-  - `scripts/prod/bootstrap.sh` redoes all of it, the first deploy and the first worker images included ([Going live](RUNBOOK.md#22-going-live)).
+- **Production is deployed.** While the `DEPLOY_ENABLED` GitHub repository variable is set, every merge to `main` deploys to it through the `deploy` job ([Workflows & branch protection](#71-workflows--branch-protection)). The `scripts/prod/` scripts act on it.
 
 Known gaps, priority order:
 
 1. **No E2E coverage.** `web/e2e/` has no specs; share/view pages SSR from the DB with no seeded test DB to run against. Seed one and add a spec.
-2. **The worker's lifetime ceiling is a guess.** The `worker-max-lifetime-minutes` setting's default of 30 minutes hasn't been measured against a real worker job's wall clock.
+2. **The worker's lifetime ceiling has been measured against one capture only.** The `worker-max-lifetime-minutes` setting defaults to 30 minutes. A 56-photo worker job on AWS took about 8.5 minutes for reconstruct and 6 minutes for train, each counted from instance boot to upload. `scripts/prod/logs-timings.sh` prints the per-phase split.
+   - No 100-photo capture has been timed. Exhaustive matching grows with the square of the photo count, so reconstruct is the stage that nears the ceiling first.
    - A legitimately slow stage that runs past it is terminated and failed exactly like a hang.
    - When the instance's own shutdown fires, no one is emailed. The sweeper only emails about instances whose own shutdown never fired ([Compute](ARCHITECTURE.md#3-compute)).
 3. **A well-formed but wrong `alert_email` still deploys green.**
    - `infra/variables.tf`'s validation catches a non-email string, but a typo'd address that is still email-shaped (`alert+email@gmial.com`) passes it.
    - The sweeper's SNS email subscription is the one place a typo shows. It stays `PendingConfirmation` until someone clicks the link AWS sends, so a subscription that never confirms points to a wrong address ([Going live](RUNBOOK.md#22-going-live)). The AWS Budget emails the address directly and has no such state.
 
-**M0 has run locally:** a real capture has been through COLMAP→gsplat and opened in the viewer on a local GPU, as a [local worker run](RUNBOOK.md#14-local-worker-runs). No worker job has run on AWS yet, and no run's wall clock has been recorded.
+**M0 has run on AWS:** a real capture has been through COLMAP→gsplat on GPU spot instances and opened in the viewer.

@@ -2,9 +2,9 @@
 
 Upload multi-angle photos of a physical object, get back a real-time, interactive 3D Gaussian Splat you can view in the browser and share. Photogrammetry places the photos in 3D, and AI training on a CUDA GPU in the cloud turns them into the splat.
 
-<br>
+<p align="center"><strong>👉 <a href="https://ai-gaussian-splatter.orky.net">Try it live at ai-gaussian-splatter.orky.net</a> 👈</strong></p>
 
-<img src="images/landing.webp" alt="The AI Gaussian Splatter landing page, headed &quot;Every object, in the round.&quot;, with five example splats (Starbucks mugs, a plant, a child, a Lego figure and a bike) above the three steps of how it works">
+<a href="https://ai-gaussian-splatter.orky.net"><img src="images/landing.webp" alt="The AI Gaussian Splatter landing page, headed &quot;Every object, in the round.&quot;, with five example splats (Starbucks mugs, a plant, a child, a Lego figure and a bike) above the three steps of how it works"></a>
 
 <br>
 
