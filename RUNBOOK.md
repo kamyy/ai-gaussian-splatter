@@ -105,7 +105,7 @@ Pick something opaque, matte, and genuinely three-dimensional. Stand it on a pat
 
 ### 1.4 Local worker runs
 
-Under `pnpm dev`, each stage of a worker job runs on your own GPU in Podman instead of on an EC2 spot instance. It needs a real NVIDIA GPU with its driver installed, and `scripts/dev/setup.sh gpu` sets up the rest.
+Under `pnpm dev`, each stage of a worker job runs in Podman on your own machine instead of on an EC2 spot instance. The train stage needs a real NVIDIA GPU with its driver installed, and `scripts/dev/setup.sh gpu` sets up the rest. The reconstruct stage runs COLMAP on your CPU.
 
 Create a splat at `/splats/new` as normal. Uploading its photos starts the worker job, and the splat's page shows each stage live. Each stage rebuilds its image from `worker/` first, so a `worker/` edit is picked up by the next stage.
 
@@ -429,7 +429,7 @@ scripts/prod/ssm.sh processing-enabled false   # changes one
 - **Pausing processing** stops new reconstruct and train launches only. Stages already running finish, and the new-splat page and the splat page tell visitors processing is paused.
 - **A new lifetime ceiling** applies to instances launched after the change. Each running instance keeps the ceiling it launched with.
 - **A new train instance type** must be one whose GPU `worker/Dockerfile` compiles gsplat's kernels for, so the script accepts only those.
-- **A new reconstruct instance type** can be a CPU or a GPU type, because COLMAP runs on either. The script accepts only the types `web/lib/server/runtimeSettings.ts` lists.
+- **A new reconstruct instance type** must be a CPU type, because the reconstruct stage's container is given no GPU. The script accepts only the types `web/lib/server/runtimeSettings.ts` lists.
 
 For local dev, each setting except the lifetime ceiling and the two instance types is an env var in `web/.env` named after it, such as `MAX_JOBS_PER_DAY` (`web/.env.example`). Those three only an EC2 launch reads, and `pnpm dev` never makes one.
 

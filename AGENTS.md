@@ -65,7 +65,7 @@ Upload multi-angle photos of a physical object, get back a real-time 3D Gaussian
   - A demonstrative pointing at the immediately preceding noun in the same sentence is fine.
 - **Never write a bare "job".** Two unrelated things are called that, often in the same paragraph.
   - A GitHub Actions job is named: the `deploy` job, CI's `web` job, `capture-deploy-enabled`.
-  - A **worker job** is one splat's run through the pipeline: a `jobs` row, plus a GPU spot instance per stage. Say "worker job" for the run, "worker instance" for the EC2 instance, and "stage" for the reconstruct or train half that one instance runs.
+  - A **worker job** is one splat's run through the pipeline: a `jobs` row, plus a spot instance per stage. Say "worker job" for the run, "worker instance" for the EC2 instance, and "stage" for the reconstruct or train half that one instance runs.
 - **Every heading is numbered — `## 2.`, `### 2.3` — and a `---` rule goes immediately before every `##`.**
   - The number is what tells the reader which section a subsection belongs to once its parent has scrolled off. The rule marks where each top-level section starts.
   - Headings stop at `###`, because GitHub renders `####` at body size, where it stops reading as a heading at all. Where a section needs steps, each step becomes a `###` of its own and the parent opens with an ordered list linking them, as [Deploying to production](RUNBOOK.md#2-deploying-to-production) does.
@@ -327,10 +327,9 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - The sweeper never waits longer than `worker_max_lifetime_upper_bound_minutes` (`infra/locals.tf`) plus 15 minutes, whatever the tag says. Keep that local at or above the largest ceiling `web/lib/server/runtimeSettings.ts` accepts, or the sweeper kills healthy stages the setting allows.
 - **A train instance type needs a GPU that `worker/Dockerfile`'s `TORCH_CUDA_ARCH_LIST` covers.** Adding one to the `train-instance-type` allow-list in `web/lib/server/runtimeSettings.ts` means checking that list, then adding it to `scripts/prod/ssm.sh` too.
 - **Every instance type either allow-list in `web/lib/server/runtimeSettings.ts` accepts must also be in `local.worker_instance_types` (`infra/locals.tf`).** The web task's `RunInstances` grant refuses any other type. A type missing there passes `scripts/prod/ssm.sh` and then fails every launch with an IAM denial.
-- **`web/lib/server/workerLauncher.ts` and `worker/pipeline/sfm.py` both decide GPU or CPU from `nvidia-smi`, and the two must agree.** The user-data passes `--gpus all` to `docker run` only when `nvidia-smi -L` works on the instance, because Docker refuses to start a container with `--gpus all` on an instance with no NVIDIA device.
-  - The container then has `nvidia-smi` only when it got a GPU, and `worker/pipeline/sfm.py` runs COLMAP on the GPU only then.
-  - The reconstruct stage's default instance type, `c7i.8xlarge`, has no GPU ([Compute](ARCHITECTURE.md#3-compute)).
-  - Release the worker image with `scripts/prod/worker-push-image.sh` before setting `reconstruct-instance-type` to a CPU type. An older image passes `use_gpu 1` and fails every reconstruct stage on a CPU instance.
+- **The reconstruct stage runs on a CPU instance, so its container gets no GPU.** The user-data in `web/lib/server/workerLauncher.ts` passes `--gpus all` to `docker run` for the train stage only, because Docker refuses that flag on an instance with no NVIDIA device. `worker/pipeline/sfm.py` always passes COLMAP `use_gpu 0` ([Compute](ARCHITECTURE.md#3-compute)).
+  - Release the worker image with `scripts/prod/worker-push-image.sh` before setting `reconstruct-instance-type` to `c7i.8xlarge`. An older image passes `use_gpu 1` and fails every reconstruct stage on a CPU instance.
+  - Reconstruct's allow-list in `web/lib/server/runtimeSettings.ts` holds CPU types only.
 - **Every S3 call in `worker/` gets its client from `s3_client()` in `worker/pipeline/storage.py`, never `boto3.client("s3")`.** A worker instance's role has no S3 access, so a bare client works in a local run and fails with `AccessDenied` on AWS ([Abuse protection](ARCHITECTURE.md#10-abuse-protection)).
   - The credentials it returns cover one splat's keys only. A new object the worker writes has to sit under `splats/<splatId>/` in the splats bucket, and `web/app/api/v1/internal/jobs/[jobId]/s3-credentials/route.ts`'s session policy has to allow the action.
   - A listing outside that prefix, or a `HeadObject` of a missing key, can come back as 403 rather than 404.
