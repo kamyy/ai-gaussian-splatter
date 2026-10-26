@@ -6,10 +6,14 @@ favouring accuracy over speed for a small object-centric photo set.
 
 Requires the `colmap` CLI on PATH, which `worker/Dockerfile` installs. It is not a pip package, hence subprocess rather
 than pycolmap.
+
+Feature extraction and matching run on the GPU when the container has one, and on the CPU otherwise. The reconstruct
+stage's default instance type has no GPU, because these phases are limited by CPU even where a GPU exists.
 """
 
 import logging
 import re
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,6 +34,14 @@ class SfmResult:
         if self.num_images_input == 0:
             return 0.0
         return self.num_images_registered / self.num_images_input
+
+
+def _has_gpu() -> bool:
+    """Whether this container was given a GPU. The NVIDIA container toolkit puts nvidia-smi in a container only when
+    the instance's `docker run` passes `--gpus all`, which web/lib/server/workerLauncher.ts does on a GPU instance and
+    leaves out on a CPU one.
+    """
+    return shutil.which("nvidia-smi") is not None
 
 
 def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
@@ -59,6 +71,9 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
     for p in image_paths:
         (images_dir / p.name).symlink_to(p)
 
+    use_gpu = "1" if _has_gpu() else "0"
+    logger.info("COLMAP use_gpu=%s", use_gpu)
+
     with timed("colmap_feature_extractor"):
         _run(
             [
@@ -71,7 +86,7 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
                 "--ImageReader.single_camera",
                 "1",
                 "--FeatureExtraction.use_gpu",
-                "1",
+                use_gpu,
             ]
         )
 
@@ -83,7 +98,7 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
                 "--database_path",
                 str(database_path),
                 "--FeatureMatching.use_gpu",
-                "1",
+                use_gpu,
             ]
         )
 

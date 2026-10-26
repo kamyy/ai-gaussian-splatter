@@ -68,3 +68,46 @@ def test_run_colmap_excludes_non_image_files_from_image_path(monkeypatch, tmp_pa
     assert sorted(p.name for p in images_dir.iterdir()) == ["a.jpg", "b.jpg"]
     assert seen_image_paths == [str(images_dir)] * len(seen_image_paths)
     assert result.num_images_input == 2
+
+
+def _run_colmap_recording_commands(monkeypatch, tmp_path, nvidia_smi):
+    photos_dir = tmp_path / "photos"
+    photos_dir.mkdir()
+    (photos_dir / "a.jpg").write_bytes(b"fake")
+
+    workdir = tmp_path / "colmap"
+    commands = []
+
+    def fake_run(cmd, capture=False):
+        commands.append(cmd)
+        if cmd[1] == "mapper":
+            (workdir / "sparse" / "0").mkdir(parents=True, exist_ok=True)
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("pipeline.sfm._run", fake_run)
+    monkeypatch.setattr("pipeline.sfm._count_registered_images", lambda model_dir: 1)
+    monkeypatch.setattr("pipeline.sfm.shutil.which", lambda name: nvidia_smi)
+
+    run_colmap(photos_dir, workdir)
+
+    return commands
+
+
+def _flag_value(cmd, flag):
+    return cmd[cmd.index(flag) + 1]
+
+
+def test_run_colmap_uses_the_gpu_when_the_container_has_one(monkeypatch, tmp_path):
+    commands = _run_colmap_recording_commands(monkeypatch, tmp_path, "/usr/bin/nvidia-smi")
+
+    extractor, matcher = commands[0], commands[1]
+    assert _flag_value(extractor, "--FeatureExtraction.use_gpu") == "1"
+    assert _flag_value(matcher, "--FeatureMatching.use_gpu") == "1"
+
+
+def test_run_colmap_runs_on_the_cpu_when_the_container_has_no_gpu(monkeypatch, tmp_path):
+    commands = _run_colmap_recording_commands(monkeypatch, tmp_path, None)
+
+    extractor, matcher = commands[0], commands[1]
+    assert _flag_value(extractor, "--FeatureExtraction.use_gpu") == "0"
+    assert _flag_value(matcher, "--FeatureMatching.use_gpu") == "0"
