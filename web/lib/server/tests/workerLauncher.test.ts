@@ -359,14 +359,60 @@ describe("launchJob", () => {
       ]);
     });
 
-    it("explains the refusal once every subnet has no capacity", async () => {
+    it("explains the refusal once every subnet and instance type has no capacity", async () => {
       ec2Mock.on(RunInstancesCommand).rejects(refusal("InsufficientInstanceCapacity"));
 
       await expect(launchJob(params)).rejects.toMatchObject({
         message: expect.stringContaining("Try again later."),
         cause: expect.objectContaining({ name: "InsufficientInstanceCapacity" }),
       });
-      expect(ec2Mock.commandCalls(RunInstancesCommand)).toHaveLength(2);
+      // Three reconstruct instance types in two subnets.
+      expect(ec2Mock.commandCalls(RunInstancesCommand)).toHaveLength(6);
+    });
+
+    it("tries the setting's instance type in every subnet before the next type", async () => {
+      ec2Mock
+        .on(RunInstancesCommand)
+        .rejectsOnce(refusal("InsufficientInstanceCapacity"))
+        .rejectsOnce(refusal("InsufficientInstanceCapacity"))
+        .resolves({ Instances: [{ InstanceId: "i-0third" }] });
+
+      await expect(
+        launchJob({ ...params, settings: { ...settings, reconstructInstanceType: "c7a.8xlarge" } }),
+      ).resolves.toBe("i-0third");
+      expect(
+        ec2Mock
+          .commandCalls(RunInstancesCommand)
+          .map(call => [call.args[0].input.InstanceType, call.args[0].input.SubnetId]),
+      ).toEqual([
+        ["c7a.8xlarge", "subnet-0123456789"],
+        ["c7a.8xlarge", "subnet-9876543210"],
+        ["c7i.8xlarge", "subnet-0123456789"],
+      ]);
+    });
+
+    it("tries a train stage's one instance type only", async () => {
+      ec2Mock.on(RunInstancesCommand).rejects(refusal("InsufficientInstanceCapacity"));
+
+      await expect(launchJob({ ...params, stage: "train" })).rejects.toThrow("Try again later.");
+      expect(ec2Mock.commandCalls(RunInstancesCommand).map(call => call.args[0].input.InstanceType)).toEqual([
+        "g6e.xlarge",
+        "g6e.xlarge",
+      ]);
+    });
+
+    it("gives the user-data the instance type that launched", async () => {
+      ec2Mock
+        .on(RunInstancesCommand)
+        .rejectsOnce(refusal("InsufficientInstanceCapacity"))
+        .rejectsOnce(refusal("InsufficientInstanceCapacity"))
+        .resolves({ Instances: [{ InstanceId: "i-0third" }] });
+
+      await launchJob({ ...params, settings: { ...settings, reconstructInstanceType: "c7a.8xlarge" } });
+
+      const calls = ec2Mock.commandCalls(RunInstancesCommand);
+      const userData = Buffer.from(calls[2].args[0].input.UserData ?? "", "base64").toString();
+      expect(userData).toContain("context instance_type=c7i.8xlarge");
     });
 
     it("tries the next subnet when the instance type is unsupported in the first zone", async () => {

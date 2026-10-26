@@ -23,7 +23,7 @@ import {
 import { JobStatus } from "@/lib/statuses";
 import { getEnv, LOCAL_APP_ORIGIN } from "./env";
 import { HttpError } from "./httpError";
-import type { RuntimeSettings } from "./runtimeSettings";
+import { RECONSTRUCT_INSTANCE_TYPES, type RuntimeSettings } from "./runtimeSettings";
 
 /**
  * The tag each worker instance carries its own lifetime ceiling in. infra/lambda/worker_sweeper.py reads the same key,
@@ -241,17 +241,32 @@ function explainLaunchError(err: unknown): unknown {
   return message === undefined ? err : new HttpError(503, message, { cause: err });
 }
 
+// The instance types a launch tries, in order. Reconstruct runs on the CPU, where the allow-listed types are
+// interchangeable 32-vCPU instances from different families, so one family's spot capacity running out moves the launch
+// to the next. The setting's own type goes first. Train has no such fallback, because its GPU types differ a good deal
+// in price.
+function instanceTypesToTry(params: WorkerLaunch): string[] {
+  if (params.stage === "train") {
+    return [params.settings.trainInstanceType];
+  }
+
+  const preferred = params.settings.reconstructInstanceType;
+
+  return [preferred, ...RECONSTRUCT_INSTANCE_TYPES.filter(type => type !== preferred)];
+}
+
 /**
  * Launches the spot worker instance and returns its instance ID.
  *
- * An error only one availability zone can cause (ZONE_ERROR_NAMES) moves on to the next subnet in WORKER_SUBNET_IDS,
- * since each subnet is in its own zone. Each skipped subnet is logged.
+ * An error only one instance type in one availability zone can cause (ZONE_ERROR_NAMES) moves on to the next subnet in
+ * WORKER_SUBNET_IDS, since each subnet is in its own zone. After the last subnet it moves on to the next instance type
+ * from instanceTypesToTry() and starts the subnets again. Each skipped attempt is logged.
  *
- * Any other error stops the loop at once. The GPU spot quota is one of those, because it is account-wide and another
- * zone can't help.
+ * Any other error stops the loop at once. The spot quota is one of those, because it is account-wide and covers every
+ * type in the same family group, so another zone or type can't help.
  *
- * The splat's page shows the failure's message as the worker job's error. When every zone fails, a zone that had no
- * capacity decides the message, even if a later zone failed with a different zone error.
+ * The splat's page shows the failure's message as the worker job's error. When every attempt fails, one that had no
+ * capacity decides the message, even if a later one failed with a different zone error.
  */
 export async function launchJob(params: WorkerLaunch): Promise<string> {
   // launchJob runs only outside local dev, where getEnv() has already required every worker instance setting. The
@@ -267,18 +282,20 @@ export async function launchJob(params: WorkerLaunch): Promise<string> {
 
   let firstCapacityError: Error | undefined;
   let lastError: Error | undefined;
-  for (const subnetId of subnetIds) {
-    try {
-      return await runInstance(params, env, subnetId);
-    } catch (err) {
-      if (!(err instanceof Error) || !ZONE_ERROR_NAMES.has(err.name)) {
-        throw explainLaunchError(err);
-      }
+  for (const instanceType of instanceTypesToTry(params)) {
+    for (const subnetId of subnetIds) {
+      try {
+        return await runInstance(params, env, subnetId, instanceType);
+      } catch (err) {
+        if (!(err instanceof Error) || !ZONE_ERROR_NAMES.has(err.name)) {
+          throw explainLaunchError(err);
+        }
 
-      console.warn(`RunInstances in ${subnetId} failed with ${err.name}: ${err.message}`);
-      lastError = err;
-      if (err.name in NO_CAPACITY_MESSAGES) {
-        firstCapacityError ??= err;
+        console.warn(`RunInstances of ${instanceType} in ${subnetId} failed with ${err.name}: ${err.message}`);
+        lastError = err;
+        if (err.name in NO_CAPACITY_MESSAGES) {
+          firstCapacityError ??= err;
+        }
       }
     }
   }
@@ -286,10 +303,12 @@ export async function launchJob(params: WorkerLaunch): Promise<string> {
   throw explainLaunchError(firstCapacityError ?? lastError);
 }
 
-async function runInstance(params: WorkerLaunch, env: LaunchEnv, subnetId: string): Promise<string> {
-  const instanceType =
-    params.stage === "reconstruct" ? params.settings.reconstructInstanceType : params.settings.trainInstanceType;
-
+async function runInstance(
+  params: WorkerLaunch,
+  env: LaunchEnv,
+  subnetId: string,
+  instanceType: string,
+): Promise<string> {
   const userData = renderUserData({
     callbackToken: params.callbackToken,
     jobId: params.jobId,

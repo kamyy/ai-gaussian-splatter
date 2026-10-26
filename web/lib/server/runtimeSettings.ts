@@ -27,7 +27,7 @@ const CACHE_TTL_MS = 60 * 1000;
 // Reconstruct runs COLMAP on the CPU, because its phases are limited by CPU. Its allow-list holds CPU types only, since
 // worker/pipeline/sfm.py never uses a GPU and the instance's container is not given one. The three are 32-vCPU types from
 // different families, so one family's spot capacity running out leaves the others to switch to with scripts/prod/ssm.sh.
-const RECONSTRUCT_INSTANCE_TYPES = ["c7i.8xlarge", "c7a.8xlarge", "c6i.8xlarge"];
+export const RECONSTRUCT_INSTANCE_TYPES = ["c7i.8xlarge", "c7a.8xlarge", "c6i.8xlarge"];
 
 // Train runs gsplat kernels compiled for the GPUs in worker/Dockerfile's TORCH_CUDA_ARCH_LIST: the A10G (g5), L4 (g6)
 // and L40S (g6e). A type outside that list fails every train stage.
