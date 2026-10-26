@@ -12,6 +12,7 @@ no GPU.
 """
 
 import logging
+import os
 import re
 import subprocess
 from dataclasses import dataclass
@@ -20,6 +21,14 @@ from pathlib import Path
 from .timing import timed
 
 logger = logging.getLogger(__name__)
+
+# What one CPU SIFT thread holds at its peak. COLMAP shrinks a photo to 3200 pixels on its long edge first, so this does
+# not grow with the photo's size. A 12.5-megapixel photo took 2.2 GiB, and this leaves headroom over that.
+EXTRACTION_GIB_PER_THREAD = 3
+
+# The share of the machine's memory the extraction threads may use. The rest is for the operating system, the container
+# and the matcher and mapper that follow.
+EXTRACTION_MEMORY_SHARE = 0.75
 
 
 @dataclass
@@ -33,6 +42,16 @@ class SfmResult:
         if self.num_images_input == 0:
             return 0.0
         return self.num_images_registered / self.num_images_input
+
+
+def _extraction_threads() -> int:
+    """How many threads feature extraction may use. COLMAP defaults to one per vCPU, and on a 32-vCPU instance with
+    64 GiB that is more memory than the machine has, so the kernel kills the process with SIGKILL partway through.
+    """
+    memory_gib = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 2**30
+    by_memory = int(memory_gib * EXTRACTION_MEMORY_SHARE // EXTRACTION_GIB_PER_THREAD)
+
+    return max(1, min(os.cpu_count() or 1, by_memory))
 
 
 def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
@@ -62,6 +81,9 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
     for p in image_paths:
         (images_dir / p.name).symlink_to(p)
 
+    extraction_threads = _extraction_threads()
+    logger.info("COLMAP feature extraction threads=%d", extraction_threads)
+
     with timed("colmap_feature_extractor"):
         _run(
             [
@@ -75,6 +97,8 @@ def run_colmap(photos_dir: Path, workdir: Path) -> SfmResult:
                 "1",
                 "--FeatureExtraction.use_gpu",
                 "0",
+                "--FeatureExtraction.num_threads",
+                str(extraction_threads),
             ]
         )
 
