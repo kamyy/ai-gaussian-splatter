@@ -41,7 +41,12 @@ locals {
   migration_task_family = "ai-gaussian-splatter-migrate"
 
   # --- Network and DNS ----------------------------------------------------------------
+  # RDS's isolated subnets span these two zones.
   availability_zones = [for suffix in ["a", "b"] : "${var.aws_region}${suffix}"]
+
+  # The public subnets span one more zone, so a worker launch has a third place to find GPU spot capacity. Zone d is
+  # left out because it offers neither default worker instance type (g4dn.xlarge, g5.xlarge).
+  public_availability_zones = concat(local.availability_zones, ["${var.aws_region}c"])
 
   # Every subnet the worker's spot instance may launch into, which web/lib/server/workerLauncher.ts tries in this order
   # until one has GPU capacity. A single local keeps infra/web.tf's WORKER_SUBNET_IDS env var and its RunInstances IAM

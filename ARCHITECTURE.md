@@ -316,14 +316,14 @@ flowchart TB
   user(["Browser"])
   subgraph aws["AWS account · var.aws_region"]
     r53["Route 53 record<br/>+ ACM cert"]
-    subgraph vpc["VPC 10.0.0.0/16 · 2 availability zones"]
+    subgraph vpc["VPC 10.0.0.0/16"]
       igw["Internet gateway"]
-      subgraph pub["Public subnets · 0.0.0.0/0 → IGW"]
+      subgraph pub["Public subnets · 3 availability zones<br/>0.0.0.0/0 → IGW"]
         alb["ALB · sg alb<br/>443 in, 80 redirects"]
         web["Fargate Spot service<br/>sg web · 1–3 tasks<br/>public IP"]
         worker["EC2 GPU spot<br/>sg worker<br/>one per stage"]
       end
-      subgraph priv["Private subnets · no route out"]
+      subgraph priv["Private subnets · 2 availability zones<br/>no route out"]
         rds[("RDS Postgres · sg db<br/>one availability zone")]
       end
       s3ep["S3 gateway endpoint"]
