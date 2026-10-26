@@ -521,7 +521,8 @@ Known gaps, priority order:
 1. **No E2E coverage.** `web/e2e/` has no specs; share/view pages SSR from the DB with no seeded test DB to run against. Seed one and add a spec.
 2. **The worker's lifetime ceiling has been measured against two captures only.** The `worker-max-lifetime-minutes` setting defaults to 30 minutes. A 56-photo worker job on AWS took about 8.5 minutes for reconstruct and 6 minutes for train, each counted from instance boot to upload. That reconstruct stage ran on a GPU instance. `scripts/prod/logs-timings.sh` prints the per-phase split.
    - A 100-photo capture took about 17 minutes for reconstruct on a GPU instance, a `g4dn.xlarge`: 5.4 for feature extraction, 4.5 for exhaustive matching and 6.9 for `mapper`.
-   - Reconstruct defaults to a CPU instance, and its timings are not measured yet. Exhaustive matching grows with the square of the photo count, so it is the phase most likely to near the ceiling on a CPU.
+   - Reconstruct defaults to a CPU instance. The same 100 photos took about 10.5 minutes on a `c7i.8xlarge`, from instance boot to upload: 1.9 for feature extraction, 1.6 for exhaustive matching and 4.2 for `mapper`.
+   - Exhaustive matching grows with the square of the photo count, so it is the phase most likely to near the ceiling on a CPU. Feature extraction ran on 15 threads under the memory cap, while matching ran on all 32 vCPUs at 100%.
    - A legitimately slow stage that runs past it is terminated and failed exactly like a hang.
    - When the instance's own shutdown fires, no one is emailed. The sweeper only emails about instances whose own shutdown never fired ([Compute](ARCHITECTURE.md#3-compute)).
 3. **A well-formed but wrong `alert_email` still deploys green.**
