@@ -30,32 +30,38 @@ Most procedures below run a script from `scripts/dev/` or `scripts/prod/`, and e
 
 Local development runs against the dev buckets and the `splat-pg` container, never the deployed account.
 
-```mermaid
-flowchart TD
-  browser(["Browser"])
-  clerk["Clerk development<br/>instance"]
-  subgraph host["Your machine"]
-    env["web/.env"]
-    next["next dev<br/>localhost:3000"]
-    pg[("splat-pg")]
-    worker["Podman worker<br/>container, per stage"]
-    jobdir["worker/jobdir/<br/>#lt;jobId#gt;/"]
-  end
-  subgraph aws["AWS account"]
-    up[("dev uploads<br/>bucket")]
-    sp[("dev splats<br/>bucket")]
-  end
-  browser -->|"sign in"| clerk
-  browser -->|"pages + API"| next
-  browser -->|"PUT photos"| up
-  env -->|"Clerk + dev keys"| next
-  next --> pg
-  next -->|"podman run<br/>with dev keys"| worker
-  up --> worker
-  worker --> sp
-  worker --> jobdir
-  worker -->|"status callback"| next
-  sp -->|"GET .spz"| browser
+```text
+                      ┌──────────┐   sign in ┌───────────────────┐
+                      │ Browser  ├──────────►│ Clerk development │
+                      └──┬──┬──▲─┘           │ instance          │
+                         │  │  │             └───────────────────┘
+                         │  │  │ GET .spz
+                         │  │  └────────────────────────────────────────────────────┐
+                         │  │ PUT photos                                            │
+                         │  └───────────────────────────────────────┐               │
+             pages + API │                                          │               │
+                         │                                          │               │
+┌─ Your machine ─────────┼───────────────────────────────┐   ┌──────┼─ AWS account ─┼───┐
+│                        │                               │   │      ▼               │   │
+│                        ▼                               │   │  ╭───────────────╮   │   │
+│ ┌──────────┐ Clerk + ┌─────────────────┐  ╭──────────╮ │   │  │ dev uploads   │   │   │
+│ │ web/.env ├────────►│ next dev        ├─►│ splat-pg │ │   │  │ bucket        │   │   │
+│ └──────────┘         │ localhost:3000  │  ╰──────────╯ │   │  ╰───────┬───────╯   │   │
+│             dev keys └──┬───────────▲──┘               │   │          │           │   │
+│       podman run with   │           │                  │   │          │           │   │
+│       dev keys          │           │ status callback  │   │          │           │   │
+│                         ▼           │                  │   │          │           │   │
+│                      ┌──────────────┴──┐               │   │          │           │   │
+│                      │ Podman worker   │◄──────────────┼───┼──────────┘           │   │
+│                      │ container,      │               │   │  ╭───────────────╮   │   │
+│                      │ per stage       ├───────────────┼───┼─►│ dev splats    ├───┘   │
+│                      └───────┬─────────┘               │   │  │ bucket        │       │
+│                              ▼                         │   │  ╰───────────────╯       │
+│                      ╭─────────────────╮               │   │                          │
+│                      │ worker/jobdir/  │               │   │                          │
+│                      │ <jobId>/        │               │   └──────────────────────────┘
+│                      ╰─────────────────╯               │
+└────────────────────────────────────────────────────────┘
 ```
 
 ### 1.1 First-time setup
@@ -130,51 +136,95 @@ After that, a human only releases worker changes ([Releasing a worker change](#2
 
 CI's `deploy` job (`.github/workflows/deploy.yml`) does every deploy, including the first one into an empty account. It runs on a push to `main` that changes more than just `.md` files or `LICENSE`, and on a run started by hand on `main`, but only while the `DEPLOY_ENABLED` GitHub repository variable is `true`.
 
-```mermaid
-%%{init: {"flowchart": {"wrappingWidth": 400}}}%%
-flowchart TD
-  push(["push to main<br/>changing more than<br/>.md or LICENSE"])
-  scripts["scripts/prod/bootstrap.sh deploy<br/>or<br/>scripts/prod/worker-push-image.sh"]
-  dispatch(["gh workflow run<br/>ci.yml --ref main"])
-  subgraph ci[".github/workflows/ci.yml"]
-    checks["lint-format<br/>worker<br/>web<br/>infra"]
-    gate["capture-deploy-enabled<br/>records<br/>DEPLOY_ENABLED"]
-    deployjob["deploy"]
-  end
-  deployyml[".github/workflows/<br/>deploy.yml"]
-  scripts --> dispatch
-  push --> checks & gate
-  dispatch --> checks & gate
-  checks -->|"all pass"| deployjob
-  gate -->|"enabled is true"| deployjob
-  deployjob -->|"workflow_call"| deployyml
+```text
+┌───────────────────────────────────┐
+│ scripts/prod/bootstrap.sh deploy  │
+│ or                                │
+│ scripts/prod/worker-push-image.sh │
+└─────────────────┬─────────────────┘
+                  ▼
+┌──────────────────────┐   ┌───────────────────────┐
+│ push to main         │   │ gh workflow run       │
+│ changing more than   │   │ ci.yml --ref main     │
+│ .md or LICENSE       │   └───────────┬───────────┘
+└──────────┬───────────┘               │
+           └──────────────┬────────────┘
+                          │
+┌─────────────────────────┼──── .github/workflows/ci.yml ──┐
+│               ┌─────────┴─────────────┐                  │
+│               ▼                       ▼                  │
+│   ┌──────────────────┐   ┌──────────────────────────┐    │
+│   │ lint-format      │   │ capture-deploy-enabled   │    │
+│   │ worker           │   │ records DEPLOY_ENABLED   │    │
+│   │ web              │   └─────────────┬────────────┘    │
+│   │ infra            │                 │                 │
+│   └─────────┬────────┘                 │                 │
+│             │ all pass                 │ enabled is true │
+│             └────────────┬─────────────┘                 │
+│                          ▼                               │
+│                    ┌──────────┐                          │
+│                    │ deploy   │                          │
+│                    └─────┬────┘                          │
+└──────────────────────────┼───────────────────────────────┘
+                           │ workflow_call
+                           ▼
+              ┌──────────────────────────────┐
+              │ .github/workflows/deploy.yml │
+              └──────────────────────────────┘
 ```
 
 Each deploy builds the web images only when `web/` changed, and runs the migration between two `terraform apply` calls so that no task serves new code before its migration has run ([Migration ordering](ARCHITECTURE.md#113-migration-ordering)).
 
-```mermaid
-%%{init: {"flowchart": {"wrappingWidth": 400}}}%%
-flowchart TD
-  checkvars["Check repository variables"]
-  resolve["Resolve tags<br/>NEW_TAG is web/'s tree id<br/>OLD_TAG is the image the service runs now"]
-  first{"aws_ecs_service.web<br/>in Terraform state?"}
-  ecr["1 · apply ECR repository only<br/>OLD_TAG = NEW_TAG"]
-  pushed{"NEW_TAG-web and NEW_TAG-migrate<br/>already in ECR?"}
-  build["2 · build and push both images"]
-  apply1["3 · terraform apply<br/>service image OLD_TAG, migration task NEW_TAG"]
-  migrate["4 · Run migration"]
-  ok{"migration task<br/>exit code 0?"}
-  stop(["run fails<br/>service image stays OLD_TAG"])
-  apply2["5 · terraform apply<br/>service image NEW_TAG"]
-  smoke["Smoke test<br/>a DB-backed route must 404"]
-  checkvars --> resolve --> first
-  first -->|"no, first deploy"| ecr --> pushed
-  first -->|yes| pushed
-  pushed -->|no| build --> apply1
-  pushed -->|yes| apply1
-  apply1 --> migrate --> ok
-  ok -->|no| stop
-  ok -->|yes| apply2 --> smoke
+```text
+┌────────────────────────────┐
+│ Check repository variables │
+└─────┬──────────────────────┘
+      ▼
+┌─────────────────────────────────────────────┐
+│ Resolve tags                                │
+│ NEW_TAG is web/'s tree id                   │
+│ OLD_TAG is the image the service runs now   │
+└─────┬───────────────────────────────────────┘
+      ▼
+   aws_ecs_service.web in Terraform state?
+      │ yes                  │ no, first deploy
+      │                      ▼
+      │      ┌───────────────────────────────┐
+      │      │ 1 · apply ECR repository only │
+      │      │ OLD_TAG = NEW_TAG             │
+      │      └───────────────┬───────────────┘
+      ├──────────────────────┘
+      ▼
+   NEW_TAG-web and NEW_TAG-migrate already in ECR?
+      │ yes                  │ no
+      │                      ▼
+      │      ┌────────────────────────────────┐
+      │      │ 2 · build and push both images │
+      │      └───────────────┬────────────────┘
+      ├──────────────────────┘
+      ▼
+┌─────────────────────────────────────────────┐
+│ 3 · terraform apply                         │
+│ service image OLD_TAG, migration task       │
+│ NEW_TAG                                     │
+└─────┬───────────────────────────────────────┘
+      ▼
+┌───────────────────┐
+│ 4 · Run migration │
+└─────┬─────────────┘
+      ▼
+   migration task exit code 0?
+      │ yes                  │ no
+      ▼                      ▼
+┌───────────────────────┐  ╭─────────────────────────────╮
+│ 5 · terraform apply   │  │ run fails                   │
+│ service image NEW_TAG │  │ service image stays OLD_TAG │
+└─────┬─────────────────┘  ╰─────────────────────────────╯
+      ▼
+┌────────────────────────────┐
+│ Smoke test                 │
+│ a DB-backed route must 404 │
+└────────────────────────────┘
 ```
 
 1. **Create the ECR repository**, on the first deploy only. The service can't be created before the image it names is pushed, so the `ai-gaussian-splatter` ECR repository (`infra/registry.tf`) goes first.
@@ -185,16 +235,18 @@ flowchart TD
 
 A push that leaves `web/` untouched keeps `NEW_TAG` equal to `OLD_TAG`, so steps 2 and 5 do nothing. Step 3 can still replace the running tasks, because the web task definition carries the two worker image URIs and `KEEP_ALIVE_TIMEOUT` as well as the image. [Releasing a worker change](#23-releasing-a-worker-change) relies on that replacement.
 
-```mermaid
-flowchart LR
-  webchange["change under web/"] --> newtag["NEW_TAG differs<br/>from OLD_TAG"]
-  newtag --> build["step 2 builds<br/>new images"]
-  newtag --> roll["step 5 replaces<br/>the tasks with<br/>the new image"]
-  otherchange["change only under<br/>infra/, worker/<br/>or scripts/, or a new<br/>WORKER_IMAGE_TAG"] --> sametag["NEW_TAG equals<br/>OLD_TAG"]
-  sametag --> skip["steps 2 and 5<br/>do nothing"]
-  otherchange --> taskdef{"step 3 changes<br/>the web task<br/>definition?"}
-  taskdef -->|yes| replace["step 3 replaces<br/>the tasks: same<br/>image, new settings"]
-  taskdef -->|no| keep["tasks keep running"]
+```text
+change under web/
+ └─► NEW_TAG differs from OLD_TAG
+      ├─► step 2 builds new images
+      └─► step 5 replaces the tasks with the new image
+
+change only under infra/, worker/ or scripts/, or a new WORKER_IMAGE_TAG
+ ├─► NEW_TAG equals OLD_TAG
+ │    └─► steps 2 and 5 do nothing
+ └─► step 3 changes the web task definition?
+      ├─ yes ─► step 3 replaces the tasks: same image, new settings
+      └─ no ──► tasks keep running
 ```
 
 ### 2.1 Signing in to AWS
@@ -223,47 +275,26 @@ scripts/prod/bootstrap.sh
 
 What each step creates, and what reads it afterwards:
 
-```mermaid
-flowchart LR
-  subgraph bootstrap["scripts/prod/bootstrap.sh"]
-    prereqs["prereqs"]
-    quotastep["quota"]
-    cirole["ci-role"]
-    ghvars["gh-vars"]
-    enable["enable"]
-    deploystep["deploy"]
-    workerstep["worker"]
-  end
-  secret[("ai-gaussian-splatter/<br/>clerk-secret-key")]
-  spotrole["AWSServiceRole<br/>ForEC2Spot"]
-  quotareq["GPU spot vCPU<br/>quota request"]
-  state[("ai-gaussian-splatter-<br/>tfstate-#lt;account-id#gt;")]
-  oidc["GitHub OIDC<br/>provider"]
-  role["ai-gaussian-splatter-<br/>ci-deploy"]
-  vars["GitHub repository<br/>variables"]
-  flag["DEPLOY_ENABLED"]
-  images[("worker images")]
-  tag["WORKER_IMAGE_TAG"]
-  deployjob["deploy job"]
-  webtask["web task"]
-  spot["worker instances"]
-  prereqs --> secret & spotrole & state
-  quotastep --> quotareq
-  cirole --> oidc & role
-  ghvars --> vars
-  enable --> flag
-  workerstep --> images & tag
-  secret -->|"read at start"| webtask
-  spotrole -->|"needed by"| spot
-  quotareq -->|"allows"| spot
-  images -->|"pulled by"| spot
-  state -->|"terraform init"| deployjob
-  oidc -->|"signs in"| deployjob
-  role -->|"assumed by"| deployjob
-  vars -->|"read by"| deployjob
-  tag -->|"read by"| deployjob
-  flag -->|"gates"| deployjob
-  deploystep -->|"starts"| deployjob
+```text
+scripts/prod/bootstrap.sh
+ │
+ ├─ prereqs ─┬─► ai-gaussian-splatter/clerk-secret-key ───── read at start ───► web task
+ │           ├─► AWSServiceRoleForEC2Spot ────────────────── needed by ───────► worker instances
+ │           └─► ai-gaussian-splatter-tfstate-<account-id> ─ terraform init ──► deploy job
+ │
+ ├─ quota ─────► GPU spot vCPU quota request ─────────────── allows ──────────► worker instances
+ │
+ ├─ ci-role ─┬─► GitHub OIDC provider ────────────────────── signs in ────────► deploy job
+ │           └─► ai-gaussian-splatter-ci-deploy ──────────── assumed by ──────► deploy job
+ │
+ ├─ gh-vars ───► GitHub repository variables ─────────────── read by ─────────► deploy job
+ │
+ ├─ enable ────► DEPLOY_ENABLED ──────────────────────────── gates ───────────► deploy job
+ │
+ ├─ deploy ──────────────────────────────────────────────── starts ──────────► deploy job
+ │
+ └─ worker ──┬─► worker images ───────────────────────────── pulled by ───────► worker instances
+             └─► WORKER_IMAGE_TAG ────────────────────────── read by ─────────► deploy job
 ```
 
 Every step skips what already exists, so re-running the script, or one step of it (`scripts/prod/bootstrap.sh gh-vars`), is safe.
@@ -306,20 +337,32 @@ scripts/prod/worker-push-image.sh
 
 It pushes both images to the `ai-gaussian-splatter-worker` ECR repository tagged with `worker/`'s tree id, sets the `WORKER_IMAGE_TAG` GitHub repository variable to that tag, then starts a run of `.github/workflows/ci.yml` on `main` and waits for it. That run's deploy points both worker image URIs on the web task definition at the new images and replaces the running tasks. Until it finishes, every worker instance still launches with the old images. A tag that is already built and deployed is a no-op, so a re-run after a failure finishes only what is left.
 
-```mermaid
-%%{init: {"sequence": {"actorMargin": 20, "width": 150}}}%%
-sequenceDiagram
-  participant script as scripts/prod/<br/>worker-push-image.sh
-  participant gh as GitHub
-  participant web as web tasks
-  participant worker as worker<br/>instance
-  participant ecr as ai-gaussian-splatter-<br/>worker ECR
-  script->>ecr: push both images
-  script->>gh: set WORKER_IMAGE_TAG,<br/>start ci.yml on main
-  gh->>web: deploy job swaps in<br/>new worker image URIs
-  Note over gh,web: until then, launches<br/>use the old images
-  web->>worker: RunInstances
-  worker->>ecr: pull its image
+```text
+scripts/prod/worker-push-image.sh                                            ai-gaussian-splatter-worker ECR
+                                 GitHub               web tasks     worker instance
+          │                         │                     │                │                │
+          │ push both images        │                     │                │                │
+          ├─────────────────────────┼─────────────────────┼────────────────┼───────────────►│
+          │                         │                     │                │                │
+          │ set WORKER_IMAGE_TAG,   │                     │                │                │
+          │ start ci.yml on main    │                     │                │                │
+          ├────────────────────────►│                     │                │                │
+          │                         │                     │                │                │
+          │                         │ deploy job swaps in │                │                │
+          │                         │ new worker image    │                │                │
+          │                         │ URIs                │                │                │
+          │                         ├────────────────────►│                │                │
+          │                         │                     │                │                │
+          │                         │ until then,         │                │                │
+          │                         │ launches use the    │                │                │
+          │                         │ old images          │                │                │
+          │                         │                     │                │                │
+          │                         │                     │ RunInstances   │                │
+          │                         │                     ├───────────────►│                │
+          │                         │                     │                │                │
+          │                         │                     │                │ pull its image │
+          │                         │                     │                ├───────────────►│
+          │                         │                     │                │                │
 ```
 
 Only the last `local.worker_releases_kept` images are kept (`infra/locals.tf`), which makes a `WORKER_IMAGE_TAG` that was set but never deployed the risk. Once that many newer images exist, the lifecycle policy expires the tag the web app still names, and every worker instance then fails its image pull and bills until its lifetime-ceiling shutdown (the `worker-max-lifetime-minutes` runtime setting it launched with).
@@ -350,19 +393,28 @@ For local dev, set `SHOWCASE_CLERK_USER_ID` in `web/.env` to a user ID from the 
 
 The processing switch, the usage limits, the worker's instance types, lifetime ceiling and training iterations, and the showcase account are runtime settings ([Runtime settings](ARCHITECTURE.md#95-runtime-settings)). A change reaches the web service within a minute, with no deploy.
 
-```mermaid
-%%{init: {"flowchart": {"wrappingWidth": 400}}}%%
-flowchart TD
-  ssmsh["scripts/prod/ssm.sh"]
-  params[("SSM parameters<br/>under RUNTIME_SETTINGS_PATH")]
-  web["web service<br/>web/lib/server/runtimeSettings.ts"]
-  dotenv["web/.env<br/>MAX_JOBS_PER_DAY, …"]
-  devweb["next dev<br/>RUNTIME_SETTINGS_PATH unset"]
-  worker["worker instance"]
-  ssmsh -->|"validates, then writes"| params
-  params -->|"one read, cached<br/>for a minute"| web
-  dotenv --> devweb
-  web -->|"RunInstances with<br/>the instance type and<br/>MaxLifetimeMinutes tag"| worker
+```text
+┌─────────────────────┐
+│ scripts/prod/ssm.sh │
+└──────────┬──────────┘
+           │ validates, then writes
+           ▼
+╭─────────────────────────────╮                  ╭──────────────────────╮
+│ SSM parameters              │                  │ web/.env             │
+│ under RUNTIME_SETTINGS_PATH │                  │ MAX_JOBS_PER_DAY, …  │
+╰──────────┬──────────────────╯                  ╰──────────┬───────────╯
+           │ one read, cached for a minute                  │
+           ▼                                                ▼
+┌───────────────────────────────────┐            ┌─────────────────────────────┐
+│ web service                       │            │ next dev                    │
+│ web/lib/server/runtimeSettings.ts │            │ RUNTIME_SETTINGS_PATH unset │
+└──────────┬────────────────────────┘            └─────────────────────────────┘
+           │ RunInstances with the instance type
+           │ and MaxLifetimeMinutes tag
+           ▼
+┌─────────────────┐
+│ worker instance │
+└─────────────────┘
 ```
 
 ```bash
@@ -407,25 +459,29 @@ If the `deploy` job's migration step fails for an infra reason rather than a bad
 
 Each step below narrows down where the worker job failed:
 
-```mermaid
-%%{init: {"flowchart": {"wrappingWidth": 400}}}%%
-flowchart TD
-  status{"jobs.status"}
-  running{"EC2 instance tagged<br/>JobId=#lt;job_id#gt; running?"}
-  reconcile["the splat page's next poll<br/>marks it failed after 15 minutes<br/>without a callback"]
-  ceiling{"past its<br/>MaxLifetimeMinutes tag?"}
-  boot["boot failure: cloud-init never ran<br/>read the system log<br/>the sweeper terminates it and emails"]
-  stream{"log stream<br/>#lt;job_id#gt;-#lt;stage#gt; exists?"}
-  syslog["container never started<br/>read the system log"]
-  logs["scripts/prod/logs-tail.sh worker<br/>scripts/prod/logs-timings.sh"]
-  status -->|failed| stream
-  status -->|"still in progress"| running
-  running -->|no| reconcile --> stream
-  running -->|yes| ceiling
-  ceiling -->|yes| boot
-  ceiling -->|"no, still working"| stream
-  stream -->|no| syslog
-  stream -->|yes| logs
+```text
+jobs.status
+ ├─ failed ────────────────────────────────────────────────────┐
+ └─ still in progress                                          │
+     │                                                         │
+     ▼                                                         │
+    EC2 instance tagged JobId=<job_id> running?                │
+     ├─ no ──► the splat page's next poll marks it failed      │
+     │         after 15 minutes without a callback ────────────┤
+     └─ yes                                                    │
+         │                                                     │
+         ▼                                                     │
+        past its MaxLifetimeMinutes tag?                       │
+         ├─ yes ─► boot failure: cloud-init never ran.         │
+         │         Read the system log.                        │
+         │         The sweeper terminates it and emails.       │
+         └─ no, still working ─────────────────────────────────┤
+                                                               ▼
+                                     log stream <job_id>-<stage> exists?
+                                      ├─ no ──► container never started:
+                                      │         read the system log
+                                      └─ yes ─► scripts/prod/logs-tail.sh worker
+                                                scripts/prod/logs-timings.sh
 ```
 
 1. Check `jobs.status` and `jobs.error_message` for the splat (`GET /api/v1/splats/{id}/jobs/latest`).
