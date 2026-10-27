@@ -572,7 +572,7 @@ Every line should be an added `OU=Amazon RDS` root CA for a region or rotation y
 scripts/prod/teardown.sh
 ```
 
-Each step refuses while a CI run on `main` is unfinished, where that run could still deploy ([CI/CD](ARCHITECTURE.md#11-cicd)). Each skips what is already gone, so a teardown that stopped partway is finished by running the script again.
+`disable` and `destroy` refuse while a CI run on `main` is unfinished, where that run could still deploy ([CI/CD](ARCHITECTURE.md#11-cicd)). `state-bucket` refuses while the state still tracks a resource, and `cleanup` refuses until the state bucket is gone. Each step skips what is already gone, so a teardown that stopped partway is finished by running the script again.
 
 **This is a full, unconditional teardown.** Nothing here is protected from deletion, because there's no real data yet to protect (see `infra/data.tf`'s comments on `force_destroy`/`skip_final_snapshot`).
 

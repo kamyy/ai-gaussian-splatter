@@ -207,7 +207,7 @@ cloud-init runs user-data?
 
 A worker job's wall clock splits into three parts. The times are from one 56-photo worker job on AWS.
 
-- **Fixed overhead**: booting the instance, then pulling and extracting the stage's image before the stage's work starts. Reconstruct's took ~1.7 minutes with its ~1.9 GB image. Train's took ~2.7 minutes with its ~8.0 GB image, 90 seconds of that the pull.
+- **Fixed overhead**: booting the instance, then pulling and extracting the stage's image before the stage's work starts. Reconstruct's took ~1.7 minutes with its ~1.9 GB image (0.7 GB compressed). Train's took ~2.7 minutes with its ~8.0 GB image (5.2 GB compressed), 90 seconds of that the pull. ECR stores and the pull transfers the compressed size.
   - `worker/Dockerfile` builds one target per stage carrying only what that stage runs. It compiles gsplat's CUDA kernels in, so no stage compiles them at run time.
   - Reconstruct gets much the smaller image and runs more often, since every upload reconstructs while only some go on to train.
   - Reconstruct needs no CUDA library beyond cudart, so it starts from a `-base` image where train needs `-runtime`.
@@ -621,7 +621,7 @@ The core ordering problem:
 
 Solved by giving the migration task its own variable (`migrate_image_tag`, defaulting to `web_image_tag` so every existing manual invocation is unaffected), then calling `terraform apply` twice:
 
-1. Apply with `migrate_image_tag` on the new tag but `web_image_tag` still on the old one. This registers the migration task against the new **migrator image** while the service stays on its old **web image**. The service has no diff, so no rollout starts.
+1. Apply with `migrate_image_tag` on the new tag but `web_image_tag` still on the old one. This registers the migration task against the new **migrator image** while the service stays on its old **web image**. When the image is the only change, the service has no diff and no rollout starts. A change to the web task definition's other fields, such as a new `WORKER_IMAGE_TAG`, still replaces the tasks in this apply ([Image tags](#111-image-tags)).
 2. Only if the migration task exits 0, apply again with `web_image_tag` also updated to the new tag (now equal to `migrate_image_tag`). This second apply is what actually moves the service onto the new **web image**.
 
 The migration task runs on every deploy, including one whose tag is unchanged. An unchanged tag says `web/drizzle/` is unchanged, not that the database matches it. The first apply can replace `aws_db_instance.main`, and a first deploy whose migration failed leaves the service already on the new tag with nothing applied. Re-applying migrations that already ran is a no-op, so running it unconditionally is cheaper than any test for whether it is needed.
@@ -648,7 +648,7 @@ A rolled-back *service* deployment does not undo an already-applied migration. R
 Three tiers (`.github/workflows/ci.yml`):
 
 - **Unit/component** (every PR): `pytest` + `moto` for `worker/`; Vitest `client` (jsdom) and `server` (Node + a real Postgres for the database-backed tests).
-- **E2E** (every PR): Playwright without live Clerk. No specs yet (SSR reads DB; `page.route()` can't intercept; no seed — see [State / what's next](AGENTS.md#11-state--whats-next)). Server correctness is the Vitest `server` project.
+- **E2E**: Playwright without live Clerk. CI skips it until `web/e2e/` holds a spec, and there are none yet (SSR reads DB; `page.route()` can't intercept; no seed — see [State / what's next](AGENTS.md#11-state--whats-next)). Server correctness is the Vitest `server` project.
 - **Real-pipeline** (manual/milestone-gated): real COLMAP + gsplat costs GPU money.
 
 `web/` AWS tests use `aws-sdk-client-mock` (assert command args), not `moto`-style emulation.
