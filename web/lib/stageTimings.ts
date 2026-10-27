@@ -1,5 +1,5 @@
 /**
- * How long each GPU stage of a worker job took, and how to show those durations.
+ * How long each stage of a worker job took, and how to show those durations.
  *
  * Splits each stage into the instance's start-up and the work itself, from the timestamps the worker reports. Where the
  * worker also reported when its instance finished booting, start-up splits again into the boot and the image pull.

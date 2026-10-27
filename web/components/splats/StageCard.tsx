@@ -156,8 +156,8 @@ export function StageCard({ splatId, stage, onJobChanged }: StageCardProps) {
       return (
         <StageShell title="Placing the cameras">
           <p>
-            A cloud GPU is working out where each photo was taken from. This takes a few minutes, and you can close this
-            tab while it runs.
+            A cloud computer is working out where each photo was taken from. This takes a few minutes, and you can close
+            this tab while it runs.
           </p>
           <WorkingBar label="Placing the cameras" />
           <div className="flex flex-wrap gap-2">

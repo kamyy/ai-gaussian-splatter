@@ -107,11 +107,11 @@ describe("PublicSplatView", () => {
     const steps = within(screen.getByRole("list", { name: "Progress" })).getAllByRole("listitem");
     expect(steps.map(item => item.textContent)).toEqual([
       "Upload photos: done2 photos",
-      "Place the cameras: done7m 52sGPU start-up 3m 40s · reconstructing 4m 12s",
+      "Place the cameras: done7m 52sStart-up 3m 40s · reconstructing 4m 12s",
       "Check the shape: done12m 00s",
-      "Build the 3D splat: done10m 15sGPU start-up 3m 05s · training 7m 10s",
+      "Build the 3D splat: done10m 15sStart-up 3m 05s · training 7m 10s",
     ]);
-    expect(screen.getByText("18m 07s of GPU time")).toBeInTheDocument();
+    expect(screen.getByText("18m 07s of processing time")).toBeInTheDocument();
   });
 
   it("hands the owner's crop to the viewer, so the point cloud matches the cropped splat", () => {

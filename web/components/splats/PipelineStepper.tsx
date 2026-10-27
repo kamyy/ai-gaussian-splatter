@@ -1,7 +1,7 @@
 /**
  * The list of pipeline steps on a splat's page, with how far along the splat is.
  *
- * Shows each step from upload to a finished splat, marking the ones done and the one running. The two GPU steps also
+ * Shows each step from upload to a finished splat, marking the ones done and the one running. The two worker steps also
  * show how long they took, counting up live while they run.
  */
 
@@ -41,9 +41,9 @@ function timingExtras(timing: StepTiming | null, workLabel: string): StepExtras 
   if (timing.bootMs !== null && timing.pullMs !== null && timing.workMs !== null) {
     detail = `Boot ${formatDuration(timing.bootMs)} · image pull ${formatDuration(timing.pullMs)} · ${workLabel} ${formatDuration(timing.workMs)}`;
   } else if (timing.startupMs !== null && timing.workMs !== null) {
-    detail = `GPU start-up ${formatDuration(timing.startupMs)} · ${workLabel} ${formatDuration(timing.workMs)}`;
+    detail = `Start-up ${formatDuration(timing.startupMs)} · ${workLabel} ${formatDuration(timing.workMs)}`;
   } else if (timing.running) {
-    detail = "Starting a GPU";
+    detail = "Starting an instance";
   }
 
   if (timing.running) {
@@ -78,16 +78,16 @@ function stepExtras(key: StepKey, timings: StageTimings | null, photoCount: numb
 }
 
 // The camera and build stages' combined time, under the stepper once the splat is complete.
-function gpuTotal(timings: StageTimings | null): string | null {
+function processingTotal(timings: StageTimings | null): string | null {
   if (!timings?.cameras || !timings.build) {
     return null;
   }
 
-  return `${formatDuration(timings.cameras.totalMs + timings.build.totalMs)} of GPU time`;
+  return `${formatDuration(timings.cameras.totalMs + timings.build.totalMs)} of processing time`;
 }
 
 /**
- * Each GPU step shows how long it took. With boot timestamps the detail line is the boot, the image pull, and the
+ * Each worker step shows how long it took. With boot timestamps the detail line is the boot, the image pull, and the
  * work. Without them it is the start-up and the work. Once the splat is complete, every step shows as done, and the
  * list stays vertical so those times stay visible. A visitor on the share page gets no Share step, since they are
  * already looking at the shared splat.
@@ -114,9 +114,9 @@ export function PipelineStepper({
   const failed = stage.kind === "failed" || stage.kind === "cancelled";
 
   let total: React.ReactNode = null;
-  const gpuTime = complete ? gpuTotal(timings) : null;
-  if (gpuTime !== null) {
-    total = <p className="pl-8.5 text-sm text-muted-foreground tabular-nums">{gpuTime}</p>;
+  const processingTime = complete ? processingTotal(timings) : null;
+  if (processingTime !== null) {
+    total = <p className="pl-8.5 text-sm text-muted-foreground tabular-nums">{processingTime}</p>;
   }
 
   return (
