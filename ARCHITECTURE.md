@@ -664,9 +664,9 @@ Milestones (`M0`…`M10`) name phases, not a schedule, and they are not built in
 - ~~**M2** — Schema + CRUD endpoints.~~
 - ~~**M3** — S3 presign/complete against a real bucket.~~
 - ~~**M4** — Local end-to-end: upload → process → result (no cloud orchestration).~~
-- **M5** — EC2 spot launch, worker image, status callback, self-termination (success + induced failure).
+- ~~**M5** — EC2 spot launch, worker image, status callback, self-termination (success + induced failure).~~
 - ~~**M6** — Auth + three rate-limit layers.~~
 - ~~**M7** — Authenticated UI: upload, worker-job polling, splat viewer.~~
 - ~~**M8** — Share links, OG thumbnails.~~
 - ~~**M9** — IaC + first real deploy.~~
-- **M10** — time a real worker job on AWS, split by pull, COLMAP and training; revisit a Packer-baked AMI only if fixed overhead still dominates.
+- ~~**M10** — time a real worker job on AWS, split by pull, COLMAP and training; revisit a Packer-baked AMI only if fixed overhead still dominates.~~
