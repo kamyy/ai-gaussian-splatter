@@ -121,6 +121,9 @@ run "run_instances_statements_stay_split" {
         "g5.xlarge",
         "g6.xlarge",
         "g6e.xlarge",
+        "g5.2xlarge",
+        "g6.2xlarge",
+        "g6e.2xlarge",
       ])
     ])
     error_message = "the tagged RunInstances statement must limit ec2:InstanceType to the worker instance types"
