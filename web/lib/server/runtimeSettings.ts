@@ -30,8 +30,10 @@ const CACHE_TTL_MS = 60 * 1000;
 export const RECONSTRUCT_INSTANCE_TYPES = ["c7i.8xlarge", "c7a.8xlarge", "c6i.8xlarge"];
 
 // Train runs gsplat kernels compiled for the GPUs in worker/Dockerfile's TORCH_CUDA_ARCH_LIST: the A10G (g5), L4 (g6)
-// and L40S (g6e). A type outside that list fails every train stage.
-const TRAIN_INSTANCE_TYPES = ["g5.xlarge", "g6.xlarge", "g6e.xlarge"];
+// and L40S (g6e). A type outside that list fails every train stage. A launch that finds no capacity for the setting's
+// type moves on to the others, so a type added here also needs at least as much GPU memory as the g5's 24 GB. Training
+// holds every photo in GPU memory, and a smaller card runs out only on the launches that fall back to it.
+export const TRAIN_INSTANCE_TYPES = ["g5.xlarge", "g6.xlarge", "g6e.xlarge"];
 
 /**
  * The range the worker-max-lifetime-minutes setting accepts. An instance with no lifetime tag is judged by the max,
