@@ -22,7 +22,7 @@ usage() {
   echo "  min-photos-per-splat         3 to 100"
   echo "  worker-max-lifetime-minutes  5 to 240. Applies to instances launched after the change."
   echo "  reconstruct-instance-type    c7i.8xlarge, c7a.8xlarge or c6i.8xlarge"
-  echo "  train-instance-type          g5.xlarge, g6.xlarge or g6e.xlarge"
+  echo "  train-instance-type          g5, g6 or g6e in xlarge or 2xlarge"
   echo "  training-iterations          1000 to 30000"
   echo "  showcase-clerk-user-id       a production Clerk user ID (user_...), or none"
   echo
@@ -84,8 +84,8 @@ check_value() {
       [[ $value =~ ^(c7i|c7a|c6i)\.8xlarge$ ]]
       ;;
     train-instance-type)
-      echo "g5.xlarge, g6.xlarge or g6e.xlarge"
-      [[ $value =~ ^(g5|g6|g6e)\.xlarge$ ]]
+      echo "g5, g6 or g6e in xlarge or 2xlarge"
+      [[ $value =~ ^(g5|g6|g6e)\.(xlarge|2xlarge)$ ]]
       ;;
     training-iterations)
       echo "a whole number from 1000 to 30000"

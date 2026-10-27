@@ -59,6 +59,9 @@ const NO_CAPACITY_MESSAGES: Record<WorkerStage, Record<string, string>> = {
 // is an instance type the zone doesn't offer. A zone can lack a type, such as g5.xlarge in zone d.
 const ZONE_ERROR_NAMES = new Set(["InsufficientInstanceCapacity", "Unsupported"]);
 
+// The RunInstances error for the account's spot vCPU quota, which no zone or instance type of the same size avoids.
+const QUOTA_ERROR_NAME = "MaxSpotInstanceCountExceeded";
+
 type WorkerStage = "reconstruct" | "train";
 
 /**
@@ -252,7 +255,8 @@ function explainLaunchError(err: unknown, stage: WorkerStage): unknown {
 
 // The instance types a launch tries, in order. The setting's own type goes first. Each stage's allow-list holds types
 // that do the same work, so one family's spot capacity running out moves the launch to the next. Train's types differ in
-// price, and its launch can land on a dearer one than the setting names.
+// price and in vCPUs, so its launch can land on a dearer one than the setting names, and a larger size can exceed the
+// spot quota where a smaller one fits.
 function instanceTypesToTry(params: WorkerLaunch): string[] {
   const [preferred, allowed] =
     params.stage === "train"
@@ -262,6 +266,16 @@ function instanceTypesToTry(params: WorkerLaunch): string[] {
   return [preferred, ...allowed.filter(type => type !== preferred)];
 }
 
+// How many vCPUs an instance type has, read from its size. An xlarge has 4, and a 2xlarge or 8xlarge has 4 per multiple.
+function vcpuCount(instanceType: string): number {
+  const match = /\.(\d*)xlarge$/.exec(instanceType);
+  if (match === null) {
+    throw new Error(`Cannot read the vCPU count of ${instanceType}`);
+  }
+
+  return (match[1] === "" ? 1 : Number(match[1])) * 4;
+}
+
 /**
  * Launches the spot worker instance and returns its instance ID.
  *
@@ -269,11 +283,17 @@ function instanceTypesToTry(params: WorkerLaunch): string[] {
  * WORKER_SUBNET_IDS, since each subnet is in its own zone. After the last subnet it moves on to the next instance type
  * from instanceTypesToTry() and starts the subnets again. Each skipped attempt is logged.
  *
- * Any other error stops the loop at once. The spot quota is one of those, because it is account-wide and covers every
- * type in the same family group, so another zone or type can't help.
+ * MaxSpotInstanceCountExceeded is the account-wide spot vCPU quota, so another zone can't help. It moves straight to
+ * the next instance type, and skips every type that needs at least as many vCPUs as the one refused. A smaller size can
+ * still fit where a larger one does not, such as a g5.xlarge while another stage holds some of the quota.
  *
- * The splat's page shows the failure's message as the worker job's error. When every attempt fails, one that had no
- * capacity decides the message, even if a later one failed with a different zone error.
+ * Any other error stops the loop at once.
+ *
+ * The splat's page shows the failure's message as the worker job's error. When every attempt fails, a quota refusal
+ * decides the message if it blocked a size no larger than the smallest one refused for capacity, since then the quota
+ * is what stopped the launch and only the site owner can clear it. Otherwise a refusal for capacity decides it, even if
+ * a later attempt failed with a different zone error. A quota refusal of a larger size than one that had no capacity
+ * would have fitted that smaller size, so capacity is the real cause.
  */
 export async function launchJob(params: WorkerLaunch): Promise<string> {
   // launchJob runs only outside local dev, where getEnv() has already required every worker instance setting. The
@@ -287,9 +307,16 @@ export async function launchJob(params: WorkerLaunch): Promise<string> {
     throw new Error("WORKER_SUBNET_IDS names no subnet");
   }
 
+  let quotaError: Error | undefined;
+  let quotaRefusedVcpus = Number.POSITIVE_INFINITY;
   let firstCapacityError: Error | undefined;
+  let smallestCapacityVcpus = Number.POSITIVE_INFINITY;
   let lastError: Error | undefined;
   for (const instanceType of instanceTypesToTry(params)) {
+    if (vcpuCount(instanceType) >= quotaRefusedVcpus) {
+      continue;
+    }
+
     for (const subnetId of subnetIds) {
       try {
         const instanceId = await runInstance(params, env, subnetId, instanceType);
@@ -299,20 +326,29 @@ export async function launchJob(params: WorkerLaunch): Promise<string> {
 
         return instanceId;
       } catch (err) {
-        if (!(err instanceof Error) || !ZONE_ERROR_NAMES.has(err.name)) {
+        if (!(err instanceof Error) || !(ZONE_ERROR_NAMES.has(err.name) || err.name === QUOTA_ERROR_NAME)) {
           throw explainLaunchError(err, params.stage);
         }
 
         console.warn(`RunInstances of ${instanceType} in ${subnetId} failed with ${err.name}: ${err.message}`);
+        if (err.name === QUOTA_ERROR_NAME) {
+          quotaError ??= err;
+          quotaRefusedVcpus = Math.min(quotaRefusedVcpus, vcpuCount(instanceType));
+          break;
+        }
+
         lastError = err;
         if (err.name in NO_CAPACITY_MESSAGES[params.stage]) {
           firstCapacityError ??= err;
+          smallestCapacityVcpus = Math.min(smallestCapacityVcpus, vcpuCount(instanceType));
         }
       }
     }
   }
 
-  throw explainLaunchError(firstCapacityError ?? lastError, params.stage);
+  const quotaDecides = quotaError !== undefined && quotaRefusedVcpus <= smallestCapacityVcpus;
+
+  throw explainLaunchError(quotaDecides ? quotaError : (firstCapacityError ?? quotaError ?? lastError), params.stage);
 }
 
 async function runInstance(

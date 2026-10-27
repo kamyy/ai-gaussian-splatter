@@ -263,7 +263,7 @@ aws login # Needed again only after the session expires, up to 12 hours later.
 
 1. Creates what `infra/` never manages: the Clerk secret `ai-gaussian-splatter/clerk-secret-key` (it prompts for the `sk_live_...` value), the account-wide `AWSServiceRoleForEC2Spot` role, and the Terraform state bucket `ai-gaussian-splatter-tfstate-<account-id>`.
 2. Requests two spot vCPU quotas, because a new account's GPU quota is 0 and its standard quota can be lower than one reconstruct instance needs. It asks before the first deploy so the approval overlaps the deploy's wait. Declining, or a failed request, doesn't stop the run.
-   - A GPU quota of 8 ("All G and VT Spot Instance Requests") lets two train stages run at once. Until AWS raises it, every train launch fails.
+   - A GPU quota of 16 ("All G and VT Spot Instance Requests") lets two train stages run at once, even when both land on an 8-vCPU `2xlarge` type. Until AWS raises it, every train launch fails.
    - A standard quota of 64 ("All Standard Spot Instance Requests") lets two reconstruct stages run at once, since each reconstruct instance has 32 vCPUs. Until AWS raises it, every reconstruct launch fails.
 3. Creates GitHub's OIDC provider and the `ai-gaussian-splatter-ci-deploy` role the `deploy` job assumes.
 4. Sets the GitHub repository variables `.github/workflows/deploy.yml` reads.

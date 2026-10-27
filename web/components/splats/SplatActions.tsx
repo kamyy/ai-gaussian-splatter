@@ -105,7 +105,7 @@ export function StopJobButton({ splatId, onJobChanged }: { splatId: string; onJo
       label="Stop"
       variant="contained"
       title="Stop processing?"
-      description="The cloud GPU stops straight away. Starting again later begins from placing the cameras."
+      description="The cloud computer stops straight away. Starting again later begins from placing the cameras."
       confirmLabel="Stop"
       keepLabel="Keep going"
       onConfirm={async () => {

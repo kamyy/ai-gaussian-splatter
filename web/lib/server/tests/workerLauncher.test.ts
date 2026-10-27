@@ -415,6 +415,12 @@ describe("launchJob", () => {
         "g5.xlarge",
         "g6.xlarge",
         "g6.xlarge",
+        "g5.2xlarge",
+        "g5.2xlarge",
+        "g6.2xlarge",
+        "g6.2xlarge",
+        "g6e.2xlarge",
+        "g6e.2xlarge",
       ]);
     });
 
@@ -488,16 +494,75 @@ describe("launchJob", () => {
       });
     });
 
-    it("stops at the quota refusal after a first subnet with no capacity", async () => {
+    it("stops trying types as large as the one the quota refused, and reports the quota", async () => {
       ec2Mock
         .on(RunInstancesCommand)
         .rejectsOnce(refusal("InsufficientInstanceCapacity"))
         .rejects(refusal("MaxSpotInstanceCountExceeded"));
 
-      await expect(launchJob(params)).rejects.toMatchObject({
+      await expect(launchJob({ ...params, stage: "train" })).rejects.toMatchObject({
         message: expect.stringContaining("Retrying won't help"),
       });
-      expect(ec2Mock.commandCalls(RunInstancesCommand)).toHaveLength(2);
+      expect(ec2Mock.commandCalls(RunInstancesCommand).map(call => call.args[0].input.InstanceType)).toEqual([
+        "g6e.xlarge",
+        "g6e.xlarge",
+      ]);
+    });
+
+    it("reports capacity when every xlarge lacked it and only a larger size met the quota", async () => {
+      ec2Mock
+        .on(RunInstancesCommand)
+        .callsFake(input =>
+          Promise.reject(
+            refusal(
+              input.InstanceType.endsWith(".2xlarge") ? "MaxSpotInstanceCountExceeded" : "InsufficientInstanceCapacity",
+            ),
+          ),
+        );
+
+      await expect(launchJob({ ...params, stage: "train" })).rejects.toMatchObject({
+        message: expect.stringContaining("Try again later."),
+      });
+      expect(ec2Mock.commandCalls(RunInstancesCommand).map(call => call.args[0].input.InstanceType)).toEqual([
+        "g6e.xlarge",
+        "g6e.xlarge",
+        "g5.xlarge",
+        "g5.xlarge",
+        "g6.xlarge",
+        "g6.xlarge",
+        "g5.2xlarge",
+      ]);
+    });
+
+    it("reports capacity when a smaller type after a quota refusal has none", async () => {
+      ec2Mock
+        .on(RunInstancesCommand)
+        .callsFake(input =>
+          Promise.reject(
+            refusal(
+              input.InstanceType === "g5.2xlarge" ? "MaxSpotInstanceCountExceeded" : "InsufficientInstanceCapacity",
+            ),
+          ),
+        );
+
+      await expect(
+        launchJob({ ...params, stage: "train", settings: { ...settings, trainInstanceType: "g5.2xlarge" } }),
+      ).rejects.toMatchObject({ message: expect.stringContaining("Try again later.") });
+    });
+
+    it("tries a smaller type after the quota refuses a larger one", async () => {
+      ec2Mock
+        .on(RunInstancesCommand)
+        .rejectsOnce(refusal("MaxSpotInstanceCountExceeded"))
+        .resolves({ Instances: [{ InstanceId: "i-0smaller" }] });
+
+      await expect(
+        launchJob({ ...params, stage: "train", settings: { ...settings, trainInstanceType: "g5.2xlarge" } }),
+      ).resolves.toBe("i-0smaller");
+      expect(ec2Mock.commandCalls(RunInstancesCommand).map(call => call.args[0].input.InstanceType)).toEqual([
+        "g5.2xlarge",
+        "g5.xlarge",
+      ]);
     });
 
     it.each(["MaxSpotInstanceCountExceeded", "UnauthorizedOperation"])("stops at once on %s", async name => {
