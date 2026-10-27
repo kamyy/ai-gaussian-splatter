@@ -519,9 +519,10 @@ Scaffolding (three packages + CI) is in place. Host-run `next dev` can 500 with 
 Known gaps, priority order:
 
 1. **No E2E coverage.** `web/e2e/` doesn't exist yet, so CI skips Playwright; share/view pages SSR from the DB with no seeded test DB to run against. Seed one and add a spec.
-2. **The worker's lifetime ceiling has been measured against only a few captures.** The `worker-max-lifetime-minutes` setting defaults to 30 minutes. A 56-photo train stage on AWS took about 6 minutes, counted from instance boot to upload. `scripts/prod/logs-timings.sh` prints the per-phase split.
-   - Reconstruct defaults to a CPU instance. A 100-photo capture took about 10.5 minutes on a `c7i.8xlarge`, from instance boot to upload: 1.9 for feature extraction, 1.6 for exhaustive matching and 4.2 for `mapper`.
-   - The train stage for those 100 photos took about 8.5 minutes on a `g6.2xlarge`: 4.3 for the 10,000-iteration `train_loop`, 1.4 for pulling the 5.2 GB compressed image, and 1.4 for OS boot.
+2. **The worker's lifetime ceiling has been measured against only five captures of 56 to 100 photos.** The `worker-max-lifetime-minutes` setting defaults to 30 minutes. `scripts/prod/logs-timings.sh` prints the per-phase split. Times below run from instance boot to upload.
+   - Reconstruct defaults to a CPU instance. It took about 4 minutes for 67 photos on a `c7a.8xlarge`, about 5 minutes for 80 photos, and about 10.5 minutes for 100 photos on a `c7i.8xlarge`. For those 100 photos, feature extraction took 1.9 minutes, exhaustive matching 1.6 and `mapper` 4.2.
+   - The train stage took 5.8 to 8.5 minutes for 56 to 100 photos on a `g6.xlarge` or `g6.2xlarge`. The 10,000-iteration `train_loop` took 2.7 to 4.3 of those minutes and peaked under 4 GB of GPU memory.
+   - Every train stage also spends about 3.5 minutes on fixed costs: 1.5 for OS boot, 1.5 for pulling the 5.2 GB compressed image, and 0.5 for starting the container.
    - Exhaustive matching grows with the square of the photo count, so it is the phase most likely to near the ceiling on a CPU. Feature extraction ran on 15 threads under the memory cap, while matching ran on all 32 vCPUs at 100%.
    - A legitimately slow stage that runs past it is terminated and failed exactly like a hang.
    - When the instance's own shutdown fires, no one is emailed. The sweeper only emails about instances whose own shutdown never fired ([Compute](ARCHITECTURE.md#3-compute)).
