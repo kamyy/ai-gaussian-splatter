@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Sets up a machine for local development: dependencies, the pinned Terraform CLI, the dev AWS resources, and GPU
-# access for the worker container.
+# Sets up a machine for local development: dependencies, the pinned Terraform CLI, the AWS Session Manager plugin, the
+# dev AWS resources, and GPU access for the worker container.
 #
 # After it, `pnpm dev` from the repo root is the whole daily loop. Each step is one subcommand, so a single step can be
 # re-run on its own, such as `aws` after deleting a lost access key. Every step checks what is already in place and
@@ -18,6 +18,10 @@ usage() {
   echo "             service so the splat-pg database container comes back after a reboot."
   echo "  terraform  Installs the exact Terraform version infra/providers.tf pins into ~/.local/bin, after checking"
   echo "             HashiCorp's signature. Skipped when that version is already there."
+  echo "  session-manager"
+  echo "             Installs the pinned AWS Session Manager plugin into ~/.local/bin, after checking AWS's signature."
+  echo "             scripts/prod/db-tunnel.sh needs it. Needs rpm2cpio and cpio, and skips when that version is"
+  echo "             already there."
   echo "  aws        Creates web/.env from web/.env.example if it's missing, then the dev uploads and splats buckets it"
   echo "             names and the ai-gaussian-splatter-dev IAM user that can reach only those two, and writes the"
   echo "             user's access key into web/.env. Needs aws login as an admin. A full run skips it when not signed"
@@ -36,7 +40,7 @@ fi
 
 STEP=${1-}
 case $STEP in
-  "" | deps | terraform | aws | gpu) ;;
+  "" | deps | terraform | session-manager | aws | gpu) ;;
   *)
     usage >&2
     exit 1
@@ -59,6 +63,26 @@ PROJECT_TAG=ai-gaussian-splatter
 # HashiCorp's release signing key. The fingerprint is pinned here rather than trusting whatever the key URL serves, so
 # whoever could swap the zip can't also swap the key it's checked against.
 HASHICORP_KEY_FINGERPRINT=C874011F0AB405110D02105534365D9472D7468F
+
+# The Session Manager plugin version to install and the key AWS signs its Linux packages with. AWS publishes the key
+# block and this fingerprint on its "Verify the signature of the Session Manager plugin" documentation page, which is
+# where both were copied from on 2026-10-28. Bump the version here to move to a newer plugin.
+SESSION_MANAGER_PLUGIN_VERSION=1.2.896.0
+SESSION_MANAGER_KEY_FINGERPRINT=7959637124CE093AD501D47A2C4D4AFF6F6757EE
+SESSION_MANAGER_KEY='-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+mFIEZ5ERQxMIKoZIzj0DAQcCAwQjuZy+IjFoYg57sLTGhF3aZLBaGpzB+gY6j7Ix
+P7NqbpXyjVj8a+dy79gSd64OEaMxUb7vw/jug+CfRXwVGRMNtIBBV1MgU1NNIFNl
+c3Npb24gTWFuYWdlciA8c2Vzc2lvbi1tYW5hZ2VyLXBsdWdpbi1zaWduZXJAYW1h
+em9uLmNvbT4gKEFXUyBTeXN0ZW1zIE1hbmFnZXIgU2Vzc2lvbiBNYW5hZ2VyIFBs
+dWdpbiBMaW51eCBTaWduZXIgS2V5KYkBAAQQEwgAqAUCZ5ERQ4EcQVdTIFNTTSBT
+ZXNzaW9uIE1hbmFnZXIgPHNlc3Npb24tbWFuYWdlci1wbHVnaW4tc2lnbmVyQGFt
+YXpvbi5jb20+IChBV1MgU3lzdGVtcyBNYW5hZ2VyIFNlc3Npb24gTWFuYWdlciBQ
+bHVnaW4gTGludXggU2lnbmVyIEtleSkWIQR5WWNxJM4JOtUB1HosTUr/b2dX7gIe
+AwIbAwIVCAAKCRAsTUr/b2dX7rO1AQCa1kig3lQ78W/QHGU76uHx3XAyv0tfpE9U
+oQBCIwFLSgEA3PDHt3lZ+s6m9JLGJsy+Cp5ZFzpiF6RgluR/2gA861M=
+=2DQm
+-----END PGP PUBLIC KEY BLOCK-----'
 
 # NVIDIA documents no fingerprint for this key, so this is the one its server served on 2026-09-15 rather than an
 # independently published value. Pinning it still catches a later swap of the key. Check any mismatch against NVIDIA
@@ -125,6 +149,52 @@ install_terraform() {
   mkdir -p ~/.local/bin
   unzip -o "$dir/$zip" terraform -d ~/.local/bin
   ~/.local/bin/terraform version
+}
+
+install_session_manager_plugin() {
+  local version=$SESSION_MANAGER_PLUGIN_VERSION installed='' tool base dir rpm status validsig
+  if [[ -x $HOME/.local/bin/session-manager-plugin ]]; then
+    installed=$("$HOME/.local/bin/session-manager-plugin" --version)
+  fi
+  if [[ $installed == "$version" ]]; then
+    echo "session-manager: v$version is already in ~/.local/bin."
+    return
+  fi
+
+  # The plugin ships as an RPM, which is a cpio archive with a header. These two unpack it without dnf or sudo.
+  for tool in rpm2cpio cpio; do
+    if ! command -v "$tool" >/dev/null; then
+      echo "session-manager: $tool is missing. Nothing was installed." >&2
+      exit 1
+    fi
+  done
+
+  base=https://s3.amazonaws.com/session-manager-downloads/plugin/$version/linux_64bit
+  dir=$SCRATCH/session-manager
+  rpm=$dir/session-manager-plugin.rpm
+  mkdir "$dir"
+  curl -fsSL -o "$rpm" "$base/session-manager-plugin.rpm"
+  curl -fsSL -o "$rpm.sig" "$base/session-manager-plugin.rpm.sig"
+
+  # A throwaway keyring, so the check neither depends on nor changes your own GPG setup.
+  mkdir -m 700 "$dir/gnupg"
+  GNUPGHOME=$dir/gnupg gpg --batch --quiet --import <<<"$SESSION_MANAGER_KEY"
+
+  # gpg's VALIDSIG status line ends with the signing key's primary fingerprint, so a good signature from any other key
+  # fails this too. AWS signs the RPM, not the zip bundle, which is why the RPM is the download.
+  status=$(GNUPGHOME=$dir/gnupg gpg --batch --status-fd 1 --verify "$rpm.sig" "$rpm" 2>/dev/null || true)
+  validsig=$(grep '^\[GNUPG:\] VALIDSIG ' <<<"$status" || true)
+  if [[ $validsig != *" $SESSION_MANAGER_KEY_FINGERPRINT" ]]; then
+    echo "session-manager: the RPM isn't signed by AWS's plugin key ($SESSION_MANAGER_KEY_FINGERPRINT). Nothing was" \
+      "installed." >&2
+    exit 1
+  fi
+  echo "Verified the Session Manager plugin $version RPM against AWS's signing key."
+
+  (cd "$dir" && rpm2cpio "$rpm" | cpio --quiet -idm ./usr/local/sessionmanagerplugin/bin/session-manager-plugin)
+  mkdir -p ~/.local/bin
+  install -m 0755 "$dir/usr/local/sessionmanagerplugin/bin/session-manager-plugin" ~/.local/bin/session-manager-plugin
+  ~/.local/bin/session-manager-plugin --version
 }
 
 create_aws_resources() {
@@ -268,11 +338,18 @@ setup_gpu() {
 case $STEP in
   deps) install_deps ;;
   terraform) install_terraform ;;
+  session-manager) install_session_manager_plugin ;;
   aws) create_aws_resources ;;
   gpu) setup_gpu ;;
   "")
     install_deps
     install_terraform
+    if command -v rpm2cpio >/dev/null && command -v cpio >/dev/null; then
+      install_session_manager_plugin
+    else
+      echo "session-manager: skipped, since rpm2cpio and cpio are missing. Install them, then run" \
+        "scripts/dev/setup.sh session-manager."
+    fi
     if aws sts get-caller-identity >/dev/null 2>&1; then
       create_aws_resources
     else
