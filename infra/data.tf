@@ -38,6 +38,11 @@ resource "aws_db_instance" "main" {
   # both off the one secret ARN in `aws_db_instance.main.master_user_secret[0].secret_arn`.
   manage_master_user_password = true
 
+  # Lets the read-only `splatter_readonly` role log in with a 15-minute token that AWS signs from an IAM identity, so
+  # no second database password exists. scripts/prod/db-tunnel.sh mints the token. The setting needs no restart. The
+  # instance sets no `apply_immediately`, so RDS applies the setting in the maintenance window below.
+  iam_database_authentication_enabled = true
+
   # RDS defaults to 1 day, which is the whole recovery window for a bad migration given no deletion protection.
   # Backups of a 20 GiB instance are nearly free.
   backup_retention_period = 7

@@ -8,6 +8,13 @@
       "when": 1791092928473,
       "tag": "0000_bent_talkback",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793215814177,
+      "tag": "0001_readonly_role",
+      "breakpoints": true
     }
   ]
 }

@@ -43,6 +43,11 @@ run "database_config" {
   }
 
   assert {
+    condition     = aws_db_instance.main.iam_database_authentication_enabled == true
+    error_message = "the read-only role scripts/prod/db-tunnel.sh connects as logs in with an IAM token, not a password"
+  }
+
+  assert {
     condition     = aws_db_instance.main.skip_final_snapshot == true && aws_db_instance.main.deletion_protection == false
     error_message = "no live data exists yet to protect, so a bare `terraform destroy` must fully remove the instance"
   }

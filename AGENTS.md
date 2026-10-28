@@ -285,6 +285,7 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
 - A script that uses the GitHub CLI sources `scripts/lib/github.sh` and calls `gh_require_login` before its first `gh` call. Otherwise a logged-out `gh` reads the same as an unset GitHub repository variable.
 - A script that acts on the deployed account also calls `gh_require_aws_deploy_account`, which checks the signed-in account against the `AWS_ACCOUNT_ID` GitHub repository variable:
   - `scripts/prod/bootstrap.sh` (its `deploy` step)
+  - `scripts/prod/db-tunnel.sh`
   - `scripts/prod/logs-tail.sh`
   - `scripts/prod/logs-timings.sh`
   - `scripts/prod/ssm.sh`
@@ -504,6 +505,9 @@ Operational scripts live in `scripts/dev/` (local) and `scripts/prod/` (the depl
   - Node's `?sslmode=require` is `verify-full`, not libpq's encrypt-only. Without Amazon's CA you get `UNABLE_TO_VERIFY_LEAF_SIGNATURE`.
   - Fix: bake the RDS CA bundle into the image (`web/Dockerfile`), set `DATABASE_SSL_CA` from `infra/web.tf`, pass `ssl: { ca }` in `web/lib/server/databaseUrl.ts`; leave `rejectUnauthorized` at default `true`. Do not use `rejectUnauthorized: false`. (Node's `sslmode` behavior was checked empirically; libpq docs don't transfer.)
   - Local dev and CI run a plain, TLS-less Postgres — `DATABASE_SSL_CA` unset makes `databaseSsl()` return undefined and the connection plain — so this whole path is otherwise unexercised until a real AWS deploy.
+- **Production is read through `scripts/prod/db-tunnel.sh`, as `splatter_readonly`, never as the master user.** The master secret belongs to the web service and the migration task. The reason for the tunnel is in [Reading production data](ARCHITECTURE.md#72-reading-production-data), and the steps are in [Querying the production database](RUNBOOK.md#36-querying-the-production-database).
+  - The client's SSL mode is "required" with no hostname verification, because the certificate RDS presents doesn't name `127.0.0.1`.
+  - `web/drizzle/0001_readonly_role.sql` grants `rds_iam` only where that role exists, since local dev and CI Postgres have no such role. A later migration that touches an RDS-only role needs the same guard.
 - **`drizzle-kit`'s CLI driver silently ignores a sibling `ssl` field in `dbCredentials` whenever `url` is also set** (checked against `drizzle-kit/bin.cjs`: `"url" in credentials ? new pg.Pool({connectionString: credentials.url}) : new pg.Pool({...credentials, ssl})`). The `url` branch never even looks at `ssl`.
   - `web/drizzle.config.ts`'s `dbCredentials` sets both, so this is dead code there. It only matters for `pnpm db:studio` against a TLS-required database, which fails loudly (the server refuses the plaintext connection) rather than connecting insecurely.
   - `pnpm db:migrate` is unaffected: `web/scripts/db-migrate.cjs` builds its own `Pool` directly, bypassing drizzle-kit's CLI driver entirely.

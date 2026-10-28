@@ -22,6 +22,7 @@ Most procedures below run a script from `scripts/dev/` or `scripts/prod/`, and e
   - [3.3 Reading logs and alarms](#33-reading-logs-and-alarms)
   - [3.4 Rotating the Clerk secret](#34-rotating-the-clerk-secret)
   - [3.5 Refreshing the RDS CA bundle](#35-refreshing-the-rds-ca-bundle)
+  - [3.6 Querying the production database](#36-querying-the-production-database)
 - [4. Tearing down](#4-tearing-down)
 
 ---
@@ -66,7 +67,7 @@ Local development runs against the dev buckets and the `splat-pg` container, nev
 
 ### 1.1 First-time setup
 
-`scripts/dev/setup.sh` installs the dependencies, the Terraform CLI version `infra/providers.tf` pins, the dev AWS resources, and GPU access for the worker container. Its `--help` lists each step. Sign in to AWS as an admin first ([Signing in to AWS](#21-signing-in-to-aws)), or the dev AWS resources step is skipped.
+`scripts/dev/setup.sh` installs the dependencies, the Terraform CLI version `infra/providers.tf` pins, the AWS Session Manager plugin, the dev AWS resources, and GPU access for the worker container. Its `--help` lists each step. Sign in to AWS as an admin first ([Signing in to AWS](#21-signing-in-to-aws)), or the dev AWS resources step is skipped.
 
 ```bash
 scripts/dev/setup.sh
@@ -452,7 +453,7 @@ Where to start once a migration or a worker job has already failed.
 
 ### 3.1 Fixing a bad migration
 
-The only supported production apply is the `deploy` job (`.github/workflows/deploy.yml`), which runs the `migrator` image (`web/Dockerfile`) as a one-off ECS task before rolling the service forward. There is no supported way to reach the database by hand. The RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway and no bastion. It accepts connections only from `aws_security_group.web` on port 5432, which is how the migration task gets to it.
+The only supported production apply is the `deploy` job (`.github/workflows/deploy.yml`), which runs the `migrator` image (`web/Dockerfile`) as a one-off ECS task before rolling the service forward. Production data changes only through migrations. The RDS instance (`infra/data.tf`) sits in an isolated subnet with no NAT gateway and no bastion. It accepts connections only from `aws_security_group.web` on port 5432, which is how the migration task gets to it. [Querying the production database](#36-querying-the-production-database) covers reading it.
 
 Fix a bad migration the same way you'd fix any other bug: write a corrective migration following the expand/contract discipline in [Schema & migrations (Drizzle)](AGENTS.md#101-schema--migrations-drizzle) (edit `web/lib/server/db/schema.ts`, `pnpm db:generate`, review the emitted SQL in `web/drizzle/`), commit it, and land it through a normal PR to `main`. It applies when `DEPLOY_ENABLED` is `true` and that commit reaches `main` ([Going live](#22-going-live)).
 
@@ -556,6 +557,24 @@ diff <(git show HEAD:web/certs/rds-global-bundle.pem | list_certs) <(list_certs 
 ```
 
 Every line should be an added `OU=Amazon RDS` root CA for a region or rotation you expected. A removed or changed root for the region the app runs in, or any subject outside `OU=Amazon RDS`, means the download is wrong. Don't commit it.
+
+### 3.6 Querying the production database
+
+`scripts/prod/db-tunnel.sh` opens a tunnel from your machine to the production database, so TablePlus or `psql` can read it. It needs `aws login` as an admin ([Signing in to AWS](#21-signing-in-to-aws)), `gh` signed in, and the Session Manager plugin, which `scripts/dev/setup.sh session-manager` installs. The tunnel goes through a running web task, so it fails while the service has none.
+
+```bash
+scripts/prod/db-tunnel.sh
+```
+
+The script prints the connection settings and a login token, then holds the tunnel open until you press Ctrl-C. Point the client at it:
+
+- Host `127.0.0.1`, port `5433`, database `ai_gaussian_splatter`.
+- User `splatter_readonly`, which can only `SELECT`.- Password: the printed token.
+- SSL: required, without hostname verification.
+
+The token expires after 15 minutes, and RDS checks it only when a connection opens. A connection that is already open keeps working. A client that opens a new connection later, such as after a reconnect, fails with `password authentication failed` until you re-run the script and paste the new token.
+
+The script stops with a message when IAM authentication isn't on yet. RDS applies that setting in the maintenance window after the first deploy that carries it. `aws rds modify-db-instance --db-instance-identifier ai-gaussian-splatter --apply-immediately --enable-iam-database-authentication` applies it at once and needs no restart.
 
 ---
 
