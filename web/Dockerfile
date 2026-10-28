@@ -27,11 +27,9 @@ RUN pnpm install --frozen-lockfile
 # ======================================================================================================================
 FROM deps AS deps-prod
 
-# `pnpm prune --prod` removes devDependencies from node_modules, but the store still holds their bytes, so it has to
-# go too or this stage saves nothing. Safe to rm -rf: pnpm hard-links each file into node_modules/.pnpm at install
-# time, giving node_modules its own independent claim on the data. Deleting the store's claim doesn't remove those
-# bytes.
-RUN pnpm prune --prod && rm -rf "$(pnpm store path)"
+# `pnpm prune --prod` removes devDependencies from node_modules, which is the only part of this stage that migrator
+# COPYs.
+RUN pnpm prune --prod
 
 
 # ======================================================================================================================
@@ -67,9 +65,9 @@ ENV NODE_ENV=production
 
 RUN addgroup -g 1001 -S app && adduser -u 1001 -S app -G app
 
-# COPYed from deps-prod rather than built FROM it. Image layers only add to each other, so deps-prod's own rm -rf
-# wouldn't shrink an image built FROM it. It would only hide files an earlier layer already paid for. COPY takes just
-# the final state. `web` below COPYs from `builder` for the same reason.
+# COPYed from deps-prod rather than built FROM it. Image layers only add to each other, so an image built FROM deps-prod
+# would still carry the devDependencies that `pnpm prune --prod` removed, because the earlier layer already paid for
+# them. COPY takes just the final state. `web` below COPYs from `builder` for the same reason.
 COPY --from=deps-prod --chown=app:app /app/node_modules ./node_modules
 COPY --chown=app:app package.json ./package.json
 
