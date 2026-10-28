@@ -10,6 +10,7 @@ Why the system is shaped this way: decisions, alternatives rejected, costs accep
 - [6. Schema & ORM](#6-schema--orm)
 - [7. Postgres connectivity & TLS](#7-postgres-connectivity--tls)
   - [7.1 Master password refresh](#71-master-password-refresh)
+  - [7.2 Reading production data](#72-reading-production-data)
 - [8. Infra](#8-infra)
 - [9. Hosting](#9-hosting)
   - [9.1 Spot tradeoffs](#91-spot-tradeoffs)
@@ -325,6 +326,34 @@ SecretPasswordPool     fetchDatabasePassword    Secrets Manager      RDS Postgre
 ```
 
 The migration task (`web/scripts/db-migrate.cjs`) takes its password as a static env var. It runs for seconds and exits, well inside the 7-day window, so the value can't go stale. Fetching it live would cost its own Secrets Manager IAM grant for no benefit.
+
+### 7.2 Reading production data
+
+RDS accepts connections only from `aws_security_group.web`, so a person reading production data has to come in through something in that group. `scripts/prod/db-tunnel.sh` comes in through the running web task ([Querying the production database](RUNBOOK.md#36-querying-the-production-database)).
+
+```text
+ client (TablePlus)       session-manager-plugin         SSM agent in the web task        RDS
+        │ 127.0.0.1:5433           │                              │                       │
+        ├─────────────────────────►│ outbound 443, via SSM        │                       │
+        │                          ├─────────────────────────────►│ 5432                  │
+        │                          │                              ├──────────────────────►│
+```
+
+Three ways in were considered:
+
+- **A bastion host**: an EC2 instance in the web security group that people SSH or SSM into. It costs money while it exists, needs patching, and is one more machine with a path to RDS.
+- **A public RDS endpoint**: it puts the database's login on the internet and needs a security group rule for whichever address the reader connects from.
+- **A port forward through the web task** (chosen): `infra/web.tf` already turns on `enable_execute_command` and grants the task role the `ssmmessages` actions it needs. Nothing is added to the network. Only an identity with `ecs:ExecuteCommand` and `ssm:StartSession` can open a tunnel, and CloudTrail records each session start.
+
+The client logs in as `splatter_readonly` (`web/drizzle/0001_readonly_role.sql`), a role that can only `SELECT`, with an RDS IAM authentication token. The master secret stays with the app, and no second database password exists to store or leak. A token is signed from the reader's own AWS credentials and lapses after 15 minutes.
+
+Costs accepted:
+
+- The tunnel needs a running web task.
+- RDS checks the token only when a connection opens, so a client that opens a new connection after 15 minutes needs a fresh token.
+- The certificate RDS presents names the RDS endpoint, not `127.0.0.1`, so the client requires SSL without verifying the hostname.
+- `infra/web.tf` sets the cluster's execute-command logging to `NONE`, so CloudTrail records who opened a tunnel and not what they queried.
+- Anyone who can open the tunnel can also open a shell in the web task, because both need the same `ecs:ExecuteCommand` permission.
 
 ---
 
