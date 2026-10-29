@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     # identical runs by up to about 1 dB. Compare a change over several runs.
     eval_holdout: bool = False
 
+    # Seeds the random view order and torch when eval_holdout is set. worker/eval_train.py varies it between repeats.
+    eval_seed: int = 0
+
     local_workdir: str = "/tmp/job"
 
     # Set by web/lib/server/workerLauncher.ts's user-data, because a worker instance's own role has no S3 access.

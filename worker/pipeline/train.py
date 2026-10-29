@@ -75,12 +75,21 @@ class GaussianModel:
 
 
 @dataclass
+class EvalScores:
+    """Mean scores over the held-out views, from _evaluate."""
+
+    psnr: float  # dB, higher is better
+    ssim: float  # 0 to 1, higher is better
+
+
+@dataclass
 class TrainedScene:
     model: GaussianModel
     canonical_viewmat: torch.Tensor  # (4, 4). A representative pose, for worker/pipeline/export.py's thumbnail.
     canonical_K: torch.Tensor  # (3, 3)
     canonical_width: int
     canonical_height: int
+    eval_scores: EvalScores | None = None  # set only when Settings.eval_holdout held views back
 
 
 def train(
@@ -99,7 +108,7 @@ def train(
     # (see web/components/splats/StageCard.tsx). torch's own OutOfMemoryError message is a multi-line CUDA
     # allocator dump aimed at a developer, not something to show a user waiting on their splat.
     try:
-        model, cameras, viewmats, images_tensor = _train_loop(sparse, photos_dir, settings)
+        model, cameras, viewmats, images_tensor, eval_scores = _train_loop(sparse, photos_dir, settings)
     except torch.OutOfMemoryError as exc:
         raise RuntimeError(
             f"Training ran out of GPU memory with {len(sparse.images)} registered photos. Try a smaller photo set, "
@@ -114,6 +123,7 @@ def train(
         canonical_K=canonical_K,
         canonical_width=canonical_width,
         canonical_height=canonical_height,
+        eval_scores=eval_scores,
     )
 
 
@@ -127,8 +137,8 @@ def _train_loop(sparse: SparseModel, photos_dir: Path, settings: Settings):
 
     train_indices, eval_indices = _split_views(len(images_tensor), settings.eval_holdout)
     if settings.eval_holdout:
-        np.random.seed(0)
-        torch.manual_seed(0)
+        np.random.seed(settings.eval_seed)
+        torch.manual_seed(settings.eval_seed)
     # gsplat's strategy replaces entries of this dict as it clones, splits, and prunes, carrying each optimizer's
     # state across. So nothing may hold on to an individual parameter between steps.
     params = {name: torch.nn.Parameter(tensor.detach()) for name, tensor in vars(_init_gaussians(sparse)).items()}
@@ -187,10 +197,13 @@ def _train_loop(sparse: SparseModel, photos_dir: Path, settings: Settings):
             fields["peak_gpu_mb"] = torch.cuda.max_memory_allocated() // 2**20
 
     model = GaussianModel(**params)
+    eval_scores = None
     if eval_indices:
         with timed("evaluate"):
-            _evaluate(model, cameras, viewmats, images_tensor, eval_indices, Path(settings.local_workdir) / "eval")
-    return model, cameras, viewmats, images_tensor
+            eval_scores = _evaluate(
+                model, cameras, viewmats, images_tensor, eval_indices, Path(settings.local_workdir) / "eval"
+            )
+    return model, cameras, viewmats, images_tensor, eval_scores
 
 
 def _split_views(count: int, eval_holdout: bool) -> tuple[list[int], list[int]]:
@@ -204,10 +217,12 @@ def _split_views(count: int, eval_holdout: bool) -> tuple[list[int], list[int]]:
     return train_indices, eval_indices
 
 
-def _evaluate(model: GaussianModel, cameras, viewmats, images_tensor, eval_indices: list[int], out_dir: Path) -> None:
-    """Logs mean PSNR and SSIM over the held-out views. It also writes a ground-truth-beside-render PNG per view to
-    out_dir, for looking at what the numbers miss. out_dir is {local_workdir}/eval, and local_workdir defaults to
-    /tmp/job. A local run bind-mounts worker/jobdir/<jobId> at /tmp/job, so those PNGs land in
+def _evaluate(
+    model: GaussianModel, cameras, viewmats, images_tensor, eval_indices: list[int], out_dir: Path
+) -> EvalScores:
+    """Logs and returns mean PSNR and SSIM over the held-out views. It also writes a ground-truth-beside-render PNG per
+    view to out_dir, for looking at what the numbers miss. out_dir is {local_workdir}/eval, and local_workdir defaults
+    to /tmp/job. A local run bind-mounts worker/jobdir/<jobId> at /tmp/job, so those PNGs land in
     worker/jobdir/<jobId>/eval on the host. On AWS they stay at /tmp/job/eval on the worker instance.
 
     PSNR (peak signal-to-noise ratio) is in decibels and higher is better. It rewards matching exact pixel values.
@@ -225,13 +240,15 @@ def _evaluate(model: GaussianModel, cameras, viewmats, images_tensor, eval_indic
         ssims.append(_ssim(rendered, gt_image).item())
         side_by_side = (torch.cat([gt_image, rendered], dim=1) * 255).byte().cpu().numpy()
         PILImage.fromarray(side_by_side).save(out_dir / f"view-{idx:03d}.png")
+    scores = EvalScores(psnr=float(np.mean(psnrs)), ssim=float(np.mean(ssims)))
     logger.info(
         "Held-out eval over %d views: PSNR=%.2f dB SSIM=%.4f (side-by-sides in %s)",
         len(eval_indices),
-        float(np.mean(psnrs)),
-        float(np.mean(ssims)),
+        scores.psnr,
+        scores.ssim,
         out_dir,
     )
+    return scores
 
 
 def _psnr(a: torch.Tensor, b: torch.Tensor) -> float:
