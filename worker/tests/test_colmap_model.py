@@ -74,6 +74,13 @@ def test_reads_each_camera_model_into_focal_lengths_and_principal_point(model_di
     assert (simple_radial.fx, simple_radial.fy, simple_radial.cx, simple_radial.cy) == (1500.0, 1500.0, 960.0, 540.0)
 
 
+def test_reads_radial_distortion_and_zero_for_models_without_it(model_dir):
+    cameras = read_sparse_model(model_dir).cameras
+
+    assert (cameras[1].k1, cameras[1].k2) == (0.0, 0.0)
+    assert (cameras[2].k1, cameras[2].k2) == (0.01, 0.0)
+
+
 def test_reads_images_past_their_2d_points(model_dir):
     images = read_sparse_model(model_dir).images
 
