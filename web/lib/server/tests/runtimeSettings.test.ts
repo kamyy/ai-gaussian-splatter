@@ -137,7 +137,7 @@ describe("getRuntimeSettings", () => {
       expect(settings.maxJobsPerDay).toBe(20);
       expect(settings.workerMaxLifetimeMinutes).toBe(30);
       expect(settings.minPhotosPerSplat).toBe(20);
-      expect(settings.trainingIterations).toBe(10_000);
+      expect(settings.trainingIterations).toBe(20_000);
       expect(settings.uploadsPerIpPerHour).toBe(5);
       expect(console.error).toHaveBeenCalledWith(expect.stringContaining("max-jobs-per-day is invalid"));
     });

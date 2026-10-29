@@ -94,7 +94,7 @@ Where each stage reads its input and writes its output. Every key sits under `sp
 2. **COLMAP** (`worker/pipeline/sfm.py`): exhaustive matching → camera poses + sparse cloud.
    - Accuracy over speed, since the object-centric photo sets are small.
    - `worker/run_job.py` fails below 50% registered images. That reflects capture quality, not a pipeline bug.
-3. **gsplat** (`worker/pipeline/train.py`): the actual training step. It trains one 3D Gaussian Splatting (3DGS) model per object, for a default of 10k iterations (`worker/pipeline/config.py`) against the paper's 30k. Each iteration is one gradient-descent step that adjusts the Gaussians to better match the photos.
+3. **gsplat** (`worker/pipeline/train.py`): the actual training step. It trains one 3D Gaussian Splatting (3DGS) model per object, for a default of 20k iterations (`worker/pipeline/config.py`) against the paper's 30k. Each iteration is one gradient-descent step that adjusts the Gaussians to better match the photos.
    - Single-object, plain-background scenes converge faster, so fewer iterations suffice.
    - Apache 2.0 (INRIA's original is non-commercial).
    - Colors use degree-3 spherical harmonics (SH), so a Gaussian's color changes with the viewing angle and highlights on glossy surfaces move as the camera orbits. The cost is 45 more values per Gaussian. The `.spz` export below still comes out smaller than a degree-0 `.ply`.

@@ -159,7 +159,7 @@ locals {
     "worker-max-lifetime-minutes" = "30"
     "reconstruct-instance-type"   = "c7i.8xlarge"
     "train-instance-type"         = "g5.xlarge"
-    "training-iterations"         = "10000"
+    "training-iterations"         = "20000"
     # SSM refuses an empty value, so "none" stands for no showcase account.
     "showcase-clerk-user-id" = "none"
   }

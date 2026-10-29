@@ -28,8 +28,9 @@ class Settings(BaseSettings):
     # by a separate POST /api/v1/splats/[splatId]/train call reusing the same job_id/callback_token.
     stage: Literal["reconstruct", "train"] = "reconstruct"
 
-    # Single-object-against-plain-background scenes converge well below the paper's 30k default.
-    training_iterations: int = 10_000
+    # A single object against a plain background gains little past two thirds of the paper's 30k. Held-out scores at 20k
+    # were within 0.02 dB of 30k.
+    training_iterations: int = 20_000
 
     # A local experiment switch, never set on AWS. worker/pipeline/train.py holds back every 8th photo from training
     # and scores the finished splat against them, since the training loss keeps falling even while the splat overfits
