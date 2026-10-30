@@ -1,12 +1,8 @@
 """3D Gaussian Splatting training via gsplat, at a reduced iteration count for object-centric captures.
 
-Simplifications relative to the original paper, made deliberately for a reduced-iteration, object-centric MVP rather
-than by oversight:
-- Densification is gsplat's DefaultStrategy with its schedule scaled down from 30k iterations to the run's length (see
-  _build_strategy).
-- Camera radial distortion from COLMAP is not undistorted before training (see worker/pipeline/colmap_model.py). The
-  approximation holds for SIMPLE_RADIAL's typically small phone-camera distortion at this quality bar. It does not
-  hold for wide-angle lenses.
+One simplification relative to the original paper, made deliberately for a reduced-iteration, object-centric MVP
+rather than by oversight: densification is gsplat's DefaultStrategy with its schedule scaled down from 30k iterations
+to the run's length (see _build_strategy).
 """
 
 import logging
@@ -31,6 +27,12 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # Training at that resolution makes every ground-truth image resident in VRAM at full size, which OOMs a consumer GPU
 # well before a modest photo count. 1600px matches the reference 3DGS implementation's longest-edge target.
 MAX_TRAINING_EDGE = 1600
+
+# gsplat renders an ideal pinhole camera, so the photos' lens distortion has to be removed first. Removing it can leave
+# the corners of the straightened image outside the photo, where there is nothing to sample. _undistortion zooms in
+# until none are, one step at a time. Distortion that needs more than this factor fails the train stage.
+UNDISTORT_ZOOM_STEP = 0.002
+UNDISTORT_MAX_ZOOM = 1.5
 
 # Each initial Gaussian is sized from the RMS distance to this many of its nearest COLMAP points, as in the reference
 # 3DGS implementation. A per-point distance keeps a few stray background points from inflating every Gaussian, which a
@@ -75,12 +77,21 @@ class GaussianModel:
 
 
 @dataclass
+class EvalScores:
+    """Mean scores over the held-out views, from _evaluate."""
+
+    psnr: float  # dB, higher is better
+    ssim: float  # 0 to 1, higher is better
+
+
+@dataclass
 class TrainedScene:
     model: GaussianModel
     canonical_viewmat: torch.Tensor  # (4, 4). A representative pose, for worker/pipeline/export.py's thumbnail.
     canonical_K: torch.Tensor  # (3, 3)
     canonical_width: int
     canonical_height: int
+    eval_scores: EvalScores | None = None  # set only when Settings.eval_holdout held views back
 
 
 def train(
@@ -99,7 +110,7 @@ def train(
     # (see web/components/splats/StageCard.tsx). torch's own OutOfMemoryError message is a multi-line CUDA
     # allocator dump aimed at a developer, not something to show a user waiting on their splat.
     try:
-        model, cameras, viewmats, images_tensor = _train_loop(sparse, photos_dir, settings)
+        model, cameras, viewmats, images_tensor, eval_scores = _train_loop(sparse, photos_dir, settings)
     except torch.OutOfMemoryError as exc:
         raise RuntimeError(
             f"Training ran out of GPU memory with {len(sparse.images)} registered photos. Try a smaller photo set, "
@@ -114,6 +125,7 @@ def train(
         canonical_K=canonical_K,
         canonical_width=canonical_width,
         canonical_height=canonical_height,
+        eval_scores=eval_scores,
     )
 
 
@@ -127,8 +139,8 @@ def _train_loop(sparse: SparseModel, photos_dir: Path, settings: Settings):
 
     train_indices, eval_indices = _split_views(len(images_tensor), settings.eval_holdout)
     if settings.eval_holdout:
-        np.random.seed(0)
-        torch.manual_seed(0)
+        np.random.seed(settings.eval_seed)
+        torch.manual_seed(settings.eval_seed)
     # gsplat's strategy replaces entries of this dict as it clones, splits, and prunes, carrying each optimizer's
     # state across. So nothing may hold on to an individual parameter between steps.
     params = {name: torch.nn.Parameter(tensor.detach()) for name, tensor in vars(_init_gaussians(sparse)).items()}
@@ -187,10 +199,13 @@ def _train_loop(sparse: SparseModel, photos_dir: Path, settings: Settings):
             fields["peak_gpu_mb"] = torch.cuda.max_memory_allocated() // 2**20
 
     model = GaussianModel(**params)
+    eval_scores = None
     if eval_indices:
         with timed("evaluate"):
-            _evaluate(model, cameras, viewmats, images_tensor, eval_indices, Path(settings.local_workdir) / "eval")
-    return model, cameras, viewmats, images_tensor
+            eval_scores = _evaluate(
+                model, cameras, viewmats, images_tensor, eval_indices, Path(settings.local_workdir) / "eval"
+            )
+    return model, cameras, viewmats, images_tensor, eval_scores
 
 
 def _split_views(count: int, eval_holdout: bool) -> tuple[list[int], list[int]]:
@@ -204,10 +219,12 @@ def _split_views(count: int, eval_holdout: bool) -> tuple[list[int], list[int]]:
     return train_indices, eval_indices
 
 
-def _evaluate(model: GaussianModel, cameras, viewmats, images_tensor, eval_indices: list[int], out_dir: Path) -> None:
-    """Logs mean PSNR and SSIM over the held-out views. It also writes a ground-truth-beside-render PNG per view to
-    out_dir, for looking at what the numbers miss. out_dir is {local_workdir}/eval, and local_workdir defaults to
-    /tmp/job. A local run bind-mounts worker/jobdir/<jobId> at /tmp/job, so those PNGs land in
+def _evaluate(
+    model: GaussianModel, cameras, viewmats, images_tensor, eval_indices: list[int], out_dir: Path
+) -> EvalScores:
+    """Logs and returns mean PSNR and SSIM over the held-out views. It also writes a ground-truth-beside-render PNG per
+    view to out_dir, for looking at what the numbers miss. out_dir is {local_workdir}/eval, and local_workdir defaults
+    to /tmp/job. A local run bind-mounts worker/jobdir/<jobId> at /tmp/job, so those PNGs land in
     worker/jobdir/<jobId>/eval on the host. On AWS they stay at /tmp/job/eval on the worker instance.
 
     PSNR (peak signal-to-noise ratio) is in decibels and higher is better. It rewards matching exact pixel values.
@@ -225,13 +242,15 @@ def _evaluate(model: GaussianModel, cameras, viewmats, images_tensor, eval_indic
         ssims.append(_ssim(rendered, gt_image).item())
         side_by_side = (torch.cat([gt_image, rendered], dim=1) * 255).byte().cpu().numpy()
         PILImage.fromarray(side_by_side).save(out_dir / f"view-{idx:03d}.png")
+    scores = EvalScores(psnr=float(np.mean(psnrs)), ssim=float(np.mean(ssims)))
     logger.info(
         "Held-out eval over %d views: PSNR=%.2f dB SSIM=%.4f (side-by-sides in %s)",
         len(eval_indices),
-        float(np.mean(psnrs)),
-        float(np.mean(ssims)),
+        scores.psnr,
+        scores.ssim,
         out_dir,
     )
+    return scores
 
 
 def _psnr(a: torch.Tensor, b: torch.Tensor) -> float:
@@ -270,10 +289,57 @@ def render_view(model: GaussianModel, viewmat: torch.Tensor, K: torch.Tensor, wi
     return rendered
 
 
+def _undistortion(
+    width: int, height: int, fx: float, fy: float, cx: float, cy: float, k1: float, k2: float
+) -> tuple[float, torch.Tensor]:
+    """(zoom, grid) that turn a photo with radial distortion into the pinhole image gsplat renders.
+
+    Each output pixel looks up where its ray lands in the photo, using COLMAP's radial model. zoom is the factor to
+    multiply fx and fy by for the output camera, and grid is the lookup table for torch's grid_sample. The zoom is the
+    smallest, from 1, that keeps every border pixel's lookup inside the photo.
+    """
+    # Pixel centres sit half a pixel in from the corner, in COLMAP's convention.
+    u = torch.arange(width, dtype=torch.float64, device=DEVICE) + 0.5
+    v = torch.arange(height, dtype=torch.float64, device=DEVICE) + 0.5
+
+    def lookup(out_u: torch.Tensor, out_v: torch.Tensor, zoom: float) -> tuple[torch.Tensor, torch.Tensor]:
+        x = (out_u - cx) / (fx * zoom)
+        y = (out_v - cy) / (fy * zoom)
+        r2 = x * x + y * y
+        factor = 1 + k1 * r2 + k2 * r2 * r2
+        return fx * x * factor + cx, fy * y * factor + cy
+
+    # Only the output's border is checked. The lookup moves points smoothly outwards from the centre, so the interior
+    # lands inside the photo whenever the border does.
+    border_u = torch.cat([u, u, u.new_full((height,), u[0].item()), u.new_full((height,), u[-1].item())])
+    border_v = torch.cat([v.new_full((width,), v[0].item()), v.new_full((width,), v[-1].item()), v, v])
+
+    def border_inside(zoom: float) -> bool:
+        src_u, src_v = lookup(border_u, border_v, zoom)
+        return bool(((src_u >= 0) & (src_u <= width) & (src_v >= 0) & (src_v <= height)).all())
+
+    zoom = 1.0
+    while not border_inside(zoom):
+        zoom += UNDISTORT_ZOOM_STEP
+        if zoom > UNDISTORT_MAX_ZOOM:
+            raise RuntimeError(
+                f"The camera's lens distortion (k1={k1:.3f}, k2={k2:.3f}) is too strong to straighten the photos. "
+                "Retake them with a less wide-angle lens."
+            )
+
+    vv, uu = torch.meshgrid(v, u, indexing="ij")
+    src_u, src_v = lookup(uu, vv, zoom)
+    # grid_sample takes x and y in [-1, 1] across the photo's full extent.
+    grid = torch.stack([2 * src_u / width - 1, 2 * src_v / height - 1], dim=-1).to(torch.float32)
+    return zoom, grid
+
+
 def _load_views(sparse: SparseModel, photos_dir: Path):
     cameras: list[tuple[torch.Tensor, int, int]] = []
     viewmats: list[torch.Tensor] = []
     images_tensor: list[torch.Tensor] = []
+    # A capture's photos usually share one camera, so each camera's lookup table is built once.
+    undistortions: dict[int, tuple[float, torch.Tensor]] = {}
 
     for image in sparse.images.values():
         camera = sparse.cameras[image.camera_id]
@@ -287,6 +353,13 @@ def _load_views(sparse: SparseModel, photos_dir: Path):
             scale = MAX_TRAINING_EDGE / longest_edge
             fx, fy, cx, cy = fx * scale, fy * scale, cx * scale, cy * scale
             width, height = round(width * scale), round(height * scale)
+
+        distorted = camera.k1 != 0 or camera.k2 != 0
+        if distorted and image.camera_id not in undistortions:
+            undistortions[image.camera_id] = _undistortion(width, height, fx, fy, cx, cy, camera.k1, camera.k2)
+        if distorted:
+            zoom, _grid = undistortions[image.camera_id]
+            fx, fy = fx * zoom, fy * zoom
 
         K = torch.tensor(
             [[fx, 0, cx], [0, fy, cy], [0, 0, 1]],
@@ -304,6 +377,16 @@ def _load_views(sparse: SparseModel, photos_dir: Path):
         img_path = photos_dir / image.name
         pil_img = PILImage.open(img_path).convert("RGB").resize((width, height))
         img_tensor = torch.tensor(np.array(pil_img), dtype=torch.float32, device=DEVICE) / 255.0
+        if distorted:
+            _zoom, grid = undistortions[image.camera_id]
+            # Pixels past the photo's edge repeat its border. The zoom keeps the output from needing any.
+            img_tensor = torch.nn.functional.grid_sample(
+                img_tensor.permute(2, 0, 1)[None],
+                grid[None],
+                mode="bilinear",
+                padding_mode="border",
+                align_corners=False,
+            )[0].permute(1, 2, 0)
         images_tensor.append(img_tensor)
 
         cameras.append((K, width, height))

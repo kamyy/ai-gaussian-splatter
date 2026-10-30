@@ -128,7 +128,7 @@ const SETTINGS: { [K in keyof RuntimeSettings]: Setting<RuntimeSettings[K]> } = 
     parse: oneOf(RECONSTRUCT_INSTANCE_TYPES),
   },
   trainInstanceType: { name: "train-instance-type", fallback: "g5.xlarge", parse: oneOf(TRAIN_INSTANCE_TYPES) },
-  trainingIterations: { name: "training-iterations", fallback: 10_000, parse: integerIn(1000, 30_000) },
+  trainingIterations: { name: "training-iterations", fallback: 20_000, parse: integerIn(1000, 30_000) },
   showcaseClerkUserId: { name: "showcase-clerk-user-id", fallback: null, parse: parseShowcase },
 };
 

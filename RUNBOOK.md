@@ -114,7 +114,13 @@ A worker job's files land in `worker/jobdir/<jobId>/`, including `worker.log`, `
 
 When a set registers poorly, `colmap/database.db` says why. Its `keypoints` table has the keypoint count per image, and its `two_view_geometries` table shows how many other images each image matches. Very low counts in either point at blur, low texture, or an orbit that doesn't connect, rather than a pipeline bug. No healthy thresholds are recorded yet, so compare the counts against each other.
 
-To judge a change to `worker/pipeline/train.py`, set `EVAL_HOLDOUT=true` in `web/.env`. The train stage then holds back every 8th photo and logs PSNR and SSIM against those photos, with side-by-side renders in `worker/jobdir/<jobId>/eval/`. Training loss can't judge a change, because it keeps falling even while the splat overfits. Identical runs differ by up to about 1 dB, so repeat each side a few times. Each run is a new splat.
+To judge a change to `worker/pipeline/train.py`, run `scripts/dev/worker-eval.sh --runs 3 <jobId>...` on captures that have finished their reconstruct stage. It trains on each one several times with every 8th photo held back, and prints PSNR and SSIM on those photos. Training loss can't judge a change, because it keeps falling even while the splat overfits.
+
+Each run uses a different seed. Run the same seeds on the code before and after a change, and treat a difference smaller than the spread between seeds as noise. Identical runs differ by up to about 1 dB. Nothing is uploaded, and `--help` lists the options.
+
+A change that alters the target photos, such as undistorting them, also changes what PSNR compares against. Look at the side-by-side renders in the run's `eval/` folder as well as the numbers.
+
+Setting `EVAL_HOLDOUT=true` in `web/.env` does the same for one splat made through the UI. Each of those runs is a new splat.
 
 ### 1.5 Full test suite
 

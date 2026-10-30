@@ -22,6 +22,7 @@ from pipeline.train import (
     _sh_degree_at,
     _split_views,
     _ssim,
+    _undistortion,
     train,
 )
 
@@ -75,6 +76,64 @@ def test_load_views_leaves_small_photos_unscaled(tmp_path):
     assert (scaled_width, scaled_height) == (width, height)
     assert K[0, 0].item() == pytest.approx(1000.0)
     assert images_tensor[0].shape[:2] == (height, width)
+
+
+def _line_centres(red: np.ndarray) -> np.ndarray:
+    """The brightness-weighted column of the line in each row of a (height, width) image."""
+    return (red * np.arange(red.shape[1])).sum(axis=1) / red.sum(axis=1)
+
+
+def test_load_views_straightens_a_line_the_lens_curved(tmp_path):
+    """A straight vertical line in the scene is photographed as a curve by a lens with radial distortion. After
+    _load_views removes the distortion it must be a straight column again, which proves the lookup applies COLMAP's
+    model the right way round.
+    """
+    width, height, focal, k1, line_x = 400, 300, 300.0, 0.5, 0.4
+    camera = Camera(1, width, height, focal, focal, width / 2, height / 2, k1=k1)
+    sparse = _make_sparse_model(width, height)
+    sparse.cameras[1] = camera
+
+    # The line is x = line_x at every y in the scene. The lens moves each of its points outwards by 1 + k1 r^2.
+    photo = np.zeros((height, width, 3), dtype=np.uint8)
+    for y in np.linspace(-0.6, 0.6, 5000):
+        distortion = 1 + k1 * (line_x**2 + y**2)
+        column = width / 2 + focal * line_x * distortion
+        row = height / 2 + focal * y * distortion
+        if 0 <= row < height:
+            photo[int(row), int(column) - 1 : int(column) + 2] = 255
+    PILImage.fromarray(photo).save(tmp_path / "photo.jpg", quality=100)
+
+    _cameras, _viewmats, images_tensor = _load_views(sparse, tmp_path)
+
+    straightened = _line_centres(images_tensor[0][:, :, 0].cpu().numpy())
+    assert np.ptp(straightened) < 1.5
+    assert np.ptp(_line_centres(photo[:, :, 0].astype(np.float32))) > 10
+
+
+def test_load_views_zooms_the_focal_length_with_the_pixels(tmp_path):
+    sparse = _make_sparse_model(400, 300)
+    sparse.cameras[1] = Camera(1, 400, 300, 300.0, 300.0, 200.0, 150.0, k1=0.5)
+    PILImage.new("RGB", (400, 300)).save(tmp_path / "photo.jpg")
+
+    zoom, _grid = _undistortion(400, 300, 300.0, 300.0, 200.0, 150.0, 0.5, 0.0)
+    cameras, _viewmats, _images = _load_views(sparse, tmp_path)
+
+    assert zoom > 1
+    assert cameras[0][0][0, 0].item() == pytest.approx(300.0 * zoom)
+
+
+def test_undistortion_only_zooms_when_the_corners_would_leave_the_photo():
+    pincushion, _ = _undistortion(400, 300, 300.0, 300.0, 200.0, 150.0, 0.5, 0.0)
+    barrel, grid = _undistortion(400, 300, 300.0, 300.0, 200.0, 150.0, -0.1, 0.0)
+
+    assert pincushion > 1
+    assert barrel == 1.0
+    assert grid.abs().max().item() <= 1.0
+
+
+def test_undistortion_refuses_distortion_it_cannot_zoom_away():
+    with pytest.raises(RuntimeError, match="too strong to straighten"):
+        _undistortion(400, 300, 300.0, 300.0, 200.0, 150.0, 3.0, 0.0)
 
 
 def _make_settings() -> Settings:

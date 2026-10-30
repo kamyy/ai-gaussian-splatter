@@ -12,8 +12,7 @@ from pathlib import Path
 import numpy as np
 
 # model_id -> (name, num_params). Only the common models COLMAP's feature_extractor actually produces are handled.
-# Parameters beyond focal length and principal point (such as radial distortion) are read but not applied. That is a
-# known simplification (see worker/pipeline/train.py's docstring).
+# Radial distortion is read into Camera.k1 and Camera.k2, and worker/pipeline/train.py removes it from the photos.
 _CAMERA_MODELS = {
     0: ("SIMPLE_PINHOLE", 3),
     1: ("PINHOLE", 4),
@@ -31,6 +30,10 @@ class Camera:
     fy: float
     cx: float
     cy: float
+    # Radial distortion. A point at normalized distance r from the principal point lands at r * (1 + k1 r^2 + k2 r^4)
+    # in the photo. Both are 0 for a camera model without distortion.
+    k1: float = 0.0
+    k2: float = 0.0
 
 
 @dataclass
@@ -83,7 +86,9 @@ def _read_cameras(path: Path) -> dict[int, Camera]:
             fy = params[1] if num_params >= 4 and model_id == 1 else fx
             cx = params[1] if model_id in (0, 2, 3) else params[2]
             cy = params[2] if model_id in (0, 2, 3) else params[3]
-            cameras[camera_id] = Camera(camera_id, width, height, fx, fy, cx, cy)
+            k1 = params[3] if model_id in (2, 3) else 0.0
+            k2 = params[4] if model_id == 3 else 0.0
+            cameras[camera_id] = Camera(camera_id, width, height, fx, fy, cx, cy, k1, k2)
     return cameras
 
 

@@ -28,14 +28,18 @@ class Settings(BaseSettings):
     # by a separate POST /api/v1/splats/[splatId]/train call reusing the same job_id/callback_token.
     stage: Literal["reconstruct", "train"] = "reconstruct"
 
-    # Single-object-against-plain-background scenes converge well below the paper's 30k default.
-    training_iterations: int = 10_000
+    # A single object against a plain background gains little past two thirds of the paper's 30k. Held-out scores at 20k
+    # were within 0.02 dB of 30k.
+    training_iterations: int = 20_000
 
     # A local experiment switch, never set on AWS. worker/pipeline/train.py holds back every 8th photo from training
     # and scores the finished splat against them, since the training loss keeps falling even while the splat overfits
     # the photos it trains on. It also seeds the random view order. GPU nondeterminism still moves the score of two
     # identical runs by up to about 1 dB. Compare a change over several runs.
     eval_holdout: bool = False
+
+    # Seeds the random view order and torch when eval_holdout is set. worker/eval_train.py varies it between repeats.
+    eval_seed: int = 0
 
     local_workdir: str = "/tmp/job"
 
