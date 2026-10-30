@@ -94,7 +94,7 @@ After editing `web/lib/server/db/schema.ts`, run `pnpm --dir web db:generate` to
 
 ### 1.3 Capture
 
-Walk around the object shooting individual stills: every side, a couple of heights, each shot overlapping its neighbors. Aim for ~50. The API's floor of 20 (the `min-photos-per-splat` runtime setting, HTTP 400 below it) is a hard minimum, not a quality target, and its ceiling is 100 (`MAX_PHOTOS_PER_SPLAT`). Extra frames only help where they close a coverage gap, and near-duplicates just add COLMAP matching cost.
+Walk around the object shooting individual stills: every side, a couple of heights, each shot overlapping its neighbors. Aim for ~50. The API's floor of 40 (the `min-photos-per-splat` runtime setting, HTTP 400 below it) is a hard minimum, not a quality target, and its ceiling is 100 (`MAX_PHOTOS_PER_SPLAT`). Extra frames only help where they close a coverage gap, and near-duplicates just add COLMAP matching cost.
 
 Object choice matters more than photo count. COLMAP triangulates surface features that hold still, so these kinds of objects can defeat it:
 
