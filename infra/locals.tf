@@ -155,7 +155,7 @@ locals {
     "max-jobs-per-day"            = "20"
     "uploads-per-ip-per-hour"     = "5"
     "uploads-per-user-per-day"    = "10"
-    "min-photos-per-splat"        = "20"
+    "min-photos-per-splat"        = "40"
     "worker-max-lifetime-minutes" = "30"
     "reconstruct-instance-type"   = "c7i.8xlarge"
     "train-instance-type"         = "g5.xlarge"

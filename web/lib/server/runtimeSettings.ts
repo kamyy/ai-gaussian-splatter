@@ -116,7 +116,7 @@ const SETTINGS: { [K in keyof RuntimeSettings]: Setting<RuntimeSettings[K]> } = 
     fallback: 10,
     parse: integerIn(1, Number.MAX_SAFE_INTEGER),
   },
-  minPhotosPerSplat: { name: "min-photos-per-splat", fallback: 20, parse: integerIn(3, MAX_PHOTOS_PER_SPLAT) },
+  minPhotosPerSplat: { name: "min-photos-per-splat", fallback: 40, parse: integerIn(3, MAX_PHOTOS_PER_SPLAT) },
   workerMaxLifetimeMinutes: {
     name: "worker-max-lifetime-minutes",
     fallback: 30,

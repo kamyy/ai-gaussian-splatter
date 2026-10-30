@@ -420,7 +420,7 @@ describe("NewSplatForm", () => {
         return { id: "new-splat-1" };
       }
 
-      throw new Error("Need at least 20 uploaded photos, have 1");
+      throw new Error("Need at least 40 uploaded photos, have 1");
     });
     render(<NewSplatForm />);
     fillName("Coffee mug");
